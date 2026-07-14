@@ -161,6 +161,29 @@ function staticThumb(lat?: number, lng?: number, w = 240, h = 150): string | nul
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},16.5,0/${w}x${h}@2x?access_token=${MAPBOX_TOKEN}&attribution=false&logo=false`
 }
 
+// Map a saved aria_properties row → a list card. The row's real UUID id is kept,
+// so opening it loads the canonical record instantly (no re-search, no spend).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function savedRowToItem(row: any): PropItem {
+  return {
+    id: row.id,
+    name: row.property_name ?? row.facts?.property?.name ?? 'Unknown Property',
+    address: row.facts?.property?.address ?? row.address ?? '',
+    city: row.facts?.property?.city ?? row.city ?? '',
+    state: row.facts?.property?.state ?? row.state ?? '',
+    units: row.units ?? row.facts?.property?.units,
+    management_company: row.management_company ?? row.facts?.property?.management_company,
+    isp_signal: (row.isp_providers ?? row.facts?.connectivity?.isp_providers ?? [])[0],
+    bulk_detected: (row.bulk_agreements?.length ?? 0) > 0 || !!row.roe_detected,
+    gate_signal: (row.gate_operators?.length ?? 0) > 0 || (row.facts?.proptech_found?.gate_operators?.length ?? 0) > 0,
+    buy_score: row.buy_score ?? row.deductions?.ai_intel?.buy_score,
+    researched: true,
+    contract_expiry_year: row.contract_expiry_year ?? undefined,
+    lat: row.facts?.property?.lat ?? undefined,
+    lng: row.facts?.property?.lng ?? undefined,
+  }
+}
+
 export default function AriaExplorePage() {
   const [category, setCategory] = useState<Category>('properties')
   const [query, setQuery]       = useState('')
@@ -272,6 +295,39 @@ export default function AriaExplorePage() {
     if (qArg && qArg !== query) setQuery(qArg)
     setLoading(true); setError(null); setItems([]); setSelected(new Set()); setInterp(''); setMsg(null); setDetail(null)
     try {
+      // DB-FIRST for a typed property NAME. If what you typed clearly names one
+      // property (not a broad area query like "apartments in Dallas"), and we
+      // already have it saved, open it instantly from Supabase — no re-search,
+      // no spend. Broad/discovery queries skip this and go straight to live.
+      const ql = q.toLowerCase()
+      const isDiscovery = /\b(in|near|around|within|with|under|over|below|above)\b/.test(ql) || /\d{2,}\s*\+?\s*(unit|units|door|doors)/.test(ql)
+      const sig = ql.replace(/[.,]/g, ' ').split(/\s+/).filter(w => w.length > 2)
+      if (!isDiscovery && sig.length >= 1) {
+        try {
+          const term = [...sig].sort((a, b) => b.length - a.length)[0]
+          const mr = await fetch(`/api/aria/properties?search=${encodeURIComponent(term)}&limit=50`)
+          if (mr.ok) {
+            const md = await mr.json()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mrows: any[] = md.properties ?? []
+            // Strong match = a saved property whose NAME contains every
+            // significant word you typed (conservative — avoids false hits).
+            const strong = mrows.find(row => {
+              const name = String(row.property_name ?? '').toLowerCase()
+              return sig.every(t => name.includes(t))
+            })
+            if (strong) {
+              const it = savedRowToItem(strong)
+              setItems([it])
+              setMsg('Found in your database — loaded instantly, no new search.')
+              setDetail(it); setDetailReport(normalizeReport(strong)); setOpenCard(null); setScoutMsg(null)
+              setItems([it.lat != null ? it : { ...it, ...(await geocode(it)) }])
+              return
+            }
+          }
+        } catch { /* fall through to live search */ }
+      }
+
       const knownNames = new Set<string>()
       try {
         const kr = await fetch('/api/aria/properties?limit=200')
@@ -322,22 +378,7 @@ export default function AriaExplorePage() {
       const d = await r.json()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows: any[] = d.properties ?? []
-      const list: PropItem[] = rows.map(row => ({
-        id: row.id,
-        name: row.property_name ?? 'Unknown Property',
-        address: row.facts?.property?.address ?? row.address ?? '',
-        city: row.facts?.property?.city ?? '', state: row.facts?.property?.state ?? '',
-        units: row.units ?? row.facts?.property?.units,
-        management_company: row.management_company,
-        isp_signal: (row.isp_providers ?? [])[0],
-        bulk_detected: (row.bulk_agreements?.length ?? 0) > 0 || !!row.roe_detected,
-        gate_signal: (row.gate_operators?.length ?? 0) > 0,
-        buy_score: row.buy_score,
-        researched: true,
-        contract_expiry_year: row.contract_expiry_year ?? undefined,
-        lat: row.facts?.property?.lat ?? undefined,
-        lng: row.facts?.property?.lng ?? undefined,
-      }))
+      const list: PropItem[] = rows.map(savedRowToItem)
       setItems(list)
       const geo = await Promise.all(list.map(async it => (it.lat != null ? it : { ...it, ...(await geocode(it)) })))
       setItems(geo)
@@ -500,6 +541,45 @@ export default function AriaExplorePage() {
     } catch { /* ignore */ } finally { setDetailBusy(false) }
   }, [])
 
+  // History pick / known search → ALWAYS pull from Supabase first. Every full
+  // search is auto-saved, so re-running a past search must be an instant DB read
+  // (no re-search, no spend). Only falls back to a live search if nothing at all
+  // is found in the database for that query.
+  const openFromSaved = useCallback(async (q: string) => {
+    const raw = (q ?? '').trim()
+    if (!raw) return
+    setPanel(null); setSource('discover'); setQuery(raw)
+    setLoading(true); setError(null); setItems([]); setSelected(new Set()); setInterp(''); setMsg(null); setDetail(null); setDetailReport(null)
+    try {
+      const tokens = raw.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+      const term = tokens[0] || raw
+      const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(term)}&limit=50`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let rows: any[] = []
+      if (r.ok) { const d = await r.json(); rows = d.properties ?? [] }
+      // Keep rows that actually relate to the query (share a token in name/mgmt/address/city).
+      const rel = rows.filter(row => {
+        const hay = `${row.property_name ?? ''} ${row.management_company ?? ''} ${row.address ?? ''} ${row.facts?.property?.city ?? row.city ?? ''}`.toLowerCase()
+        return tokens.length === 0 || tokens.some(t => hay.includes(t))
+      })
+      const use = rel.length ? rel : rows
+      if (use.length) {
+        const list = use.map(savedRowToItem)
+        setItems(list)
+        setMsg(`Loaded ${list.length} saved ${list.length === 1 ? 'property' : 'properties'} from your database — no new search.`)
+        // Exactly one match → open its full canonical report instantly.
+        if (list.length === 1) openDetail(list[0])
+        const geo = await Promise.all(list.map(async it => (it.lat != null ? it : { ...it, ...(await geocode(it)) })))
+        setItems(geo)
+        return
+      }
+      // Truly not in the database yet → run the live search (this one spends).
+      await runSearch(raw)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load from database')
+    } finally { setLoading(false) }
+  }, [runSearch, openDetail])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const NAV: { href?: string; onClick?: () => void; active?: boolean; Icon: any; label: string }[] = [
     { href: '/', Icon: LayoutGrid, label: 'Home' },
@@ -562,7 +642,7 @@ export default function AriaExplorePage() {
             {/* HISTORY */}
             {panel === 'history' && (
               <div className="p-4 h-[calc(100%-4.5rem)]">
-                <SearchHistoryPanel onPick={(qq) => { setPanel(null); setSource('discover'); runSearch(qq) }} />
+                <SearchHistoryPanel onPick={(qq) => openFromSaved(qq)} />
               </div>
             )}
 
