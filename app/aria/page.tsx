@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users } from 'lucide-react'
+import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users, Star, Settings } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, LayoutGrid, Map: MapIcon, Cpu } = require('lucide-react') as any
 import { SearchHistoryPanel } from '@/components/aria/SearchHistoryPanel'
@@ -152,6 +152,13 @@ async function geocode(it: PropItem): Promise<{ lat: number; lng: number } | nul
   } catch { return null }
 }
 
+// Zillow-style aerial thumbnail of the property from its coordinates (free with
+// the Mapbox token — a real satellite image, no photo storage needed).
+function staticThumb(lat?: number, lng?: number, w = 240, h = 150): string | null {
+  if (lat == null || lng == null || !MAPBOX_TOKEN) return null
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},16.5,0/${w}x${h}@2x?access_token=${MAPBOX_TOKEN}&attribution=false&logo=false`
+}
+
 export default function AriaExplorePage() {
   const [category, setCategory] = useState<Category>('properties')
   const [query, setQuery]       = useState('')
@@ -194,6 +201,10 @@ export default function AriaExplorePage() {
     const s = document.createElement('script')
     s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'
     document.body.appendChild(s)
+    // Strip Mapbox's default white popup chrome so our dark tooltip shows clean.
+    const st = document.createElement('style')
+    st.textContent = '.mapboxgl-popup-content{background:transparent!important;padding:0!important;box-shadow:none!important}.mapboxgl-popup-tip{display:none!important}'
+    document.head.appendChild(st)
   }, [])
 
   const initMap = useCallback(() => {
@@ -203,7 +214,7 @@ export default function AriaExplorePage() {
     mapboxgl.accessToken = MAPBOX_TOKEN
     mapRef.current = new mapboxgl.Map({
       container: 'aria-explore-map',
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
       center: [-96.8, 32.8], zoom: 9,
     })
   }, [])
@@ -234,6 +245,12 @@ export default function AriaExplorePage() {
       inner.style.cssText = 'transform:rotate(45deg);color:#fff;font-size:10px;font-weight:700'
       el.appendChild(inner)
       el.onclick = () => openDetail(it)
+      // Hover tooltip (dark) — property name, location, units, top flag.
+      const flag = triggerFlags(it)[0]?.label
+      const popup = new mapboxgl.Popup({ offset: 22, closeButton: false, closeOnClick: false })
+        .setHTML(`<div style="font-family:Inter,sans-serif;background:#0B1728;color:#f1f5f9;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px 10px;min-width:150px"><div style="font-weight:700;font-size:12px">${it.name}</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">${[it.city, it.state].filter(Boolean).join(', ')}${it.units ? ` · ${it.units} units` : ''}</div>${flag ? `<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-top:4px">${flag}</div>` : ''}</div>`)
+      el.addEventListener('mouseenter', () => popup.setLngLat([it.lng!, it.lat!]).addTo(map))
+      el.addEventListener('mouseleave', () => popup.remove())
       const marker = new mapboxgl.Marker(el).setLngLat([it.lng!, it.lat!]).addTo(map)
       markersRef.current[it.id] = marker
       bounds?.extend([it.lng!, it.lat!])
@@ -332,6 +349,7 @@ export default function AriaExplorePage() {
     (!fExpBefore || (it.contract_expiry_year != null && it.contract_expiry_year <= fExpBefore)) &&
     (source !== 'saved' || !query.trim() || it.name.toLowerCase().includes(query.trim().toLowerCase()))
   const visible = items.filter(matchesFilters)
+  const alreadyCount = items.filter(i => i.researched).length
 
   const addToLeads = useCallback(async (list: PropItem[]) => {
     if (!list.length) return
@@ -389,35 +407,58 @@ export default function AriaExplorePage() {
   // (no re-search); for discover cards, just open — Research fills it in.
   const openDetail = useCallback(async (it: PropItem) => {
     setDetail(it); setDetailReport(null); setOpenCard(null); setScoutMsg(null)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)
-    // Saved rows carry the real id → load by id.
-    if (isUuid) {
-      setDetailBusy(true)
-      try {
+    setDetailBusy(true)
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)
+      // Saved rows carry the real id → load by id (fastest path).
+      if (isUuid) {
         const r = await fetch(`/api/aria/properties/${it.id}`)
-        if (r.ok) { const row = await r.json(); setDetailReport(normalizeReport(row)) }
-      } catch { /* ignore */ } finally { setDetailBusy(false) }
-      return
-    }
-    // Discover cards have no id — but if it's already researched, find the stored
-    // record by name and show it instantly (no new search / no spend).
-    if (it.researched) {
-      setDetailBusy(true)
-      try {
-        const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(it.name)}&limit=5`)
-        if (r.ok) {
-          const d = await r.json()
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const rows: any[] = d.properties ?? []
-          const row = rows.find(p => (p.property_name ?? '').toLowerCase() === it.name.toLowerCase()) ?? rows[0]
-          if (row) setDetailReport(normalizeReport(row))
-        }
-      } catch { /* ignore */ } finally { setDetailBusy(false) }
-    }
+        if (r.ok) { const row = await r.json(); setDetailReport(normalizeReport(row)); return }
+      }
+      // ALWAYS check the database by name — if we've researched this property
+      // before, show the stored record. A paid search only happens when it's
+      // genuinely not found in Supabase.
+      const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(it.name)}&limit=8`)
+      if (r.ok) {
+        const d = await r.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rows: any[] = d.properties ?? []
+        const nm = it.name.toLowerCase()
+        const row = rows.find(p => (p.property_name ?? '').toLowerCase() === nm)
+          ?? rows.find(p => (p.property_name ?? '').toLowerCase().includes(nm) || nm.includes((p.property_name ?? '').toLowerCase()))
+        if (row) setDetailReport(normalizeReport(row))
+      }
+    } catch { /* ignore */ } finally { setDetailBusy(false) }
   }, [])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const NAV: { href?: string; active?: boolean; Icon: any; label: string }[] = [
+    { href: '/', Icon: LayoutGrid, label: 'Home' },
+    { active: true, Icon: MapPin, label: 'Discover' },
+    { href: '/crm/leads', Icon: Star, label: 'Leads' },
+    { href: '/sites', Icon: Building2, label: 'Portfolio' },
+    { href: '/crm', Icon: Users, label: 'Contacts' },
+  ]
+
   return (
-    <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100vh' }}>
+    <div className="flex h-full" style={{ background: '#0B1728', minHeight: '100vh' }}>
+      {/* Left icon nav */}
+      <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
+        {NAV.map((n, i) => (
+          <a key={i} href={n.href} title={n.label}
+            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
+            <n.Icon size={18} />
+            <span className="text-[8px] font-bold">{n.label}</span>
+          </a>
+        ))}
+        <div className="flex-1" />
+        <a href="/admin" title="Settings" className="w-full flex flex-col items-center gap-0.5 py-2.5 text-slate-500 hover:text-slate-200 transition-colors">
+          <Settings size={18} /><span className="text-[8px] font-bold">Settings</span>
+        </a>
+      </aside>
+
+      {/* Main column */}
+      <div className="flex flex-col flex-1 min-w-0 h-full">
       {/* Header */}
       <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
         <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
@@ -499,7 +540,7 @@ export default function AriaExplorePage() {
       {items.length > 0 && (
         <div className="shrink-0 px-5 py-2 border-b border-white/[0.07] flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mr-1">Filter</span>
-          {([['Has gate', fGate, setFGate], ['Bulk', fBulk, setFBulk], ['New only', fNew, setFNew]] as const).map(([label, val, set]) => (
+          {([['Has gate', fGate, setFGate], ['Bulk', fBulk, setFBulk], [`Skip already-found${alreadyCount ? ` (${alreadyCount})` : ''}`, fNew, setFNew]] as const).map(([label, val, set]) => (
             <button key={label} onClick={() => set(v => !v)}
               className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${val ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10 hover:border-[#6B7EFF]/50'}`}>
               {label}
@@ -547,18 +588,29 @@ export default function AriaExplorePage() {
               {visible.map(it => {
                 const s = it.buy_score ?? 5
                 const isSel = selected.has(it.id)
+                const thumb = staticThumb(it.lat, it.lng, 320, 150)
                 return (
-                  <div key={it.id} className={`relative rounded-xl border p-4 transition-all ${isSel ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40 bg-[#131B2E]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
+                  <div key={it.id} className={`relative rounded-xl border overflow-hidden transition-all bg-[#131B2E]/70 ${isSel ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40' : 'border-white/10 hover:border-[#6B7EFF]/50'}`}>
+                    {/* Aerial thumbnail */}
+                    <button onClick={() => openDetail(it)} className="block w-full relative h-28 bg-[#0F1830]">
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumb} alt={it.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"><MapPin size={20} className="text-slate-600" /></div>
+                      )}
+                      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(11,23,40,0) 45%,rgba(11,23,40,0.85) 100%)' }} />
+                      <div className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-md" style={{ background: scoreColor(s) }}>{s}</div>
+                      {it.researched && <span className="absolute top-2.5 left-9 text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/90 text-white">✓ Researched</span>}
+                    </button>
+                    {/* Select checkbox */}
                     <button onClick={() => toggle(it.id)} aria-label="Select"
-                      className={`absolute top-3.5 left-3.5 w-5 h-5 rounded-md border flex items-center justify-center ${isSel ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/25 bg-[#0F1830]'}`}>
+                      className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-md border flex items-center justify-center ${isSel ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/40 bg-black/40 backdrop-blur-sm'}`}>
                       {isSel && <Check size={12} className="text-white" />}
                     </button>
-                    <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: scoreColor(s) }}>{s}</div>
-                    <button onClick={() => openDetail(it)} className="w-full text-left pl-7 pr-10">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-sm font-bold text-slate-100 truncate">{it.name}</h3>
-                        {it.researched && <span className="shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">✓</span>}
-                      </div>
+                    {/* Content */}
+                    <button onClick={() => openDetail(it)} className="block w-full text-left p-3">
+                      <h3 className="text-sm font-bold text-slate-100 truncate">{it.name}</h3>
                       <p className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5"><MapPin size={10} className="opacity-70" /> {[it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
@@ -600,6 +652,15 @@ export default function AriaExplorePage() {
         <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setDetail(null)}>
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderLeft: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            {/* Hero aerial photo */}
+            {staticThumb(detail.lat, detail.lng) && (
+              <div className="relative h-36 w-full bg-[#0F1830]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={staticThumb(detail.lat, detail.lng, 520, 220)!} alt={detail.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(11,23,40,0.1) 30%,rgba(11,23,40,0.95) 100%)' }} />
+                <button onClick={() => setDetail(null)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70"><X size={15} /></button>
+              </div>
+            )}
             <div className="flex items-start gap-3 p-5 border-b border-white/10">
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-bold text-slate-100">{detail.name}</h2>
@@ -617,18 +678,20 @@ export default function AriaExplorePage() {
             <div className="p-5 space-y-2.5">
               {/* Research (paid) ONLY for brand-new properties. Researched ones
                   load their stored report on open — no new search, no spend. */}
-              {!detail.researched && !detailReport && (
-                <button onClick={() => researchDetail(detail)} disabled={detailBusy}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
-                  {detailBusy ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                  {detailBusy ? 'Researching…' : 'Research this property'}
+              {detailBusy && !detailReport && (
+                <div className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Checking your database…</div>
+              )}
+              {!detailBusy && !detailReport && (
+                <button onClick={() => researchDetail(detail)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+                  <Zap size={14} /> Research this property <span className="opacity-60 text-[11px]">· not in database yet</span>
                 </button>
               )}
               <button onClick={() => addToLeads([detail])} disabled={busy}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
                 <Plus size={14} /> Add to Leads
               </button>
-              {(detail.researched || detailReport) && (
+              {detailReport && (
                 <button onClick={() => researchDetail(detail)} disabled={detailBusy}
                   className="w-full text-center text-[11px] font-semibold text-slate-500 hover:text-slate-300 py-1 disabled:opacity-60">
                   {detailBusy ? 'Refreshing…' : '↻ Refresh data (runs a new search)'}
@@ -645,7 +708,6 @@ export default function AriaExplorePage() {
             </div>
 
             {/* Report */}
-            {detailBusy && <div className="px-5 pb-8 flex items-center gap-2 text-slate-400 text-xs"><Loader2 size={13} className="animate-spin" /> Pulling the report…</div>}
             {detailReport && !detailReport._error && (() => {
               const rep = detailReport
               const v = (x: unknown) => (x === null || x === undefined || x === '' || (Array.isArray(x) && !x.length)) ? 'No data found' : (Array.isArray(x) ? x.join(', ') : String(x))
@@ -795,6 +857,7 @@ export default function AriaExplorePage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
