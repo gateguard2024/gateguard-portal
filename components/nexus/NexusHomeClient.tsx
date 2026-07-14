@@ -26,15 +26,17 @@ type ChatMessage = {
 
 // Internal/Admin is intentionally NOT here — it lives behind a near-hidden admin
 // icon (see below) so dealers and normal users never see it in the main flow.
+// The old "Operations" tab (id 'recent') and "Money/Docs" (id 'field') are
+// retired from the main flow — the Jobs surface IS operations, so it now carries
+// the name. Both surfaces still exist in the codebase and their remaining work is
+// tracked in docs/nexus/BUILD_SCHEDULE.md; nothing here deletes them.
 const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
   { label: 'Sales', id: 'opps' },
-  { label: 'Jobs', id: 'jobs' },
-  { label: 'Operations', id: 'recent' },
+  { label: 'Operations', id: 'jobs' },
   { label: 'Design', id: 'design' },
   { label: 'Catalog', id: 'catalog' },
   { label: 'Systems', id: 'systems' },
-  { label: 'Money/Docs', id: 'field' },
 ]
 
 const COMMAND_SUGGESTIONS = [

@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users, Star, Settings } from 'lucide-react'
+import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users, Star, Settings, Globe } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, LayoutGrid, Map: MapIcon, Cpu } = require('lucide-react') as any
 import { SearchHistoryPanel } from '@/components/aria/SearchHistoryPanel'
@@ -326,6 +326,8 @@ function savedRowToItem(row: any): PropItem {
     contract_expiry_year: row.contract_expiry_year ?? undefined,
     lat: row.facts?.property?.lat ?? undefined,
     lng: row.facts?.property?.lng ?? undefined,
+    website: row.facts?.property?.website ?? row.website ?? null,
+    photo_url: row.facts?.property?.photo_url ?? row.photo_url ?? null,
   }
 }
 
@@ -1231,13 +1233,15 @@ export default function AriaExplorePage() {
         {selected.size > 0 && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/10 shadow-2xl" style={{ background: 'rgba(11,23,40,0.97)', backdropFilter: 'blur(12px)' }}>
             <span className="text-xs font-bold text-slate-200">{selected.size} selected</span>
-            <button onClick={() => addToLeads(selectedItems)} disabled={busy}
+            {/* Save is the primary action on a base find — keep what you found. */}
+            <button onClick={() => saveToDb(selectedItems)} disabled={saveBusy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#6B7EFF' }}>
-              <Plus size={13} /> {busy ? 'Adding…' : 'Add to Leads'}
+              {saveBusy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              {saveBusy ? 'Saving…' : 'Save to database'}
             </button>
-            <button onClick={() => { const first = selectedItems[0]; if (first) { setDetail(first); setDetailReport(null); researchDetail(first) } }} disabled={busy}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10">
-              <Zap size={13} /> Research
+            <button onClick={() => addToLeads(selectedItems)} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10 disabled:opacity-50">
+              <Star size={13} /> {busy ? 'Adding…' : 'Add to Leads'}
             </button>
             <button onClick={() => setSelected(new Set())} className="text-[11px] font-bold text-slate-400 hover:text-slate-200">Clear</button>
           </div>
@@ -1249,11 +1253,20 @@ export default function AriaExplorePage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-8" onClick={() => setDetail(null)}>
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
           <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl" style={{ background: '#0B1728', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
-            {/* Hero — real property photo if we have one, else aerial of the site */}
-            {(detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
+            {/* Hero — the community's own photo (from the base find or the saved
+                record). Satellite is only the fallback when there's no real shot. */}
+            {(detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
               <div className="relative h-44 w-full bg-[#0F1830]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 700, 300)!} alt={detail.name} className="w-full h-full object-cover" />
+                <img
+                  src={detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 700, 300)!}
+                  alt={detail.name}
+                  onError={e => {
+                    const fb = staticThumb(detail.lat, detail.lng, 700, 300)
+                    const el = e.currentTarget as HTMLImageElement
+                    if (fb && el.src !== fb) el.src = fb
+                  }}
+                  className="w-full h-full object-cover" />
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(11,23,40,0.1) 30%,rgba(11,23,40,0.95) 100%)' }} />
                 <button onClick={() => setDetail(null)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70"><X size={15} /></button>
               </div>
@@ -1271,22 +1284,50 @@ export default function AriaExplorePage() {
               <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-slate-200"><X size={18} /></button>
             </div>
 
+            {/* What the base find already told us — shown before any deep run. */}
+            {detail.systems && (
+              <div className="px-5 pt-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">What we found (base)</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {SYSTEM_LABELS.map(sl => {
+                    const on = !!detail.systems?.[sl.key]
+                    return (
+                      <span key={sl.key}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                          on ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                             : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
+                        {on ? '✓' : '—'} {sl.label}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Three clear actions */}
             <div className="p-5 space-y-2.5">
-              {/* Research (paid) ONLY for brand-new properties. Researched ones
-                  load their stored report on open — no new search, no spend. */}
+              {/* Save the base find first — cheap, instant, and it's what makes
+                  this property viewable later without paying for a search. */}
+              {!detail.researched && detail.systems && (
+                <button onClick={() => saveToDb([detail])} disabled={saveBusy}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: '#6B7EFF' }}>
+                  {saveBusy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {saveBusy ? 'Saving…' : 'Save to database'}
+                </button>
+              )}
               {detailBusy && !detailReport && (
                 <div className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Checking your database…</div>
               )}
+              {/* Deep research is always an explicit, deliberate choice — never automatic. */}
               {!detailBusy && !detailReport && (
                 <button onClick={() => researchDetail(detail)}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
-                  <Zap size={14} /> Research this property <span className="opacity-60 text-[11px]">· not in database yet</span>
+                  <Zap size={14} /> Deep research this property <span className="opacity-60 text-[11px]">· runs a full search</span>
                 </button>
               )}
               <button onClick={() => addToLeads([detail])} disabled={busy}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
-                <Plus size={14} /> Add to Leads
+                <Star size={14} /> Add to Leads
               </button>
               {detailReport && (
                 <button onClick={() => researchDetail(detail)} disabled={detailBusy}

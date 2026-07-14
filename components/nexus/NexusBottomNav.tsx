@@ -2,11 +2,14 @@
 
 import { useRouter } from 'next/navigation'
 
+// NOTE: the ids here are the source of NexusTabId, so they stay even where a tab
+// is retired from the visible nav — removing one breaks the type union that the
+// surfaces switch on. Labels reflect the current naming: Jobs IS Operations.
 export const NEXUS_TABS = [
   { id: 'my-day',  label: 'My Day',           href: '/?tab=my-day' },
   { id: 'recent',  label: 'Recent Work',       href: '/?tab=recent' },
   { id: 'opps',    label: 'New Opps/Leads',    href: '/opps',        badge: 0 },
-  { id: 'jobs',    label: 'Jobs',              href: '/?tab=jobs' },
+  { id: 'jobs',    label: 'Operations',        href: '/?tab=jobs' },
   { id: 'field',   label: 'Field',             href: '/?tab=field' },
   { id: 'people',  label: 'People',            href: '/?tab=people' },
 ] as const
