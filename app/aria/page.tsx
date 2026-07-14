@@ -86,6 +86,7 @@ function normalizeReport(raw: any): any {
     }
     return {
       property: {
+        photo_url: f.property?.photo_url ?? raw.photo_url ?? raw.image_url,
         phone: f.property?.phone ?? raw.property_phone ?? raw.dm_phone,
         units: f.property?.units ?? raw.units, year_built: f.property?.year_built ?? raw.year_built,
         occupancy: f.property?.occupancy ?? raw.occupancy, management_company: f.property?.management_company ?? raw.management_company,
@@ -111,6 +112,7 @@ function normalizeReport(raw: any): any {
   const p = raw
   return {
     property: {
+      photo_url: p.property?.photo_url ?? p.property?.image_url,
       phone: p.property?.phone, units: p.property?.units, year_built: p.property?.year_built,
       occupancy: p.property?.occupancy, management_company: p.property?.management_company,
       owner_entity: p.ownership?.owner_entity ?? p.property?.owner_entity,
@@ -192,6 +194,7 @@ export default function AriaExplorePage() {
 
   const mapRef     = useRef<any>(null)               // eslint-disable-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<Record<string, any>>({}) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [mapTick, setMapTick] = useState(0) // forces the map effect to retry until Mapbox GL loads
 
   // Load Mapbox GL once
   useEffect(() => {
@@ -225,10 +228,12 @@ export default function AriaExplorePage() {
   // (Re)draw markers when items change or the map view is shown
   useEffect(() => {
     if (view !== 'map') return
-    initMap()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mapboxgl = (window as any).mapboxgl
-    if (!mapboxgl || !mapRef.current) return
+    // Mapbox GL may not have finished loading yet — retry until it has.
+    if (!mapboxgl) { const t = setTimeout(() => setMapTick(x => x + 1), 350); return () => clearTimeout(t) }
+    initMap()
+    if (!mapRef.current) { const t = setTimeout(() => setMapTick(x => x + 1), 200); return () => clearTimeout(t) }
     const map = mapRef.current
     setTimeout(() => map.resize(), 60)
     Object.values(markersRef.current).forEach((m: any) => m.remove()) // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -259,7 +264,7 @@ export default function AriaExplorePage() {
       bounds?.extend([it.lng!, it.lat!])
     }
     if (bounds && withCoords.length) { try { map.fitBounds(bounds, { padding: 60, maxZoom: 13, duration: 500 }) } catch { /* noop */ } }
-  }, [items, view, initMap, fMinUnits, fGate, fBulk, fNew, fExpBefore, source, query])
+  }, [items, view, initMap, fMinUnits, fGate, fBulk, fNew, fExpBefore, source, query, mapTick])
 
   const runSearch = useCallback(async (qArg?: string) => {
     const q = (qArg ?? query).trim()
@@ -711,8 +716,8 @@ export default function AriaExplorePage() {
                     </button>
                     {/* Select checkbox */}
                     <button onClick={() => toggle(it.id)} aria-label="Select"
-                      className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-md border flex items-center justify-center ${isSel ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/40 bg-black/40 backdrop-blur-sm'}`}>
-                      {isSel && <Check size={12} className="text-white" />}
+                      className={`absolute top-2.5 left-2.5 z-10 w-7 h-7 rounded-lg border-2 flex items-center justify-center shadow-lg transition-all ${isSel ? 'bg-[#6B7EFF] border-white' : 'border-white bg-black/55 backdrop-blur-sm hover:bg-black/75'}`}>
+                      {isSel && <Check size={16} className="text-white" strokeWidth={3} />}
                     </button>
                     {/* Content */}
                     <button onClick={() => openDetail(it)} className="block w-full text-left p-3">
@@ -757,12 +762,12 @@ export default function AriaExplorePage() {
       {detail && (
         <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setDetail(null)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderLeft: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
-            {/* Hero aerial photo */}
-            {staticThumb(detail.lat, detail.lng) && (
-              <div className="relative h-36 w-full bg-[#0F1830]">
+          <div className="relative w-full max-w-2xl h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderLeft: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            {/* Hero — real property photo if we have one, else aerial of the site */}
+            {(detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
+              <div className="relative h-44 w-full bg-[#0F1830]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={staticThumb(detail.lat, detail.lng, 520, 220)!} alt={detail.name} className="w-full h-full object-cover" />
+                <img src={detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 700, 300)!} alt={detail.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(11,23,40,0.1) 30%,rgba(11,23,40,0.95) 100%)' }} />
                 <button onClick={() => setDetail(null)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70"><X size={15} /></button>
               </div>
@@ -830,19 +835,22 @@ export default function AriaExplorePage() {
                   <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}</span>
                 </div>
               )
-              const buy = Number(rep.buy_score ?? 5)
+              // Normalize any 0-100 style score (e.g. buy_score from freshness) to 0-10.
+              const norm10 = (x: unknown) => { const n = Number(x); if (!isFinite(n)) return 5; return n > 10 ? Math.round((n / 10) * 10) / 10 : n }
+              const buy = norm10(rep.buy_score ?? 5)
               // Pro-Tech Fit: low modern saturation + displacement signals = high fit for us.
               const fit = Math.max(0, Math.min(10, 5 + (rep.property?.bulk_agreements?.length ? 2 : 0) + (detail?.gate_signal || /gate|access/i.test(String(rep.ai_intel?.key_finding || '')) ? 2 : 0) - Math.min(found.length, 4)))
-              const gcol = (n: number) => n >= 8 ? '#22c55e' : n >= 5 ? '#f59e0b' : '#ef4444'
+              // Striking, high-contrast gauge colors.
+              const gcol = (n: number) => n >= 7 ? '#2ee66d' : n >= 4.5 ? '#f6a723' : '#ff4d4f'
               // Half-circle speedometer gauge (matches the mockup).
               const SemiGauge = ({ label, val, size = 96 }: { label: string; val: number; size?: number }) => {
-                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44
+                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44, c = gcol(val)
                 return (
                   <div className="flex flex-col items-center">
                     <svg width={size} height={size * 0.58} viewBox="0 0 100 58">
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#1e293b" strokeWidth="9" strokeLinecap="round" />
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={gcol(val)} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} />
-                      <text x="50" y="47" textAnchor="middle" fontSize="18" fontWeight="800" fill={gcol(val)}>{val.toFixed(1)}</text>
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#243247" strokeWidth="9" strokeLinecap="round" />
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={c} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} style={{ filter: `drop-shadow(0 0 3px ${c}aa)` }} />
+                      <text x="50" y="46" textAnchor="middle" fontSize="19" fontWeight="800" fill={c}>{val.toFixed(1)}</text>
                       <text x="50" y="56" textAnchor="middle" fontSize="7" fontWeight="700" fill="#64748b">/10</text>
                     </svg>
                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wide -mt-1 text-center leading-tight">{label}</span>
