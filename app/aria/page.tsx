@@ -438,9 +438,25 @@ export default function AriaExplorePage() {
       // GUARANTEE all data (facts + inferred) is saved to Supabase — post the full
       // prospect to the canonical upsert (builds facts + deductions incl. inferred).
       if (d?.prospects?.length) {
-        void fetch('/api/aria/properties', {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p0: any = d.prospects[0]
+        await fetch('/api/aria/properties', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prospects: d.prospects }),
+        }).catch(() => {})
+        // Also fetch + save Community (social) posts and show them live.
+        fetch('/api/aria/social', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            property_name: p0.property?.name, city: p0.property?.city, state: p0.property?.state,
+            management_company: p0.property?.management_company,
+            isp_providers: p0.property?.isp_providers, video_providers: p0.property?.video_providers,
+            bulk_agreements: p0.property?.bulk_agreements,
+            gate_operators: p0.property?.proptech?.gate_operators, access_control: p0.property?.proptech?.access_control,
+          }),
+        }).then(r => r.ok ? r.json() : null).then(sd => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (sd?.social_posts?.length) setDetailReport((prev: any) => prev ? { ...prev, community: sd.social_posts } : prev)
         }).catch(() => {})
       }
     } catch { setDetailReport({ _error: true }) }
@@ -459,17 +475,26 @@ export default function AriaExplorePage() {
         const r = await fetch(`/api/aria/properties/${it.id}`)
         if (r.ok) { const row = await r.json(); setDetailReport(normalizeReport(row)); return }
       }
-      // ALWAYS check the database by name — if we've researched this property
-      // before, show the stored record. A paid search only happens when it's
-      // genuinely not found in Supabase.
-      const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(it.name)}&limit=8`)
+      // ALWAYS check the database first — research often RENAMES a property
+      // ("Avana on Main" → "Avana Uptown Apartments"), so match on a keyword +
+      // city, not the exact name. A paid search only happens when it's truly
+      // not found in Supabase.
+      const nm = it.name.toLowerCase().trim()
+      const tokens = nm.split(/\s+/).filter(w => w.length > 3)
+      const term = tokens[0] || it.name
+      const city = (it.city || '').toLowerCase()
+      const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(term)}&limit=30`)
       if (r.ok) {
         const d = await r.json()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rows: any[] = d.properties ?? []
-        const nm = it.name.toLowerCase()
         const row = rows.find(p => (p.property_name ?? '').toLowerCase() === nm)
-          ?? rows.find(p => (p.property_name ?? '').toLowerCase().includes(nm) || nm.includes((p.property_name ?? '').toLowerCase()))
+          ?? rows.find(p => {
+            const pn = (p.property_name ?? '').toLowerCase()
+            const pc = (p.facts?.property?.city ?? p.city ?? '').toLowerCase()
+            const shares = tokens.some(t => pn.includes(t))
+            return shares && (!city || !pc || pc === city)
+          })
         if (row) setDetailReport(normalizeReport(row))
       }
     } catch { /* ignore */ } finally { setDetailBusy(false) }
@@ -840,17 +865,19 @@ export default function AriaExplorePage() {
               const buy = norm10(rep.buy_score ?? 5)
               // Pro-Tech Fit: low modern saturation + displacement signals = high fit for us.
               const fit = Math.max(0, Math.min(10, 5 + (rep.property?.bulk_agreements?.length ? 2 : 0) + (detail?.gate_signal || /gate|access/i.test(String(rep.ai_intel?.key_finding || '')) ? 2 : 0) - Math.min(found.length, 4)))
-              // Striking, high-contrast gauge colors.
-              const gcol = (n: number) => n >= 7 ? '#2ee66d' : n >= 4.5 ? '#f6a723' : '#ff4d4f'
-              // Half-circle speedometer gauge (matches the mockup).
+              // Premium two-tone gradient speedometer — green→teal (strong),
+              // amber→orange (mid), rose→red (weak). White numerals for contrast.
               const SemiGauge = ({ label, val, size = 96 }: { label: string; val: number; size?: number }) => {
-                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44, c = gcol(val)
+                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44
+                const [c1, c2] = val >= 7 ? ['#34d399', '#06b6d4'] : val >= 4.5 ? ['#fbbf24', '#f97316'] : ['#fb7185', '#e11d48']
+                const gid = `gg-${label.replace(/\s+/g, '')}-${Math.round(val * 10)}`
                 return (
                   <div className="flex flex-col items-center">
                     <svg width={size} height={size * 0.58} viewBox="0 0 100 58">
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#243247" strokeWidth="9" strokeLinecap="round" />
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={c} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} style={{ filter: `drop-shadow(0 0 3px ${c}aa)` }} />
-                      <text x="50" y="46" textAnchor="middle" fontSize="19" fontWeight="800" fill={c}>{val.toFixed(1)}</text>
+                      <defs><linearGradient id={gid} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={c1} /><stop offset="100%" stopColor={c2} /></linearGradient></defs>
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#1c2740" strokeWidth="9" strokeLinecap="round" />
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={`url(#${gid})`} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} style={{ filter: `drop-shadow(0 0 4px ${c1}88)` }} />
+                      <text x="50" y="46" textAnchor="middle" fontSize="19" fontWeight="800" fill="#f8fafc">{val.toFixed(1)}</text>
                       <text x="50" y="56" textAnchor="middle" fontSize="7" fontWeight="700" fill="#64748b">/10</text>
                     </svg>
                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wide -mt-1 text-center leading-tight">{label}</span>
@@ -858,7 +885,7 @@ export default function AriaExplorePage() {
                 )
               }
               const verdictLabel = buy >= 8 ? 'HOT LEAD' : buy >= 5 ? 'WARM LEAD' : 'COLD'
-              const verdictColor = buy >= 8 ? '#22c55e' : buy >= 5 ? '#f59e0b' : '#ef4444'
+              const verdictColor = buy >= 8 ? '#34d399' : buy >= 5 ? '#fbbf24' : '#fb7185'
               const verdictText = (rep.ai_intel?.key_finding && rep.ai_intel.key_finding !== 'No data found')
                 ? rep.ai_intel.key_finding
                 : `${detail?.name} is a ${detail?.units ? `${detail.units}-unit ` : ''}property${rep.property?.bulk_agreements?.length ? ' with an existing bulk internet deal worth displacing' : ''}${found.length === 0 ? '. Low proptech saturation signals strong upgrade potential' : ''}. ${buy >= 8 ? 'Hot lead — prioritize.' : buy >= 5 ? 'Warm — worth a call.' : 'Cold for now.'}`
