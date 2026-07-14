@@ -40,7 +40,13 @@ interface SerperResult { title: string; url: string; content: string }
 // enough that the vendor being complained about is probably still on site.
 const POST_WINDOW = 'qdr:y' // last 12 months
 
-async function serperSocial(query: string, num = 6): Promise<SerperResult[]> {
+// IMPORTANT: `dated` is opt-IN, not the default.
+// A review hub (Google Maps, Yelp, ApartmentRatings) is one long-lived page —
+// it isn't "published" within the last N months, so a tbs date filter throws
+// away almost every result. Running qdr:m6 against site:google.com/maps is how
+// a 224-unit Buckhead property came back with zero posts. Date-filter only the
+// things that genuinely have a publish date: news, and the negative sweep.
+async function serperSocial(query: string, num = 6, dated = false): Promise<SerperResult[]> {
   if (!process.env.SERPER_API_KEY) return []
   try {
     const res = await fetch('https://google.serper.dev/search', {
@@ -51,7 +57,7 @@ async function serperSocial(query: string, num = 6): Promise<SerperResult[]> {
         num,
         gl: 'us',
         hl: 'en',
-        tbs: POST_WINDOW,
+        ...(dated ? { tbs: POST_WINDOW } : {}),
       }),
       signal: AbortSignal.timeout(7000),
     })
@@ -176,13 +182,24 @@ export async function POST(req: NextRequest) {
       ? `(${onSiteTech.map(t => `"${t}"`).join(' OR ')})`
       : `(${TECH_KEYWORDS})`
 
-    const [propertyResults, mgmtResults, bulkResults, phoneResults, negativeResults] = await Promise.all([
+    // Every name this community trades under. Properties get rebranded and the
+    // reviews stay under the old name (or the new one) — searching a single
+    // string silently loses half the evidence. Include the caller's aliases plus
+    // a "The"-stripped variant, which is the most common listing-site difference.
+    const aliasSet = new Set<string>([property_name])
+    if (Array.isArray(body.aliases)) for (const a of body.aliases) if (typeof a === 'string' && a.trim()) aliasSet.add(a.trim())
+    const stripped = property_name.replace(/^the\s+/i, '').trim()
+    if (stripped && stripped !== property_name) aliasSet.add(stripped)
+    const aliasQ = `(${[...aliasSet].slice(0, 4).map(a => `"${a}"`).join(' OR ')})`
 
-      // Search 1 — property-level social (Reddit, Google Reviews, Yelp, listing reviews) — up to 10
-      serperSocial(
-        `site:reddit.com OR site:google.com/maps OR site:yelp.com OR site:apartments.com "${property_name}" ${city} (${TECH_KEYWORDS}) review OR complaint OR resident`,
-        10
-      ),
+    const [propertyResults, mgmtResults, bulkResults, phoneResults, negativeResults, aliasResults] = await Promise.all([
+
+      // Search 1 — property reviews, deliberately BROAD and undated.
+      // Previously this stacked 4 site: filters + 15 tech keywords + a 6-month
+      // window in one query. Google returned ~nothing, so a property with
+      // hundreds of real reviews looked like it had none. Cast wide here and let
+      // Haiku pick out the tech complaints below — that's what the model is for.
+      serperSocial(`"${property_name}" ${city} apartments reviews complaints residents`, 10),
 
       // Search 2 — management company social (catches complaints that name the mgmt co, not just the property)
       management_company
@@ -205,10 +222,17 @@ export async function POST(req: NextRequest) {
       ),
 
       // Search 5 — NEGATIVE posts about the proptech that's actually on site.
-      // Widest source net: Reddit, Facebook, Yelp, Google, ApartmentRatings, X.
+      // Dated (12mo): complaints DO have publish dates, and a stale one may name
+      // a vendor that's already been replaced.
+      serperSocial(`"${property_name}" ${city} ${onSiteQ} ${NEGATIVE}`, 10, true),
+
+      // Search 6 — the property under ANY name it goes by. Communities get
+      // rebranded constantly (this is real: "Aster Buckhead" now trades as
+      // "LYV Buckhead" on the listing sites), and the reviews stay under the
+      // OTHER name. Searching one name alone silently misses all of them.
       serperSocial(
-        `("${property_name}" OR "${property_name}" apartments) ${city} ${onSiteQ} ${NEGATIVE} (site:reddit.com OR site:facebook.com OR site:yelp.com OR site:apartmentratings.com OR site:google.com/maps OR site:x.com OR site:twitter.com OR site:apartments.com)`,
-        10
+        `${aliasQ} ${city} (gate OR internet OR wifi OR cable OR package OR "smart lock" OR camera) (review OR complaint OR resident OR reddit)`,
+        8
       ),
     ])
 
@@ -221,6 +245,7 @@ export async function POST(req: NextRequest) {
     const allSnippets = [
       // Negative-first: these are the posts that make the pitch.
       formatSnippets(negativeResults, `NEGATIVE POSTS ABOUT ON-SITE TECH${onSiteTech.length ? ` (${onSiteTech.join(', ')})` : ''}`),
+      formatSnippets(aliasResults,    'SAME PROPERTY UNDER OTHER NAMES (rebrands)'),
       formatSnippets(propertyResults, 'PROPERTY SOCIAL (Reddit / Google Reviews / Yelp)'),
       formatSnippets(mgmtResults,     'MANAGEMENT CO SOCIAL'),
       formatSnippets(bulkResults,     'BULK / EXCLUSIVE SIGNAL SEARCH'),

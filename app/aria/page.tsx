@@ -228,6 +228,18 @@ function normalizeReport(raw: any): any {
         proptech: pt,
         inferred_proptech: pickArr(d.proptech_inferred),
       },
+      // What the base find proved EXISTS, even when deep hasn't named the brand.
+      // "Present, brand unknown" and "no data found" are completely different
+      // facts and must never be shown as the same thing.
+      presence: {
+        internet:      !!f.connectivity?.internet_present,
+        video:         !!f.connectivity?.video_present,
+        bulk:          !!f.connectivity?.bulk_present || !!raw.roe_detected,
+        gates:         !!f.proptech_found?.gates_present,
+        cameras:       !!f.proptech_found?.cameras_present,
+        smart_lockers: !!f.proptech_found?.smart_lockers_present,
+        smart_rent:    !!f.proptech_found?.smart_rent_present,
+      },
       contacts: pickArr(f.decision_makers, raw.dm_chain),
       // Community lives in the `social_posts` column (written by /api/aria/social);
       // facts.community_posts is often an empty placeholder — take whichever has data.
@@ -1545,16 +1557,30 @@ export default function AriaExplorePage() {
                           </button>
                         </div>
                         <div className="overflow-y-auto p-4">
-                      {openCard === 'network' && (
-                        <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                          <Row k="Internet (ISP)" val={v(rep.property?.isp_providers)} />
-                          <Row k="TV / Video" val={v(rep.property?.video_providers)} />
-                          <Row k="Bulk deal" val={rep.property?.bulk_agreements?.length ? `Yes — ${rep.property.bulk_agreements.map((b: any) => b.provider).filter(Boolean).join(', ')}` : 'No data found'} /> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
-                          <Row k="Contract expiry" val={v(rep.property?.roe_expiry_year)} />
-                          <Row k="Phone" val={v(rep.property?.phone)} />
-                          <Row k="Units" val={v(rep.property?.units)} />
-                        </div>
-                      )}
+                      {openCard === 'network' && (() => {
+                        // Three honest states, never conflated:
+                        //   brand known → name it
+                        //   present but unnamed → say so (that IS a finding)
+                        //   nothing → "No data found"
+                        const pz = rep.presence ?? {}
+                        const vp = (arr: unknown, present: boolean) => {
+                          if (Array.isArray(arr) && arr.length) return arr.join(', ')
+                          if (arr && !Array.isArray(arr)) return String(arr)
+                          return present ? 'Present — provider not identified yet' : 'No data found'
+                        }
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const bulks = (rep.property?.bulk_agreements ?? []).map((b: any) => b?.provider).filter(Boolean)
+                        return (
+                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                            <Row k="Internet (ISP)" val={vp(rep.property?.isp_providers, !!pz.internet)} />
+                            <Row k="TV / Video" val={vp(rep.property?.video_providers, !!pz.video)} />
+                            <Row k="Bulk deal" val={bulks.length ? `Yes — ${bulks.join(', ')}` : (pz.bulk ? 'Yes — provider not identified yet' : 'No data found')} />
+                            <Row k="Contract expiry" val={v(rep.property?.roe_expiry_year)} />
+                            <Row k="Phone" val={v(rep.property?.phone)} />
+                            <Row k="Units" val={v(rep.property?.units)} />
+                          </div>
+                        )
+                      })()}
                       {openCard === 'community' && (
                         <div className="space-y-2">
                           {community.length === 0 && (
@@ -1579,8 +1605,25 @@ export default function AriaExplorePage() {
                       )}
                       {openCard === 'proptech' && (
                         <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Found on site</p>
-                          <p className={`text-[11px] ${found.length ? 'text-slate-200' : 'text-slate-500 italic'}`}>{found.length ? found.join(', ') : 'No data found'}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Brands identified</p>
+                          <p className={`text-[11px] ${found.length ? 'text-slate-200' : 'text-slate-500 italic'}`}>{found.length ? found.join(', ') : 'No brands identified yet'}</p>
+                          {/* Confirmed present by the base find, brand still unknown —
+                              that's a finding in its own right, not an empty cell. */}
+                          {(() => {
+                            const pz = rep.presence ?? {}
+                            const on = SYSTEM_LABELS.filter(sl => pz[sl.key])
+                            if (!on.length) return null
+                            return (
+                              <div className="mt-3 pt-3 border-t border-white/5">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Confirmed on site (brand TBD)</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {on.map(sl => (
+                                    <span key={sl.key} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">{sl.label}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                           {inferred.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
                               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Likely (AI-deduced)</p>

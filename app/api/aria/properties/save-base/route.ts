@@ -28,6 +28,7 @@ interface BaseIn {
   name: string; address?: string; city?: string; state?: string
   units?: number | null; website?: string | null; management_company?: string | null
   lat?: number | null; lng?: number | null; photo_url?: string | null
+  phone?: string | null
   systems?: Systems
 }
 
@@ -49,11 +50,6 @@ export async function POST(req: NextRequest) {
       const name = (p.name ?? '').trim()
       if (!name) { errors.push('A result had no name.'); continue }
       const sys = p.systems ?? {}
-
-      // The base find only knows "does this exist", not the brand. Record the
-      // presence as a placeholder so the flag survives; a later deep research
-      // replaces it with the real vendor name via the merge-upsert.
-      const flag = (on: boolean | undefined, label: string) => (on ? [label] : null)
 
       // facts = Data In. Only what we actually observed.
       const facts = {
@@ -106,15 +102,16 @@ export async function POST(req: NextRequest) {
         city: p.city ?? null,
         state: p.state ?? null,
         units: p.units ?? null,
+        property_phone: p.phone ?? null,
         website: p.website ?? null,
         management_company: p.management_company ?? null,
         roe_detected: !!sys.bulk,
-        gate_operators: flag(sys.gates, 'Gate (present — brand unknown)'),
-        cameras: flag(sys.cameras, 'Cameras (present — brand unknown)'),
-        package_solutions: flag(sys.smart_lockers, 'Package lockers (present — brand unknown)'),
-        resident_apps: flag(sys.smart_rent, 'Smart home / SmartRent (present — brand unknown)'),
-        isp_providers: flag(sys.internet, 'Internet (present — provider unknown)'),
-        video_providers: flag(sys.video, 'Video/TV (present — provider unknown)'),
+        // NOTE: brand columns (isp_providers, gate_operators, cameras, …) are
+        // deliberately NOT written here. The base find knows a gate EXISTS, not
+        // which gate. Writing "Gate (present — brand unknown)" into the vendor
+        // column poisons real data — the deep merge unions arrays, so the fake
+        // string would sit next to the real brand forever and read as a finding.
+        // Presence lives in facts.* only; deep research fills the brands.
         facts: existing?.facts ? { ...(existing.facts as object), ...facts } : facts,
         last_researched_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

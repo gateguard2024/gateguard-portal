@@ -19,6 +19,7 @@ import { auth } from '@clerk/nextjs/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { upsertAriaProperties } from '@/lib/aria-upsert'
 
 const supabaseDeep = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2584,16 +2585,13 @@ export async function POST(req: NextRequest) {
     const checkpoint = (partial: Record<string, unknown>) => {
       pendingWrites.push((async () => {
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-          const r = await fetch(`${baseUrl}/api/aria/properties`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-service-key': process.env.ARIA_SERVICE_KEY ?? '' },
-            body: JSON.stringify({ prospects: [partial] }),
-          })
-          const b = await r.json().catch(() => ({}))
-          if (!r.ok || !(b?.upserted > 0)) {
+          // Direct in-process call. This used to POST to `${baseUrl}/api/aria/properties`
+          // — an HTTP request this route made to ITSELF, which fell back to
+          // localhost:3000 on Vercel and connected to nothing.
+          const res = await upsertAriaProperties([partial])
+          if (!(res.upserted > 0)) {
             checkpointFail++
-            console.error(`[aria/deep] checkpoint save FAILED: ${b?.error ?? `HTTP ${r.status}`}`)
+            console.error(`[aria/deep] checkpoint save FAILED: ${res.errors[0] ?? 'nothing upserted'}`)
           } else { checkpointOk++ }
         } catch (e) {
           checkpointFail++
@@ -3403,11 +3401,14 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       } catch { }
     })()
 
-    // ── Persist to Intel DB (non-blocking) ────────────────────────────────────
-    // NOTE: Use the same baseUrl pattern as Inngest — NEXT_PUBLIC_APP_URL first,
-    // then VERCEL_URL (deployment URL), then localhost. NEXT_PUBLIC_APP_URL alone
-    // was falling back to localhost:3000 in production when the env var wasn't set.
-    // MUST be awaited. This used to be `void (async () => {...})()` — a
+    // ── Persist to Intel DB ───────────────────────────────────────────────────
+    // Direct in-process call to the shared upsert. This used to POST to
+    // `${baseUrl}/api/aria/properties` — an HTTP request this route made to
+    // ITSELF. With NEXT_PUBLIC_APP_URL unset, baseUrl fell back to
+    // localhost:3000, which on Vercel connects to nothing; the failure was
+    // swallowed and NOTHING was ever saved. No network hop, no baseUrl, no
+    // self-auth needed now.
+    // MUST be awaited. This was also once `void (async () => {...})()` — a
     // fire-and-forget in a serverless function. Vercel freezes/kills the
     // instance the moment the response is returned, so the in-flight save was
     // routinely killed and the property never landed in the Intel DB. That is
@@ -3416,20 +3417,9 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     let savedToIntelDb = false
     let saveError: string | null = null
     try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_APP_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-      const upsertRes = await fetch(`${baseUrl}/api/aria/properties`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-service-key': process.env.ARIA_SERVICE_KEY ?? '',
-        },
-        body: JSON.stringify({ prospects: [prospectPayload] }),
-      })
-      const upsertBody = await upsertRes.json().catch(() => ({}))
-      if (!upsertRes.ok || !(upsertBody?.upserted > 0)) {
-        saveError = upsertBody?.error || `HTTP ${upsertRes.status}`
+      const upsertRes = await upsertAriaProperties([prospectPayload])
+      if (!(upsertRes.upserted > 0)) {
+        saveError = upsertRes.errors[0] ?? 'Nothing saved'
         console.error(`[aria/deep] Intel DB save FAILED for "${property_name}": ${saveError}`)
       } else {
         savedToIntelDb = true

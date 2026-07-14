@@ -51,6 +51,7 @@ export interface BaseProperty {
   units: number | null
   lat?: number | null
   lng?: number | null
+  phone?: string | null       // the property's OWN line — never an 800 tracking number
   website?: string | null
   management_company?: string | null
   photo_url?: string | null   // the community's own hero shot (og:image)
@@ -127,6 +128,22 @@ async function heroImage(url: string): Promise<string | null> {
   } catch { return null }
 }
 
+// ─── Phone hygiene ───────────────────────────────────────────────────────────
+// Listing aggregators (apartments.com, rentdeals, forrent…) inject their own
+// toll-free lead-capture numbers into every snippet — e.g. "(800) 644-5012".
+// Those route to THEIR call centre, not the property. Returning one as the site
+// phone is worse than returning nothing: a rep dials it in good faith.
+const TOLLFREE = /^(800|833|844|855|866|877|888)$/
+function cleanPhone(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const digits = raw.replace(/\D/g, '')
+  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+  if (ten.length !== 10) return null
+  if (TOLLFREE.test(ten.slice(0, 3))) return null       // aggregator tracking line
+  if (/^(\d)\1{9}$/.test(ten)) return null              // 0000000000 etc.
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`
+}
+
 // ─── Is this one named property, or an area/cluster hunt? ────────────────────
 // Cheap heuristic first — no model call for the obvious cases.
 function looksLikeArea(q: string): boolean {
@@ -157,18 +174,30 @@ export async function POST(req: NextRequest) {
     const isArea = looksLikeArea(query)
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+    // Quote the NAME only — never the whole query. `"Aster Buckhead Atlanta GA"`
+    // as one phrase matches nothing on the web, which is how a search for a real
+    // property came back with unrelated "Buckhead Luxury Apartments" results.
+    // Strip the trailing city/state so the name can be quoted on its own.
+    const nameOnly = query
+      .replace(/\b[A-Z]{2}\b\s*$/i, '')                 // trailing state
+      .replace(/,\s*[^,]+\s*$/, '')                     // trailing ", City"
+      .trim() || query
+    const qName = `"${nameOnly}"`
+
     // Two cheap searches: identity/listing + amenities (where systems show up).
     const [identity, amenities] = await Promise.all([
       serper(
         isArea
           ? `${query} apartments site:apartments.com OR site:rentcafe.com OR site:loopnet.com`
-          : `"${query}" apartments address units site:apartments.com OR site:rentcafe.com OR site:zillow.com`,
-        isArea ? 10 : 6
+          // yardimatrix/loopnet carry structured unit + year-built facts that the
+          // consumer listing sites bury — they're the reason units go missing.
+          : `${qName} apartments ${query} units "year built" address (site:yardimatrix.com OR site:loopnet.com OR site:apartments.com OR site:rentcafe.com OR site:apartmentlist.com OR site:zillow.com)`,
+        isArea ? 10 : 8
       ),
       serper(
         isArea
           ? `${query} apartments amenities internet wifi cable gated "controlled access" cameras package lockers`
-          : `"${query}" amenities internet wifi cable TV gated "controlled access" cameras "package lockers" SmartRent`,
+          : `${qName} ${query} amenities internet wifi cable TV gated "controlled access" cameras "package lockers" SmartRent`,
         isArea ? 8 : 6
       ),
     ])
@@ -191,11 +220,20 @@ ${isArea
   : 'This is a SINGLE PROPERTY search: return ONLY the one property that best matches. Do not invent others.'}
 
 For each property return:
-- name: official community name (NOT the listing site name)
+- name: official community name (NOT the listing site name). If sources disagree
+  (a site was renamed), prefer the name used by the property's OWN website and
+  by data sources like yardimatrix/loopnet.
 - address: full street address if found, else ""
 - city, state: 2-letter state
-- units: integer unit count, or null if not stated
-- website: official property URL (never apartments.com/zillow), or ""
+- units: integer unit count, or null if not stated.
+  IMPORTANT: data sources (yardimatrix, loopnet) state this plainly, e.g.
+  "the property features 224 units" — use that. Do NOT use a count of listings
+  currently available for rent ("20 Units Available") — that is NOT the unit count.
+- phone: the property's OWN leasing office number, or "".
+  NEVER return a toll-free aggregator/tracking number (800/833/844/855/866/877/888).
+  Listing sites inject those to route calls to themselves — they are not the
+  property. If the only number you can see is toll-free, return "".
+- website: official property URL (never apartments.com/zillow/rentdeals), or ""
 - management_company: or ""
 - systems: presence flags. TRUE only if the text gives real evidence. Never guess:
     internet      -> an ISP / wifi / "high-speed internet" is offered or mentioned
@@ -211,7 +249,7 @@ Rules:
 - units must be a number or null — never a guess, never a range.
 
 JSON shape:
-{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","address":"","city":"","state":"","units":null,"website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false}}]}
+{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false}}]}
 
 SNIPPETS:
 ${snippets}`
@@ -241,6 +279,10 @@ ${snippets}`
         city: String(p.city ?? '').trim(),
         state: String(p.state ?? '').trim(),
         units: typeof p.units === 'number' ? p.units : null,
+        // Enforce the toll-free rule in CODE, not just in the prompt. A model
+        // instruction is a request; this is a guarantee. Handing a rep an
+        // aggregator's lead-capture line is worse than handing them nothing.
+        phone: cleanPhone(p.phone),
         website: p.website || null,
         management_company: p.management_company || null,
         systems: { ...EMPTY_SYSTEMS, ...(p.systems ?? {}) },
