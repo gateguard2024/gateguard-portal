@@ -12,9 +12,9 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock } from 'lucide-react'
+import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, LayoutGrid, Map: MapIcon } = require('lucide-react') as any
+const { ArrowLeft, LayoutGrid, Map: MapIcon, Cpu } = require('lucide-react') as any
 import { SearchHistoryPanel } from '@/components/aria/SearchHistoryPanel'
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
@@ -77,21 +77,27 @@ const toneClass = (t: 'red' | 'amber' | 'blue') =>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeReport(raw: any): any {
   if (!raw) return null
-  if (raw.facts || raw.deductions) {
+  // Any aria_properties row (with or without the new facts/deductions columns).
+  if (raw.facts || raw.deductions || raw.property_name) {
     const f = raw.facts || {}, d = raw.deductions || {}
+    const pt = f.proptech_found ?? {
+      gate_operators: raw.gate_operators, access_control: raw.access_control, intercoms: raw.intercoms,
+      cameras: raw.cameras, smart_locks: raw.smart_locks, resident_apps: raw.resident_apps, package_solutions: raw.package_solutions,
+    }
     return {
       property: {
-        phone: f.property?.phone, units: f.property?.units ?? raw.units, year_built: f.property?.year_built ?? raw.year_built,
+        phone: f.property?.phone ?? raw.property_phone ?? raw.dm_phone,
+        units: f.property?.units ?? raw.units, year_built: f.property?.year_built ?? raw.year_built,
         occupancy: f.property?.occupancy ?? raw.occupancy, management_company: f.property?.management_company ?? raw.management_company,
         owner_entity: f.property?.owner_entity ?? raw.owner_entity,
         isp_providers: f.connectivity?.isp_providers ?? raw.isp_providers ?? [],
         video_providers: f.connectivity?.video_providers ?? raw.video_providers ?? [],
         bulk_agreements: f.connectivity?.bulk_agreements ?? raw.bulk_agreements ?? [],
-        roe_expiry_year: f.connectivity?.roe_expiry_year ?? raw.roe_expiry_year,
-        proptech: f.proptech_found ?? {},
+        roe_expiry_year: f.connectivity?.roe_expiry_year ?? raw.roe_expiry_year ?? raw.contract_expiry_year,
+        proptech: pt,
         inferred_proptech: d.proptech_inferred ?? [],
       },
-      contacts: f.decision_makers ?? [],
+      contacts: f.decision_makers ?? raw.dm_chain ?? [],
       community: f.community_posts ?? raw.social_posts ?? [],
       ai_intel: {
         key_finding: d.ai_intel?.key_finding ?? raw.primary_concern,
@@ -162,7 +168,7 @@ export default function AriaExplorePage() {
   const [detailBusy, setDetailBusy]   = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [detailReport, setDetailReport] = useState<any | null>(null)
-  const [detailTab, setDetailTab]     = useState<'overview' | 'connectivity' | 'proptech' | 'contacts' | 'community' | 'playbook'>('overview')
+  const [openCard, setOpenCard]       = useState<null | 'network' | 'community' | 'proptech' | 'ai'>(null)
   // Apollo-grade segmentation on multifamily fields
   const [fMinUnits, setFMinUnits] = useState(0)
   const [fGate, setFGate]         = useState(false)
@@ -382,13 +388,30 @@ export default function AriaExplorePage() {
   // Open a property: for Saved rows (real id) load the canonical record instantly
   // (no re-search); for discover cards, just open — Research fills it in.
   const openDetail = useCallback(async (it: PropItem) => {
-    setDetail(it); setDetailReport(null); setDetailTab('overview'); setScoutMsg(null)
+    setDetail(it); setDetailReport(null); setOpenCard(null); setScoutMsg(null)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)
+    // Saved rows carry the real id → load by id.
     if (isUuid) {
       setDetailBusy(true)
       try {
         const r = await fetch(`/api/aria/properties/${it.id}`)
         if (r.ok) { const row = await r.json(); setDetailReport(normalizeReport(row)) }
+      } catch { /* ignore */ } finally { setDetailBusy(false) }
+      return
+    }
+    // Discover cards have no id — but if it's already researched, find the stored
+    // record by name and show it instantly (no new search / no spend).
+    if (it.researched) {
+      setDetailBusy(true)
+      try {
+        const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(it.name)}&limit=5`)
+        if (r.ok) {
+          const d = await r.json()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = d.properties ?? []
+          const row = rows.find(p => (p.property_name ?? '').toLowerCase() === it.name.toLowerCase()) ?? rows[0]
+          if (row) setDetailReport(normalizeReport(row))
+        }
       } catch { /* ignore */ } finally { setDetailBusy(false) }
     }
   }, [])
@@ -592,15 +615,25 @@ export default function AriaExplorePage() {
 
             {/* Three clear actions */}
             <div className="p-5 space-y-2.5">
-              <button onClick={() => researchDetail(detail)} disabled={detailBusy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
-                {detailBusy ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                {detailBusy ? 'Researching…' : detail.researched ? 'View report' : 'Research this property'}
-              </button>
+              {/* Research (paid) ONLY for brand-new properties. Researched ones
+                  load their stored report on open — no new search, no spend. */}
+              {!detail.researched && !detailReport && (
+                <button onClick={() => researchDetail(detail)} disabled={detailBusy}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+                  {detailBusy ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                  {detailBusy ? 'Researching…' : 'Research this property'}
+                </button>
+              )}
               <button onClick={() => addToLeads([detail])} disabled={busy}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
                 <Plus size={14} /> Add to Leads
               </button>
+              {(detail.researched || detailReport) && (
+                <button onClick={() => researchDetail(detail)} disabled={detailBusy}
+                  className="w-full text-center text-[11px] font-semibold text-slate-500 hover:text-slate-300 py-1 disabled:opacity-60">
+                  {detailBusy ? 'Refreshing…' : '↻ Refresh data (runs a new search)'}
+                </button>
+              )}
               {scoutLeadIds.length > 0 && (
                 <button onClick={launchScout} disabled={busy}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(to right,#10B981,#059669)' }}>
@@ -629,112 +662,132 @@ export default function AriaExplorePage() {
                   <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}</span>
                 </div>
               )
-              const TABS: { key: typeof detailTab; label: string; n?: number }[] = [
-                { key: 'overview', label: 'Overview' },
-                { key: 'connectivity', label: 'Wi-Fi / TV' },
-                { key: 'proptech', label: 'Proptech', n: found.length + inferred.length },
-                { key: 'contacts', label: 'Contacts', n: contacts.length },
-                { key: 'community', label: 'Community', n: community.length },
-                { key: 'playbook', label: 'Playbook' },
-              ]
+              const buy = Number(rep.buy_score ?? 5)
+              // Pro-Tech Fit: low modern saturation + displacement signals = high fit for us.
+              const fit = Math.max(0, Math.min(10, 5 + (rep.property?.bulk_agreements?.length ? 2 : 0) + (detail?.gate_signal || /gate|access/i.test(String(rep.ai_intel?.key_finding || '')) ? 2 : 0) - Math.min(found.length, 4)))
+              const gcol = (n: number) => n >= 8 ? '#22c55e' : n >= 5 ? '#f59e0b' : '#ef4444'
+              const Gauge = ({ label, val }: { label: string; val: number }) => {
+                const p = Math.max(0, Math.min(10, val)) / 10, C = 2 * Math.PI * 26
+                return (
+                  <div className="flex flex-col items-center">
+                    <svg width="62" height="62" viewBox="0 0 64 64">
+                      <circle cx="32" cy="32" r="26" fill="none" stroke="#1e293b" strokeWidth="6" />
+                      <circle cx="32" cy="32" r="26" fill="none" stroke={gcol(val)} strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - p)} transform="rotate(-90 32 32)" />
+                      <text x="32" y="38" textAnchor="middle" fontSize="17" fontWeight="700" fill="#f1f5f9">{Math.round(val)}</text>
+                    </svg>
+                    <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wide">{label}</span>
+                  </div>
+                )
+              }
+              const verdictText = (rep.ai_intel?.key_finding && rep.ai_intel.key_finding !== 'No data found')
+                ? rep.ai_intel.key_finding
+                : `${detail?.name} is a ${detail?.units ? `${detail.units}-unit ` : ''}property${rep.property?.bulk_agreements?.length ? ' with an existing bulk internet deal worth displacing' : ''}${found.length === 0 ? '. Low proptech saturation signals strong upgrade potential' : ''}. ${buy >= 8 ? 'Hot lead — prioritize.' : buy >= 5 ? 'Warm — worth a call.' : 'Cold for now.'}`
+              const Card = ({ id, Icon, title, summary }: { id: typeof openCard; Icon: any; title: string; summary: string }) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
+                <button onClick={() => setOpenCard(openCard === id ? null : id)}
+                  className={`text-left rounded-xl border p-3 transition-all ${openCard === id ? 'border-[#6B7EFF] bg-[#131B2E] shadow-[0_0_20px_rgba(107,126,255,0.15)]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
+                  <Icon size={16} className="text-[#6B7EFF] mb-1.5" />
+                  <p className="text-[12px] font-bold text-slate-100 leading-tight">{title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{summary}</p>
+                </button>
+              )
               return (
                 <div className="pb-10">
-                  {/* Scores */}
-                  <div className="flex items-center gap-2 px-5 pb-3">
-                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg text-white" style={{ background: scoreColor(rep.buy_score ?? 5) }}>Buy {rep.buy_score ?? '—'}/10</span>
-                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${dm >= 7 ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30' : dm >= 4 ? 'bg-amber-400/10 text-amber-200 border-amber-400/30' : 'bg-slate-500/10 text-slate-400 border-white/10'}`}>Contactability {dm}/10</span>
+                  {/* Wow dials */}
+                  <div className="grid grid-cols-3 gap-2 px-5 pt-1 pb-4">
+                    <Gauge label="Buy score" val={buy} />
+                    <Gauge label="Contactability" val={dm} />
+                    <Gauge label="Pro-Tech fit" val={fit} />
                   </div>
-                  {/* Tab bar */}
-                  <div className="flex items-center gap-1 px-5 border-b border-white/10 overflow-x-auto">
-                    {TABS.map(t => (
-                      <button key={t.key} onClick={() => setDetailTab(t.key)}
-                        className={`shrink-0 text-[11px] font-bold px-2.5 py-2 border-b-2 -mb-px transition-colors ${detailTab === t.key ? 'border-[#6B7EFF] text-[#9AA8FF]' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-                        {t.label}{t.n ? <span className="ml-1 text-[9px] text-slate-500">{t.n}</span> : null}
-                      </button>
-                    ))}
+                  {/* ARIA's opportunity verdict */}
+                  <div className="px-5">
+                    <div className="rounded-xl border border-[#6B7EFF]/25 p-4" style={{ background: 'rgba(107,126,255,0.06)' }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA8FF] mb-1.5">ARIA&apos;s verdict</p>
+                      <p className="text-[12px] text-slate-200 leading-relaxed">{verdictText}</p>
+                    </div>
                   </div>
-                  {/* Tab content */}
-                  <div className="px-5 pt-3">
-                    {detailTab === 'overview' && (
-                      <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                        <Row k="Phone" val={v(rep.property?.phone)} />
-                        <Row k="Units" val={v(rep.property?.units)} />
-                        <Row k="Year built" val={v(rep.property?.year_built)} />
-                        <Row k="Occupancy" val={v(rep.property?.occupancy)} />
-                        <Row k="Management" val={v(rep.property?.management_company)} />
-                        <Row k="Owner" val={v(rep.property?.owner_entity)} />
-                        <Row k="Key finding" val={v(rep.ai_intel?.key_finding)} />
-                      </div>
-                    )}
-                    {detailTab === 'connectivity' && (
-                      <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                        <Row k="Internet (ISP)" val={v(rep.property?.isp_providers)} />
-                        <Row k="TV / Video" val={v(rep.property?.video_providers)} />
-                        <Row k="Bulk deal" val={rep.property?.bulk_agreements?.length ? `Yes — ${rep.property.bulk_agreements.map((b: any) => b.provider).filter(Boolean).join(', ')}` : 'No data found'} /> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
-                        <Row k="Contract expiry" val={v(rep.property?.roe_expiry_year)} />
-                      </div>
-                    )}
-                    {detailTab === 'proptech' && (
-                      <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Found on site</p>
-                        <p className={`text-[11px] ${found.length ? 'text-slate-200' : 'text-slate-500 italic'}`}>{found.length ? found.join(', ') : 'No data found'}</p>
-                        {inferred.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Likely (AI-deduced)</p>
-                            {inferred.map((x, i) => (
-                              <div key={i} className="flex items-center gap-2 text-[11px]">
-                                <span className="text-slate-200 font-medium">{x.name}</span>
-                                <span className="text-[9px] text-slate-500">{x.category}</span>
-                                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25">~{x.confidence_pct}%</span>
+                  {/* Insight cards */}
+                  <div className="grid grid-cols-2 gap-2.5 px-5 pt-4">
+                    <Card id="network" Icon={Wifi} title="Network overview" summary={rep.property?.isp_providers?.length ? rep.property.isp_providers.slice(0, 2).join(', ') : 'Wi-Fi & TV audit'} />
+                    <Card id="community" Icon={Users} title="Community insights" summary={`${community.length} resident post${community.length === 1 ? '' : 's'}`} />
+                    <Card id="proptech" Icon={Cpu} title="Proptech ops" summary={`${found.length} found · ${inferred.length} likely`} />
+                    <Card id="ai" Icon={Zap} title="Deep AI audit" summary={`${contacts.length} contact${contacts.length === 1 ? '' : 's'} · playbook`} />
+                  </div>
+                  {/* Expanded card */}
+                  {openCard && (
+                    <div className="px-5 pt-4">
+                      {openCard === 'network' && (
+                        <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                          <Row k="Internet (ISP)" val={v(rep.property?.isp_providers)} />
+                          <Row k="TV / Video" val={v(rep.property?.video_providers)} />
+                          <Row k="Bulk deal" val={rep.property?.bulk_agreements?.length ? `Yes — ${rep.property.bulk_agreements.map((b: any) => b.provider).filter(Boolean).join(', ')}` : 'No data found'} /> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
+                          <Row k="Contract expiry" val={v(rep.property?.roe_expiry_year)} />
+                          <Row k="Phone" val={v(rep.property?.phone)} />
+                          <Row k="Units" val={v(rep.property?.units)} />
+                        </div>
+                      )}
+                      {openCard === 'community' && (
+                        <div className="space-y-2">
+                          {community.length === 0 && <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">No resident posts found yet</div>}
+                          {community.slice(0, 12).map((c, i) => (
+                            <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[9px] font-bold text-slate-400">{c.platform || 'Review'}</span>
+                                {c.signal_type && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-200 border border-amber-400/30">{String(c.signal_type).replace(/_/g, ' ')}</span>}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {detailTab === 'contacts' && (
-                      <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                        {contacts.length === 0 && <p className="text-[11px] text-slate-500 italic">No contacts found yet</p>}
-                        {contacts.slice(0, 8).map((c, i) => (
-                          <div key={i} className="py-2 border-b border-white/5 last:border-0">
-                            <p className="text-[12px] font-semibold text-slate-100">{c.name || 'Unknown'} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{[c.email, c.phone].filter(x => x && x !== 'No data found').join('  ·  ') || 'No email / phone found'}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {detailTab === 'community' && (
-                      <div className="space-y-2">
-                        {community.length === 0 && <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">No resident posts found yet</div>}
-                        {community.slice(0, 12).map((c, i) => (
-                          <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-[9px] font-bold text-slate-400">{c.platform || 'Review'}</span>
-                              {c.signal_type && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-200 border border-amber-400/30">{String(c.signal_type).replace(/_/g, ' ')}</span>}
+                              <p className="text-[11px] text-slate-200 italic leading-relaxed">&ldquo;{c.quote}&rdquo;</p>
                             </div>
-                            <p className="text-[11px] text-slate-200 italic leading-relaxed">&ldquo;{c.quote}&rdquo;</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {detailTab === 'playbook' && (
-                      <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 space-y-3">
-                        <Row k="Pitch hook" val={v(rep.ai_intel?.pitch_hook)} />
-                        <Row k="Buying trends" val={v(rep.ai_intel?.buying_trends)} />
-                        {plan && typeof plan === 'object' && (
-                          <div className="pt-2">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">6-month outreach</p>
-                            {Object.keys(plan).slice(0, 6).map((mk, i) => (
-                              <div key={mk} className="py-1.5 border-b border-white/5 last:border-0">
-                                <p className="text-[11px] font-semibold text-slate-200">Month {i + 1}: {plan[mk]?.theme || '—'}</p>
-                                {plan[mk]?.goal && <p className="text-[10px] text-slate-400">{plan[mk].goal}</p>}
+                          ))}
+                        </div>
+                      )}
+                      {openCard === 'proptech' && (
+                        <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Found on site</p>
+                          <p className={`text-[11px] ${found.length ? 'text-slate-200' : 'text-slate-500 italic'}`}>{found.length ? found.join(', ') : 'No data found'}</p>
+                          {inferred.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Likely (AI-deduced)</p>
+                              {inferred.map((x, i) => (
+                                <div key={i} className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-slate-200 font-medium">{x.name}</span>
+                                  <span className="text-[9px] text-slate-500">{x.category}</span>
+                                  <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25">~{x.confidence_pct}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {openCard === 'ai' && (
+                        <div className="space-y-2.5">
+                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Contacts</p>
+                            {contacts.length === 0 && <p className="text-[11px] text-slate-500 italic">No contacts found yet</p>}
+                            {contacts.slice(0, 6).map((c, i) => (
+                              <div key={i} className="py-2 border-b border-white/5 last:border-0">
+                                <p className="text-[12px] font-semibold text-slate-100">{c.name || 'Unknown'} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{[c.email, c.phone].filter(x => x && x !== 'No data found').join('  ·  ') || 'No email / phone found'}</p>
                               </div>
                             ))}
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                            <Row k="Pitch hook" val={v(rep.ai_intel?.pitch_hook)} />
+                            <Row k="Buying trends" val={v(rep.ai_intel?.buying_trends)} />
+                            {plan && typeof plan === 'object' && (
+                              <div className="pt-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">6-month outreach</p>
+                                {Object.keys(plan).slice(0, 6).map((mk, i) => (
+                                  <div key={mk} className="py-1.5 border-b border-white/5 last:border-0">
+                                    <p className="text-[11px] font-semibold text-slate-200">Month {i + 1}: {plan[mk]?.theme || '—'}</p>
+                                    {plan[mk]?.goal && <p className="text-[10px] text-slate-400">{plan[mk].goal}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })()}
