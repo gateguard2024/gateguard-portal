@@ -2619,11 +2619,42 @@ export async function POST(req: NextRequest) {
         })
       }
 
+      // ── Save to aria_searches ─────────────────────────────────────────────
+      // Area/prospecting searches must appear in history exactly like a
+      // specific-property search. Without this, every discovery search was
+      // invisible to /api/aria/history (which reads aria_searches by user_id).
+      let candidateSearchId: string | undefined
+      if (userId !== 'inngest-service') {
+        try {
+          const portalUser = await getCurrentUser()
+          const { data: searchRow, error: searchErr } = await supabaseDeep.from('aria_searches').insert({
+            query: rawQuery,
+            query_interpretation: candidateResult.query_interpretation ?? `ARIA ${ARIA_ENGINE_VERSION} — ${enrichedCandidates.length} found`,
+            results: {
+              mode: 'candidates',
+              engine_version: ARIA_ENGINE_VERSION,
+              search_run_id: searchRunId,
+              candidates: enrichedCandidates.map((c, i) => ({ ...c, rank_position: i + 1, _candidate_id: candidateIds[i] ?? null })),
+            },
+            search_type: 'candidates',
+            user_id: userId,
+            user_name: portalUser.name, user_email: portalUser.email,
+            org_id: portalUser.org_id ?? null,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          }).select('id').single()
+          if (searchErr) console.error('[aria] aria_searches insert failed (candidates):', searchErr.message)
+          if (searchRow?.id) candidateSearchId = searchRow.id
+        } catch (e) {
+          console.error('[aria] aria_searches insert threw (candidates):', e instanceof Error ? e.message : e)
+        }
+      }
+
       return NextResponse.json({
         type: 'candidates',
         mode: 'candidates',
         engine_version: ARIA_ENGINE_VERSION,
         search_run_id: searchRunId,
+        search_id: candidateSearchId,
         candidates: enrichedCandidates.map((c, i) => ({
           ...c,
           rank_position: i + 1,
@@ -3260,7 +3291,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     try {
       const portalUser = await getCurrentUser()
       const originalQuery = raw.property_name || raw.query || rawQuery
-      const { data: searchRow } = await supabaseDeep.from('aria_searches').insert({
+      const { data: searchRow, error: searchErr } = await supabaseDeep.from('aria_searches').insert({
         query: originalQuery,
         query_interpretation: `ARIA ${ARIA_ENGINE_VERSION} — ${property_name}`,
         results: { mode: 'deep', engine_version: ARIA_ENGINE_VERSION, prospects: [prospectPayload], fccVerified: p2Final.fcc_providers.length > 0, webIntelligence: true },
@@ -3269,6 +3300,9 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
         org_id: portalUser.org_id ?? null,
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       }).select('id').single()
+      // Never swallow this silently — a failed insert means the search vanishes
+      // from history, which looks like "ARIA lost my search".
+      if (searchErr) console.error('[aria] aria_searches insert failed (deep):', searchErr.message)
       if (searchRow?.id) savedSearchId = searchRow.id
 
       // v8: Complete the search run record with full stats + org_id + real COGS.

@@ -151,11 +151,16 @@ export async function POST(req: NextRequest) {
       // ── Fetch existing record first (learning loop: never overwrite good data) ──
       const propName = prop.name ?? 'Unknown Property'
       const propAddr = prop.address ?? ''
-      const { data: existing } = await supabase
+      // NOTE: .maybeSingle() errors to null when 2+ rows share a name, which
+      // silently wiped the learning-loop merge (existing → null) and re-emitted
+      // empty facts. Take the most recently researched match instead.
+      const { data: existingRows } = await supabase
         .from('aria_properties')
         .select('*')
         .ilike('property_name', propName)
-        .maybeSingle()
+        .order('last_researched_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+      const existing = existingRows?.[0] ?? null
 
       // Collect new tech providers discovered (for auto-catalog growth)
       const techCategories: [string, string[]][] = [
@@ -228,7 +233,14 @@ export async function POST(req: NextRequest) {
       const freshDMs: any[] = (p.decision_maker_chain?.length
         ? p.decision_maker_chain
         : (dm.name ? [{ name: dm.name, title: dm.title, company: dm.company, role_type: 'unknown', email: dm.email ?? dm.top_email_format, phone: dm.phone, linkedin_slug: dm.linkedin_slug }] : []))
-      const freshCommunity: any[] = Array.isArray(p.social_posts) ? p.social_posts : (existing?.social_posts ?? [])
+      // Community posts can arrive on the prospect (p.social_posts) OR already be
+      // on the row (written by /api/aria/social, which runs after this upsert).
+      // Take whichever actually has data so a re-save never blanks Community.
+      const freshCommunity: any[] =
+        (Array.isArray(p.social_posts) && p.social_posts.length ? p.social_posts : null)
+        ?? (Array.isArray(p.community_posts) && p.community_posts.length ? p.community_posts : null)
+        ?? (Array.isArray(existing?.social_posts) && existing.social_posts.length ? existing.social_posts : null)
+        ?? (Array.isArray(existing?.facts?.community_posts) ? existing.facts.community_posts : [])
       const freshInferred: any[]  = Array.isArray(prop.inferred_proptech) ? prop.inferred_proptech : []
 
       const facts = {

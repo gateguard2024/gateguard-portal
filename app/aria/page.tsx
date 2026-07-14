@@ -75,6 +75,17 @@ const toneClass = (t: 'red' | 'amber' | 'blue') =>
 // into one report shape the tabbed panel renders. This is what makes a Saved
 // property show the full rich report instantly, no re-search.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Pick the first source that actually HAS data. `??` is wrong for arrays here:
+// the canonical `facts.*` bundles are always written as [] (never null), so `??`
+// would lock onto an empty array and never fall back to the flat column that
+// holds the real data (this is why Community was always blank).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickArr(...cands: any[]): any[] {
+  for (const c of cands) if (Array.isArray(c) && c.length > 0) return c
+  return []
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeReport(raw: any): any {
   if (!raw) return null
   // Any aria_properties row (with or without the new facts/deductions columns).
@@ -91,15 +102,17 @@ function normalizeReport(raw: any): any {
         units: f.property?.units ?? raw.units, year_built: f.property?.year_built ?? raw.year_built,
         occupancy: f.property?.occupancy ?? raw.occupancy, management_company: f.property?.management_company ?? raw.management_company,
         owner_entity: f.property?.owner_entity ?? raw.owner_entity,
-        isp_providers: f.connectivity?.isp_providers ?? raw.isp_providers ?? [],
-        video_providers: f.connectivity?.video_providers ?? raw.video_providers ?? [],
-        bulk_agreements: f.connectivity?.bulk_agreements ?? raw.bulk_agreements ?? [],
+        isp_providers: pickArr(f.connectivity?.isp_providers, raw.isp_providers),
+        video_providers: pickArr(f.connectivity?.video_providers, raw.video_providers),
+        bulk_agreements: pickArr(f.connectivity?.bulk_agreements, raw.bulk_agreements),
         roe_expiry_year: f.connectivity?.roe_expiry_year ?? raw.roe_expiry_year ?? raw.contract_expiry_year,
         proptech: pt,
-        inferred_proptech: d.proptech_inferred ?? [],
+        inferred_proptech: pickArr(d.proptech_inferred),
       },
-      contacts: f.decision_makers ?? raw.dm_chain ?? [],
-      community: f.community_posts ?? raw.social_posts ?? [],
+      contacts: pickArr(f.decision_makers, raw.dm_chain),
+      // Community lives in the `social_posts` column (written by /api/aria/social);
+      // facts.community_posts is often an empty placeholder — take whichever has data.
+      community: pickArr(f.community_posts, raw.social_posts),
       ai_intel: {
         key_finding: d.ai_intel?.key_finding ?? raw.primary_concern,
         buying_trends: d.ai_intel?.buying_trends,
@@ -189,7 +202,8 @@ export default function AriaExplorePage() {
   const [query, setQuery]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [items, setItems]       = useState<PropItem[]>([])
-  const [view, setView]         = useState<ViewMode>('list')
+  // Default = the split Find screen: map in the centre, results in the right third.
+  const [view, setView]         = useState<ViewMode>('map')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detail, setDetail]     = useState<PropItem | null>(null)
   const [error, setError]       = useState<string | null>(null)
@@ -201,6 +215,7 @@ export default function AriaExplorePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [detailReport, setDetailReport] = useState<any | null>(null)
   const [openCard, setOpenCard]       = useState<null | 'network' | 'community' | 'proptech' | 'ai'>(null)
+  const [communityBusy, setCommunityBusy] = useState(false)
   // Apollo-grade segmentation on multifamily fields
   const [fMinUnits, setFMinUnits] = useState(0)
   const [fGate, setFGate]         = useState(false)
@@ -248,9 +263,11 @@ export default function AriaExplorePage() {
     })
   }, [])
 
-  // (Re)draw markers when items change or the map view is shown
+  // (Re)draw markers when items change. The map is the centre of the Find screen
+  // (split layout: map centre + results list on the right), so it stays mounted
+  // in every view except the full-width grid.
   useEffect(() => {
-    if (view !== 'map') return
+    if (view === 'list') return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mapboxgl = (window as any).mapboxgl
     // Mapbox GL may not have finished loading yet — retry until it has.
@@ -261,19 +278,23 @@ export default function AriaExplorePage() {
     setTimeout(() => map.resize(), 60)
     Object.values(markersRef.current).forEach((m: any) => m.remove()) // eslint-disable-line @typescript-eslint/no-explicit-any
     markersRef.current = {}
-    const withCoords = items.filter(i => i.lat != null && i.lng != null
-      && (!fMinUnits || (i.units ?? 0) >= fMinUnits) && (!fGate || i.gate_signal) && (!fBulk || i.bulk_detected) && (!fNew || !i.researched)
+    // Same predicate as matchesFilters, so pin numbers line up 1:1 with the
+    // numbers shown in the results list on the right.
+    const filtered = items.filter(i =>
+      (!fMinUnits || (i.units ?? 0) >= fMinUnits) && (!fGate || i.gate_signal) && (!fBulk || i.bulk_detected) && (!fNew || !i.researched)
       && (!fExpBefore || (i.contract_expiry_year != null && i.contract_expiry_year <= fExpBefore))
       && (source !== 'saved' || !query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase())))
+    const withCoords = filtered.filter(i => i.lat != null && i.lng != null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bounds = withCoords.length ? new mapboxgl.LngLatBounds() : null
     for (const it of withCoords) {
       const el = document.createElement('div')
       const s = it.buy_score ?? 5
-      el.style.cssText = `width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${scoreColor(s)};border:2px solid #0B1728;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer;display:flex;align-items:center;justify-content:center`
+      const n = filtered.indexOf(it) + 1   // matches the list number on the right
+      el.style.cssText = `width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${scoreColor(s)};border:2px solid #0B1728;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center`
       const inner = document.createElement('span')
-      inner.textContent = String(s)
-      inner.style.cssText = 'transform:rotate(45deg);color:#fff;font-size:10px;font-weight:700'
+      inner.textContent = String(n)
+      inner.style.cssText = 'transform:rotate(45deg);color:#fff;font-size:12px;font-weight:800'
       el.appendChild(inner)
       el.onclick = () => openDetail(it)
       // Hover tooltip (dark) — property name, location, units, top flag.
@@ -288,6 +309,38 @@ export default function AriaExplorePage() {
     }
     if (bounds && withCoords.length) { try { map.fitBounds(bounds, { padding: 60, maxZoom: 13, duration: 500 }) } catch { /* noop */ } }
   }, [items, view, initMap, fMinUnits, fGate, fBulk, fNew, fExpBefore, source, query, mapTick])
+
+  // Community/social posts are fetched + saved by their own route, separate from
+  // the main engine. A saved property that was researched before that route ran
+  // has none — so fetch them on open and persist. Without this, Community stays
+  // blank forever on every known site.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hydrateCommunity = useCallback(async (rep: any, it: { name: string; city?: string; state?: string }) => {
+    if (!rep || (rep.community?.length ?? 0) > 0) return
+    if (!it.name || !it.city) return   // the social route requires name + city
+    setCommunityBusy(true)
+    try {
+      const r = await fetch('/api/aria/social', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_name: it.name, city: it.city, state: it.state,
+          management_company: rep.property?.management_company,
+          isp_providers: rep.property?.isp_providers,
+          video_providers: rep.property?.video_providers,
+          bulk_agreements: rep.property?.bulk_agreements,
+          gate_operators: rep.property?.proptech?.gate_operators,
+          access_control: rep.property?.proptech?.access_control,
+        }),
+      })
+      if (!r.ok) return
+      const sd = await r.json()
+      if (sd?.social_posts?.length) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setDetailReport((prev: any) => prev ? { ...prev, community: sd.social_posts } : prev)
+      }
+    } catch { /* non-blocking */ }
+    finally { setCommunityBusy(false) }
+  }, [])
 
   const runSearch = useCallback(async (qArg?: string) => {
     const q = (qArg ?? query).trim()
@@ -318,9 +371,11 @@ export default function AriaExplorePage() {
             })
             if (strong) {
               const it = savedRowToItem(strong)
+              const rep = normalizeReport(strong)
               setItems([it])
               setMsg('Found in your database — loaded instantly, no new search.')
-              setDetail(it); setDetailReport(normalizeReport(strong)); setOpenCard(null); setScoutMsg(null)
+              setDetail(it); setDetailReport(rep); setOpenCard(null); setScoutMsg(null)
+              void hydrateCommunity(rep, it)
               setItems([it.lat != null ? it : { ...it, ...(await geocode(it)) }])
               return
             }
@@ -366,7 +421,7 @@ export default function AriaExplorePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed')
     } finally { setLoading(false) }
-  }, [query, loading])
+  }, [query, loading, hydrateCommunity])
 
   // Browse the Intel DB — everything already researched, instant, no spend.
   const loadSaved = useCallback(async () => {
@@ -474,35 +529,30 @@ export default function AriaExplorePage() {
       })
       const d = await r.json()
       if (d.error) throw new Error(d.error)
-      setDetailReport(d?.prospects?.[0] ? normalizeReport(d.prospects[0]) : null)
+      const rep = d?.prospects?.[0] ? normalizeReport(d.prospects[0]) : null
+      setDetailReport(rep)
       setItems(prev => prev.map(x => x.id === it.id ? { ...x, researched: true } : x))
       // GUARANTEE all data (facts + inferred) is saved to Supabase — post the full
       // prospect to the canonical upsert (builds facts + deductions incl. inferred).
       if (d?.prospects?.length) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const p0: any = d.prospects[0]
+        // Save FIRST so the row exists — the social route finds the property by
+        // name and can only write its posts onto an existing row.
         await fetch('/api/aria/properties', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prospects: d.prospects }),
         }).catch(() => {})
-        // Also fetch + save Community (social) posts and show them live.
-        fetch('/api/aria/social', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            property_name: p0.property?.name, city: p0.property?.city, state: p0.property?.state,
-            management_company: p0.property?.management_company,
-            isp_providers: p0.property?.isp_providers, video_providers: p0.property?.video_providers,
-            bulk_agreements: p0.property?.bulk_agreements,
-            gate_operators: p0.property?.proptech?.gate_operators, access_control: p0.property?.proptech?.access_control,
-          }),
-        }).then(r => r.ok ? r.json() : null).then(sd => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          if (sd?.social_posts?.length) setDetailReport((prev: any) => prev ? { ...prev, community: sd.social_posts } : prev)
-        }).catch(() => {})
+        // Then fetch + save Community posts (same helper the saved path uses).
+        void hydrateCommunity(rep, {
+          name: p0.property?.name ?? it.name,
+          city: p0.property?.city ?? it.city,
+          state: p0.property?.state ?? it.state,
+        })
       }
     } catch { setDetailReport({ _error: true }) }
     finally { setDetailBusy(false) }
-  }, [])
+  }, [hydrateCommunity])
 
   // Open a property: for Saved rows (real id) load the canonical record instantly
   // (no re-search); for discover cards, just open — Research fills it in.
@@ -514,7 +564,13 @@ export default function AriaExplorePage() {
       // Saved rows carry the real id → load by id (fastest path).
       if (isUuid) {
         const r = await fetch(`/api/aria/properties/${it.id}`)
-        if (r.ok) { const row = await r.json(); setDetailReport(normalizeReport(row)); return }
+        if (r.ok) {
+          const row = await r.json()
+          const rep = normalizeReport(row)
+          setDetailReport(rep)
+          void hydrateCommunity(rep, it)   // backfill Community if this row has none yet
+          return
+        }
       }
       // ALWAYS check the database first — research often RENAMES a property
       // ("Avana on Main" → "Avana Uptown Apartments"), so match on a keyword +
@@ -536,10 +592,14 @@ export default function AriaExplorePage() {
             const shares = tokens.some(t => pn.includes(t))
             return shares && (!city || !pc || pc === city)
           })
-        if (row) setDetailReport(normalizeReport(row))
+        if (row) {
+          const rep = normalizeReport(row)
+          setDetailReport(rep)
+          void hydrateCommunity(rep, it)
+        }
       }
     } catch { /* ignore */ } finally { setDetailBusy(false) }
-  }, [])
+  }, [hydrateCommunity])
 
   // History pick / known search → ALWAYS pull from Supabase first. Every full
   // search is auto-saved, so re-running a past search must be an instant DB read
@@ -742,8 +802,8 @@ export default function AriaExplorePage() {
           {/* List / Map toggle */}
           {items.length > 0 && (
             <div className="flex items-center rounded-lg border border-white/10 overflow-hidden ml-1">
-              <button onClick={() => setView('list')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'list' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><LayoutGrid size={12} /> List</button>
               <button onClick={() => setView('map')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'map' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><MapIcon size={12} /> Map</button>
+              <button onClick={() => setView('list')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'list' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><LayoutGrid size={12} /> Big cards</button>
             </div>
           )}
         </div>
@@ -840,10 +900,55 @@ export default function AriaExplorePage() {
           </div>
         )}
 
-        {/* MAP VIEW */}
-        <div className={`absolute inset-0 ${items.length > 0 && view === 'map' ? '' : 'hidden'}`}>
-          {!MAPBOX_TOKEN && <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">Map needs NEXT_PUBLIC_MAPBOX_TOKEN.</div>}
-          <div id="aria-explore-map" className="absolute inset-0" />
+        {/* MAP + RESULTS — map fills the centre, results live in the right third */}
+        <div className={`absolute inset-0 flex ${items.length > 0 && view === 'map' ? '' : 'hidden'}`}>
+          {/* Map (centre) */}
+          <div className="relative flex-1 min-w-0">
+            {!MAPBOX_TOKEN && <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">Map needs NEXT_PUBLIC_MAPBOX_TOKEN.</div>}
+            <div id="aria-explore-map" className="absolute inset-0" />
+          </div>
+
+          {/* Results (right third) */}
+          <aside className="w-[34%] min-w-[290px] max-w-[420px] shrink-0 flex flex-col border-l border-white/[0.08]" style={{ background: '#0B1728' }}>
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.07]">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">{visible.length} found</span>
+              {alreadyCount > 0 && <span className="text-[10px] font-semibold text-emerald-400">{alreadyCount} researched</span>}
+              <button onClick={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(v => v.id)))}
+                className="ml-auto text-[10px] font-bold text-[#6B7EFF] hover:underline">
+                {selected.size === visible.length && visible.length > 0 ? 'Clear all' : 'Select all'}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {visible.map((it, i) => {
+                const s = it.buy_score ?? 5
+                const isSel = selected.has(it.id)
+                return (
+                  <div key={it.id}
+                    className={`relative flex items-start gap-2.5 rounded-xl border p-2.5 transition-all cursor-pointer ${isSel ? 'border-[#6B7EFF] bg-[#6B7EFF]/10' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}
+                    onClick={() => openDetail(it)}>
+                    {/* Number — matches the pin on the map */}
+                    <span className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold shadow" style={{ background: scoreColor(s) }}>{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[12.5px] font-bold text-slate-100 truncate leading-tight">{it.name}</h3>
+                      <p className="text-[10.5px] text-slate-400 truncate mt-0.5">{[it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
+                        {it.researched && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">✓ Saved</span>}
+                        {triggerFlags(it).slice(0, 1).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
+                      </div>
+                    </div>
+                    {/* Select */}
+                    <button onClick={e => { e.stopPropagation(); toggle(it.id) }} aria-label="Select"
+                      className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSel ? 'bg-[#6B7EFF] border-white' : 'border-white/70 bg-black/40 hover:bg-black/70'}`}>
+                      {isSel && <Check size={13} className="text-white" strokeWidth={3} />}
+                    </button>
+                  </div>
+                )
+              })}
+              {visible.length === 0 && <p className="text-[11px] text-slate-500 text-center py-8">Nothing matches your filters.</p>}
+            </div>
+          </aside>
         </div>
 
         {/* Bulk action bar */}
@@ -863,11 +968,11 @@ export default function AriaExplorePage() {
         )}
       </div>
 
-      {/* Detail panel */}
+      {/* Detail — a big popup in the CENTRE of the screen so it's easy to read */}
       {detail && (
-        <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setDetail(null)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative w-full max-w-2xl h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderLeft: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-8" onClick={() => setDetail(null)}>
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
+          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl" style={{ background: '#0B1728', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
             {/* Hero — real property photo if we have one, else aerial of the site */}
             {(detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
               <div className="relative h-44 w-full bg-[#0F1830]">
@@ -975,7 +1080,7 @@ export default function AriaExplorePage() {
                   <Icon size={20} className="text-[#6B7EFF] mb-2" />
                   <p className="text-[12px] font-bold text-slate-100 leading-tight uppercase tracking-wide">{title}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{summary}</p>
-                  <p className="text-[9px] font-bold text-[#6B7EFF] mt-2 uppercase tracking-wide">{openCard === id ? 'Hide report' : 'Click for detailed report'}</p>
+                  <p className="text-[9px] font-bold text-[#6B7EFF] mt-2 uppercase tracking-wide">Click for detailed report</p>
                 </button>
               )
               return (
@@ -1004,9 +1109,24 @@ export default function AriaExplorePage() {
                     <Card id="proptech" Icon={Cpu} title="Proptech ops" summary="Hardware & software stack." />
                     <Card id="ai" Icon={Zap} title="Deep AI audit" summary="Analysis & recommendations." />
                   </div>
-                  {/* Expanded card */}
+                  {/* Detailed report — opens as its own POPUP on top, so nothing
+                      gets appended to the bottom and nobody has to scroll to find it. */}
                   {openCard && (
-                    <div className="px-5 pt-4">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setOpenCard(null)}>
+                      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+                      <div className="relative w-full max-w-xl max-h-[82vh] flex flex-col rounded-2xl shadow-2xl"
+                        style={{ background: '#0B1728', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
+                          <h3 className="text-[13px] font-bold text-slate-100 uppercase tracking-wide">
+                            {openCard === 'network' ? 'Network overview' : openCard === 'community' ? 'Community insights' : openCard === 'proptech' ? 'Proptech ops' : 'Deep AI audit'}
+                          </h3>
+                          {openCard === 'community' && communityBusy && <Loader2 size={13} className="animate-spin text-[#6B7EFF]" />}
+                          <button onClick={() => setOpenCard(null)} aria-label="Close"
+                            className="ml-auto w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10">
+                            <X size={15} />
+                          </button>
+                        </div>
+                        <div className="overflow-y-auto p-4">
                       {openCard === 'network' && (
                         <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
                           <Row k="Internet (ISP)" val={v(rep.property?.isp_providers)} />
@@ -1019,7 +1139,11 @@ export default function AriaExplorePage() {
                       )}
                       {openCard === 'community' && (
                         <div className="space-y-2">
-                          {community.length === 0 && <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">No resident posts found yet</div>}
+                          {community.length === 0 && (
+                            <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
+                              {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
+                            </div>
+                          )}
                           {community.slice(0, 12).map((c, i) => (
                             <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
                               <div className="flex items-center gap-1.5 mb-1">
@@ -1078,6 +1202,8 @@ export default function AriaExplorePage() {
                           </div>
                         </div>
                       )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
