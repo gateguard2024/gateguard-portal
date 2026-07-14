@@ -36,6 +36,10 @@ const supaSocial = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.e
 
 interface SerperResult { title: string; url: string; content: string }
 
+// 12 months: wide enough to establish a real pattern of complaints, recent
+// enough that the vendor being complained about is probably still on site.
+const POST_WINDOW = 'qdr:y' // last 12 months
+
 async function serperSocial(query: string, num = 6): Promise<SerperResult[]> {
   if (!process.env.SERPER_API_KEY) return []
   try {
@@ -47,7 +51,7 @@ async function serperSocial(query: string, num = 6): Promise<SerperResult[]> {
         num,
         gl: 'us',
         hl: 'en',
-        tbs: 'qdr:m6', // last 6 months
+        tbs: POST_WINDOW,
       }),
       signal: AbortSignal.timeout(7000),
     })
@@ -68,7 +72,7 @@ async function serperNews(query: string, num = 4): Promise<SerperResult[]> {
     const res = await fetch('https://google.serper.dev/news', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
-      body: JSON.stringify({ q: query, num, gl: 'us', hl: 'en', tbs: 'qdr:m6' }),
+      body: JSON.stringify({ q: query, num, gl: 'us', hl: 'en', tbs: POST_WINDOW }),
       signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return []
@@ -151,7 +155,28 @@ export async function POST(req: NextRequest) {
 
     const TECH_KEYWORDS = 'gate OR "gate access" OR "call box" OR intercom OR "access control" OR "smart lock" OR "fob" OR internet OR WiFi OR DirecTV OR "Dish Network" OR camera OR "security camera" OR "package locker" OR "Amazon Hub"'
 
-    const [propertyResults, mgmtResults, bulkResults, phoneResults] = await Promise.all([
+    // The vendors we actually know are ON THIS SITE. A resident complaining about
+    // *their* gate or *their* ISP by name is worth far more than a generic keyword
+    // hit — it's the displacement argument, in the resident's own words.
+    const onSiteTech = [
+      ...(Array.isArray(isp_providers) ? isp_providers : []),
+      ...(Array.isArray(video_providers) ? video_providers : []),
+      ...(Array.isArray(gate_operators) ? gate_operators : []),
+      ...(Array.isArray(access_control) ? access_control : []),
+      ...(Array.isArray(bulk_agreements) ? bulk_agreements.map(b => b?.provider) : []),
+    ].filter((t): t is string =>
+      typeof t === 'string' && t.trim().length > 2 &&
+      // Skip our own base-find placeholders ("Gate (present — brand unknown)").
+      !/present|unknown|no data/i.test(t)
+    ).slice(0, 6)
+
+    // Negativity, in the words residents actually use.
+    const NEGATIVE = '(broken OR "not working" OR "doesn\'t work" OR down OR outage OR slow OR unreliable OR terrible OR awful OR worst OR complaint OR frustrated OR "keeps failing" OR "never works" OR "waiting for" OR "no signal")'
+    const onSiteQ = onSiteTech.length
+      ? `(${onSiteTech.map(t => `"${t}"`).join(' OR ')})`
+      : `(${TECH_KEYWORDS})`
+
+    const [propertyResults, mgmtResults, bulkResults, phoneResults, negativeResults] = await Promise.all([
 
       // Search 1 — property-level social (Reddit, Google Reviews, Yelp, listing reviews) — up to 10
       serperSocial(
@@ -178,6 +203,13 @@ export async function POST(req: NextRequest) {
         `"${property_name}" ${loc} leasing phone contact site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com OR site:forrent.com`,
         4
       ),
+
+      // Search 5 — NEGATIVE posts about the proptech that's actually on site.
+      // Widest source net: Reddit, Facebook, Yelp, Google, ApartmentRatings, X.
+      serperSocial(
+        `("${property_name}" OR "${property_name}" apartments) ${city} ${onSiteQ} ${NEGATIVE} (site:reddit.com OR site:facebook.com OR site:yelp.com OR site:apartmentratings.com OR site:google.com/maps OR site:x.com OR site:twitter.com OR site:apartments.com)`,
+        10
+      ),
     ])
 
     // Also grab recent news for this property (gate incidents, security events, etc.)
@@ -187,6 +219,8 @@ export async function POST(req: NextRequest) {
     )
 
     const allSnippets = [
+      // Negative-first: these are the posts that make the pitch.
+      formatSnippets(negativeResults, `NEGATIVE POSTS ABOUT ON-SITE TECH${onSiteTech.length ? ` (${onSiteTech.join(', ')})` : ''}`),
       formatSnippets(propertyResults, 'PROPERTY SOCIAL (Reddit / Google Reviews / Yelp)'),
       formatSnippets(mgmtResults,     'MANAGEMENT CO SOCIAL'),
       formatSnippets(bulkResults,     'BULK / EXCLUSIVE SIGNAL SEARCH'),

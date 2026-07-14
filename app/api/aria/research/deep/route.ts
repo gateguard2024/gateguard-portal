@@ -2493,6 +2493,27 @@ export async function POST(req: NextRequest) {
     const rawQuery: string = raw.property_name || raw.query || ''
     if (!rawQuery) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
 
+    // ── Base-row seed ────────────────────────────────────────────────────────
+    // Deep research is Phase 2: it runs ON a property we already found and saved
+    // in the base find. When the caller passes property_id we start from that
+    // saved row — its confirmed name, address, units and system flags — instead
+    // of paying to rediscover facts we already hold. The row is also what the
+    // enriched result merges back into.
+    let baseSeed: Record<string, unknown> | null = null
+    if (raw.property_id && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(raw.property_id))) {
+      try {
+        const { data: seedRow } = await supabaseDeep
+          .from('aria_properties').select('*').eq('id', raw.property_id).maybeSingle()
+        if (seedRow) {
+          baseSeed = seedRow as Record<string, unknown>
+          console.log(`[aria/deep] seeded from saved base row "${seedRow.property_name}"`)
+        }
+      } catch (e) {
+        console.error('[aria/deep] base seed lookup failed:', e instanceof Error ? e.message : e)
+      }
+    }
+    void baseSeed
+
     // v10: the UI filter chips (All / ISP / Cable / Gate & Access / Cameras) — now
     // actually consumed to bias the searches instead of being silently ignored.
     const searchFocus = String(raw.search_focus ?? raw.searchFocus ?? 'all').toLowerCase()
@@ -2694,11 +2715,15 @@ export async function POST(req: NextRequest) {
     // ── PHASE 1A + DB lookback + Query Rewriting in parallel ────────────────
     // IMP-4: rewriteQuery expands the raw query into intent-specific sub-queries.
     // Runs concurrently with DB lookup and Phase 1A — zero latency impact.
-    const [p1, existingRecord, rewritten] = await Promise.all([
+    const [p1, lookedUpRecord, rewritten] = await Promise.all([
       runPhase1A(rawQuery, anthropic),
-      lookupExistingProperty(rawQuery, classification.city_hint),
+      // Skip the fuzzy name lookback when we were handed the exact row.
+      baseSeed ? Promise.resolve(null) : lookupExistingProperty(rawQuery, classification.city_hint),
       rewriteQuery(rawQuery, anthropic),
     ])
+    // The explicit base row always wins over a name-matched guess — it's the row
+    // the user selected, and the row this run will merge back into.
+    const existingRecord = (baseSeed as AriaDbRecord | null) ?? lookedUpRecord
 
     // v9: Create search run for specific_property branch (rewritten query now available)
     searchRunId = await createSearchRun(

@@ -351,6 +351,11 @@ export default function AriaExplorePage() {
   const [openCard, setOpenCard]       = useState<null | 'network' | 'community' | 'proptech' | 'ai'>(null)
   const [communityBusy, setCommunityBusy] = useState(false)
   const [communityErr, setCommunityErr]   = useState<string | null>(null)
+  // Deep research queue — runs ONE property at a time so nothing times out, and
+  // shows plainly what's waiting, what's running, and what's finished.
+  type QueueItem = { id: string; name: string; status: 'queued' | 'running' | 'done' | 'failed'; note?: string }
+  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [queueRunning, setQueueRunning] = useState(false)
   // Base find: was this one named property, or a cluster?
   const [resultKind, setResultKind] = useState<'single' | 'multi'>('multi')
   // Include previously-searched properties, or only new ones?
@@ -812,6 +817,43 @@ export default function AriaExplorePage() {
     } catch { /* ignore */ } finally { setDetailBusy(false) }
   }, [hydrateCommunity])
 
+  // Deep research on the selected properties. Deliberately SEQUENTIAL — one at a
+  // time. Running them in parallel blows the serverless timeout and the engine's
+  // rate limits. Each one reports its own status so it's obvious what's happening.
+  const runDeepQueue = useCallback(async (list: PropItem[]) => {
+    if (!list.length || queueRunning) return
+    setQueueRunning(true)
+    setError(null); setMsg(null)
+    setQueue(list.map(it => ({ id: it.id, name: it.name, status: 'queued' as const })))
+
+    for (const it of list) {
+      setQueue(q => q.map(x => x.id === it.id ? { ...x, status: 'running' } : x))
+      try {
+        const r = await fetch('/api/aria/research/deep', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `${it.name} ${it.city} ${it.state}`.trim(),
+            // Start from what we already saved instead of rediscovering it.
+            property_id: (it.saved_id && /^[0-9a-f]{8}-/i.test(it.saved_id)) ? it.saved_id
+              : (/^[0-9a-f]{8}-/i.test(it.id) ? it.id : undefined),
+          }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok || d.error) throw new Error(d.error || `Search failed (${r.status})`)
+        // Only call it done if it genuinely persisted.
+        if (d.saved_to_intel_db === false) throw new Error(d.save_error || 'found, but did not save')
+        setQueue(q => q.map(x => x.id === it.id ? { ...x, status: 'done' } : x))
+        setItems(prev => prev.map(x => x.id === it.id ? { ...x, researched: true } : x))
+      } catch (e) {
+        const note = e instanceof Error ? e.message : 'failed'
+        setQueue(q => q.map(x => x.id === it.id ? { ...x, status: 'failed', note } : x))
+      }
+    }
+
+    setQueueRunning(false)
+    setSelected(new Set())
+  }, [queueRunning])
+
   // History pick / known search → ALWAYS pull from Supabase first. Every full
   // search is auto-saved, so re-running a past search must be an instant DB read
   // (no re-search, no spend). Only falls back to a live search if nothing at all
@@ -1168,6 +1210,47 @@ export default function AriaExplorePage() {
               </div>
             )}
 
+            {/* Deep research queue — one at a time, and you can see exactly where it is. */}
+            {queue.length > 0 && (
+              <div className="px-3 py-2.5 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.07)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  {queueRunning
+                    ? <Loader2 size={12} className="animate-spin text-[#6B7EFF]" />
+                    : <Check size={12} className="text-emerald-400" strokeWidth={3} />}
+                  <span className="text-[11px] font-bold text-slate-200">
+                    {queueRunning
+                      ? `Researching ${queue.filter(q => q.status === 'done' || q.status === 'failed').length + 1} of ${queue.length}`
+                      : `Finished — ${queue.filter(q => q.status === 'done').length} of ${queue.length} done`}
+                  </span>
+                  {!queueRunning && (
+                    <button onClick={() => setQueue([])} className="ml-auto text-[10px] font-bold text-slate-400 hover:text-slate-200">Clear</button>
+                  )}
+                </div>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {queue.map(q => (
+                    <div key={q.id} className="flex items-center gap-2 text-[10.5px]">
+                      <span className="shrink-0 w-4 text-center">
+                        {q.status === 'queued'  && <span className="text-slate-500">•</span>}
+                        {q.status === 'running' && <Loader2 size={10} className="animate-spin text-[#6B7EFF] inline" />}
+                        {q.status === 'done'    && <span className="text-emerald-400 font-bold">✓</span>}
+                        {q.status === 'failed'  && <span className="text-rose-400 font-bold">✕</span>}
+                      </span>
+                      <span className={`truncate flex-1 ${q.status === 'done' ? 'text-slate-400' : 'text-slate-200'}`}>{q.name}</span>
+                      <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide ${
+                        q.status === 'running' ? 'text-[#6B7EFF]'
+                        : q.status === 'done'  ? 'text-emerald-400'
+                        : q.status === 'failed' ? 'text-rose-400' : 'text-slate-500'}`}>
+                        {q.status === 'queued' ? 'Waiting' : q.status === 'running' ? 'Working…' : q.status === 'done' ? 'Done' : 'Failed'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {queue.some(q => q.status === 'failed') && (
+                  <p className="text-[10px] text-rose-300 mt-1.5">{queue.find(q => q.status === 'failed')?.note}</p>
+                )}
+              </div>
+            )}
+
             {/* Save what's selected into the Intel DB — base data only. */}
             {selected.size > 0 && (
               <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.08)' }}>
@@ -1238,6 +1321,12 @@ export default function AriaExplorePage() {
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#6B7EFF' }}>
               {saveBusy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
               {saveBusy ? 'Saving…' : 'Save to database'}
+            </button>
+            {/* Deep research — explicit, sequential, costs a search per property. */}
+            <button onClick={() => runDeepQueue(selectedItems)} disabled={queueRunning}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+              <Zap size={13} /> {queueRunning ? 'Researching…' : `Deep research ${selected.size}`}
             </button>
             <button onClick={() => addToLeads(selectedItems)} disabled={busy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10 disabled:opacity-50">
