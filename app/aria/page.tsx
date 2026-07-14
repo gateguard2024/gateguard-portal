@@ -61,10 +61,10 @@ function scoreColor(s: number): string {
 // middle, light green from ~65% (the first genuinely positive signal), and a
 // rich, deep green at 100%.
 const GAUGE_STOPS: { at: number; c: [number, number, number] }[] = [
-  { at: 0.00, c: [225, 29, 72] },   // #e11d48 red
-  { at: 0.15, c: [249, 115, 22] },  // #f97316 orange (early, so red doesn't linger)
-  { at: 0.38, c: [245, 158, 11] },  // #f59e0b amber
-  { at: 0.65, c: [74, 222, 128] },  // #4ade80 light green — positive territory
+  { at: 0.00, c: [234, 88, 12] },   // #ea580c orange (no deep red — it read too harsh)
+  { at: 0.22, c: [245, 158, 11] },  // #f59e0b amber
+  { at: 0.45, c: [250, 204, 21] },  // #facc15 yellow
+  { at: 0.65, c: [74, 222, 128] },  // #4ade80 light green — first positive signal
   { at: 0.85, c: [34, 160, 84] },   // #22a054 green
   { at: 1.00, c: [17, 110, 51] },   // #116e33 rich deep green
 ]
@@ -321,6 +321,9 @@ export default function AriaExplorePage() {
   const mapRef     = useRef<any>(null)               // eslint-disable-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<Record<string, any>>({}) // eslint-disable-line @typescript-eslint/no-explicit-any
   const [mapTick, setMapTick] = useState(0) // forces the map effect to retry until Mapbox GL loads
+  const [mapErr, setMapErr]   = useState<string | null>(
+    MAPBOX_TOKEN ? null : 'Map is not configured (NEXT_PUBLIC_MAPBOX_TOKEN is missing on this deployment).'
+  )
 
   // Load Mapbox GL once
   useEffect(() => {
@@ -332,6 +335,10 @@ export default function AriaExplorePage() {
     document.head.appendChild(link)
     const s = document.createElement('script')
     s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'
+    // Kick the map effect the instant the library lands. Relying only on the
+    // poll meant the map could sit blank if a retry landed in a gap.
+    s.onload = () => setMapTick(x => x + 1)
+    s.onerror = () => setMapErr('Map library failed to load.')
     document.body.appendChild(s)
     // Strip Mapbox's default white popup chrome so our dark tooltip shows clean.
     const st = document.createElement('style')
@@ -451,7 +458,9 @@ export default function AriaExplorePage() {
     finally { setCommunityBusy(false) }
   }, [])
 
-  const runSearch = useCallback(async (qArg?: string) => {
+  // opts.force = the user explicitly asked for fresh data (the ↻ button), so skip
+  // the database short-circuit and go straight to the engine.
+  const runSearch = useCallback(async (qArg?: string, opts?: { force?: boolean }) => {
     const q = (qArg ?? query).trim()
     if (!q || loading) return
     if (qArg && qArg !== query) setQuery(qArg)
@@ -464,7 +473,7 @@ export default function AriaExplorePage() {
       const ql = q.toLowerCase()
       const isDiscovery = /\b(in|near|around|within|with|under|over|below|above)\b/.test(ql) || /\d{2,}\s*\+?\s*(unit|units|door|doors)/.test(ql)
       const sig = ql.replace(/[.,]/g, ' ').split(/\s+/).filter(w => w.length > 2)
-      if (!isDiscovery && sig.length >= 1) {
+      if (!opts?.force && !isDiscovery && sig.length >= 1) {
         try {
           const term = [...sig].sort((a, b) => b.length - a.length)[0]
           const mr = await fetch(`/api/aria/properties?search=${encodeURIComponent(term)}&limit=50`)
@@ -714,7 +723,9 @@ export default function AriaExplorePage() {
   // search is auto-saved, so re-running a past search must be an instant DB read
   // (no re-search, no spend). Only falls back to a live search if nothing at all
   // is found in the database for that query.
-  const openFromSaved = useCallback(async (q: string) => {
+  // View = read the database only. It must NEVER fall through to a paid search;
+  // if there's nothing saved we say so and let the user press ↻ deliberately.
+  const openFromSaved = useCallback(async (q: string, opts?: { allowLive?: boolean }) => {
     const raw = (q ?? '').trim()
     if (!raw) return
     setPanel(null); setSource('discover'); setQuery(raw)
@@ -742,12 +753,17 @@ export default function AriaExplorePage() {
         setItems(geo)
         return
       }
-      // Truly not in the database yet → run the live search (this one spends).
-      await runSearch(raw)
+      // Nothing saved for this one. Don't silently spend — tell the user and let
+      // them choose to search again.
+      if (!opts?.allowLive) {
+        setMsg('Not saved yet — press ↻ Search again to pull fresh data for this one.')
+        return
+      }
+      await runSearch(raw, { force: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load from database')
     } finally { setLoading(false) }
-  }, [runSearch, openDetail])
+  }, [runSearch, openDetail, hydrateCommunity])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const NAV: { href?: string; onClick?: () => void; active?: boolean; Icon: any; label: string }[] = [
@@ -811,7 +827,10 @@ export default function AriaExplorePage() {
             {/* HISTORY */}
             {panel === 'history' && (
               <div className="p-4 h-[calc(100%-4.5rem)]">
-                <SearchHistoryPanel onPick={(qq) => openFromSaved(qq)} />
+                <SearchHistoryPanel
+                  onPick={(qq) => openFromSaved(qq)}
+                  onResearch={(qq) => { setPanel(null); setSource('discover'); setQuery(qq); runSearch(qq, { force: true }) }}
+                />
               </div>
             )}
 
@@ -1016,8 +1035,14 @@ export default function AriaExplorePage() {
         <div className={`absolute inset-0 flex ${view === 'map' ? '' : 'hidden'}`}>
           {/* Map (centre) */}
           <div className="relative flex-1 min-w-0">
-            {!MAPBOX_TOKEN && <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">Map needs NEXT_PUBLIC_MAPBOX_TOKEN.</div>}
             <div id="aria-explore-map" className="absolute inset-0" />
+            {mapErr && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 pointer-events-none" style={{ background: '#0F1830' }}>
+                <MapIcon size={26} className="text-slate-600" />
+                <p className="text-[12px] font-semibold text-slate-300">{mapErr}</p>
+                <p className="text-[11px] text-slate-500">Results still work — you just won’t see pins.</p>
+              </div>
+            )}
           </div>
 
           {/* Results (right third) */}

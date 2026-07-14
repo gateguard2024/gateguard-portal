@@ -7,7 +7,9 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Clock, RefreshCw, ChevronRight } from 'lucide-react'
+import { Search, Clock, RefreshCw, Eye } from 'lucide-react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { RotateCcw } = require('lucide-react') as any
 
 interface HistoryItem {
   id: string
@@ -35,7 +37,12 @@ function pretty(q: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Search'
 }
 
-export function SearchHistoryPanel({ onPick }: { onPick: (query: string) => void }) {
+export function SearchHistoryPanel({ onPick, onResearch }: {
+  /** View — load what we already saved. Never runs a new search. */
+  onPick: (query: string) => void
+  /** Search again — deliberately pull fresh data (costs a search). */
+  onResearch?: (query: string) => void
+}) {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -74,23 +81,32 @@ export function SearchHistoryPanel({ onPick }: { onPick: (query: string) => void
         )}
 
         {items.map(it => (
-          <button
+          <div
             key={it.id}
-            onClick={() => onPick(it.query)}
-            className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-xl mb-1 hover:bg-[#131B2E] border border-transparent hover:border-white/10 transition-all group"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-1 hover:bg-[#131B2E] border border-transparent hover:border-white/10 transition-all group"
           >
             <span className="shrink-0 w-8 h-8 rounded-full bg-[#0F1830] border border-white/10 flex items-center justify-center">
               <Search size={13} className="text-slate-400 group-hover:text-[#6B7EFF]" />
             </span>
-            <span className="min-w-0 flex-1">
+            <button onClick={() => onPick(it.query)} className="min-w-0 flex-1 text-left" title="Open what we already found">
               <span className="block text-[13px] font-semibold text-slate-100 truncate group-hover:text-[#6B7EFF]">{pretty(it.query)}</span>
               <span className="block text-[11px] text-slate-500">
                 {ago(it.created_at)}
                 {!!it.imported_count && it.imported_count > 0 && <span className="text-emerald-400 font-semibold"> · {it.imported_count} lead{it.imported_count > 1 ? 's' : ''}</span>}
               </span>
-            </span>
-            <ChevronRight size={15} className="shrink-0 text-slate-600 group-hover:text-[#6B7EFF]" />
-          </button>
+            </button>
+            {/* Two explicit choices — never guess for the user.
+                Eye  = view what we already saved (instant, free).
+                ↻    = search again for fresh data (costs a search). */}
+            <button onClick={() => onPick(it.query)} title="View saved results (instant, no new search)"
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#6B7EFF]/25 border border-white/10">
+              <Eye size={14} />
+            </button>
+            <button onClick={() => onResearch?.(it.query)} title="Search again for fresh data"
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-amber-500/25 border border-white/10">
+              <RotateCcw size={14} />
+            </button>
+          </div>
         ))}
       </div>
     </div>
