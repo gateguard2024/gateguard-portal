@@ -186,6 +186,10 @@ export default function AriaExplorePage() {
   const [scoutLeadIds, setScoutLeadIds] = useState<string[]>([])
   const [scoutMsg, setScoutMsg]   = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [panel, setPanel] = useState<null | 'leads' | 'contacts' | 'settings'>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [panelItems, setPanelItems] = useState<any[]>([])
+  const [panelLoading, setPanelLoading] = useState(false)
 
   const mapRef     = useRef<any>(null)               // eslint-disable-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<Record<string, any>>({}) // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -339,6 +343,34 @@ export default function AriaExplorePage() {
 
   const onFind = source === 'saved' ? loadSaved : () => runSearch()
 
+  // Load data for the Leads / Contacts nav panels (both derived from searches).
+  useEffect(() => {
+    if (!panel || panel === 'settings') return
+    setPanelLoading(true); setPanelItems([])
+    void (async () => {
+      try {
+        if (panel === 'leads') {
+          const r = await fetch('/api/crm/leads?limit=200')
+          const d = await r.json()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = d.records ?? d.leads ?? d.data ?? []
+          setPanelItems(rows.filter(l => ['aria', 'aria_pool'].includes(String(l.source))))
+        } else if (panel === 'contacts') {
+          const r = await fetch('/api/aria/properties?limit=200')
+          const d = await r.json()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const out: any[] = []
+          for (const p of (d.properties ?? [])) {
+            const dms = p.facts?.decision_makers ?? p.dm_chain ?? []
+            for (const c of dms) if (c?.name && c.name !== 'No data found') out.push({ ...c, _property: p.property_name })
+          }
+          const seen = new Set<string>()
+          setPanelItems(out.filter(c => { const k = `${(c.name || '').toLowerCase()}|${(c.company || '').toLowerCase()}`; if (seen.has(k)) return false; seen.add(k); return true }))
+        }
+      } catch { /* ignore */ } finally { setPanelLoading(false) }
+    })()
+  }, [panel])
+
   const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const selectedItems = items.filter(i => selected.has(i.id))
   const matchesFilters = (it: PropItem) =>
@@ -432,29 +464,34 @@ export default function AriaExplorePage() {
   }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const NAV: { href?: string; active?: boolean; Icon: any; label: string }[] = [
+  const NAV: { href?: string; onClick?: () => void; active?: boolean; Icon: any; label: string }[] = [
     { href: '/', Icon: LayoutGrid, label: 'Home' },
-    { active: true, Icon: MapPin, label: 'Discover' },
-    { href: '/crm/leads', Icon: Star, label: 'Leads' },
-    { href: '/sites', Icon: Building2, label: 'Portfolio' },
-    { href: '/crm', Icon: Users, label: 'Contacts' },
+    { onClick: () => { setPanel(null); setSource('discover') }, active: !panel && source === 'discover', Icon: MapPin, label: 'Discover' },
+    { onClick: () => setPanel('leads'), active: panel === 'leads', Icon: Star, label: 'Leads' },
+    { onClick: () => { setPanel(null); setSource('saved'); loadSaved() }, active: !panel && source === 'saved', Icon: Building2, label: 'Portfolio' },
+    { onClick: () => setPanel('contacts'), active: panel === 'contacts', Icon: Users, label: 'Contacts' },
   ]
 
   return (
     <div className="flex h-full" style={{ background: '#0B1728', minHeight: '100vh' }}>
       {/* Left icon nav */}
       <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
-        {NAV.map((n, i) => (
+        {NAV.map((n, i) => n.href ? (
           <a key={i} href={n.href} title={n.label}
             className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
-            <n.Icon size={18} />
-            <span className="text-[8px] font-bold">{n.label}</span>
+            <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
           </a>
+        ) : (
+          <button key={i} onClick={n.onClick} title={n.label}
+            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
+            <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
+          </button>
         ))}
         <div className="flex-1" />
-        <a href="/admin" title="Settings" className="w-full flex flex-col items-center gap-0.5 py-2.5 text-slate-500 hover:text-slate-200 transition-colors">
+        <button onClick={() => setPanel('settings')} title="Settings"
+          className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${panel === 'settings' ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
           <Settings size={18} /><span className="text-[8px] font-bold">Settings</span>
-        </a>
+        </button>
       </aside>
 
       {/* Main column */}
@@ -490,6 +527,82 @@ export default function AriaExplorePage() {
             </div>
           </div>
           <div className="flex-1 bg-black/50" />
+        </div>
+      )}
+
+      {/* Nav panels — Leads / Contacts / Settings (all derived from searches) */}
+      {panel && (
+        <div className="fixed inset-y-0 right-0 z-40 flex" style={{ left: 56 }} onClick={() => setPanel(null)}>
+          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 sticky top-0 z-10" style={{ background: '#0B1728' }}>
+              {panel === 'leads' ? <Star size={15} className="text-[#6B7EFF]" /> : panel === 'contacts' ? <Users size={15} className="text-[#6B7EFF]" /> : <Settings size={15} className="text-[#6B7EFF]" />}
+              <span className="text-base font-bold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : 'Search settings'}</span>
+              {panel !== 'settings' && <span className="text-[11px] font-semibold text-slate-500">{panelItems.length}</span>}
+              <button onClick={() => setPanel(null)} className="ml-auto text-slate-500 hover:text-slate-200"><X size={17} /></button>
+            </div>
+
+            {panelLoading && <div className="flex items-center gap-2 px-5 py-6 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Loading…</div>}
+
+            {/* LEADS */}
+            {panel === 'leads' && !panelLoading && (
+              <div className="p-4 space-y-2">
+                {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No ARIA leads yet. Add properties to Leads from a search.</p>}
+                {panelItems.map((l, i) => (
+                  <button key={i} onClick={() => { setPanel(null); openDetail({ id: l.property_name || l.id, name: l.property_name || l.contact_name || 'Property', address: l.location ?? '', city: l.city ?? '', state: l.state ?? '' }) }}
+                    className="w-full text-left rounded-xl border border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50 p-3 transition-all">
+                    <p className="text-[13px] font-bold text-slate-100 truncate">{l.property_name || l.contact_name || 'Untitled'}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{[l.city, l.state].filter(Boolean).join(', ') || '—'}{l.unit_count ? ` · ${l.unit_count} units` : ''}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {l.stage && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25 capitalize">{l.stage}</span>}
+                      {l.scout_status && l.scout_status !== 'queued' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">SCOUT {l.scout_status}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* CONTACTS */}
+            {panel === 'contacts' && !panelLoading && (
+              <div className="p-4 space-y-2">
+                {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No contacts yet. Research properties and their decision-makers show up here.</p>}
+                {panelItems.map((c, i) => (
+                  <button key={i} onClick={() => { setPanel(null); openDetail({ id: c._property || '', name: c._property || '', address: '', city: '', state: '' }) }}
+                    className="w-full text-left rounded-xl border border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50 p-3 transition-all">
+                    <p className="text-[13px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{[c.email, c.phone].filter((x: string) => x && x !== 'No data found').join('  ·  ') || 'No email / phone'}</p>
+                    {c._property && <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1"><Building2 size={9} /> {c._property}</p>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* SETTINGS */}
+            {panel === 'settings' && (
+              <div className="p-5 space-y-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">Default search type</p>
+                  <div className="flex gap-1.5">
+                    {CATEGORIES.map(c => (
+                      <button key={c.key} onClick={() => { setCategory(c.key); try { localStorage.setItem('aria_def_cat', c.key) } catch { /* */ } }}
+                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${category === c.key ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10'}`}>{c.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#131B2E] p-3.5">
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-100">Skip already-found</p>
+                    <p className="text-[11px] text-slate-400">Hide properties already in your database from results.</p>
+                  </div>
+                  <button onClick={() => { const nv = !fNew; setFNew(nv); try { localStorage.setItem('aria_skip_found', String(nv)) } catch { /* */ } }}
+                    className={`w-11 h-6 rounded-full transition-colors relative ${fNew ? 'bg-[#6B7EFF]' : 'bg-white/15'}`}>
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${fNew ? 'left-[22px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">More search controls (data sources, refresh cadence) coming here.</p>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 bg-black/40" />
         </div>
       )}
 
