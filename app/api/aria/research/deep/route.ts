@@ -2552,17 +2552,37 @@ export async function POST(req: NextRequest) {
     // v10: Per-step persistence. Each phase saves what it found to Supabase
     // immediately (additive merge-upsert), so a later failure never drops the
     // earlier steps' data — and re-runs build on what's already saved.
+    // COLLECT the writes — do not fire-and-forget. `void (async () => ...)()`
+    // looks non-blocking but on Vercel the instance is frozen/killed the moment
+    // the response returns, so in-flight checkpoints were routinely dropped.
+    // That is precisely why "we saved every step" wasn't true. We now drain
+    // these before returning (see flushWrites) so a save either lands or logs.
+    const pendingWrites: Promise<unknown>[] = []
+    let checkpointOk = 0
+    let checkpointFail = 0
     const checkpoint = (partial: Record<string, unknown>) => {
-      void (async () => {
+      pendingWrites.push((async () => {
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-          await fetch(`${baseUrl}/api/aria/properties`, {
+          const r = await fetch(`${baseUrl}/api/aria/properties`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-service-key': process.env.ARIA_SERVICE_KEY ?? '' },
             body: JSON.stringify({ prospects: [partial] }),
           })
-        } catch { /* non-blocking — never let a checkpoint break the run */ }
-      })()
+          const b = await r.json().catch(() => ({}))
+          if (!r.ok || !(b?.upserted > 0)) {
+            checkpointFail++
+            console.error(`[aria/deep] checkpoint save FAILED: ${b?.error ?? `HTTP ${r.status}`}`)
+          } else { checkpointOk++ }
+        } catch (e) {
+          checkpointFail++
+          console.error('[aria/deep] checkpoint save THREW:', e instanceof Error ? e.message : e)
+        }
+      })())
+    }
+    /** Wait for every checkpoint to actually land before we respond. */
+    const flushWrites = async () => {
+      if (pendingWrites.length) await Promise.allSettled(pendingWrites)
     }
 
     // ── PHASE 1B: Prospecting (city/criteria/contract queries) ────────────────
@@ -2649,12 +2669,18 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Make sure every per-step save actually landed before we answer.
+      await flushWrites()
+
       return NextResponse.json({
         type: 'candidates',
         mode: 'candidates',
         engine_version: ARIA_ENGINE_VERSION,
         search_run_id: searchRunId,
         search_id: candidateSearchId,
+        // Truth about persistence — the UI must not claim "Saved" on faith.
+        saved_count: checkpointOk,
+        save_failed_count: checkpointFail,
         candidates: enrichedCandidates.map((c, i) => ({
           ...c,
           rank_position: i + 1,
@@ -3391,12 +3417,18 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     // Suppress unused warning for contractExpiryYear (used in non-blocking write)
     void contractExpiryYear
 
+    // Drain any per-step checkpoints so nothing is lost when we return.
+    await flushWrites()
+
     return NextResponse.json({
       type: 'property',
       mode: 'deep',
       engine_version: ARIA_ENGINE_VERSION,
       query_interpretation: `ARIA ${ARIA_ENGINE_VERSION} — ${property_name}`,
       prospects: [prospectPayload],
+      // Persistence truth — the UI must only show "Saved" when this is true.
+      saved_to_intel_db: savedToIntelDb,
+      save_error: saveError,
       savedSearchId,
       search_run_id: searchRunId,
       quality_gates: qualityGates,

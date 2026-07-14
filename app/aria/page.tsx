@@ -22,6 +22,17 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
 type Category = 'properties' | 'listings' | 'contacts'
 type ViewMode = 'list' | 'map'
 
+// The base find answers "does this exist?" — presence only, never a brand.
+interface BaseSystems {
+  internet: boolean
+  video: boolean
+  bulk: boolean
+  gates: boolean
+  cameras: boolean
+  smart_lockers: boolean
+  smart_rent: boolean
+}
+
 interface PropItem {
   id: string
   name: string
@@ -30,15 +41,49 @@ interface PropItem {
   state: string
   units?: number
   management_company?: string
+  website?: string | null
   isp_signal?: string
   bulk_detected?: boolean
   gate_signal?: boolean
   pain_brief?: string
   buy_score?: number
-  researched?: boolean
+  researched?: boolean          // = already in the Intel DB (the ✓ Saved badge)
   contract_expiry_year?: number
   lat?: number
   lng?: number
+  systems?: BaseSystems         // from the base find
+  saved_id?: string | null      // aria_properties.id when already saved
+  photo_url?: string | null     // the community's real hero shot (og:image)
+}
+
+const SYSTEM_LABELS: { key: keyof BaseSystems; short: string; label: string }[] = [
+  { key: 'internet',      short: 'INT',  label: 'Internet' },
+  { key: 'video',         short: 'TV',   label: 'Video / TV' },
+  { key: 'bulk',          short: 'BULK', label: 'Bulk deal' },
+  { key: 'gates',         short: 'GATE', label: 'Gates' },
+  { key: 'cameras',       short: 'CAM',  label: 'Cameras' },
+  { key: 'smart_lockers', short: 'PKG',  label: 'Smart lockers' },
+  { key: 'smart_rent',    short: 'SMRT', label: 'Smart rent' },
+]
+
+/** The 7 base signals as compact chips — green = found, grey = not found. */
+function SystemChips({ systems }: { systems?: BaseSystems }) {
+  if (!systems) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+      {SYSTEM_LABELS.map(s => {
+        const on = !!systems[s.key]
+        return (
+          <span key={s.key} title={`${s.label}: ${on ? 'found' : 'not found'}`}
+            className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded border tracking-wide ${
+              on ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                 : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
+            {s.short}
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 type Source = 'discover' | 'saved'
@@ -304,6 +349,11 @@ export default function AriaExplorePage() {
   const [openCard, setOpenCard]       = useState<null | 'network' | 'community' | 'proptech' | 'ai'>(null)
   const [communityBusy, setCommunityBusy] = useState(false)
   const [communityErr, setCommunityErr]   = useState<string | null>(null)
+  // Base find: was this one named property, or a cluster?
+  const [resultKind, setResultKind] = useState<'single' | 'multi'>('multi')
+  // Include previously-searched properties, or only new ones?
+  const [savedFilter, setSavedFilter] = useState<'all' | 'new' | 'saved'>('all')
+  const [saveBusy, setSaveBusy] = useState(false)
   // Apollo-grade segmentation on multifamily fields
   const [fMinUnits, setFMinUnits] = useState(0)
   const [fGate, setFGate]         = useState(false)
@@ -501,41 +551,46 @@ export default function AriaExplorePage() {
         } catch { /* fall through to live search */ }
       }
 
-      const knownNames = new Set<string>()
-      try {
-        const kr = await fetch('/api/aria/properties?limit=200')
-        if (kr.ok) { const kd = await kr.json(); for (const p of (kd.properties ?? [])) knownNames.add(String(p.property_name ?? '').toLowerCase()) }
-      } catch { /* non-blocking */ }
-
-      const res = await fetch('/api/aria/research/deep', {
+      // ── THE INITIAL FIND ────────────────────────────────────────────────
+      // Base data only: name, address, units, and which systems exist. This is
+      // deliberately cheap — no deep engine, no contacts, no scoring. Deep
+      // research is a separate, explicit step on a property you choose.
+      const res = await fetch('/api/aria/research/base', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q }),
       })
       const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      if (!res.ok || data.error) throw new Error(data.error || `Search failed (${res.status})`)
 
-      let list: PropItem[] = []
-      if (data.type === 'candidates') {
-        setInterp(data.query_interpretation ?? '')
-        list = (data.candidates ?? []).map((c: any, i: number) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
-          id: `${c.name ?? 'prop'}-${i}`, name: c.name ?? 'Unknown Property',
-          address: c.address ?? '', city: c.city ?? '', state: c.state ?? '',
-          units: c.units, management_company: c.management_company,
-          isp_signal: c.isp_signal, bulk_detected: c.bulk_detected, gate_signal: c.gate_signal,
-          pain_brief: c.pain_brief, buy_score: c.buy_score_estimate,
-        }))
-      } else if (Array.isArray(data.prospects)) {
-        list = data.prospects.map((p: any, i: number) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
-          id: `${p.property?.name ?? 'prop'}-${i}`, name: p.property?.name ?? 'Unknown Property',
-          address: p.property?.address ?? '', city: p.property?.city ?? '', state: p.property?.state ?? '',
-          units: p.property?.units, management_company: p.property?.management_company,
-          isp_signal: (p.property?.isp_providers ?? [])[0], buy_score: p.profile?.buy_score, researched: true,
-        }))
+      setInterp(data.query_interpretation ?? '')
+      setResultKind(data.type === 'multi' ? 'multi' : 'single')
+      setSavedFilter('all')
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const list: PropItem[] = (data.properties ?? []).map((p: any, i: number) => ({
+        id: p.saved_id || `base-${(p.name ?? 'prop').toLowerCase().replace(/\s+/g, '-')}-${i}`,
+        name: p.name ?? 'Unknown Property',
+        address: p.address ?? '', city: p.city ?? '', state: p.state ?? '',
+        units: p.units ?? undefined,
+        management_company: p.management_company ?? undefined,
+        website: p.website ?? null,
+        photo_url: p.photo_url ?? null,
+        systems: p.systems,
+        // Mirror the base flags onto the legacy signals the filters/pins read.
+        bulk_detected: !!p.systems?.bulk,
+        gate_signal: !!p.systems?.gates,
+        researched: !!p.already_saved,   // ✓ Saved = genuinely in the Intel DB
+        saved_id: p.saved_id ?? null,
+      }))
+
+      if (!list.length) {
+        setError('No properties matched that. Try the full name, or add a city.')
       }
-      list = list.map(it => ({ ...it, researched: it.researched || knownNames.has(it.name.toLowerCase()) }))
       setItems(list)
       const geo = await Promise.all(list.map(async it => ({ ...it, ...(await geocode(it)) })))
       setItems(geo)
+      // A single named property → open it straight away on the right.
+      if (data.type !== 'multi' && geo.length === 1) setDetail(geo[0])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed')
     } finally { setLoading(false) }
@@ -596,10 +651,46 @@ export default function AriaExplorePage() {
     (!fGate || it.gate_signal) &&
     (!fBulk || it.bulk_detected) &&
     (!fNew || !it.researched) &&
+    // All / New only / Already searched
+    (savedFilter === 'all' || (savedFilter === 'new' ? !it.researched : !!it.researched)) &&
     (!fExpBefore || (it.contract_expiry_year != null && it.contract_expiry_year <= fExpBefore)) &&
     (source !== 'saved' || !query.trim() || it.name.toLowerCase().includes(query.trim().toLowerCase()))
   const visible = items.filter(matchesFilters)
   const alreadyCount = items.filter(i => i.researched).length
+
+  // Save the selected base findings into the Intel DB. Base data only — name,
+  // address, units and the system flags. Deep research enriches the same row later.
+  const saveToDb = useCallback(async (list: PropItem[]) => {
+    if (!list.length) return
+    setSaveBusy(true); setMsg(null); setError(null)
+    try {
+      const r = await fetch('/api/aria/properties/save-base', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          properties: list.map(it => ({
+            name: it.name, address: it.address, city: it.city, state: it.state,
+            units: it.units ?? null, website: it.website ?? null,
+            management_company: it.management_company ?? null,
+            lat: it.lat ?? null, lng: it.lng ?? null,
+            photo_url: it.photo_url ?? null,
+            systems: it.systems,
+          })),
+        }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Save failed')
+      // Only mark ✓ Saved on what genuinely landed.
+      if (d.saved > 0) {
+        const savedNames = new Set(list.map(x => x.name))
+        setItems(prev => prev.map(x => savedNames.has(x.name) ? { ...x, researched: true } : x))
+      }
+      setSelected(new Set())
+      setMsg(`Saved ${d.saved} to your database${d.failed ? ` · ${d.failed} failed` : ''}.`)
+      if (d.failed) setError(`${d.failed} did not save: ${(d.errors ?? [])[0] ?? 'unknown error'}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save to the database.')
+    } finally { setSaveBusy(false) }
+  }, [])
 
   const addToLeads = useCallback(async (list: PropItem[]) => {
     if (!list.length) return
@@ -1049,12 +1140,43 @@ export default function AriaExplorePage() {
           <aside className="w-[34%] min-w-[290px] max-w-[420px] shrink-0 flex flex-col border-l border-white/[0.08]" style={{ background: '#0B1728' }}>
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.07]">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">{visible.length} found</span>
-              {alreadyCount > 0 && <span className="text-[10px] font-semibold text-emerald-400">{alreadyCount} researched</span>}
+              {alreadyCount > 0 && <span className="text-[10px] font-semibold text-emerald-400">{alreadyCount} saved</span>}
               <button onClick={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(v => v.id)))}
                 className="ml-auto text-[10px] font-bold text-[#6B7EFF] hover:underline">
                 {selected.size === visible.length && visible.length > 0 ? 'Clear all' : 'Select all'}
               </button>
             </div>
+
+            {/* Include previously-searched properties, or only new ones? */}
+            {resultKind === 'multi' && items.length > 0 && (
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-white/[0.07]">
+                {([
+                  { k: 'all',   label: 'All',            n: items.length },
+                  { k: 'new',   label: 'New only',       n: items.filter(i => !i.researched).length },
+                  { k: 'saved', label: 'Already searched', n: items.filter(i => i.researched).length },
+                ] as const).map(c => (
+                  <button key={c.k} onClick={() => setSavedFilter(c.k)}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all ${
+                      savedFilter === c.k
+                        ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]'
+                        : 'text-slate-400 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+                    {c.label} <span className="opacity-70">{c.n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Save what's selected into the Intel DB — base data only. */}
+            {selected.size > 0 && (
+              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.08)' }}>
+                <button onClick={() => saveToDb(selectedItems)} disabled={saveBusy}
+                  className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg text-white disabled:opacity-50"
+                  style={{ background: '#6B7EFF' }}>
+                  {saveBusy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                  {saveBusy ? 'Saving…' : `Save ${selected.size} to database`}
+                </button>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
               {visible.map((it, i) => {
@@ -1067,19 +1189,30 @@ export default function AriaExplorePage() {
                     {/* Number — matches the pin on the map */}
                     <span className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold shadow" style={{ background: scoreColor(s) }}>{i + 1}</span>
                     <div className="min-w-0 flex-1">
+                      {/* Hero shot from the community's own website */}
+                      {it.photo_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.photo_url} alt={it.name} loading="lazy"
+                          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                          className="w-full h-24 object-cover rounded-lg mb-2 border border-white/10" />
+                      )}
                       <h3 className="text-[12.5px] font-bold text-slate-100 truncate leading-tight">{it.name}</h3>
-                      <p className="text-[10.5px] text-slate-400 truncate mt-0.5">{[it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
+                      <p className="text-[10.5px] text-slate-400 truncate mt-0.5">{it.address || [it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
                       <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                        {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${it.units ? 'bg-[#0F1830] text-slate-300 border-white/10' : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
+                          {it.units ? `${it.units} units` : 'Units: no data'}
+                        </span>
                         {it.researched && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">✓ Saved</span>}
-                        {triggerFlags(it).slice(0, 1).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
                       </div>
-                      {/* At-a-glance valuations — same ramp as the big gauges */}
-                      <div className="flex items-center gap-3 mt-2">
-                        <MiniGauge label="Buy" val={s} />
-                        <MiniGauge label="Fit" val={proptechFit(it)} />
-                        <MiniGauge label="Net" val={netScore(it)} />
-                      </div>
+                      {/* The 7 base signals — does it exist, yes or no */}
+                      <SystemChips systems={it.systems} />
+                      {it.website && (
+                        <a href={it.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[10px] text-[#6B7EFF] hover:underline mt-1.5 truncate max-w-full">
+                          <Globe size={10} className="shrink-0" />
+                          <span className="truncate">{it.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                        </a>
+                      )}
                     </div>
                     {/* Select */}
                     <button onClick={e => { e.stopPropagation(); toggle(it.id) }} aria-label="Select"
