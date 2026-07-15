@@ -7,9 +7,19 @@ const supabase = createClient(
 )
 
 // POST /api/maintenance/[id]/checklist — add a checklist item
+//
+// `phase_id` groups the step under a work-order phase (Wiring, Trim, Headend,
+// Program) — that's what turns a flat list into:
+//   Headend            <- the phase
+//     · Clean wiring — detail   <- title + notes
+// Omit it and the step is ungrouped, exactly as before (migration 150).
+//
+// NOTE: `category` is NOT the group — it's a CHECK-constrained enum
+// ('task','safety','inspection','verification') used for a badge. Don't put
+// "Headend" in it; Postgres will reject the row.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const { title, sort_order, category, added_by, notes } = body
+  const { title, sort_order, category, added_by, notes, phase_id } = body
 
   if (!title?.trim()) {
     return NextResponse.json({ error: 'Title required' }, { status: 400 })
@@ -24,6 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       category:  category  || 'task',
       added_by:  added_by  || 'management',
       notes:     notes?.trim() || null,
+      phase_id:  phase_id  || null,
     })
     .select()
     .single()
@@ -35,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 // PATCH /api/maintenance/[id]/checklist — toggle, set outcome, or update an item
 export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
   const body = await req.json()
-  const { item_id, title, outcome, notes, completed_by_name, sort_order } = body
+  const { item_id, title, outcome, notes, completed_by_name, sort_order, phase_id } = body
   // Accept either `completed` or `is_complete` from clients.
   const completed = body.completed !== undefined ? body.completed : body.is_complete
 
@@ -51,6 +62,8 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
   if (notes              !== undefined) update.notes              = notes
   if (completed_by_name  !== undefined) update.completed_by_name = completed_by_name
   if (sort_order         !== undefined) update.sort_order         = sort_order
+  // Move a step into (or out of) a phase. null = ungrouped.
+  if (phase_id           !== undefined) update.phase_id           = phase_id || null
 
   const { data, error } = await supabase
     .from('wo_checklist_items')
