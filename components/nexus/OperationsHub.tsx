@@ -40,6 +40,13 @@ const bucketOf = (s: string) => JOB_COLUMNS.find(c => c.from.includes(s))?.key ?
 const COL_TO_DB: Record<string, string> = { New: "open", Procurement: "procurement", Scheduled: "scheduled", "In Progress": "in_progress", Stuck: "stuck", Done: "completed" };
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
+// Steps on a job are grouped into phases (a row in work_order_phases). These are
+// the phases the install crews actually run, offered as one-tap presets so nobody
+// has to type them. Any other phase name can still be typed by hand.
+const PRESET_PHASES = ["Wiring", "Trim", "Headend", "Program"];
+// Bucket key for steps with phase_id = null — they still show, never disappear.
+const PHASE_OTHER = "__other";
+
 const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
 const btn = { background: "#6366f1", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
 const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(255,255,255,.22)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
@@ -1454,7 +1461,15 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [comments, setComments] = useState<any[]>([]);
   const [laborMins, setLaborMins] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [newItem, setNewItem] = useState("");
+  // Steps grouped by phase. `addOpen` is the id of the group whose "Add step"
+  // form is open (PHASE_OTHER for ungrouped) — only one is open at a time so the
+  // next action is always obvious. `stepErr` surfaces write failures instead of
+  // swallowing them: a tick that silently doesn't save is worse than an error.
+  const [addOpen, setAddOpen] = useState<string | null>(null);
+  const [stepForm, setStepForm] = useState({ title: "", detail: "" });
+  const [newPhaseName, setNewPhaseName] = useState("");
+  const [stepErr, setStepErr] = useState<{ msg: string; detail?: string } | null>(null);
+  const [stepBusy, setStepBusy] = useState(false);
   const [chat, setChat] = useState("");
   // site + equipment pull-through, manuals, playbooks, AI support
   const [siteId, setSiteId] = useState<string | null>(null);
@@ -1546,33 +1561,89 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const completeBlockReason = !allStepsDone ? (checklist.length === 0 ? "Add at least one step, then check it off" : `Finish all steps (${doneCount}/${checklist.length})`) : !hasPhoto ? "Add at least one photo as proof" : "";
   const patchField = (p: Record<string, unknown>) => { onUpdate(id, { ...p, send_notifications: notifyOnChange }); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
 
-  async function addChecklist() {
-    const title = newItem.trim(); if (!title) return; setNewItem("");
-    await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
-    load(true);
+  // Every step/phase write goes through here. Returns false AND shows a plain
+  // message on failure — nothing is swallowed. The raw server text is kept in a
+  // muted "Details" line so the user reads English, not Postgres.
+  async function stepReq(url: string, init: RequestInit, friendly: string): Promise<boolean> {
+    try {
+      const r = await fetch(url, init);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d: any = await r.json().catch(() => ({}));
+      if (!r.ok || d?.error) { setStepErr({ msg: friendly, detail: d?.error ? String(d.error) : `Server said ${r.status}.` }); return false; }
+      setStepErr(null); return true;
+    } catch { setStepErr({ msg: friendly, detail: "Couldn't reach the server." }); return false; }
+  }
+  // Steps belonging to one phase (null = ungrouped), in their saved order.
+  const stepsIn = (phaseId: string | null) =>
+    checklist.filter(c => (c.phase_id ?? null) === phaseId).sort((a, b) => num(a.sort_order) - num(b.sort_order));
+  // Add a step inside a phase. `category` is deliberately NOT set — it's a
+  // CHECK-constrained badge enum ('task'|'safety'|…), never the group name.
+  async function addStep(phaseId: string | null) {
+    const title = stepForm.title.trim(); if (!title || stepBusy) return;
+    setStepBusy(true);
+    const sort_order = stepsIn(phaseId).reduce((m, c) => Math.max(m, num(c.sort_order)), -1) + 1;
+    const ok = await stepReq(`/api/maintenance/${id}/checklist`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, notes: stepForm.detail.trim() || null, phase_id: phaseId, sort_order }),
+    }, "Couldn't add that step.");
+    setStepBusy(false);
+    if (ok) { setStepForm({ title: "", detail: "" }); setAddOpen(null); load(true); }
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleChecklist(item: any) {
     const next = !(item.is_complete || item.completed || item.done);
-    // Optimistic flip so the box ticks instantly, then persist + reload.
+    // Optimistic flip so the box ticks instantly, then persist + reload. If the
+    // save fails, load(true) puts the box back where it really is.
     setChecklist(cs => cs.map(c => c.id === item.id ? { ...c, completed: next, is_complete: next } : c));
-    await fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, completed: next }) }).catch(() => {});
+    await stepReq(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, completed: next }) }, "Couldn't save that step.");
     load(true);
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function removeChecklist(item: any) {
     setChecklist(cs => cs.filter(c => c.id !== item.id));
-    await fetch(`/api/maintenance/${id}/checklist`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id }) }).catch(() => {});
+    await stepReq(`/api/maintenance/${id}/checklist`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id }) }, "Couldn't remove that step.");
     load(true);
   }
-  // Reorder a step up/down. Reassigns sequential sort_order so the new order sticks.
-  async function moveStep(idx: number, dir: -1 | 1) {
+  // Reorder a step within its own phase. Reassigns sequential sort_order across
+  // the whole group rather than swapping two values — older rows were all saved
+  // with sort_order 0, and swapping equal numbers would move nothing.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function moveStep(group: any[], idx: number, dir: -1 | 1) {
     const j = idx + dir;
-    if (j < 0 || j >= checklist.length) return;
-    const next = [...checklist];
+    if (j < 0 || j >= group.length) return;
+    const next = [...group];
     [next[idx], next[j]] = [next[j], next[idx]];
-    setChecklist(next); // optimistic
-    await Promise.all(next.map((c, i) => fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: c.id, sort_order: i }) }).catch(() => {})));
+    const order = new Map<string, number>(next.map((c, i) => [String(c.id), i]));
+    setChecklist(cs => cs.map(c => order.has(String(c.id)) ? { ...c, sort_order: order.get(String(c.id)) } : c)); // optimistic
+    await Promise.all(next.map((c, i) => stepReq(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: c.id, sort_order: i }) }, "Couldn't reorder the steps.")));
+    load(true);
+  }
+  // Add a phase by name (preset button or typed). Skips exact duplicates.
+  async function addPhaseNamed(name: string) {
+    const n = name.trim(); if (!n || stepBusy) return;
+    if (phases.some(p => String(p.name).trim().toLowerCase() === n.toLowerCase())) { setNewPhaseName(""); return; }
+    setStepBusy(true);
+    const ok = await stepReq(`/api/maintenance/${id}/phases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }, "Couldn't add that phase.");
+    setStepBusy(false);
+    if (ok) { setNewPhaseName(""); load(true); }
+  }
+  // Delete a phase. Its steps survive — phase_id goes null (ON DELETE SET NULL)
+  // and they drop into "Other steps".
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function deletePhase(p: any) {
+    if (!window.confirm(`Delete the phase "${p.name}"?\n\nIts steps are kept and moved to "Other steps".`)) return;
+    const ok = await stepReq(`/api/maintenance/${id}/phases/${p.id}`, { method: "DELETE" }, "Couldn't delete that phase.");
+    if (ok) { if (costPhase === p.id) setCostPhase(""); load(true); }
+  }
+  // Move a phase up/down. The phases API PATCH passes the body straight through,
+  // so sort_order is persisted the same way the list is read back (order by sort_order).
+  async function movePhase(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= phases.length) return;
+    const next = [...phases];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setPhases(next.map((p, i) => ({ ...p, sort_order: i }))); // optimistic
+    await Promise.all(next.map((p, i) => stepReq(`/api/maintenance/${id}/phases/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sort_order: i }) }, "Couldn't reorder the phases.")));
     load(true);
   }
   async function addComment() {
@@ -1661,6 +1732,57 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     const r = await fetch(`/api/invoices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site_id: wo.site_id ?? null, work_order_id: id, line_items: lineItems, notes: `From work order ${wo.wo_number || ""}`.trim() }) }).then(x => x.json()).catch(() => null);
     setInvBusy(false);
     setSmsMsg(r?.id || r?.invoice?.id ? "Invoice created ✓ — open Money/Docs to set rates, send & collect payment." : (r?.error || "Couldn't create invoice."));
+  }
+
+  // One phase block: header ("Headend — 2 of 3 done"), its steps indented under
+  // it, and its own "+ Add step". Written as a plain function, not a nested
+  // component, so React keeps the inputs mounted (and focused) while you type.
+  function renderStepGroup(gid: string, phaseId: string | null, name: string, phaseIndex: number) {
+    const group = stepsIn(phaseId);
+    const gDone = group.filter(c => c.is_complete || c.completed || c.done).length;
+    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
+    const isPhase = phaseId !== null;
+    return <div key={gid} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 14, fontWeight: 700, flex: 1, minWidth: 110 }}>{name}</span>
+        <Small>{gDone} of {group.length} done</Small>
+        {isPhase && <>
+          <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+            <button onClick={() => movePhase(phaseIndex, -1)} disabled={phaseIndex === 0} title="Move phase up" style={{ ...arrow, opacity: phaseIndex === 0 ? 0.25 : 1 }}>▲</button>
+            <button onClick={() => movePhase(phaseIndex, 1)} disabled={phaseIndex === phases.length - 1} title="Move phase down" style={{ ...arrow, opacity: phaseIndex === phases.length - 1 ? 0.25 : 1 }}>▼</button>
+          </div>
+          <button onClick={() => deletePhase(phases[phaseIndex])} style={{ ...sel, cursor: "pointer", color: "#fca5a5", border: "1px solid rgba(248,113,113,0.35)", padding: "4px 9px", flexShrink: 0 }}>Delete</button>
+        </>}
+      </div>
+      <div style={{ display: "grid", gap: 2, marginTop: 8, paddingLeft: 10, borderLeft: "2px solid rgba(0,200,255,0.22)" }}>
+        {group.length === 0 && <Small>No steps yet — add the first one.</Small>}
+        {group.map((c, i) => {
+          const done = c.is_complete || c.completed || c.done;
+          return <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "5px 0" }}>
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", flex: 1, cursor: "pointer", minWidth: 0 }}>
+              <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} style={{ marginTop: 3, flexShrink: 0 }} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
+                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
+              </span>
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+              <button onClick={() => moveStep(group, i, -1)} disabled={i === 0} title="Move up" style={{ ...arrow, opacity: i === 0 ? 0.25 : 1 }}>▲</button>
+              <button onClick={() => moveStep(group, i, 1)} disabled={i === group.length - 1} title="Move down" style={{ ...arrow, opacity: i === group.length - 1 ? 0.25 : 1 }}>▼</button>
+            </div>
+            <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "rgba(252,165,165,0.7)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
+          </div>;
+        })}
+      </div>
+      {addOpen === gid ? <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+        <input autoFocus placeholder="What to do — e.g. Location 1" value={stepForm.title} onChange={e => setStepForm(f => ({ ...f, title: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") addStep(phaseId); }} style={{ ...input, padding: 9, fontSize: 13 }} />
+        <input placeholder="Detail (optional) — e.g. pull CAT6 from the pool gate" value={stepForm.detail} onChange={e => setStepForm(f => ({ ...f, detail: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") addStep(phaseId); }} style={{ ...input, padding: 9, fontSize: 13 }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => addStep(phaseId)} disabled={!stepForm.title.trim() || stepBusy} style={{ ...btn, opacity: stepForm.title.trim() && !stepBusy ? 1 : 0.5 }}>{stepBusy ? "Adding…" : "Add step"}</button>
+          <button onClick={() => { setAddOpen(null); setStepForm({ title: "", detail: "" }); }} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+        </div>
+      </div> : <button onClick={() => { setAddOpen(gid); setStepForm({ title: "", detail: "" }); }} style={{ ...sel, cursor: "pointer", marginTop: 8, padding: "6px 10px" }}>+ Add step</button>}
+    </div>;
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -1876,24 +1998,31 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               {playbooks.map(p => <option key={p.id} value={p.id}>{p.title}{p.org_id ? "" : " (global)"} — {(p.steps ?? []).length} steps</option>)}
             </select>
           </div>}
-          {checklist.map((c, i) => {
-            const done = c.is_complete || c.completed || c.done;
-            const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" } as const;
-            return <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0" }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer", minWidth: 0 }}>
-                <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} />
-                <span style={{ textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
-              </label>
-              <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                <button onClick={() => moveStep(i, -1)} disabled={i === 0} title="Move up" style={{ ...arrow, opacity: i === 0 ? 0.25 : 1 }}>▲</button>
-                <button onClick={() => moveStep(i, 1)} disabled={i === checklist.length - 1} title="Move down" style={{ ...arrow, opacity: i === checklist.length - 1 ? 0.25 : 1 }}>▼</button>
-              </div>
-              <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "rgba(252,165,165,0.7)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
-            </div>;
-          })}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <input placeholder="Add a step…" value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addChecklist(); }} style={{ ...input, padding: 9 }} />
-            <button onClick={addChecklist} style={btn}>Add</button>
+          {/* Phase controls — one tap for the phases we actually run, or type your own. */}
+          <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+            {phases.length === 0 && <div style={{ marginBottom: 8 }}><Small>Group your steps into phases (Wiring, Trim, Headend, Program).</Small></div>}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {PRESET_PHASES.map(name => {
+                const already = phases.some(p => String(p.name).trim().toLowerCase() === name.toLowerCase());
+                return <button key={name} onClick={() => addPhaseNamed(name)} disabled={already || stepBusy} title={already ? `${name} is already added` : `Add the ${name} phase`}
+                  style={{ ...sel, cursor: already ? "default" : "pointer", opacity: already ? 0.4 : 1, padding: "6px 10px" }}>{already ? `✓ ${name}` : `+ ${name}`}</button>;
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input placeholder="Or type a phase name…" value={newPhaseName} onChange={e => setNewPhaseName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addPhaseNamed(newPhaseName); }} style={{ ...input, padding: 9, fontSize: 13 }} />
+              <button onClick={() => addPhaseNamed(newPhaseName)} disabled={!newPhaseName.trim() || stepBusy} style={{ ...btn, opacity: newPhaseName.trim() && !stepBusy ? 1 : 0.5, whiteSpace: "nowrap" }}>+ Add phase</button>
+            </div>
+          </div>
+
+          {stepErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.35)" }}>
+            <div style={{ fontSize: 13, color: "#fca5a5" }}>{stepErr.msg} Nothing was saved — please try again.</div>
+            {stepErr.detail && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Details: {stepErr.detail}</div>}
+          </div>}
+
+          {/* Each phase, in order, then anything not in a phase — so no step is ever lost. */}
+          <div style={{ display: "grid", gap: 10 }}>
+            {phases.map((p, pi) => renderStepGroup(String(p.id), String(p.id), p.name, pi))}
+            {(stepsIn(null).length > 0 || phases.length === 0) && renderStepGroup(PHASE_OTHER, null, phases.length === 0 ? "Steps" : "Other steps", -1)}
           </div>
         </Card>
 
