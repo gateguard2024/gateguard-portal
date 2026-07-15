@@ -45,6 +45,7 @@ export interface BaseSystems {
 
 export interface BaseProperty {
   name: string
+  name_aliases?: string[]     // every other name this community trades under
   address: string
   city: string
   state: string
@@ -217,7 +218,20 @@ export async function POST(req: NextRequest) {
 Return AT MOST ${wanted} propert${wanted === 1 ? 'y' : 'ies'}.
 ${isArea
   ? 'This is an AREA search: list the distinct apartment communities you can identify.'
-  : 'This is a SINGLE PROPERTY search: return ONLY the one property that best matches. Do not invent others.'}
+  : `This is a SINGLE PROPERTY search: return THE ONE property that best matches the query.
+
+CRITICAL — you MUST return it if you can identify it at all:
+- Apartment communities are REBRANDED constantly. The name in the query and the
+  name on listing sites will often DIFFER for the SAME building (e.g. a property
+  searched as "Aster Buckhead" may be listed as "LYV Buckhead" at the same
+  address). This is expected, NOT a reason to reject the match.
+- Match on ADDRESS + city first, name second. Same address = same property.
+- If you can name the property or its address, you MUST return it in "properties".
+  Returning an empty array while describing the property in query_interpretation
+  is WRONG — if you identified it, hand it over.
+- Only return an empty array when NOTHING in the snippets plausibly matches.
+- Put the property's current/primary name in "name", and EVERY other name it
+  appears under in "name_aliases" (this is how we find its reviews later).`}
 
 For each property return:
 - name: official community name (NOT the listing site name). If sources disagree
@@ -249,7 +263,7 @@ Rules:
 - units must be a number or null — never a guess, never a range.
 
 JSON shape:
-{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false}}]}
+{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","name_aliases":[],"address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false}}]}
 
 SNIPPETS:
 ${snippets}`
@@ -271,10 +285,15 @@ ${snippets}`
 
     const raw = Array.isArray(parsed?.properties) ? parsed!.properties! : []
     const properties: BaseProperty[] = raw
-      .filter(p => (p?.name ?? '').trim().length > 1)
+      // Keep anything we can identify by EITHER name or address. Requiring a name
+      // silently dropped real matches on rebranded properties.
+      .filter(p => (p?.name ?? '').trim().length > 1 || (p?.address ?? '').trim().length > 5)
       .slice(0, wanted)
       .map(p => ({
-        name: String(p.name).trim(),
+        name: String(p.name ?? '').trim() || String(p.address ?? '').trim(),
+        name_aliases: Array.isArray(p.name_aliases)
+          ? p.name_aliases.filter((a: unknown) => typeof a === 'string' && a.trim()).slice(0, 4)
+          : [],
         address: String(p.address ?? '').trim(),
         city: String(p.city ?? '').trim(),
         state: String(p.state ?? '').trim(),
@@ -310,11 +329,27 @@ ${snippets}`
       }
     }
 
+    // If the model described a property in query_interpretation but handed back
+    // nothing, that is an extraction failure — NOT "this property doesn't exist".
+    // Say so plainly instead of rendering an innocent empty state.
+    const describedButEmpty =
+      properties.length === 0 &&
+      /\b(propert|apartment|multifamily|units|at\s+\d)/i.test(parsed?.query_interpretation ?? '')
+    if (describedButEmpty) {
+      console.error(`[aria/base] extraction returned 0 properties but described one: "${parsed?.query_interpretation}"`)
+    }
+
     return NextResponse.json({
       type: isArea ? 'multi' : 'single',
       query_interpretation: parsed?.query_interpretation ?? query,
       properties,
       count: properties.length,
+      ...(describedButEmpty
+        ? { warning: 'We found this property in the search results but could not read it cleanly. Try the full name (e.g. "The Aster Buckhead Atlanta").' }
+        : {}),
+      // How much raw material we had — distinguishes "the web has nothing" from
+      // "we had plenty and failed to read it".
+      snippets_seen: identity.length + amenities.length,
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Base search failed'

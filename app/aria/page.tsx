@@ -54,6 +54,7 @@ interface PropItem {
   systems?: BaseSystems         // from the base find
   saved_id?: string | null      // aria_properties.id when already saved
   photo_url?: string | null     // the community's real hero shot (og:image)
+  name_aliases?: string[]       // rebrands — reviews often live under the old name
 }
 
 const SYSTEM_LABELS: { key: keyof BaseSystems; short: string; label: string }[] = [
@@ -484,7 +485,7 @@ export default function AriaExplorePage() {
   // has none — so fetch them on open and persist. Without this, Community stays
   // blank forever on every known site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hydrateCommunity = useCallback(async (rep: any, it: { name: string; city?: string; state?: string; address?: string; id?: string }) => {
+  const hydrateCommunity = useCallback(async (rep: any, it: { name: string; city?: string; state?: string; address?: string; id?: string; name_aliases?: string[] }) => {
     if (!rep || (rep.community?.length ?? 0) > 0) return
     // The social route needs a city. Saved rows often have none (the column was
     // never written), so derive it from the address rather than silently giving
@@ -499,6 +500,8 @@ export default function AriaExplorePage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           property_name: it.name, city, state,
+          // Rebrands: reviews live under whatever name the site trades as now.
+          aliases: it.name_aliases ?? [],
           address: it.address ?? rep.property?.address,
           // Exact row match — survives the engine renaming a property.
           property_id: (it.id && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)) ? it.id : undefined,
@@ -594,6 +597,7 @@ export default function AriaExplorePage() {
         management_company: p.management_company ?? undefined,
         website: p.website ?? null,
         photo_url: p.photo_url ?? null,
+        name_aliases: Array.isArray(p.name_aliases) ? p.name_aliases : [],
         systems: p.systems,
         // Mirror the base flags onto the legacy signals the filters/pins read.
         bulk_detected: !!p.systems?.bulk,
