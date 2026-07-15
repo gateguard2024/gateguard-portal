@@ -8,11 +8,12 @@
 // minHeight:100vh — which covered the dashboard's background whenever it opened.
 // /aria and /tracker each had their own thing again. Same app, four navies.
 //
-// Two intensities, deliberately:
+// Two intensities:
 //   'hero' — home screen: gradient + 48px grid + centre glow + top hairline.
-//   'page' — everywhere else: the SAME gradient, no grid, no glow. The colour
-//            matches so nothing looks pasted in, but the hero treatment doesn't
-//            compete with tables, forms, and dense data.
+//   'page' — every other full page: same gradient + same 48px grid + hairline,
+//            but no centre glow. The glow is a hero device (an 860x360 ellipse
+//            behind the logo) and reads as clutter behind dense data; the grid
+//            is what makes a page feel like part of the app, so it carries.
 //
 // Sub-surfaces that already render inside a backdrop must stay TRANSPARENT and
 // inherit it. Painting your own background is what caused this in the first place.
@@ -32,18 +33,12 @@ export const NEXUS_BG =
  * aria-hidden so they never intercept a click or reach a screen reader.
  */
 export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVariant }) {
-  if (variant !== 'hero') {
-    // 'page': top hairline only. It reads as a subtle edge, not a hero effect.
-    return (
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px"
-        aria-hidden="true"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.55), transparent)' }}
-      />
-    )
-  }
   return (
     <>
+      {/* The 48px grid — on EVERY variant. This is the layer that makes a screen
+          read as part of Nexus, so it must not stop at the home screen. It fades
+          out down the page, so long content-heavy screens (Ops Hub, Work Orders)
+          aren't sitting on a full-strength grid all the way to the footer. */}
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden="true"
@@ -55,18 +50,22 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
           maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.28) 62%, transparent)',
         }}
       />
-      <div
-        className="pointer-events-none absolute left-1/2 top-[24%]"
-        aria-hidden="true"
-        style={{
-          transform: 'translate(-50%, -50%)',
-          width: 860,
-          height: 360,
-          background: 'radial-gradient(ellipse, rgba(0,124,255,0.22) 0%, rgba(0,200,255,0.10) 28%, transparent 70%)',
-          borderRadius: '999px',
-          filter: 'blur(10px)',
-        }}
-      />
+      {/* Centre glow — hero only. It's an 860x360 ellipse positioned behind the
+          home logo; on a data page it just reads as a smudge. */}
+      {variant === 'hero' && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-[24%]"
+          aria-hidden="true"
+          style={{
+            transform: 'translate(-50%, -50%)',
+            width: 860,
+            height: 360,
+            background: 'radial-gradient(ellipse, rgba(0,124,255,0.22) 0%, rgba(0,200,255,0.10) 28%, transparent 70%)',
+            borderRadius: '999px',
+            filter: 'blur(10px)',
+          }}
+        />
+      )}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px"
         aria-hidden="true"

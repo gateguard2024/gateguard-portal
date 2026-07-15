@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter }   from 'next/navigation'
 import { NexusBottomNav }        from '@/components/nexus/NexusBottomNav'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 import { ActionCommandBar }      from '@/components/nexus/ActionCommandBar'
 import { OpportunityActionCard } from '@/components/nexus/OpportunityActionCard'
 import type { ActionItem }       from '@/components/nexus/OpportunityActionCard'
@@ -189,21 +190,11 @@ export default function OppsPage() {
   return (
     <div
       className="min-h-screen flex flex-col relative overflow-hidden"
-      style={{
-        background:
-          'radial-gradient(ellipse at 50% 30%, #0d2150 0%, #060e28 40%, #020810 70%, #000306 100%)',
-      }}
+      style={{ background: NEXUS_BG }}
     >
-      {/* Grid overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        aria-hidden="true"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(107,126,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(107,126,255,0.03) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
-      />
+      {/* Was a different navy AND its own weaker 48px grid (rgba(107,126,255,0.03),
+          no fade). Same idea, hand-rolled a second time — now the shared one. */}
+      <NexusBackdropLayers variant="page" />
 
       {/* Header */}
       <header

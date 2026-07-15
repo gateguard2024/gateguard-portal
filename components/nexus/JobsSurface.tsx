@@ -6,6 +6,7 @@ import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { OperationsHub } from '@/components/nexus/OperationsHub'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
 type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
@@ -353,10 +354,15 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      {/* Operations Hub — opens inline (no page jump), seamless inside the Jobs tab. */}
+      {/* Operations Hub — opens inline (no page jump), seamless inside the Jobs tab.
+          This is a FULL-SCREEN overlay (fixed inset-0), so it hides the shell
+          behind it completely — it was painting its own #0a1430 with no grid,
+          which is why Ops Hub / Work Orders had no grid background. It now
+          carries the shared backdrop, grid included. */}
       {showOps && (
-        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: 'radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', backdropFilter: 'blur(8px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-          <div className="mx-auto w-full max-w-6xl">
+        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: NEXUS_BG, overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          <NexusBackdropLayers variant="page" />
+          <div className="relative mx-auto w-full max-w-6xl">
             <NexusGlassBackButton label="Back to Jobs" onClick={() => setShowOps(false)} />
             <div className="mt-4"><OperationsHub embedded initialTab={opsTab} /></div>
           </div>
