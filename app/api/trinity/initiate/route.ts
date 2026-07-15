@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       .from('leads')
       .select('id, contact_name, first_name, last_name')
       .eq('id', lead_id)
+      .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .maybeSingle()
 
     if (lead) {

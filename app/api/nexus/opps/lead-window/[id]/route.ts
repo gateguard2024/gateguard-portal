@@ -71,6 +71,7 @@ async function getScopedLead(
     .from('leads')
     .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
     .eq('id', leadId)
+    .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
   query = applyOrgScope(query, scope)
 

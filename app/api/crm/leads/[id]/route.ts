@@ -31,6 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .from('leads')
     .select('*, source, city, state, property_type, contact_title, unit_count, notes')
     .eq('id', uuid)
+    .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — read returns 404
     .single()
 
   if (error || !data) {

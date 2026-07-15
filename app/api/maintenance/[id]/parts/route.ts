@@ -8,7 +8,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/maintenance/[id]/parts — list all parts for a WO
+// The six supply states a part can be in, in the order a tech experiences them.
+// Kept in sync with the work_order_parts.supply_status CHECK (migration 151).
+//
+// NOT exported: Next.js route files may only export route handlers (GET/POST/…)
+// plus a few config keys. Exporting anything else fails the build with TS2344
+// "does not satisfy the constraint '{ [x: string]: never; }'".
+const SUPPLY_STATUSES = [
+  'not_ordered', 'ordered', 'shipped', 'at_office', 'on_truck', 'installed',
+] as const
+
+// GET /api/maintenance/[id]/parts — list all parts for a WO, each with its PO
+// (po_number / supplier / status) resolved so the tech can see at a glance
+// whether the part is still at the supplier or already on his truck.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const { data, error } = await supabase
     .from('work_order_parts')
@@ -28,7 +40,77 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ parts: data ?? [] })
+  const parts = (data ?? []) as Array<Record<string, unknown>>
+
+  // Second (and final) round trip: resolve every PO these parts point at in one
+  // `in` query. Done as a lookup rather than a PostgREST embed so a missing or
+  // unnamed FK can never break the whole parts list.
+  const poIds = Array.from(new Set(
+    parts.map(p => p.po_id).filter((v): v is string => typeof v === 'string' && v.length > 0)
+  ))
+
+  if (poIds.length > 0) {
+    const { data: pos, error: poErr } = await supabase
+      .from('purchase_orders')
+      .select('id, po_number, supplier, status, expected_at')
+      .in('id', poIds)
+
+    if (poErr) return NextResponse.json({ error: poErr.message }, { status: 500 })
+
+    const poMap = new Map((pos ?? []).map(po => [po.id, po]))
+    for (const p of parts) {
+      p.po = typeof p.po_id === 'string' ? (poMap.get(p.po_id) ?? null) : null
+    }
+  } else {
+    for (const p of parts) p.po = null
+  }
+
+  return NextResponse.json({ parts })
+}
+
+// PATCH /api/maintenance/[id]/parts — update procurement fields on one part.
+// Body: { part_id, supply_status?, expected_at?, is_expendable?, po_id? }
+// Errors are returned, never swallowed — a status that silently doesn't save is
+// worse than an error message, because the tech drives out on a bad assumption.
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  const partId = (body.part_id ?? body.id) as string | undefined
+  if (!partId) return NextResponse.json({ error: 'part_id is required' }, { status: 400 })
+
+  const patch: Record<string, unknown> = {}
+
+  if ('supply_status' in body) {
+    const s = body.supply_status
+    if (typeof s !== 'string' || !(SUPPLY_STATUSES as readonly string[]).includes(s)) {
+      return NextResponse.json({ error: 'invalid supply_status' }, { status: 400 })
+    }
+    patch.supply_status = s
+  }
+  if ('expected_at' in body) {
+    const d = body.expected_at
+    patch.expected_at = d === null || d === '' ? null : String(d).slice(0, 10)
+  }
+  if ('is_expendable' in body) patch.is_expendable = Boolean(body.is_expendable)
+  if ('po_id' in body)         patch.po_id = body.po_id || null
+
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('work_order_parts')
+    .update(patch)
+    .eq('id', partId)
+    .eq('work_order_id', params.id)   // a part can only be patched from its own job
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data)  return NextResponse.json({ error: 'Part not found on this job' }, { status: 404 })
+
+  return NextResponse.json({ part: data })
 }
 
 // POST /api/maintenance/[id]/parts — add a part to a WO

@@ -407,6 +407,7 @@ async function fetchPortalData(dataType: string, orgId: string | null) {
         const { data } = await supabase
           .from('leads')
           .select('id, name:contact_name, company:company_name, stage, source, created_at')
+          .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
           .not('stage', 'eq', 'lost')
           .order('created_at', { ascending: false })
           .limit(10)

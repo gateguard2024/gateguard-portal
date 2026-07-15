@@ -144,6 +144,7 @@ export async function GET(req: NextRequest) {
     const { data: allLeads, error } = await supabase
       .from('leads')
       .select('id, contact_name, property_name, email, notes')
+      .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -197,6 +198,7 @@ export async function POST(req: NextRequest) {
       const { data: rows } = await supabase
         .from('leads')
         .select('id, contact_name, property_name, email')
+        .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       const { data: converted } = await supabase
         .from('opportunities').select('lead_id').not('lead_id', 'is', null)
       const convertedIds = new Set((converted || []).map((o: any) => o.lead_id))
@@ -231,6 +233,7 @@ export async function POST(req: NextRequest) {
     const { data: rows, error } = await supabase
       .from('leads')
       .select('id, contact_name, property_name, email')
+      .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

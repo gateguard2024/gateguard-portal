@@ -84,6 +84,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
             .from('leads')
             .select('id, contact_name, company_name, location, stage, source, notes, created_at, updated_at, email, phone, unit_count')
             .eq('id', opportunity.lead_id as string)
+            .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
             .single(),
           null
         )

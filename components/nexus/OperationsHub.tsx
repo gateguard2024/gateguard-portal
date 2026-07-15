@@ -60,6 +60,59 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
 }
 const num = (v: unknown) => Number(v) || 0;
 
+/* ── Parts & procurement ──────────────────────────────────────────────────
+ * Where a part is, in the words a tech would actually use. The DB stores
+ * `supply_status` as a short code; nobody should ever read "at_office".     */
+const SUPPLY_ORDER = ["not_ordered", "ordered", "shipped", "at_office", "on_truck", "installed"] as const;
+const SUPPLY_LABEL: Record<string, string> = {
+  not_ordered: "Not ordered",
+  ordered:     "Ordered",
+  shipped:     "Shipped",
+  at_office:   "At the office",
+  on_truck:    "On the truck",
+  installed:   "Installed",
+};
+// Red = nobody has ordered it. Amber = ordered, but not here yet. Green = here.
+const SUPPLY_COLOR: Record<string, string> = {
+  not_ordered: "#f87171",
+  ordered:     "#fbbf24",
+  shipped:     "#fbbf24",
+  at_office:   "#34d399",
+  on_truck:    "#34d399",
+  installed:   "#34d399",
+};
+// Plain phrases for the summary line ("2 not ordered yet, 1 shipped").
+const SUPPLY_PENDING_PHRASE: Record<string, string> = {
+  not_ordered: "not ordered yet",
+  ordered:     "ordered",
+  shipped:     "shipped",
+};
+// A purchase order's own status, again in plain words.
+const PO_STATUS_LABEL: Record<string, string> = {
+  draft:     "Not sent yet",
+  sent:      "Sent to supplier",
+  ordered:   "Ordered",
+  confirmed: "Confirmed",
+  partial:   "Some arrived",
+  received:  "All arrived",
+  closed:    "Closed",
+  cancelled: "Cancelled",
+};
+const PO_STATUS_TONE: Record<string, string> = {
+  draft: "default", sent: "high", ordered: "high", confirmed: "high",
+  partial: "high", received: "good", closed: "good", cancelled: "urgent",
+};
+const supplyOf    = (v: unknown) => (typeof v === "string" && SUPPLY_LABEL[v] ? v : "not_ordered");
+const supplyHere  = (v: unknown) => { const s = supplyOf(v); return s === "at_office" || s === "on_truck" || s === "installed"; };
+// "2026-03-03" → "Mar 3". Parsed by hand so a date-only string never shifts a
+// day from timezone math.
+const dayLabel = (d: unknown) => {
+  const s = String(d ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
+  const [y, m, dd] = s.split("-").map(Number);
+  return new Date(y, m - 1, dd).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
 // Open a clean, printer-friendly work order in a new tab and trigger print.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function printWorkOrder(wo: any, equip: any[]) {
@@ -1491,6 +1544,13 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [pForm, setPForm] = useState({ name: "", qty: "1", unit_cost: "", unit_price: "" });
   const [laborH, setLaborH] = useState("");
   const [partBusy, setPartBusy] = useState(false);
+  // Purchase orders raised for this job + the id of the part currently saving.
+  // `partErr` surfaces a failed status change in plain English — a dropdown that
+  // silently snaps back is how a tech drives out without his parts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [jobPos, setJobPos] = useState<any[]>([]);
+  const [partSaving, setPartSaving] = useState<string | null>(null);
+  const [partErr, setPartErr] = useState<{ msg: string; detail?: string } | null>(null);
   const [showAddEq, setShowAddEq] = useState(false);
   const [eqForm, setEqForm] = useState({ product_name: "", serial_number: "", location_note: "" });
   const [eqBusy, setEqBusy] = useState(false);
@@ -1517,8 +1577,15 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
       fetch(`/api/maintenance/${id}/photos`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/crew`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/phases`).then(r => r.json()).catch(() => ({})),
-    ]).then(([d, t, ph, cr, vs]) => {
-      setWo(d.work_order ?? null); setParts(d.parts_used ?? []);
+      fetch(`/api/maintenance/${id}/parts`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/purchase-orders?work_order_id=${id}`).then(r => r.json()).catch(() => ({})),
+    ]).then(([d, t, ph, cr, vs, pp, pos]) => {
+      setWo(d.work_order ?? null);
+      // Prefer the procurement-aware parts feed (same rows, plus each part's PO
+      // number / supplier). Fall back to the plain list on the detail payload so
+      // parts still show if that call fails.
+      setParts(Array.isArray(pp?.parts) ? pp.parts : (d.parts_used ?? []));
+      setJobPos(Array.isArray(pos?.records) ? pos.records : []);
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
       setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
       setPhotos(ph.photos ?? []); setCrew(cr.crew ?? []); setPhases(vs.phases ?? []);
@@ -1554,6 +1621,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const partsRev = parts.reduce((s, p) => s + num(p.unit_price) * num(p.qty), 0);
   const margin = partsRev - partsCost;
   const marginPct = partsRev > 0 ? Math.round((margin / partsRev) * 100) : 0;
+  // "3 of 7 parts are here. 2 shipped, 2 not ordered yet." — the one line a tech
+  // reads before he decides whether it's worth driving out.
+  const partsHere = parts.filter(p => supplyHere(p.supply_status)).length;
+  const partsPending = SUPPLY_ORDER
+    .filter(s => SUPPLY_PENDING_PHRASE[s])
+    .map(s => ({ s, n: parts.filter(p => supplyOf(p.supply_status) === s).length }))
+    .filter(x => x.n > 0)
+    .map(x => `${x.n} ${SUPPLY_PENDING_PHRASE[x.s]}`);
+  const partsSummary = parts.length === 0 ? ""
+    : `${partsHere} of ${parts.length} ${parts.length === 1 ? "part is" : "parts are"} here.`
+      + (partsPending.length ? ` ${partsPending.join(", ")}.` : "");
   const doneCount = checklist.filter(c => c.is_complete || c.completed || c.done).length;
   const allStepsDone = checklist.length > 0 && doneCount === checklist.length;
   const hasPhoto = photos.length > 0;
@@ -1681,6 +1759,36 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
     await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null, phase_id: costPhase || null }) }).catch(() => {});
     setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load(true);
+  }
+  // Update one part's procurement fields. Optimistic so the dropdown answers
+  // instantly; on failure the old value is put back and the reason is shown.
+  async function patchPart(partId: string, body: Record<string, unknown>) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const before = parts.find((p: any) => p.id === partId);
+    setPartErr(null); setPartSaving(partId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setParts(ps => ps.map((p: any) => p.id === partId ? { ...p, ...body } : p));
+    try {
+      const r = await fetch(`/api/maintenance/${id}/parts`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ part_id: partId, ...body }),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let j: any = {}; try { j = await r.json(); } catch { /* empty body */ }
+      if (!r.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (before) setParts(ps => ps.map((p: any) => p.id === partId ? before : p));
+        setPartErr({ msg: "That change didn’t save.", detail: j?.error || `Server said ${r.status}.` });
+      } else if (j?.part) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setParts(ps => ps.map((p: any) => p.id === partId ? { ...p, ...j.part } : p));
+      }
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (before) setParts(ps => ps.map((p: any) => p.id === partId ? before : p));
+      setPartErr({ msg: "That change didn’t save — you may be offline.", detail: (e as Error)?.message });
+    }
+    setPartSaving(null);
   }
   async function logLabor() {
     const h = Number(laborH); if (!h || h <= 0 || partBusy) return; setPartBusy(true);
@@ -2026,12 +2134,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
-        {/* Parts used */}
+        {/* Parts & procurement — where every part is, before the truck rolls */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <h2 style={{ fontSize: 15 }}>Parts used</h2>
+            <h2 style={{ fontSize: 15 }}>Parts &amp; procurement</h2>
             <button onClick={() => setShowAddPart(s => !s)} style={{ ...btn, padding: "6px 12px" }}>+ Add</button>
           </div>
+          {parts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: partsHere === parts.length ? "#6ee7b7" : "rgba(255,255,255,0.8)", marginBottom: 10 }}>{partsSummary}</div>}
+          {partErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.35)" }}>
+            <div style={{ fontSize: 13, color: "#fca5a5" }}>{partErr.msg} Please try again.</div>
+            {partErr.detail && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Details: {partErr.detail}</div>}
+          </div>}
           {showAddPart && <div style={{ ...card, marginBottom: 10, display: "grid", gap: 8 }}>
             <input placeholder="Part name *" value={pForm.name} onChange={e => setPForm({ ...pForm, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
             <div style={{ display: "flex", gap: 8 }}>
@@ -2041,7 +2154,60 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </div>
             <button onClick={addPart} disabled={!pForm.name.trim() || partBusy} style={{ ...btn, opacity: pForm.name.trim() && !partBusy ? 1 : 0.5 }}>{partBusy ? "Adding…" : "Add part"}</button>
           </div>}
-          {parts.length === 0 ? <Small>None yet.</Small> : parts.map((p, i) => <p key={p.id || i} style={{ margin: "6px 0" }}>{p.name || "Part"} × {num(p.qty)} <span style={{ color: "#34d399" }}>· {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span></p>)}
+          {parts.length === 0 ? <Small>No parts on this job yet.</Small> : <div style={{ display: "grid", gap: 8 }}>
+            {parts.map((p, i) => {
+              const s = supplyOf(p.supply_status);
+              const c = SUPPLY_COLOR[s];
+              const saving = partSaving === p.id;
+              return <div key={p.id || i} style={{ background: "#131B2E", border: "1px solid rgba(255,255,255,0.08)", borderLeft: `3px solid ${c}`, borderRadius: 12, padding: "10px 12px", opacity: saving ? 0.6 : 1 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.name || "Part"}{p.sku ? <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}> · {p.sku}</span> : null}
+                    </div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                      Qty {num(p.qty)}
+                      {num(p.unit_price) > 0 && <span style={{ color: "#34d399" }}> · {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span>}
+                    </div>
+                  </div>
+                  {/* One tap: where is this part right now? */}
+                  <select value={s} disabled={!p.id || saving} title="Where is this part right now?"
+                    onChange={e => patchPart(String(p.id), { supply_status: e.target.value })}
+                    style={{ ...sel, flexShrink: 0, cursor: "pointer", fontWeight: 700, fontSize: 12, padding: "7px 8px", color: c, background: `${c}1f`, border: `1px solid ${c}66` }}>
+                    {SUPPLY_ORDER.map(v => <option key={v} value={v} style={{ background: "#0B1728", color: "white" }}>{SUPPLY_LABEL[v]}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                  {p.po && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.4)", color: "#c7d2fe" }}>
+                    {p.po.po_number ? `PO ${p.po.po_number}` : "On a PO"}{p.po.supplier ? ` · ${p.po.supplier}` : ""}
+                  </span>}
+                  <label title="Wire, connectors, screws — stuff you don't track one by one" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!p.is_expendable} disabled={!p.id || saving} onChange={e => patchPart(String(p.id), { is_expendable: e.target.checked })} style={{ accentColor: "#6366f1", cursor: "pointer" }} />
+                    Expendable
+                  </label>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{p.expected_at ? `Expected ${dayLabel(p.expected_at)}` : "Expected"}</span>
+                    <input type="date" value={String(p.expected_at ?? "").slice(0, 10)} disabled={!p.id || saving} title="When do we expect it?"
+                      onChange={e => patchPart(String(p.id), { expected_at: e.target.value || null })}
+                      style={{ ...sel, colorScheme: "dark", padding: "5px 6px", cursor: "pointer" }} />
+                  </span>
+                </div>
+              </div>;
+            })}
+          </div>}
+          {/* Purchase orders raised for this job */}
+          {jobPos.length > 0 && <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>Purchase orders for this job</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {jobPos.map((po, i) => <div key={po.id || i} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{po.po_number ? `PO ${po.po_number}` : "No PO number"}</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{po.supplier || "No supplier"}{po.expected_at ? ` · expected ${dayLabel(po.expected_at)}` : ""}</div>
+                </div>
+                <Badge tone={PO_STATUS_TONE[String(po.status)] ?? "default"}>{PO_STATUS_LABEL[String(po.status)] ?? String(po.status ?? "—")}</Badge>
+              </div>)}
+            </div>
+          </div>}
         </Card>
         </>)}
 

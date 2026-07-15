@@ -16,6 +16,7 @@ export async function GET() {
     const { data, error, count } = await supabase
       .from('leads')
       .select('id, contact_name, email, created_at', { count: 'exact' })
+      .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .limit(3)
 
     if (error) {

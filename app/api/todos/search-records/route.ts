@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       const { data } = await supabase
         .from('leads')
         .select('id, contact_name, company_name')
+        .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
         .ilike('contact_name', `%${q}%`)
         .limit(5)
       ;(data ?? []).forEach(r => results.push({

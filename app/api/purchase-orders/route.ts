@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const scope = await resolveOrgScope(user)
 
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status') ?? ''
+  const status        = searchParams.get('status') ?? ''
+  const workOrderId   = searchParams.get('work_order_id') ?? ''
 
   let query = supabase
     .from('purchase_orders')
@@ -27,6 +28,11 @@ export async function GET(req: NextRequest) {
 
   if (status) {
     query = query.eq('status', status) as typeof query
+  }
+
+  // ?work_order_id= — the POs raised for one job, used by the job drawer
+  if (workOrderId) {
+    query = query.eq('work_order_id', workOrderId) as typeof query
   }
 
   const { data, error, count } = await query
@@ -45,6 +51,7 @@ export async function POST(req: NextRequest) {
   const {
     supplier, notes, po_number,
     expected_at,
+    work_order_id,
     items = [],
   } = body
 
@@ -67,7 +74,8 @@ export async function POST(req: NextRequest) {
       subtotal,
       tax,
       total,
-      expected_at: expected_at || null,
+      expected_at:   expected_at   || null,
+      work_order_id: work_order_id || null,   // set when the PO is raised from a job
     })
     .select()
     .single()
@@ -78,6 +86,7 @@ export async function POST(req: NextRequest) {
   if (items.length > 0) {
     const rows = (items as Array<{
       inventory_item_id?: string
+      product_id?: string
       name: string
       sku?: string
       qty: number
@@ -85,10 +94,11 @@ export async function POST(req: NextRequest) {
     }>).map(item => ({
       po_id:             po.id,
       inventory_item_id: item.inventory_item_id || null,
+      product_id:        item.product_id        || null,
       name:              item.name,
-      sku:               item.sku              || null,
-      qty:               item.qty              ?? 1,
-      unit_cost:         item.unit_cost        ?? 0,
+      sku:               item.sku               || null,
+      qty:               item.qty               ?? 1,
+      unit_cost:         item.unit_cost         ?? 0,
       received_qty:      0,
     }))
 

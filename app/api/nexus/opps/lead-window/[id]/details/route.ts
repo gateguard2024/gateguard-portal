@@ -34,6 +34,7 @@ async function getScopedLead(leadId: string, user: Awaited<ReturnType<typeof get
     .from('leads')
     .select('id, org_id, contact_name, company_name, email, phone, property_type, unit_count, location, notes')
     .eq('id', leadId)
+    .is('deleted_at', null)              // soft-deleted leads are in Deleted Items — not editable here
 
   query = applyOrgScope(query, scope)
 

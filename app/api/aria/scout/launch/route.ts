@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
     const { data: leadsRaw, error: fetchErr } = await supabase
       .from('leads')
       .select('id, contact_name, email, property_name, property_intel, scout_status, org_id, assigned_to_user_id')
+      .is('deleted_at', null)              // never send outreach to a deleted lead
       .in('id', lead_ids)
 
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })

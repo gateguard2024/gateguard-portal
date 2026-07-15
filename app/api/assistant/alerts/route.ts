@@ -37,6 +37,7 @@ export async function GET() {
       supabase
         .from('leads')
         .select('id, property_name, scout_opened_at', { count: 'exact' })
+        .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
         .eq('scout_status', 'opened')
         .in('stage', ['new', 'contacted'])
         .order('scout_opened_at', { ascending: false })
