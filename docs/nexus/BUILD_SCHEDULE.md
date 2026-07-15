@@ -50,6 +50,71 @@ Retired from the nav July 14, 2026 in favour of Jobs-as-Operations. Outstanding:
 
 ---
 
+## Procurement + Job Costing — the vision (July 14, 2026)
+
+**The goal:** a work order tells the whole money-and-materials story. A tech knows
+whether his parts are on site before he drives out; an owner knows what the job
+actually cost.
+
+### Why it didn't work — three islands
+`purchase_orders` had **no `work_order_id`** (POs floated free of jobs).
+`purchase_order_items` linked only to `inventory_items`, **never the products
+catalog**. `work_order_parts` had **no `po_id`** and no notion of where a part
+physically was. So nothing could answer "are my parts here?" — the data had no
+path to say it.
+
+⚠️ **Trap:** the live parts table is **`work_order_parts`** (migration 035).
+`wo_parts_used` (migration 014) is LEGACY and unused by the API — migration 135
+documents that exact confusion. Never add columns to `wo_parts_used`.
+
+### Done — the plumbing (migrations 151 + 152)
+| Link | Column |
+|---|---|
+| Work order → its POs | `purchase_orders.work_order_id` |
+| PO line → catalog item | `purchase_order_items.product_id` |
+| Job part → the PO buying it | `work_order_parts.po_id` |
+| Job part → catalog item | `work_order_parts.product_id` |
+| **Where the part physically is** | `work_order_parts.supply_status` |
+| Expected delivery | `work_order_parts.expected_at` |
+| Parts vs expendables | `work_order_parts.is_expendable` |
+| Labor billing model | `work_order_time_entries.labor_type` — `hourly` / `day_rate` / `sub_invoice` |
+| Labor money | `cost_rate`, `days`, `invoice_amount`, `invoice_ref`, `subcontractor_org_id`, `bill_amount` |
+
+`supply_status` values are deliberately plain because techs read them:
+`not_ordered → ordered → shipped → at_office → on_truck → installed`.
+Distinct from the existing `action` column (`used/installed/returned/warranty`),
+which records what HAPPENED to a part, not where it is on the way there.
+
+### Still owed — the UI (nothing of this is on screen yet)
+1. **Procurement on the work order.** A Parts & Procurement section in the job
+   drawer: each part with its supply status, expected date, and the PO it's on.
+   Dispatch and the tech see the same truth. Status editable in one tap.
+2. **Order from the job.** "Create PO for this job" → pre-filled from the job's
+   parts, stamped with `work_order_id`, lines bound to `product_id`.
+3. **Two-way sync.** Receiving a PO in the Procurement tab flips its parts to
+   `at_office` on every linked job automatically. This is the "they should talk
+   to each other" requirement — it must be automatic, not a second manual step.
+4. **Catalog matching.** Adding a part searches `products` and binds
+   `product_id`, so name/sku/image come from the single source of truth instead
+   of free text. Loose text stays allowed but flagged as unmatched.
+5. **Job cost panel.** Labor + Parts + Expendables + total cost vs billed, with
+   margin. Labor must sum all three types (hourly mins × rate, day rate × days,
+   sub invoice amount).
+6. **Sub invoices.** Attach the sub's invoice to the labor entry (reuse the
+   existing job attachments) so accounting can tie the number to the paper.
+7. **Procurement discoverability.** It has NO entry card today — it's two clicks
+   deep inside the Ops Hub with no way to find it. Same for Parts, Techs, PM,
+   Playbooks, Analytics. Give Procurement its own card.
+
+### Open question to settle first
+`work_order_phases` now does double duty — the Overview tab renders those same
+rows as **"Visits"** (with dates/status), while the Steps card uses them as
+**phases** (Wiring/Trim/Headend/Program). A phase added in one shows up in the
+other. Decide: are visits and phases the same thing, or should Visits filter to
+only dated rows?
+
+---
+
 ## Open build queue (unchanged, still owed)
 
 ### P1 — ARIA
