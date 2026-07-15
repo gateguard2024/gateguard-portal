@@ -139,8 +139,9 @@ export async function GET(req: NextRequest) {
   let myLeadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   myLeadsQ = applyOrgScope(myLeadsQ, scope)
 
+  // No .limit() — the UI sorts + scrolls the full list. Capping here hid leads.
   const myLeads = ownershipIds.length > 0
-    ? await safe(myLeadsQ.in('assigned_to', ownershipIds).is('lost_at', null).order('updated_at', { ascending: false }).limit(20), [])
+    ? await safe(myLeadsQ.in('assigned_to', ownershipIds).is('lost_at', null).order('updated_at', { ascending: false }), [])
     : []
 
   if (!user.canViewCRM) {
@@ -149,7 +150,8 @@ export async function GET(req: NextRequest) {
 
   let openLeadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   openLeadsQ = applyOrgScope(openLeadsQ, scope)
-  const openLeads = await safe(openLeadsQ.is('lost_at', null).order('updated_at', { ascending: false }).limit(20), [])
+  // No .limit() — the UI sorts + scrolls the full list. Capping here hid leads.
+  const openLeads = await safe(openLeadsQ.is('lost_at', null).order('updated_at', { ascending: false }), [])
 
   let needsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   needsQ = applyOrgScope(needsQ, scope)

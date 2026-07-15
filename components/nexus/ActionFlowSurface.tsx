@@ -67,9 +67,44 @@ type WorkbenchRecord = {
   value?: number | null
   notes?: string | null
   created_at?: string | null
+  updated_at?: string | null
 }
 
 type WorkbenchFocus = 'myLeads' | 'openLeads' | 'needsAttention' | 'openOpportunities' | 'proposalFollowUps' | 'search'
+
+// Plain-words sort for the leads lists. Default = newest added.
+type LeadSort = 'newest' | 'name' | 'activity'
+
+const LEAD_SORT_LABELS: Record<LeadSort, string> = {
+  newest: 'Newest added',
+  name: 'Name',
+  activity: 'Recent activity',
+}
+
+function timeValue(iso?: string | null): number {
+  if (!iso) return 0
+  const t = new Date(iso).getTime()
+  return Number.isNaN(t) ? 0 : t
+}
+
+function sortRecords(records: WorkbenchRecord[], sort: LeadSort): WorkbenchRecord[] {
+  const rows = [...records]
+  if (sort === 'name') {
+    return rows.sort((a, b) => {
+      const an = recordDisplayName(a).trim().toLowerCase()
+      const bn = recordDisplayName(b).trim().toLowerCase()
+      // Blank / placeholder names always sort last.
+      const aBlank = !an || an === 'untitled'
+      const bBlank = !bn || bn === 'untitled'
+      if (aBlank !== bBlank) return aBlank ? 1 : -1
+      return an.localeCompare(bn)
+    })
+  }
+  if (sort === 'activity') {
+    return rows.sort((a, b) => timeValue(b.updated_at) - timeValue(a.updated_at))
+  }
+  return rows.sort((a, b) => timeValue(b.created_at) - timeValue(a.created_at))
+}
 
 type WorkbenchData = {
   stats?: Record<string, number>
@@ -395,7 +430,7 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 overflow-y-auto pr-1" style={{ maxHeight: '52vh' }}>
       {records.map(record => {
         const isLead = isLeadRecord(record)
         const isOpp = !isLead
@@ -456,6 +491,7 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
   const [nextCards, setNextCards] = useState<NextCard[]>([])
   const [workbench, setWorkbench] = useState<WorkbenchData | null>(null)
   const [workbenchFocus, setWorkbenchFocus] = useState<WorkbenchFocus>('openLeads')
+  const [leadSort, setLeadSort] = useState<LeadSort>('newest')
   const [searchTerm, setSearchTerm] = useState('')
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
@@ -622,9 +658,14 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
     }
   }
 
-  const focusedRecords = workbenchFocus === 'search'
+  const rawFocusedRecords = workbenchFocus === 'search'
     ? [...(workbench?.leads ?? []), ...(workbench?.opportunities ?? [])]
     : workbench?.[workbenchFocus] ?? []
+
+  // Sort only the two "work my leads" lists. Needs Attention keeps its own
+  // oldest-touched-first order — that ordering is the whole point of the list.
+  const showLeadSort = workbenchFocus === 'myLeads' || workbenchFocus === 'openLeads'
+  const focusedRecords = showLeadSort ? sortRecords(rawFocusedRecords, leadSort) : rawFocusedRecords
 
   const focusedEmptyText = workbenchFocus === 'myLeads'
     ? 'No leads assigned to you yet.'
@@ -698,6 +739,29 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.22)', color: 'rgba(255,255,255,0.88)' }} />
                     <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Search</button>
+                  </div>
+                )}
+
+                {showLeadSort && focusedRecords.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Sort:</span>
+                    {(['newest', 'name', 'activity'] as LeadSort[]).map(option => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setLeadSort(option)}
+                        className="rounded-full px-3 py-1 text-[11px] font-medium transition-all"
+                        style={leadSort === option
+                          ? { background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.92)' }
+                          : { background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }
+                        }
+                      >
+                        {LEAD_SORT_LABELS[option]}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                      {focusedRecords.length} {focusedRecords.length === 1 ? 'lead' : 'leads'}
+                    </span>
                   </div>
                 )}
 
