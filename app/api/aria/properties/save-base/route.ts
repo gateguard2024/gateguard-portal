@@ -103,7 +103,9 @@ export async function POST(req: NextRequest) {
         state: p.state ?? null,
         units: p.units ?? null,
         property_phone: p.phone ?? null,
-        website: p.website ?? null,
+        // NOTE: there is NO `website` column on aria_properties — writing one
+        // makes Postgres reject the entire row. The website is kept in
+        // facts.property.website (JSONB) above, which is where readers look.
         management_company: p.management_company ?? null,
         roe_detected: !!sys.bulk,
         // NOTE: brand columns (isp_providers, gate_operators, cameras, …) are
@@ -118,8 +120,9 @@ export async function POST(req: NextRequest) {
       }
 
       // Don't blank out fields a deeper run already filled in.
+      // Every key here MUST be a real column on aria_properties.
       if (existing) {
-        for (const k of ['units', 'website', 'management_company', 'city', 'state', 'address'] as const) {
+        for (const k of ['units', 'management_company', 'city', 'state', 'address', 'property_phone'] as const) {
           const prevVal = (existing as Record<string, unknown>)[k]
           row[k] = keep(row[k] as string | number | null, prevVal as string | number | null)
         }
