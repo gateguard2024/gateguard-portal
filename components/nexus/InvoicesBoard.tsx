@@ -81,10 +81,55 @@ export default function InvoicesBoard() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
   useEffect(() => { loadInvoices().then(data => { setInvoices(data); setIsLoading(false); }); }, []);
-  const handleAction = (actionName: string, id: string) => {
-    console.log(`Action: ${actionName} on Invoice: ${id}`);
-    if (actionName === 'Mark paid') setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' } : inv));
+  // Close the note box when switching invoices so a note can't land on the wrong one.
+  useEffect(() => { setNoteOpen(false); setNoteText(''); setActionError(null); }, [selectedInvoiceId]);
+
+  // These three used to be console.log stubs. "Mark Paid" was the worst of them:
+  // it flipped the badge to Paid in local state ONLY, so the invoice looked paid
+  // and was still unpaid in the database the moment you reloaded.
+  const sendInvoice = async (id: string) => {
+    setBusy('send'); setActionError(null);
+    try {
+      const r = await fetch(`/api/invoices/${id}/send`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setActionError(d?.error || `Could not send the invoice (${r.status}).`); return; }
+      setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, sent_at: new Date().toISOString().slice(0, 10) } : inv));
+      setSelectedInvoiceId(null);
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Could not send the invoice.'); }
+    finally { setBusy(null); }
+  };
+
+  const markPaid = async (id: string) => {
+    setBusy('paid'); setActionError(null);
+    try {
+      const r = await fetch(`/api/invoices/${id}/mark-paid`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setActionError(d?.error || `Could not mark this invoice paid (${r.status}).`); return; }
+      setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' } : inv));
+      setSelectedInvoiceId(null);
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Could not mark this invoice paid.'); }
+    finally { setBusy(null); }
+  };
+
+  const saveNote = async (id: string) => {
+    if (!noteText.trim()) { setNoteOpen(false); return; }
+    setBusy('note'); setActionError(null);
+    try {
+      const r = await fetch(`/api/invoices/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: noteText.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setActionError(d?.error || `Could not save the note (${r.status}).`); return; }
+      setNoteOpen(false); setNoteText('');
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Could not save the note.'); }
+    finally { setBusy(null); }
   };
   const filteredInvoices = useMemo(() => activeFilter === 'All' ? invoices : invoices.filter(inv => inv.status === activeFilter.toLowerCase()), [invoices, activeFilter]);
   const stats = useMemo(() => invoices.reduce((acc, inv) => {
@@ -143,12 +188,19 @@ export default function InvoicesBoard() {
       </div>
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 md:p-6 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl overflow-hidden flex flex-col relative" style={{ backgroundColor: 'rgba(8,18,34,0.92)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          {/* Panel MUST be height-bounded. Without a max-h it grows past the
+              viewport, and because the backdrop centres without scrolling, the
+              overflow lands off-screen where nothing can reach it — then
+              overflow-hidden clips it. That was the "cannot scroll" report. */}
+          <div className="w-full max-w-md max-h-[calc(100dvh-2rem)] md:max-h-[calc(100dvh-3rem)] rounded-3xl overflow-hidden flex flex-col relative" style={{ backgroundColor: 'rgba(8,18,34,0.92)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div className="p-5 flex justify-between items-start border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div><div className="text-xs font-medium uppercase tracking-wider mb-1" style={textSecondary}>Invoice Details</div><div className="text-xl font-semibold" style={textPrimary}>{selectedInvoice.invoice_number}</div></div>
               <button onClick={() => setSelectedInvoiceId(null)} className="p-2 rounded-full hover:bg-white/10 transition-colors" style={textSecondary}><X size={20} /></button>
             </div>
-            <div className="p-5 flex flex-col gap-5 overflow-y-auto max-h-[60vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+            {/* min-h-0 is required: a flex child defaults to min-height:auto and
+                refuses to shrink below its content, so overflow-y-auto never
+                activates and the parent's overflow-hidden clips it instead. */}
+            <div className="p-5 flex flex-col gap-5 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               <div className="flex items-center justify-between p-4 rounded-2xl" style={glassPanel}>
                 <div><div className="text-xs mb-1" style={textSecondary}>Total Amount</div><div className="text-3xl font-semibold" style={textPrimary}>{formatCurrency(selectedInvoice.amount)}</div></div>
                 <div className="flex flex-col items-end gap-1">
@@ -162,11 +214,23 @@ export default function InvoicesBoard() {
                 <div className="flex flex-col gap-1"><span className="text-xs" style={textFaint}>Date Sent</span><span className="text-sm font-medium" style={textPrimary}>{selectedInvoice.sent_at ? formatDate(selectedInvoice.sent_at) : 'Not sent'}</span></div>
               </div>
             </div>
-            <div className="p-5 border-t bg-black/20 flex flex-col gap-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              <button onClick={() => { handleAction('Send invoice', selectedInvoice.id); setSelectedInvoiceId(null); }} className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition-opacity hover:opacity-90" style={{ backgroundColor: brandBlue, color: '#fff' }}><Send size={16} /> Send Invoice</button>
+            <div className="p-5 border-t bg-black/20 flex flex-col gap-3 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              {actionError && (
+                <div className="rounded-2xl px-3 py-2 text-xs" style={{ backgroundColor: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{actionError}</div>
+              )}
+              {noteOpen && (
+                <div className="flex flex-col gap-2">
+                  <textarea autoFocus value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="Type your note…" className="w-full rounded-2xl px-3 py-2 text-sm outline-none" style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' }} />
+                  <div className="flex gap-2">
+                    <button onClick={() => { setNoteOpen(false); setNoteText(''); }} className="flex-1 py-2.5 rounded-2xl text-sm font-medium" style={{ ...glassPanel, ...textSecondary }}>Cancel</button>
+                    <button disabled={busy === 'note' || !noteText.trim()} onClick={() => saveNote(selectedInvoice.id)} className="flex-1 py-2.5 rounded-2xl text-sm font-semibold disabled:opacity-40" style={{ backgroundColor: brandBlue, color: '#fff' }}>{busy === 'note' ? 'Saving…' : 'Save note'}</button>
+                  </div>
+                </div>
+              )}
+              <button disabled={busy !== null} onClick={() => sendInvoice(selectedInvoice.id)} className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-40" style={{ backgroundColor: brandBlue, color: '#fff' }}><Send size={16} /> {busy === 'send' ? 'Sending…' : 'Send Invoice'}</button>
               <div className="flex gap-3">
-                {selectedInvoice.status !== 'paid' && (<button onClick={() => { handleAction('Mark paid', selectedInvoice.id); setSelectedInvoiceId(null); }} className="flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-colors hover:bg-white/10" style={{ ...glassPanel, color: '#34D399' }}><CheckCircle2 size={16} /> Mark Paid</button>)}
-                <button onClick={() => handleAction('Add note', selectedInvoice.id)} className="flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-colors hover:bg-white/10" style={glassPanel}><MessageSquare size={16} style={textSecondary} /><span style={textPrimary}>Add Note</span></button>
+                {selectedInvoice.status !== 'paid' && (<button disabled={busy !== null} onClick={() => markPaid(selectedInvoice.id)} className="flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-colors hover:bg-white/10 disabled:opacity-40" style={{ ...glassPanel, color: '#34D399' }}><CheckCircle2 size={16} /> {busy === 'paid' ? 'Saving…' : 'Mark Paid'}</button>)}
+                <button disabled={busy !== null} onClick={() => setNoteOpen(v => !v)} className="flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-colors hover:bg-white/10 disabled:opacity-40" style={glassPanel}><MessageSquare size={16} style={textSecondary} /><span style={textPrimary}>Add Note</span></button>
               </div>
             </div>
           </div>

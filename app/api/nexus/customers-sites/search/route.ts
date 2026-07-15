@@ -13,6 +13,22 @@ const supabase = createClient(
 // The old companies/customers/properties tables were retired in the June 2026 audit.
 type ResultType = 'customer' | 'contact' | 'site'
 
+// `subtitle` is for HUMANS to read. `data` is for CODE to use.
+// Anything a caller might need to prefill a form must live in `data` — parsing
+// facts back out of the formatted subtitle string is how "236 units" ended up
+// visible on screen but zero in the Units field of a new opportunity.
+type SearchData = {
+  units?: number | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  zip?: string | null
+  property_type?: string | null
+  contact_name?: string | null
+  contact_email?: string | null
+  contact_phone?: string | null
+}
+
 type SearchResult = {
   id: string
   type: ResultType
@@ -20,6 +36,7 @@ type SearchResult = {
   subtitle: string
   meta?: string
   href?: string
+  data?: SearchData
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,6 +77,14 @@ async function searchOrganizations(q: string, orgId: string | null, isCorporate:
     subtitle: compact([row.tier, addr(row)]) || 'Account record',
     meta: row.primary_email || row.primary_phone || undefined,
     href: `/operations?org=${row.id}`,
+    data: {
+      address: row.address ?? null,
+      city: row.city ?? null,
+      state: row.state ?? null,
+      zip: row.zip ?? null,
+      contact_email: row.primary_email ?? null,
+      contact_phone: row.primary_phone ?? null,
+    },
   }))
 }
 
@@ -100,6 +125,15 @@ async function searchSites(q: string, orgId: string | null, isCorporate: boolean
     subtitle: compact([row.property_type, row.units ? `${row.units} units` : null, addr(row)]) || 'Site record',
     meta: compact([row.status, row.primary_contact_name || row.pm_name]) || undefined,
     href: `/sites/${row.id}`,
+    data: {
+      units: typeof row.units === 'number' ? row.units : (row.units ? Number(row.units) || null : null),
+      address: row.address ?? null,
+      city: row.city ?? null,
+      state: row.state ?? null,
+      zip: row.zip ?? null,
+      property_type: row.property_type ?? null,
+      contact_name: row.primary_contact_name || row.pm_name || null,
+    },
   }))
 }
 

@@ -10,7 +10,21 @@ type Source = 'lead' | 'customer' | 'blank'
 type Step = 'source' | 'pick' | 'form'
 
 type LeadRow = { id: string; name?: string; company?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string; units?: number; location?: string }
-type SearchResult = { id: string; type: string; title: string; subtitle: string }
+
+// `data` carries the real values. `subtitle` is only the human-readable line —
+// never parse facts back out of it.
+type SearchData = {
+  units?: number | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  zip?: string | null
+  property_type?: string | null
+  contact_name?: string | null
+  contact_email?: string | null
+  contact_phone?: string | null
+}
+type SearchResult = { id: string; type: string; title: string; subtitle: string; data?: SearchData }
 
 type Selected = {
   label: string
@@ -18,6 +32,14 @@ type Selected = {
   account_name: string
   contact_name: string
   lead_id?: string
+  site_id?: string
+  contact_email?: string
+  contact_phone?: string
+  address?: string
+  city?: string
+  state?: string
+  zip?: string
+  property_type?: string
 }
 
 // GateGuard sales pipeline. "Deposit collected" is the conversion point —
@@ -107,12 +129,13 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
 
   function chooseSource(s: Source) {
     setSource(s); setQuery(''); setLeads([]); setResults([])
+    // Always clear the previous pick's numbers. Without this, picking a lead
+    // (which seeds units/MRR), going Back, then choosing a Customer carried the
+    // OLD lead's units into the new deal — silently wrong money.
+    setSelected(null); setManualAccount(''); setManualContact('')
+    setName(''); setUnits(''); setMrr(''); setValue('')
     // Standalone deal — skip the picker, go straight to a blank form (no lead_id).
-    if (s === 'blank') {
-      setSelected(null); setManualAccount(''); setManualContact('')
-      setName(''); setUnits(''); setMrr('')
-      setStep('form'); return
-    }
+    if (s === 'blank') { setStep('form'); return }
     setStep('pick')
   }
 
@@ -142,7 +165,29 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   }
 
   function pickCustomer(r: SearchResult) {
-    setSelected({ label: r.title, sublabel: r.subtitle, account_name: r.title, contact_name: r.type === 'contact' ? r.title : '' })
+    const d = r.data ?? {}
+    setSelected({
+      label: r.title,
+      sublabel: r.subtitle,
+      account_name: r.title,
+      contact_name: r.type === 'contact' ? r.title : (d.contact_name || ''),
+      // A site pick IS the property — carry the id so the deal is bound to it
+      // instead of being a name-only orphan.
+      site_id: r.type === 'site' ? r.id : undefined,
+      contact_email: d.contact_email || undefined,
+      contact_phone: d.contact_phone || undefined,
+      address: d.address || undefined,
+      city: d.city || undefined,
+      state: d.state || undefined,
+      zip: d.zip || undefined,
+      property_type: d.property_type || undefined,
+    })
+    // Prefill units/MRR exactly like the lead path already does. The customer
+    // card was showing "236 units" while the Units box sat at 0 because this
+    // number was only ever in the display string.
+    const u = d.units ? Number(d.units) : 0
+    setUnits(u ? String(u) : '')
+    setMrr(u ? String(u * MRR_PER_UNIT) : '')
     setName(`${r.title} — Opportunity`)
     setStep('form')
   }
@@ -159,9 +204,22 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
         description: notes.trim() || null,
       }
       if (mrr.trim()) body.est_mrr = Number(mrr) || 0
-      if (value.trim()) body.value = Number(value) || 0
+      // The one-time $ column is `amount`. There is NO `value` column on
+      // opportunities — writing one made PostgREST reject the whole insert
+      // ("Could not find the 'value' column ... in the schema cache").
+      if (value.trim()) body.amount = Number(value) || 0
       if (units.trim()) { body.units = Number(units) || 0; body.description = `${notes.trim() ? notes.trim() + '\n' : ''}Units: ${units} · MRR @ $${MRR_PER_UNIT}/unit` }
       if (selected?.lead_id) body.lead_id = selected.lead_id
+      // Carry the customer's real details onto the deal so the record isn't a
+      // name with nothing behind it.
+      if (selected?.site_id)        body.site_id           = selected.site_id
+      if (selected?.address)        body.property_address  = selected.address
+      if (selected?.city)           body.property_city     = selected.city
+      if (selected?.state)          body.property_state    = selected.state
+      if (selected?.zip)            body.property_zip      = selected.zip
+      if (selected?.property_type)  body.property_type     = selected.property_type
+      if (selected?.contact_email)  body.contact_email     = selected.contact_email
+      if (selected?.contact_phone)  body.contact_phone     = selected.contact_phone
 
       const res = await fetch('/api/crm/opportunities', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

@@ -61,8 +61,19 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
   }, [opportunityId])
   useEffect(() => { void loadData() }, [loadData])
 
-  // Advance/jump a stage → persist to the opportunity (best-effort; interns refine in #82).
+  // Mark the deal lost — mirrors how leads are closed out (stage='lost' + reason).
+  const [markingLost, setMarkingLost] = useState(false)
+  const [lostError, setLostError] = useState<string | null>(null)
+  const isLost = String(opp?.stage ?? '').toLowerCase() === 'lost'
+
+  // Advance/jump a stage → persist to the opportunity.
   function goToStage(i: number) {
+    // A lost deal must NOT be silently un-lost. `lost` has no entry in
+    // STAGE_TO_STEP, so the stepper sat at step 0 and the always-visible
+    // Back/Next buttons would PATCH stage back to 'overview' on one stray
+    // click — wiping 'lost' and orphaning lost_at/lost_reason. That is why
+    // "mark lost" never seemed to stick. Reopen deliberately instead.
+    if (isLost) return
     setStage(i)
     if (opportunityId) {
       void fetch(`/api/crm/opportunities/${opportunityId}`, {
@@ -72,21 +83,48 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
     }
   }
 
-  // Mark the deal lost — mirrors how leads are closed out (stage='lost' + reason).
-  const [markingLost, setMarkingLost] = useState(false)
-  const isLost = String(opp?.stage ?? '').toLowerCase() === 'lost'
   async function markLost() {
     if (!opportunityId || markingLost) return
     const reason = typeof window !== 'undefined' ? window.prompt('Why was this deal lost? (optional)') : ''
     if (reason === null) return   // user cancelled
-    setMarkingLost(true)
+    setMarkingLost(true); setLostError(null)
     try {
-      await fetch(`/api/crm/opportunities/${opportunityId}`, {
+      // Never swallow this. A silent failure here is indistinguishable from
+      // success, which is exactly how "no way to mark lost" felt.
+      const r = await fetch(`/api/crm/opportunities/${opportunityId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage: 'lost', lost_at: new Date().toISOString(), lost_reason: reason || null }),
       })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setLostError(d?.error || `Could not mark this deal lost (${r.status}).`)
+        return
+      }
       await loadData()
-    } catch { /* best-effort */ } finally { setMarkingLost(false) }
+    } catch (e) {
+      setLostError(e instanceof Error ? e.message : 'Could not mark this deal lost.')
+    } finally { setMarkingLost(false) }
+  }
+
+  // Reopen — a lost deal was a dead end with no way back.
+  async function reopenDeal() {
+    if (!opportunityId || markingLost) return
+    if (typeof window !== 'undefined' && !window.confirm('Reopen this deal? It goes back to the start of the life cycle.')) return
+    setMarkingLost(true); setLostError(null)
+    try {
+      const r = await fetch(`/api/crm/opportunities/${opportunityId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'overview', lost_at: null, lost_reason: null }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setLostError(d?.error || `Could not reopen this deal (${r.status}).`)
+        return
+      }
+      await loadData()
+    } catch (e) {
+      setLostError(e instanceof Error ? e.message : 'Could not reopen this deal.')
+    } finally { setMarkingLost(false) }
   }
 
   const dealName = (opp?.name || opp?.account_name || 'New opportunity') as string
@@ -99,9 +137,15 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
             <button onClick={markLost} disabled={markingLost} style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1 }}>{markingLost ? 'Marking…' : 'Mark Lost'}</button>
           )}
         </div>
-        {isLost && (
+        {lostError && (
           <div style={{ marginBottom: 14, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
-            This deal is marked Lost{opp?.lost_reason ? ` — ${opp.lost_reason}` : ''}.
+            {lostError}
+          </div>
+        )}
+        {isLost && (
+          <div style={{ marginBottom: 14, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <span>This deal is marked Lost{opp?.lost_reason ? ` — ${opp.lost_reason}` : ''}. The steps below are locked.</span>
+            <button onClick={reopenDeal} disabled={markingLost} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.9)', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1, whiteSpace: 'nowrap' }}>{markingLost ? 'Working…' : 'Reopen deal'}</button>
           </div>
         )}
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Opportunity · {dealName}{opp?.account_name && opp?.name ? ` · ${opp.account_name}` : ''}</div>
@@ -209,7 +253,10 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   const [actBody, setActBody] = useState('')
   const [actTo, setActTo] = useState('')        // email recipient (prefilled from contact)
   const [actWhen, setActWhen] = useState('')    // meeting date/time
-  const [actMsg, setActMsg] = useState<string | null>(null)
+  // Carry the severity explicitly. This used to be a bare string whose colour was
+  // guessed by checking whether it contained "could not" — so a real server error
+  // like "Invalid `to` field" rendered GREEN and read as success.
+  const [actMsg, setActMsg] = useState<{ text: string; error: boolean } | null>(null)
   const [posting, setPosting] = useState(false)
   // Prefill the email recipient from the deal's contact.
   useEffect(() => { setActTo(opp.site_contact_email || contact.email || '') }, [opp.site_contact_email, contact.email])
@@ -232,15 +279,27 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           body: JSON.stringify({ opportunity_id: opportunityId, to_email: actTo.trim(), to_name: form.contact_name || null, subject: actSubject.trim(), body: actBody || actSubject.trim() }),
         })
         const j = await res.json().catch(() => ({}))
-        if (!res.ok) { setActMsg(j?.error || 'Could not send email.'); return }
-        setActMsg(`Email sent to ${actTo.trim()}.`)
+        if (!res.ok) {
+          setActMsg({ text: j?.error || 'Could not send email.', error: true })
+          // Refresh anyway: a failed send still leaves a "failed" row in the
+          // timeline, so the list must reflect reality rather than the last
+          // successful state.
+          onSaved?.()
+          return
+        }
+        setActMsg({ text: `Email sent to ${actTo.trim()}.`, error: false })
       } else {
         // call / meeting / note → activity. Meeting carries a due_at so it shows on the calendar.
-        await fetch('/api/crm/activities', {
+        const res = await fetch('/api/crm/activities', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: actType, subject: actSubject.trim(), body: actBody || null, opportunity_id: opportunityId, ...(actType === 'meeting' && actWhen ? { due_at: actWhen } : {}) }),
         })
-        if (actType === 'meeting' && actWhen) setActMsg('Meeting scheduled — added to the calendar.')
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          setActMsg({ text: j?.error || `Could not save this ${actType} (${res.status}).`, error: true })
+          return
+        }
+        if (actType === 'meeting' && actWhen) setActMsg({ text: 'Meeting scheduled — added to the calendar.', error: false })
       }
       setActSubject(''); setActBody(''); setActWhen('')
       onSaved?.()
@@ -447,7 +506,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           <button onClick={postActivity} disabled={posting || !actSubject.trim() || (actType === 'email' && !actTo.trim())} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() || (actType === 'email' && !actTo.trim()) ? 0.5 : 1 }}>
             {actType === 'email' ? 'Send email' : actType === 'meeting' && actWhen ? 'Schedule + log' : 'Add to timeline'}
           </button>
-          {actMsg && <Sub><span style={{ color: actMsg.toLowerCase().includes('could not') ? '#fca5a5' : '#6ee7b7' }}>{actMsg}</span></Sub>}
+          {actMsg && <Sub><span style={{ color: actMsg.error ? '#fca5a5' : '#6ee7b7' }}>{actMsg.text}</span></Sub>}
         </div>
         {activities.length === 0 ? <Sub>No calls, emails, meetings, or notes logged yet.</Sub> : (
           <div style={{ display: 'grid', gap: 8 }}>
@@ -485,7 +544,19 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <H>Emails</H>
         {emails.length === 0 ? <Sub>No emails logged yet. Log one from the timeline above (Email).</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {emails.slice(0, 8).map((e, i) => <div key={e.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>✉️ {e.subject || '(no subject)'}{e.created_at ? <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}</div>)}
+            {/* A failed send still leaves its row behind (deliberately — it's the
+                audit trail), so it MUST be labelled. Otherwise a bounced email
+                sits here looking exactly like one that arrived. */}
+            {emails.slice(0, 8).map((e, i) => {
+              const failed = String(e.email_status || '').toLowerCase() === 'failed'
+              return (
+                <div key={e.id || i} style={{ fontSize: 13, color: failed ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.8)' }}>
+                  {failed ? '⚠️' : '✉️'} {e.subject || '(no subject)'}
+                  {failed && <span style={{ color: '#fca5a5', fontWeight: 600 }}> · Not delivered</span>}
+                  {e.created_at ? <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}
+                </div>
+              )
+            })}
           </div>
         )}
       </Card>
@@ -991,15 +1062,32 @@ function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportun
   const doorsSeed = (Number(sc.gates) || 0) + (Number(sc.common_doors) || 0)   // calc combines gates + common doors
 
   // Persist the calculator's deal-critical counts back to the opportunity:
-  // living units → units column; unit-lock add-ons → site_counts JSONB.
-  const persistFinancials = useCallback((v: { livingUnits: string; unitsApp: string; unitsGw: string }) => {
+  // living units → units column; everything else → site_counts JSONB.
+  //
+  // cam_backup, cameras_monitored, doors and common_locks were previously
+  // computed, priced, and then thrown away on unmount — nothing persisted them.
+  //
+  // site_counts is read through a ref, not the closure. The callback is memoised
+  // on [opportunityId] only, so a captured `opp` goes stale and a Financials
+  // save would spread an OLD site_counts over whatever the Survey tab had just
+  // written — quietly clobbering gates/common_doors/cameras.
+  const siteCountsRef = useRef<Record<string, unknown>>({})
+  useEffect(() => { siteCountsRef.current = (opp?.site_counts ?? {}) as Record<string, unknown> }, [opp?.site_counts])
+
+  const persistFinancials = useCallback((v: { livingUnits: string; unitsApp: string; unitsGw: string; camBackup: string; camMon: string; doors: string; commonLocks: string }) => {
     if (!opportunityId) return
     const toNum = (s: string) => (s.trim() ? Number(s) : null)
     const nextSiteCounts = {
-      ...(opp?.site_counts ?? {}),
-      units_app: toNum(v.unitsApp),
-      units_gw: toNum(v.unitsGw),
+      ...siteCountsRef.current,
+      units_app:  toNum(v.unitsApp),
+      units_gw:   toNum(v.unitsGw),
+      cam_backup: toNum(v.camBackup),
+      cam_mon:    toNum(v.camMon),
+      doors_calc: toNum(v.doors),
+      common_locks: toNum(v.commonLocks),
     }
+    // Keep the local mirror in step so two saves in a row don't undo each other.
+    siteCountsRef.current = nextSiteCounts
     void fetch(`/api/crm/opportunities/${opportunityId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1007,7 +1095,6 @@ function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportun
         site_counts: nextSiteCounts,
       }),
     }).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId])
 
   const [econ, setEcon] = useState<CalcEcon | null>(null)
@@ -1049,7 +1136,10 @@ function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportun
           </div>
         )}
       </Card>
-      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} initialDoors={doorsSeed || ''} initialCommonLocks={sc.common_locks} initialCameras={sc.cameras} initialUnitsApp={sc.units_app} initialUnitsGw={sc.units_gw} onCompute={onCompute} onPersist={persistFinancials} />
+      {/* cam_backup now seeds from site_counts, so the number survives a reload.
+          Survey-tab `cameras` still wins as the seed for the monitored count when
+          the calculator hasn't saved its own value yet. */}
+      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} initialDoors={doorsSeed || ''} initialCommonLocks={sc.common_locks} initialCameras={sc.cam_mon ?? sc.cameras} initialCamBackup={sc.cam_backup} initialUnitsApp={sc.units_app} initialUnitsGw={sc.units_gw} onCompute={onCompute} onPersist={persistFinancials} />
 
       {/* Install cost — real labor (from labor_rates) + one-time equipment */}
       <Card>

@@ -53,7 +53,21 @@ export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => vo
         style={{ background: 'radial-gradient(circle at 16% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(0,200,255,0.22)', backdropFilter: 'blur(28px)' }}>
         {windowData ? (
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-            <OpportunityGlassWindow data={windowData as Parameters<typeof OpportunityGlassWindow>[0]['data']} onBack={() => setWindowData(null)} />
+            {/* onRefresh is required for in-window actions (Schedule Follow-Up,
+                Save details) to visibly land — without it the write succeeds and
+                the panel never re-reads, so nothing appears to happen. */}
+            <OpportunityGlassWindow
+              data={windowData as Parameters<typeof OpportunityGlassWindow>[0]['data']}
+              onBack={() => setWindowData(null)}
+              onRefresh={async () => {
+                if (!windowData) return
+                const id = (windowData as { opportunity?: { id?: string } })?.opportunity?.id
+                if (!id) return
+                const res = await fetch(`/api/nexus/opps/opportunity-window/${id}`)
+                const d = await res.json().catch(() => ({}))
+                if (res.ok && d.success !== false) setWindowData(d)
+              }}
+            />
           </div>
         ) : (
           <>

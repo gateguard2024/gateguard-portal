@@ -125,19 +125,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { data, error } = await supabase
-      .from('opportunities')
-      .insert({
-        ...safeBody,
-        stage,
-        probability:    body.probability ?? STAGE_PROB[normalizeStage(stage)],
-        owner_name:     user.name,
-        owner_initials: user.initials,
-        dealer_org_id,
-        ...(lead_id ? { lead_id } : {}),
-      })
-      .select()
-      .single()
+    const insertRow: Record<string, unknown> = {
+      ...safeBody,
+      stage,
+      probability:    body.probability ?? STAGE_PROB[normalizeStage(stage)],
+      owner_name:     user.name,
+      owner_initials: user.initials,
+      dealer_org_id,
+      ...(lead_id ? { lead_id } : {}),
+    }
+
+    // Drift-resilient insert: if the client sends a key this DB doesn't have,
+    // drop that ONE key and retry rather than losing the whole opportunity.
+    // PostgREST rejects the entire row for a single unknown column, so a stray
+    // `value` key used to make "Create Opportunity" fail outright. The three
+    // other opportunity writers already do this; this one didn't.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any = null
+    let error: { code?: string; message: string } | null = null
+    for (let i = 0; i < 6; i++) {
+      const res = await supabase.from('opportunities').insert(insertRow).select().single()
+      data = res.data; error = res.error
+      if (!error) break
+      if (error.code === '42703' || error.code === 'PGRST204') {
+        const m = /Could not find the '([a-z_]+)' column/i.exec(error.message) || /column "?([a-z_]+)"?/i.exec(error.message)
+        const col = m?.[1]
+        if (col && col in insertRow) { delete insertRow[col]; continue }
+      }
+      break
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

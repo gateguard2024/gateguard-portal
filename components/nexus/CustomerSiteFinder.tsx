@@ -171,7 +171,9 @@ export default function CustomerSiteFinder() {
             <ArrowLeft size={18} /> Back to results
           </button>
         </div>
-        <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6 pb-20">
+        {/* pb-20 was clearance for the fixed bottom nav — dead weight inside a
+            popup, where it just pushed content out of reach. */}
+        <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6 pb-6">
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col gap-6">
@@ -231,8 +233,13 @@ export default function CustomerSiteFinder() {
       </div>
     );
   };
+  // h-full min-h-0, not a hard-coded h-[70dvh]. This lives inside a shell that is
+  // already height-bounded and already scrolls; a second fixed-height scroll
+  // container nested inside it swallowed the wheel, and the shell's
+  // overscroll-contain then blocked the scroll from chaining out. That is why the
+  // property popup felt frozen.
   return (
-    <div className="flex w-full h-[70dvh] overflow-hidden rounded-3xl font-sans" style={glassPanel}>
+    <div className="flex w-full h-full min-h-0 flex-1 overflow-hidden rounded-3xl font-sans" style={glassPanel}>
 
       {/* LEFT PANE: Search & List */}
       <div

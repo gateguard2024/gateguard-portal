@@ -46,7 +46,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       owner_name, owner_initials, account_name, management_co, owner_entity,
       property_address, property_city, property_state, property_zip,
       site_contact_name, site_contact_title, site_contact_phone, site_contact_email,
-      units, source, assigned_from_lead, site_id, site_counts, interests, property_type
+      units, source, assigned_from_lead, site_id, site_counts, interests, property_type,
+      unit_automation, contact_email, contact_phone
     `)
     .eq('id', oppId)
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
@@ -112,7 +113,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     safe(
       supabase
         .from('crm_activities')
-        .select('id, type, subject, body, outcome, due_at, completed_at, created_at')
+        .select(// email_status is required: without it the UI cannot tell a delivered email from
+// a failed one, so a bounced send rendered identically to a sent one.
+'id, type, subject, body, outcome, due_at, completed_at, created_at, email_status')
         .eq('opportunity_id', oppId)
         .order('created_at', { ascending: false })
         .limit(30),
@@ -306,10 +309,12 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (action === 'schedule_followup') {
     const title = clean(body.title) || 'Follow up on opportunity'
     const dueDate = clean(body.due_date)
+    // `todos` has `org_id` — NOT `dealer_org_id` — and has no `type` column at
+    // all (migrations 023 + 024). Both were being inserted, so this route
+    // returned 500 on every call with no drift-retry to save it.
     const { data, error: tErr } = await supabase.from('todos').insert({
-      dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
+      org_id: (opp as Record<string, unknown>).dealer_org_id,
       created_by: profileId,
-      type: 'task',
       title,
       body: [clean(body.notes), dueDate ? `Due: ${dueDate}` : null].filter(Boolean).join('\n') || null,
       status: 'open',

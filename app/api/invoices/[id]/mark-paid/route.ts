@@ -44,13 +44,16 @@ export async function POST(
   const paidAmount = amount_paid != null ? parseFloat(String(amount_paid)) : invoice.total
 
   // Mark paid
+  // Only touch `notes` if the caller actually sent one. This used to write
+  // `notes ?? null` unconditionally, so marking an invoice paid silently ERASED
+  // whatever note was on it. Never null out a field the caller didn't mention.
   const { data: updated, error: updateErr } = await supabase
     .from('invoices')
     .update({
       status:      'paid',
       amount_paid: paidAmount,
       paid_at:     paid_at,
-      notes:       notes ?? null,
+      ...(notes !== undefined ? { notes } : {}),
       updated_at:  new Date().toISOString(),
     })
     .eq('id', params.id)

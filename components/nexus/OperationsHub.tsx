@@ -189,7 +189,30 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
     fetch("/api/dispatch").then(r => r.json()).then(d => { setJobs(d.jobs ?? []); setTechs(d.techs ?? []); }).catch(() => {}).finally(() => setLoading(false));
   }, []);
   useEffect(() => { loadOps(); }, [loadOps]);
-  const createWO = async (p: Record<string, unknown>) => { await fetch("/api/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }).catch(() => {}); loadOps(); };
+  // Creating a work order must never fail silently. This used to be
+  // `.catch(() => {})`, so a rejected insert looked EXACTLY like a successful
+  // one — nothing appeared, nothing was said. Return the error so the caller
+  // can show it.
+  const [woError, setWoError] = useState<string | null>(null);
+  const createWO = async (p: Record<string, unknown>): Promise<boolean> => {
+    setWoError(null);
+    try {
+      const r = await fetch("/api/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setWoError(d?.error || `Could not create the work order (${r.status}).`);
+        console.error("[createWO] failed:", d?.error || r.status, p);
+        return false;
+      }
+      loadOps();
+      return true;
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "Could not create the work order.";
+      setWoError(m);
+      console.error("[createWO] threw:", m);
+      return false;
+    }
+  };
   const updateWO = async (id: string, patch: Record<string, unknown>) => { await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {}); loadOps(); };
 
   return <div style={{ color: "white", paddingBottom: 120 }}>
@@ -210,7 +233,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
     <p style={{ color: "rgba(255,255,255,0.34)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
-    {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
+    {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} createError={woError} />}
     {page === "Schedule" && <DispatchBoard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
@@ -264,8 +287,9 @@ const WO_FILTERS = [
   { key: "urgent", label: "Urgent" },
   { key: "done", label: "Done" },
 ];
-function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
+function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createError }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => Promise<boolean>; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void; createError?: string | null }) {
   const [showNew, setShowNew] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false });
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("open");
@@ -283,16 +307,28 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
   }, [showNew, sites.length]);
   const siteMatches = sites.filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
   function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false }); setSiteQ(""); }
-  function submit() {
+  // Only close the popup if the work order ACTUALLY saved.
+  // This used to fire onCreate() without awaiting it and then close + reset
+  // unconditionally — so a rejected insert looked exactly like a success: the
+  // popup shut, the list refreshed, and no work order existed. Anything the
+  // user typed was also thrown away, so they couldn't even retry.
+  async function submit() {
     const t = techs.find(x => x.id === form.assignee_id);
-    if (form.isTask) {
-      if (!form.title.trim()) return;
-      onCreate({ job_type: "task", title: form.title.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
-    } else {
-      if (!form.customer_name.trim()) return;
-      onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+    setSubmitting(true);
+    let ok = false;
+    try {
+      if (form.isTask) {
+        if (!form.title.trim()) return;
+        ok = await onCreate({ job_type: "task", title: form.title.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+      } else {
+        if (!form.customer_name.trim()) return;
+        ok = await onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+      }
+    } finally {
+      setSubmitting(false);
     }
-    resetForm(); setShowNew(false);
+    // Failed? Keep the popup open with their typing intact so they can retry.
+    if (ok) { resetForm(); setShowNew(false); }
   }
   const canSubmit = form.isTask ? !!form.title.trim() : !!form.customer_name.trim();
   const shown = jobs.filter(w => {
@@ -351,7 +387,17 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
             <input type="checkbox" checked={form.notify} onChange={e => setForm({ ...form, notify: e.target.checked })} style={{ width: 16, height: 16 }} />
             <Mail size={14} /> Email the assigned tech about this job
           </label>
-          <button onClick={submit} disabled={!canSubmit} style={{ ...btn, opacity: canSubmit ? 1 : 0.5 }}>{form.isTask ? (form.title.trim() ? "Create task" : "Enter a task") : (form.site_id ? "Create work order" : "Pick a site first")}</button>
+          {/* If the save failed, SAY SO. Silence here is what made this look
+              like "work orders can't be created" instead of a fixable error. */}
+          {createError && (
+            <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.35)", color: "#fda4af", fontSize: 12 }}>
+              Couldn’t create the work order — nothing was saved.
+              <div style={{ color: "#fecdd3", opacity: 0.75, fontSize: 11, marginTop: 4 }}>{createError}</div>
+            </div>
+          )}
+          <button onClick={submit} disabled={!canSubmit || submitting} style={{ ...btn, opacity: (canSubmit && !submitting) ? 1 : 0.5 }}>
+            {submitting ? "Saving…" : form.isTask ? (form.title.trim() ? "Create task" : "Enter a task") : (form.site_id ? "Create work order" : "Pick a site first")}
+          </button>
         </div>
       </Modal>}
       {/* search + filter chips */}

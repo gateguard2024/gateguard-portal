@@ -547,6 +547,21 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
     }
   }
 
+  // Leads had refreshOpenLead; opportunities had no equivalent, so nothing was
+  // passed as onRefresh. That is why "Schedule Follow-Up" appeared to do
+  // nothing: the to-do WAS created, but the Tasks list never re-fetched, so no
+  // new row ever showed up. The button highlighted and the screen didn't move.
+  async function refreshOpenOpportunity() {
+    if (!selectedOpportunityId) return
+    try {
+      const res = await fetch(`/api/nexus/opps/opportunity-window/${selectedOpportunityId}`)
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success !== false) setOpportunityWindowData(data)
+    } catch {
+      // Best-effort — if refresh fails, existing data stays visible.
+    }
+  }
+
   function closeOpportunityWindow() {
     setSelectedOpportunityId(null)
     setOpportunityWindowData(null)
@@ -692,6 +707,7 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
           <OpportunityGlassWindow
             data={opportunityWindowData as Parameters<typeof OpportunityGlassWindow>[0]['data']}
             onBack={closeOpportunityWindow}
+            onRefresh={refreshOpenOpportunity}
           />
         )}
 

@@ -17,6 +17,15 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Found[]>([])
   const [busy, setBusy] = useState(false)
+  // Every failure here used to be swallowed (`.catch(() => ({}))` + a silent
+  // `if (c?.id)` skip), so a contact that failed to save looked identical to
+  // one that never got typed. Surface it.
+  const [err, setErr] = useState<string | null>(null)
+  // The card only ever collected a name and posted `{ name }` — even though the
+  // API has accepted email/phone/title all along.
+  const [newEmail, setNewEmail] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newTitle, setNewTitle] = useState('')
 
   const load = useCallback(async () => {
     if (!entityId) { setLoading(false); return }
@@ -36,20 +45,51 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
     return () => { active = false; clearTimeout(t) }
   }, [q, adding])
 
+  function resetAdd() {
+    setAdding(false); setQ(''); setResults([]); setErr(null)
+    setNewEmail(''); setNewPhone(''); setNewTitle('')
+  }
+
   async function attach(contactId: string) {
-    setBusy(true)
+    setBusy(true); setErr(null)
     try {
-      await fetch('/api/crm/contact-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact_id: contactId, entity_type: entityType, entity_id: entityId }) })
-      setAdding(false); setQ(''); setResults([]); await load()
+      const r = await fetch('/api/crm/contact-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact_id: contactId, entity_type: entityType, entity_id: entityId }) })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setErr(d?.error || `Could not add that contact (${r.status}).`); return
+      }
+      resetAdd(); await load()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not add that contact.')
     } finally { setBusy(false) }
   }
+
   async function createAndAttach() {
     if (!q.trim()) return
-    setBusy(true)
+    setBusy(true); setErr(null)
     try {
-      const c = await fetch('/api/crm/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: q.trim() }) }).then(r => r.json()).catch(() => ({}))
-      if (c?.id) await fetch('/api/crm/contact-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact_id: c.id, entity_type: entityType, entity_id: entityId }) })
-      setAdding(false); setQ(''); setResults([]); await load()
+      const cRes = await fetch('/api/crm/contacts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:  q.trim(),
+          email: newEmail.trim() || null,
+          phone: newPhone.trim() || null,
+          title: newTitle.trim() || null,
+        }),
+      })
+      const c = await cRes.json().catch(() => ({}))
+      if (!cRes.ok || !c?.id) {
+        setErr(c?.error || `Could not create that contact (${cRes.status}).`); return
+      }
+      const lRes = await fetch('/api/crm/contact-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact_id: c.id, entity_type: entityType, entity_id: entityId }) })
+      if (!lRes.ok) {
+        const d = await lRes.json().catch(() => ({}))
+        setErr(d?.error || `Contact was created but could not be attached to this record (${lRes.status}).`)
+        await load(); return
+      }
+      resetAdd(); await load()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not create that contact.')
     } finally { setBusy(false) }
   }
   async function remove(linkId: string) {
@@ -92,9 +132,20 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
                 {c.email && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{c.email}</div>}
               </button>
             ))}
-            {q.trim() && <button onClick={createAndAttach} disabled={busy} style={{ textAlign: 'left', background: `${accent}1a`, border: `1px solid ${accent}55`, borderRadius: 8, padding: '7px 10px', cursor: 'pointer', color: accent, fontSize: 13 }}>+ Create &amp; add “{q.trim()}”</button>}
           </div>
-          <button onClick={() => { setAdding(false); setQ('') }} style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.45)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
+          {q.trim() && (
+            <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Not in the list? Add their details and create them.</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email (optional)" style={input} />
+                <input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="Phone (optional)" style={input} />
+                <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Job title (optional)" style={input} />
+              </div>
+              <button onClick={createAndAttach} disabled={busy} style={{ width: '100%', marginTop: 8, textAlign: 'center', background: `${accent}1a`, border: `1px solid ${accent}55`, borderRadius: 8, padding: '8px 10px', cursor: busy ? 'default' : 'pointer', color: accent, fontSize: 13, fontWeight: 600, opacity: busy ? 0.5 : 1 }}>{busy ? 'Saving…' : `+ Create & add “${q.trim()}”`}</button>
+            </div>
+          )}
+          {err && <div style={{ marginTop: 8, fontSize: 12, color: '#fca5a5', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '6px 8px' }}>{err}</div>}
+          <button onClick={resetAdd} style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.45)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
     </div>

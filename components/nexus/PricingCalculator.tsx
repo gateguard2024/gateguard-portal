@@ -36,7 +36,7 @@ function Line({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, initialUnitsApp, initialUnitsGw, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string }) => void } = {}) {
+export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, initialCamBackup, initialUnitsApp, initialUnitsGw, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialCamBackup?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string; camBackup: string; camMon: string; doors: string; commonLocks: string }) => void } = {}) {
   const seedUnits = initialUnits != null && initialUnits !== '' ? String(initialUnits) : ''
   const seed = (v: number | string | null | undefined) => (v != null && v !== '' && Number(v) > 0 ? String(v) : '')
   const [livingUnits, setLivingUnits] = useState(seedUnits)
@@ -47,7 +47,10 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
   const [unitsApp, setUnitsApp] = useState(seed(initialUnitsApp) || (initialUnitAutomation ? seedUnits : ''))
   const [unitsGw, setUnitsGw] = useState(seed(initialUnitsGw))
   const [camMon, setCamMon] = useState(seed(initialCameras))
-  const [camBackup, setCamBackup] = useState('')
+  // camBackup had no seed argument and no initial prop — it was pure local state
+  // that fed the live math and then died on unmount. Typing a number in it
+  // genuinely saved nothing anywhere.
+  const [camBackup, setCamBackup] = useState(seed(initialCamBackup))
   const [passesPerUnit, setPassesPerUnit] = useState('1.5')
 
   const [viewAsDealer, setViewAsDealer] = useState(false)   // admins can preview the dealer copy
@@ -92,10 +95,10 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
     if (!onPersistRef.current) return
     if (!persistedFirst.current) { persistedFirst.current = true; return }
     const t = setTimeout(() => {
-      onPersistRef.current?.({ livingUnits, unitsApp, unitsGw })
+      onPersistRef.current?.({ livingUnits, unitsApp, unitsGw, camBackup, camMon, doors, commonLocks })
     }, 600)
     return () => clearTimeout(t)
-  }, [livingUnits, unitsApp, unitsGw])
+  }, [livingUnits, unitsApp, unitsGw, camBackup, camMon, doors, commonLocks])
 
   const showInternal = canViewInternal && internalView
   const ggFee = calc.ggFee ?? 0
