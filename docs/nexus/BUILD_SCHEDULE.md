@@ -115,6 +115,49 @@ only dated rows?
 
 ---
 
+## Design — multi-page sets + BOM double-count guard (July 14, 2026)
+
+**The problem is money, not cosmetics.** A drawing set has several pages and the
+SAME physical device legitimately appears on more than one:
+
+```
+Page 1  Overview          -> headend switch (the real one)
+Page 2  Enclosure detail  -> the SAME switch, drawn again for clarity
+```
+
+Today **every placed device counts toward the BOM**, so that switch is counted
+twice — we'd quote the customer for two and carry two expense lines. Bad quote,
+skewed job cost, skewed margin.
+
+**The rule:** exactly ONE instance of a physical device counts. Every other
+drawing of it is a **reference** — visible on the page, invisible to the BOM.
+
+### Done — schema (migration 154)
+| Need | Column |
+|---|---|
+| Page order in a set | `floor_plans.page_no` |
+| What the sheet is | `floor_plans.sheet_type` (overview/enclosure/riser/headend/detail/as_built) |
+| Pages belong to a set | `floor_plans.set_id` (NULL = standalone, all existing rows) |
+| **Counts on the BOM?** | `floor_plan_devices.include_in_bom` (default **true** = today's behaviour) |
+| Which one is the real device | `floor_plan_devices.same_as_device_id` (+ CHECK: can't reference itself) |
+
+### ⚠️ Still owed — and the DB alone does NOT fix this
+**The BOM is computed from LIVE CANVAS STATE** (`bom.rows` in
+`app/design/floor-plans/page.tsx`), not from `floor_plan_devices`. So:
+1. The **canvas device object** must carry `include_in_bom` — not just the row.
+2. The **BOM tally must skip** anything false. Without this, 154 is a column
+   nobody reads.
+3. **Page tabs** in the design tool: add/rename/reorder/delete pages in a set.
+4. **Per-device toggle**, plain words: *"Count on BOM"* / *"Reference only —
+   already counted on Page 1"*.
+5. **Smart default:** dropping a product that already exists elsewhere in the set
+   should default to `include_in_bom = false` and prefill `same_as_device_id`.
+   The safe default is the one that can't over-bill a customer.
+6. Show the reference link on the drawing ("same switch as Page 1") so it isn't
+   a mystery to whoever reads the sheet.
+
+---
+
 ## Open build queue (unchanged, still owed)
 
 ### P1 — ARIA
