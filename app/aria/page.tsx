@@ -16,6 +16,7 @@ import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, U
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, LayoutGrid, Map: MapIcon, Cpu } = require('lucide-react') as any
 import { SearchHistoryPanel } from '@/components/aria/SearchHistoryPanel'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
 
@@ -945,7 +946,11 @@ export default function AriaExplorePage() {
   ]
 
   return (
-    <div className="flex h-full" style={{ background: '#0B1728', minHeight: '100vh' }}>
+    // Shared Nexus backdrop instead of a flat one-off #0B1728, so ARIA reads as
+    // the same app as the dashboard. Panels below still paint their own darker
+    // surfaces on top; only the page base changed.
+    <div className="relative flex h-full" style={{ background: NEXUS_BG, minHeight: '100vh' }}>
+      <NexusBackdropLayers variant="page" />
       {/* Left icon nav */}
       <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
         {NAV.map((n, i) => n.href ? (

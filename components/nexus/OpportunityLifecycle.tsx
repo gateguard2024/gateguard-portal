@@ -129,7 +129,12 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
 
   const dealName = (opp?.name || opp?.account_name || 'New opportunity') as string
   return (
-    <div style={{ minHeight: '100vh', maxHeight: '100vh', overflowY: 'auto', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: '24px 24px 160px' }}>
+    // Transparent on purpose. This used to paint its own navy
+    // (`radial-gradient(circle at top left, #11183a, #050712 50%)`) at
+    // minHeight:100vh, which covered the dashboard backdrop the moment a deal
+    // opened from Sales — a different blue on every other screen. It now
+    // inherits whatever backdrop it sits in; standalone /lifecycle supplies one.
+    <div style={{ minHeight: '100vh', maxHeight: '100vh', overflowY: 'auto', background: 'transparent', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: '24px 24px 160px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           {onClose ? <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button> : <span />}

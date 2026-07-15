@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { routeCommand } from '@/lib/command-router'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
 import DispatchConsole from '@/components/nexus/DispatchConsole'
@@ -167,11 +168,12 @@ export default function NexusHomeClient() {
     }
   }, [messages, isAdmin, router])
 
+  // Backdrop now comes from the shared NexusBackdrop module — same values, one
+  // source of truth. Every tab below renders inside this shell and inherits it;
+  // a surface must never paint its own page background.
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,124,255,0.22) 0%, transparent 42%), radial-gradient(ellipse at 12% 32%, rgba(0,200,255,0.12) 0%, transparent 32%), radial-gradient(ellipse at 84% 18%, rgba(79,70,229,0.18) 0%, transparent 34%), linear-gradient(180deg, #020713 0%, #061426 48%, #01040d 100%)' }}>
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true" style={{ backgroundImage: 'linear-gradient(rgba(0,200,255,0.095) 1px, transparent 1px), linear-gradient(90deg, rgba(0,124,255,0.095) 1px, transparent 1px)', backgroundSize: '48px 48px', maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.28) 62%, transparent)' }} />
-      <div className="pointer-events-none absolute left-1/2 top-[24%]" aria-hidden="true" style={{ transform: 'translate(-50%, -50%)', width: 860, height: 360, background: 'radial-gradient(ellipse, rgba(0,124,255,0.22) 0%, rgba(0,200,255,0.10) 28%, transparent 70%)', borderRadius: '999px', filter: 'blur(10px)' }} />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.55), transparent)' }} />
+    <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
+      <NexusBackdropLayers variant="hero" />
 
       <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
         <NexusMark />

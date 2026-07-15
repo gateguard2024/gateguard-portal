@@ -116,9 +116,40 @@ export async function POST(req: NextRequest) {
   }
 
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
-  // assigned_to (profile id) is what the jobs board "My Jobs" filters on — keep
-  // it in sync with assignee_id so assignment actually surfaces to the tech.
-  const owner = assigned_to ?? assignee_id ?? null
+
+  // ── assigned_to vs assignee_id — DIFFERENT TABLES. Do not conflate. ──────────
+  //   work_orders.assigned_to → profiles(id)     (migration 001)
+  //   work_orders.assignee_id → technicians(id)  (migration 011)
+  //
+  // This used to be `const owner = assigned_to ?? assignee_id` written to BOTH
+  // columns. Picking a technician therefore shoved a technicians.id into a
+  // column whose FK points at profiles, and Postgres rejected the whole insert:
+  //   violates foreign key constraint "work_orders_assigned_to_fkey"
+  // Creating a work order with a tech assigned was impossible.
+  //
+  // A technician is linked to a login via technicians.clerk_user_id, and a
+  // profile is found by profiles.clerk_user_id. So resolve tech → profile
+  // rather than assuming the two ids are interchangeable.
+  let ownerProfileId: string | null = assigned_to ?? null
+  if (!ownerProfileId && assignee_id) {
+    const { data: tech } = await supabase
+      .from('technicians')
+      .select('clerk_user_id')
+      .eq('id', assignee_id)
+      .maybeSingle()
+    const clerkId = (tech as { clerk_user_id?: string } | null)?.clerk_user_id
+    if (clerkId) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('clerk_user_id', clerkId)
+        .maybeSingle()
+      ownerProfileId = (prof as { id?: string } | null)?.id ?? null
+    }
+  }
+  // A tech with no portal login has no profile. That is normal and must NOT
+  // block the job — leave assigned_to null; assignee_id still records the tech.
+  const techId: string | null = assignee_id ?? null
 
   // Drift-resilient insert: opportunity_id/description need migration 124.
   // If a column isn't present yet, strip it and retry rather than failing.
@@ -126,8 +157,8 @@ export async function POST(req: NextRequest) {
     title:          title || `${job_type} — ${resolvedCustomer}`,
     customer_name:  resolvedCustomer,
     job_type,
-    assigned_to:    owner,
-    assignee_id:    owner,
+    assigned_to:    ownerProfileId,   // profiles(id) — the portal login, or null
+    assignee_id:    techId,           // technicians(id) — the person doing the work
     assignee_name:  assignee_name ?? null,
     priority,
     status:         scheduled_date ? 'scheduled' : 'open',  // New until it actually has a date
@@ -150,10 +181,28 @@ export async function POST(req: NextRequest) {
     const m = /Could not find the '(\w+)' column|column "?(\w+)"? .* does not exist/.exec(error.message)
     const bad = m?.[1] || m?.[2]
     if ((error.code === 'PGRST204' || error.code === '42703') && bad && bad in row) { delete row[bad]; continue }
+    // 23503 = foreign key violation. One bad id sinks the whole row, so drop the
+    // *link* rather than the job: the person still gets their work order, just
+    // unassigned, and the message says so in plain words.
+    if (error.code === '23503' && /assigned_to/.test(error.message) && row.assigned_to) {
+      row.assigned_to = null; continue
+    }
     break
   }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // Plain-English errors — a raw Postgres constraint name means nothing to
+    // whoever is trying to book a job.
+    const friendly =
+      error.code === '23503' && /assignee_id/.test(error.message)
+        ? 'That technician no longer exists. Pick someone else and try again.'
+        : error.code === '23503' && /site_id/.test(error.message)
+        ? 'That site could not be found. Pick the site again and try again.'
+        : error.code === '23503' && /org_id/.test(error.message)
+        ? 'This job has no valid company attached. Tell an admin — your account may not be linked to a company yet.'
+        : error.message
+    return NextResponse.json({ error: friendly }, { status: 500 })
+  }
 
   if (data && assignee_id) {
     await supabase
