@@ -23,6 +23,7 @@ const supabase = createClient(
 interface Systems {
   internet?: boolean; video?: boolean; bulk?: boolean; gates?: boolean
   cameras?: boolean; smart_lockers?: boolean; smart_rent?: boolean
+  ev_chargers?: boolean
 }
 interface BaseIn {
   name: string; address?: string; city?: string; state?: string
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
           cameras_present: !!sys.cameras,
           smart_lockers_present: !!sys.smart_lockers,
           smart_rent_present: !!sys.smart_rent,
+          ev_chargers_present: !!sys.ev_chargers,
         },
         source: 'base_find',
       }

@@ -137,8 +137,18 @@ async function groundTruthExtract(name: string, city: string, state: string): Pr
       messages: [{ role: 'user', content: `You are reading Google search results for the multifamily property "${name}"${geo ? ` in ${geo}` : ''}. Extract ONLY facts about THIS property — ignore other properties that appear. Return ONLY valid JSON:
 {"units":null,"year_built":null,"phone":null,"owner":null,"management":null,"last_sale":null,"isp_providers":[],"video_providers":[],"proptech":{"access_control":[],"gate_operators":[],"cameras":[],"intercoms":[]},"contacts":[{"name":"","title":"","email":"","phone":"","linkedin":""}]}
 Rules:
-- units = TOTAL residential unit count. If given as a bedroom breakdown (e.g. "291 one-bedroom and 273 two-bedroom"), SUM them (=564).
-- phone = leasing office phone in (xxx) xxx-xxxx form.
+- units = the TOTAL residential unit count, COPIED VERBATIM from the text.
+  *** NEVER CALCULATE. NEVER ADD. NEVER SUM. ***
+  Do NOT add bedroom breakdowns together. Do NOT sum floor-plan counts. Do NOT
+  add availability counts ("20 Units Available" is NOT the total). Do NOT combine
+  numbers from different sources or phases.
+  Return a number ONLY if a source plainly states that property's total (e.g.
+  "the property features 224 units", "Total Units: 224", "224-unit community").
+  If no source states a total, return null. null is CORRECT — a calculated
+  number is wrong and a rep will quote it to someone who knows the real figure.
+- phone = leasing office phone in (xxx) xxx-xxxx form. NEVER a toll-free
+  aggregator/tracking number (800/833/844/855/866/877/888) — listing sites inject
+  those to capture leads; they are not the property. If only toll-free, return null.
 - isp_providers / video_providers = COMPANY NAMES only (AT&T Fiber, Spectrum, DirecTV, Dish). Never service descriptions ("High-speed internet", "Cable TV").
 - proptech = brand names only (ButterflyMX, DoorKing, Brivo, Verkada, SmartRent...). Empty arrays if none named.
 - contacts = named people tied to this property/owner (property manager, regional, owner/exec) with any email/phone/linkedin found.
@@ -1225,9 +1235,19 @@ IDENTITY RULES:
 - confirmed_name: exact community name found in results (not the query — the real name)
 - confirmed_address: full street address if found
 - confirmed_city + confirmed_state: REQUIRED if any geo context exists
-- confirmed_units: LOOK HARD in ALL sections including ===AMENITY PAGES=== — patterns: "312 units", "312-unit", "Total Units: 312", "312 Apartments for Rent", "312 apartment homes", "312 homes", "Showing X of 312", "312 floor plans", "312 residences", "N studio to", "View 312 floor plans", "312 available". Also scan amenity pages for "X units" near top of page or in page title. If you find the number anywhere, return it — do not return null just because the first snippet doesn't mention it.
-  · CRITICAL — this property ONLY: search results often mention OTHER properties (different names/cities, e.g. a portfolio owner's other communities). ONLY use a unit count that clearly refers to THIS property (matching confirmed_name/address). Ignore unit counts attached to any other property name.
-  · BEDROOM BREAKDOWN = SUM: if the count is given as a bedroom split (e.g. "291 one-bedroom and 273 two-bedroom units", "291 1BR / 273 2BR"), ADD them for the total (that example = 564). Prefer this explicit total over a smaller/partial number.
+- confirmed_units: the property's stated TOTAL, COPIED VERBATIM.
+  *** NEVER CALCULATE. NEVER ADD. NEVER SUM. COPY ONLY. ***
+  · Look in ALL sections including ===AMENITY PAGES=== for a plainly stated
+    total: "312 units", "312-unit", "Total Units: 312", "312 apartment homes",
+    "the property features 312 units". Copy that number exactly.
+  · NEVER add a bedroom breakdown together ("291 one-bedroom and 273 two-bedroom"
+    → return null, NOT 564). NEVER sum floor plans. NEVER sum phases/buildings.
+  · "20 Units Available" / "Showing X of Y" = availability, NOT the total. Ignore.
+  · CRITICAL — this property ONLY: results often mention OTHER properties (a
+    portfolio owner's other communities). Only use a count clearly attached to
+    THIS property (matching confirmed_name/address). Ignore all others.
+  · If no source plainly states this property's total, return null. null is the
+    CORRECT answer — a computed number is a wrong number, and worse than none.
 - confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY", "constructed YYYY", "established YYYY". If built in phases ("built in 1985 and 1989"), return the EARLIEST year (1985).
 - confirmed_management: company managing day-to-day operations
 - confirmed_owner: investor/developer/owner entity

@@ -41,6 +41,7 @@ export interface BaseSystems {
   cameras: boolean
   smart_lockers: boolean
   smart_rent: boolean
+  ev_chargers: boolean
 }
 
 export interface BaseProperty {
@@ -63,7 +64,7 @@ export interface BaseProperty {
 
 const EMPTY_SYSTEMS: BaseSystems = {
   internet: false, video: false, bulk: false, gates: false,
-  cameras: false, smart_lockers: false, smart_rent: false,
+  cameras: false, smart_lockers: false, smart_rent: false, ev_chargers: false,
 }
 
 // ─── Serper (Google) — one helper, snippets only, no raw page reads ───────────
@@ -145,6 +146,27 @@ function cleanPhone(raw: unknown): string | null {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`
 }
 
+// ─── Unit-count verification ─────────────────────────────────────────────────
+// A prompt saying "never add" is a request. This is the guarantee.
+//
+// The unit count must appear VERBATIM in the source text. If the model summed
+// floor plans (60+60+104 = 224-ish) or added availability counts, the total it
+// invented will NOT appear in the snippets — so we reject it and return null.
+// A null unit count is honest; a computed one is a number a rep will quote to a
+// property manager who knows their own building.
+function unitsAppearVerbatim(units: number, sourceText: string): boolean {
+  if (!Number.isFinite(units) || units <= 0) return false
+  const n = Math.round(units)
+  // Match the number as a standalone token: "224 units", "224-unit", "(224)".
+  // Allow the thousands-separated form too ("1,200 units").
+  const withCommas = n.toLocaleString('en-US')
+  const variants = n >= 1000 ? [String(n), withCommas] : [String(n)]
+  return variants.some(v => {
+    const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(^|[^\\d.,])${esc}([^\\d.,]|$)`).test(sourceText)
+  })
+}
+
 // ─── Is this one named property, or an area/cluster hunt? ────────────────────
 // Cheap heuristic first — no model call for the obvious cases.
 function looksLikeArea(q: string): boolean {
@@ -197,8 +219,8 @@ export async function POST(req: NextRequest) {
       ),
       serper(
         isArea
-          ? `${query} apartments amenities internet wifi cable gated "controlled access" cameras package lockers`
-          : `${qName} ${query} amenities internet wifi cable TV gated "controlled access" cameras "package lockers" SmartRent`,
+          ? `${query} apartments amenities internet wifi cable gated "controlled access" cameras "package lockers" "EV charging"`
+          : `${qName} ${query} amenities internet wifi cable TV gated "controlled access" intercom cameras "package lockers" SmartRent "EV charging" "electric vehicle"`,
         isArea ? 8 : 6
       ),
     ])
@@ -239,10 +261,19 @@ For each property return:
   by data sources like yardimatrix/loopnet.
 - address: full street address if found, else ""
 - city, state: 2-letter state
-- units: integer unit count, or null if not stated.
-  IMPORTANT: data sources (yardimatrix, loopnet) state this plainly, e.g.
-  "the property features 224 units" — use that. Do NOT use a count of listings
-  currently available for rent ("20 Units Available") — that is NOT the unit count.
+- units: the property's TOTAL unit count, or null.
+  *** NEVER CALCULATE. NEVER ADD. COPY ONLY. ***
+  - Return a number ONLY if it appears VERBATIM in the snippets as that
+    property's total, e.g. "the property features 224 units" -> 224.
+  - Do NOT sum floor-plan counts ("One Bedroom, Two Bedroom/Two Bath…").
+  - Do NOT sum or use availability counts ("20 Units Available", "3 Beds
+    Available") — that is how many are listed for rent TODAY, not the total.
+  - Do NOT add numbers from different sources together.
+  - Do NOT combine buildings/phases into one total.
+  - If two sources state DIFFERENT totals, prefer the data source
+    (yardimatrix, loopnet) and use THAT number as-is. Never average them.
+  - If no source plainly states a total, return null. null is CORRECT and
+    expected — a wrong number is far worse than no number.
 - phone: the property's OWN leasing office number, or "".
   NEVER return a toll-free aggregator/tracking number (800/833/844/855/866/877/888).
   Listing sites inject those to route calls to themselves — they are not the
@@ -253,17 +284,18 @@ For each property return:
     internet      -> an ISP / wifi / "high-speed internet" is offered or mentioned
     video         -> cable / TV / streaming service mentioned
     bulk          -> a bulk / included / "internet included in rent" arrangement
-    gates         -> gated community / gated entry / controlled access gate
+    gates         -> gated community / gated entry / controlled access / call box / intercom
     cameras       -> security cameras / CCTV / video surveillance
-    smart_lockers -> package lockers / Amazon Hub / parcel room
+    smart_lockers -> package lockers / Amazon Hub / parcel room / package concierge
     smart_rent    -> SmartRent / smart home / smart apartment / keyless / smart lock
+    ev_chargers   -> EV charging / electric vehicle charging / ChargePoint / Tesla charger
 
 Rules:
 - Use ONLY the snippets. If a system isn't evidenced, it is false.
 - units must be a number or null — never a guess, never a range.
 
 JSON shape:
-{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","name_aliases":[],"address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false}}]}
+{"query_interpretation":"one short line on what you searched for","properties":[{"name":"","name_aliases":[],"address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false,"ev_chargers":false}}]}
 
 SNIPPETS:
 ${snippets}`
@@ -297,7 +329,19 @@ ${snippets}`
         address: String(p.address ?? '').trim(),
         city: String(p.city ?? '').trim(),
         state: String(p.state ?? '').trim(),
-        units: typeof p.units === 'number' ? p.units : null,
+        // Only accept a unit count that literally appears in the source text.
+        // If the model summed floor plans or availability counts, its total
+        // won't be in the snippets — so we drop it. "No data" beats a number a
+        // rep would quote to a manager who knows their own building.
+        units: (() => {
+          const u = typeof p.units === 'number' ? p.units : Number(p.units)
+          if (!Number.isFinite(u) || u <= 0) return null
+          if (!unitsAppearVerbatim(u, snippets)) {
+            console.warn(`[aria/base] rejected unit count ${u} for "${p.name}" — not stated verbatim in sources (likely calculated)`)
+            return null
+          }
+          return Math.round(u)
+        })(),
         // Enforce the toll-free rule in CODE, not just in the prompt. A model
         // instruction is a request; this is a guarantee. Handing a rep an
         // aggregator's lead-capture line is worse than handing them nothing.

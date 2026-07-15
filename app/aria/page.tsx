@@ -31,6 +31,7 @@ interface BaseSystems {
   cameras: boolean
   smart_lockers: boolean
   smart_rent: boolean
+  ev_chargers: boolean
 }
 
 interface PropItem {
@@ -57,14 +58,30 @@ interface PropItem {
   name_aliases?: string[]       // rebrands — reviews often live under the old name
 }
 
+// The proptech we actually sell against, broken out by category. A flat merged
+// list of brand names is useless — you need to know WHICH system each brand is.
+// `key` = the array on facts.proptech_found; `presenceKey` = the base-find flag
+// that proves it exists even when no brand was identified.
+const PROPTECH_CATEGORIES: { key: string; presenceKey: string; label: string }[] = [
+  { key: 'gate_operators',    presenceKey: 'gates',         label: 'Gates' },
+  { key: 'access_control',    presenceKey: 'gates',         label: 'Access control' },
+  { key: 'intercoms',         presenceKey: 'gates',         label: 'Intercom' },
+  { key: 'cameras',           presenceKey: 'cameras',       label: 'Cameras' },
+  { key: 'smart_locks',       presenceKey: 'smart_rent',    label: 'Smart locks' },
+  { key: 'package_solutions', presenceKey: 'smart_lockers', label: 'Package lockers' },
+  { key: 'ev_chargers',       presenceKey: 'ev_chargers',   label: 'EV chargers' },
+  { key: 'resident_apps',     presenceKey: 'smart_rent',    label: 'Resident app' },
+]
+
 const SYSTEM_LABELS: { key: keyof BaseSystems; short: string; label: string }[] = [
   { key: 'internet',      short: 'INT',  label: 'Internet' },
   { key: 'video',         short: 'TV',   label: 'Video / TV' },
   { key: 'bulk',          short: 'BULK', label: 'Bulk deal' },
-  { key: 'gates',         short: 'GATE', label: 'Gates' },
+  { key: 'gates',         short: 'GATE', label: 'Gates / access' },
   { key: 'cameras',       short: 'CAM',  label: 'Cameras' },
-  { key: 'smart_lockers', short: 'PKG',  label: 'Smart lockers' },
+  { key: 'smart_lockers', short: 'PKG',  label: 'Package lockers' },
   { key: 'smart_rent',    short: 'SMRT', label: 'Smart rent' },
+  { key: 'ev_chargers',   short: 'EV',   label: 'EV chargers' },
 ]
 
 /** The 7 base signals as compact chips — green = found, grey = not found. */
@@ -240,6 +257,7 @@ function normalizeReport(raw: any): any {
         cameras:       !!f.proptech_found?.cameras_present,
         smart_lockers: !!f.proptech_found?.smart_lockers_present,
         smart_rent:    !!f.proptech_found?.smart_rent_present,
+        ev_chargers:   !!f.proptech_found?.ev_chargers_present,
       },
       contacts: pickArr(f.decision_makers, raw.dm_chain),
       // Community lives in the `social_posts` column (written by /api/aria/social);
@@ -1123,14 +1141,20 @@ export default function AriaExplorePage() {
 
       {/* Results */}
       <div className="flex-1 overflow-hidden relative">
-        {items.length === 0 && !loading && (
+        {/* NOTE: the empty/loading states must NOT cover the map.
+            They used to render here as h-full siblings ABOVE the map container,
+            so with zero results they blanketed the whole centre — the map was
+            mounted underneath, measuring 0 usable space, and never painted.
+            That, not the Mapbox token, is why the centre was empty. They live
+            inside the results panel now; the map owns the centre unconditionally. */}
+        {items.length === 0 && !loading && view === 'list' && (
           <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 gap-3 px-6">
             <MapPin size={30} className="opacity-25" />
             <p className="text-sm font-bold text-slate-400">Pick a word, type an area, hit Find</p>
             <p className="text-[11px]">Properties show up here as a list or on the map.</p>
           </div>
         )}
-        {loading && items.length === 0 && (
+        {loading && items.length === 0 && view === 'list' && (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
             <Loader2 size={22} className="animate-spin text-[#6B7EFF]" /><p className="text-xs font-semibold">Finding properties…</p>
           </div>
@@ -1198,6 +1222,17 @@ export default function AriaExplorePage() {
 
           {/* Results (right third) */}
           <aside className="w-[34%] min-w-[290px] max-w-[420px] shrink-0 flex flex-col border-l border-white/[0.08]" style={{ background: '#0B1728' }}>
+            {/* Plain-English instructions. If you have to explain the flow in a
+                meeting, the screen isn't doing its job. */}
+            {visible.length > 0 && (
+              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.06)' }}>
+                <p className="text-[10.5px] text-slate-300 leading-relaxed">
+                  <span className="font-bold text-[#9AA8FF]">Save</span> keeps a property (free, instant).{' '}
+                  <span className="font-bold text-[#9AA8FF]">Deep research</span> then finds the contacts, internet &amp; TV deals, gate and camera brands, and what residents complain about.
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.07]">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">{visible.length} found</span>
               {alreadyCount > 0 && <span className="text-[10px] font-semibold text-emerald-400">{alreadyCount} saved</span>}
@@ -1314,6 +1349,29 @@ export default function AriaExplorePage() {
                           <span className="truncate">{it.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
                         </a>
                       )}
+
+                      {/* The next step, spelled out on the card. Deep Research was
+                          buried inside the popup, so when a site came up there was
+                          no visible way forward. Step 1 save (free), step 2 dig. */}
+                      <div className="flex items-center gap-1.5 mt-2.5">
+                        {!it.researched ? (
+                          <button onClick={e => { e.stopPropagation(); saveToDb([it]) }} disabled={saveBusy}
+                            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg text-white disabled:opacity-50"
+                            style={{ background: '#6B7EFF' }} title="Free. Keeps this property so you never search it again.">
+                            <Plus size={11} /> 1. Save
+                          </button>
+                        ) : (
+                          <span className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+                            <Check size={11} strokeWidth={3} /> Saved
+                          </span>
+                        )}
+                        <button onClick={e => { e.stopPropagation(); runDeepQueue([it]) }} disabled={queueRunning}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg text-white disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}
+                          title="Digs deep: contacts, internet & TV deals, gate/camera brands, resident complaints.">
+                          <Zap size={11} /> 2. Deep research
+                        </button>
+                      </div>
                     </div>
                     {/* Select */}
                     <button onClick={e => { e.stopPropagation(); toggle(it.id) }} aria-label="Select"
@@ -1323,7 +1381,23 @@ export default function AriaExplorePage() {
                   </div>
                 )
               })}
-              {visible.length === 0 && <p className="text-[11px] text-slate-500 text-center py-8">Nothing matches your filters.</p>}
+              {/* Empty / loading now live HERE, beside the map — never on top of it. */}
+              {loading && items.length === 0 && (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
+                  <Loader2 size={20} className="animate-spin text-[#6B7EFF]" />
+                  <p className="text-[11px] font-semibold">Finding properties…</p>
+                </div>
+              )}
+              {!loading && items.length === 0 && (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center text-slate-500">
+                  <Search size={22} className="opacity-30" />
+                  <p className="text-[12px] font-bold text-slate-400">Type a property or an area, hit Find</p>
+                  <p className="text-[11px]">Results land here. The map shows where they are.</p>
+                </div>
+              )}
+              {!loading && items.length > 0 && visible.length === 0 && (
+                <p className="text-[11px] text-slate-500 text-center py-8">Nothing matches your filters.</p>
+              )}
             </div>
           </aside>
         </div>
@@ -1609,8 +1683,28 @@ export default function AriaExplorePage() {
                       )}
                       {openCard === 'proptech' && (
                         <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Brands identified</p>
-                          <p className={`text-[11px] ${found.length ? 'text-slate-200' : 'text-slate-500 italic'}`}>{found.length ? found.join(', ') : 'No brands identified yet'}</p>
+                          {/* By CATEGORY — never a merged blob of brand names. Knowing
+                              a gate operator is LiftMaster vs the intercom being
+                              ButterflyMX is the entire point; a flat list destroys it. */}
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Systems on site</p>
+                          <div className="space-y-0">
+                            {PROPTECH_CATEGORIES.map(cat => {
+                              const brands: string[] = (pt?.[cat.key] ?? []).filter(Boolean)
+                              const present = !!(rep.presence ?? {})[cat.presenceKey as keyof BaseSystems]
+                              return (
+                                <div key={cat.key} className="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0">
+                                  <span className="text-[10.5px] font-bold text-slate-400 w-28 shrink-0 uppercase tracking-wide">{cat.label}</span>
+                                  <span className={`text-[11.5px] flex-1 ${
+                                    brands.length ? 'text-slate-100 font-medium'
+                                    : present ? 'text-emerald-300' : 'text-slate-600 italic'}`}>
+                                    {brands.length
+                                      ? brands.join(', ')
+                                      : present ? 'Present — brand not identified' : 'No data found'}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
                           {/* Confirmed present by the base find, brand still unknown —
                               that's a finding in its own right, not an empty cell. */}
                           {(() => {
