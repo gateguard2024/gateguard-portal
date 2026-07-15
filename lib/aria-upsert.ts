@@ -15,6 +15,40 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// ── Constraint guards ────────────────────────────────────────────────────────
+// aria_properties has CHECK constraints. Postgres rejects the ENTIRE row if any
+// one value falls outside them — so a single out-of-range number silently killed
+// every save. This is exactly what happened: the engine scores buy_score on a
+// 0–100 scale, the column is `CHECK (buy_score BETWEEN 0 AND 10)`, and every
+// deep research write died on `aria_properties_buy_score_check`. Nothing was
+// ever stored. Coerce to what the DB actually accepts — never hand it a value
+// we haven't validated.
+
+/** buy_score → 0–10. Accepts the engine's 0–100 scale and rescales it. */
+function safeBuyScore(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return null
+  const scaled = n > 10 ? n / 10 : n          // 85 (0–100) → 8.5
+  return Math.max(0, Math.min(10, Math.round(scaled)))
+}
+
+/** freshness_score → 1–5 (CHECK BETWEEN 1 AND 5). */
+function safeFreshness(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return null
+  const scaled = n > 5 ? Math.round((n / 100) * 5) : n   // tolerate a 0–100 scale
+  return Math.max(1, Math.min(5, Math.round(scaled) || 1))
+}
+
+/** Only let through values the CHECK constraint actually permits. */
+function safeEnum(v: unknown, allowed: readonly string[]): string | null {
+  if (typeof v !== 'string') return null
+  const s = v.trim().toLowerCase()
+  return allowed.includes(s) ? s : null
+}
+const URGENCY_VALUES   = ['critical', 'high', 'medium', 'low'] as const
+const TECH_GEN_VALUES  = ['legacy', 'modern', 'hybrid'] as const
+
 // ── Merge helpers (learning loop — never destroy confirmed data) ──────────────
 
 /** Take fresh value unless it's empty/null, then fall back to existing */
@@ -294,13 +328,18 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
       smart_locks:           mergeArr(existing?.smart_locks, pt.smart_locks),
       resident_apps:         mergeArr(existing?.resident_apps, pt.resident_apps),
       package_solutions:     mergeArr(existing?.package_solutions, pt.package_solutions),
-      tech_generation:       mergeVal(existing?.tech_generation, pt.tech_generation),
+      // CHECK (tech_generation IN ('legacy','modern','hybrid')) — anything else kills the row.
+      tech_generation:       safeEnum(mergeVal(existing?.tech_generation, pt.tech_generation), TECH_GEN_VALUES),
       sara_signals:          pt.sara_signals || existing?.sara_signals || false,
       replacement_window:    mergeVal(existing?.replacement_window, pt.replacement_window),
       displacement_targets:  mergeArr(existing?.displacement_targets, pt.displacement_targets),
       // Profile
-      buy_score:             mergeVal(existing?.buy_score, profile.buy_score),
-      urgency:               mergeVal(existing?.urgency, profile.urgency),
+      // CHECK (buy_score BETWEEN 0 AND 10). The engine scores 0–100 — writing 85
+      // here threw aria_properties_buy_score_check and rejected the WHOLE row,
+      // which is why nothing was ever saved. Rescale, don't trust.
+      buy_score:             safeBuyScore(mergeVal(existing?.buy_score, profile.buy_score)),
+      // CHECK (urgency IN ('critical','high','medium','low'))
+      urgency:               safeEnum(mergeVal(existing?.urgency, profile.urgency), URGENCY_VALUES),
       primary_concern:       mergeVal(existing?.primary_concern, profile.primary_concern),
       current_vendor:        mergeVal(existing?.current_vendor, profile.current_vendor),
       contract_window:       mergeVal(existing?.contract_window, profile.contract_window),
@@ -310,7 +349,8 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
       pain_signals:          (p.pain_signals?.length > 0) ? p.pain_signals : (existing?.pain_signals ?? null),
       behavioral_profile:    mergeVal(existing?.behavioral_profile, p.behavioral_profile),
       pitch_strategy:        mergeVal(existing?.pitch_strategy, p.pitch_strategy),
-      freshness_score:       mergeVal(existing?.freshness_score, p.freshness_score),
+      // CHECK (freshness_score BETWEEN 1 AND 5)
+      freshness_score:       safeFreshness(mergeVal(existing?.freshness_score, p.freshness_score)),
       // Decision maker — only update if new data has a name (don't clobber user-verified contacts)
       dm_name:               existing?.dm_name_user_verified ? existing.dm_name : mergeVal(existing?.dm_name, dm.name),
       dm_title:              existing?.dm_name_user_verified ? existing.dm_title : mergeVal(existing?.dm_title, dm.title),
