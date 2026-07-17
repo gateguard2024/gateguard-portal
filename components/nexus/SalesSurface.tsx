@@ -10,6 +10,7 @@ import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { OpportunityLifecycle } from '@/components/nexus/OpportunityLifecycle'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
 type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'opps-workbench' | 'rough-calc'
@@ -214,9 +215,17 @@ export function SalesSurface() {
       {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} onCreated={openLifecycle} />}
       {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} onOpen={openLifecycle} />}
 
+      {/* The deal life cycle opens as a full-screen overlay. This wrapper MUST
+          carry an opaque backdrop: OpportunityLifecycle is transparent (so it
+          inherits whatever shell it sits in), and a fixed inset-0 layer with no
+          background of its own lets the Sales surface behind bleed straight
+          through — unreadable text stacked on text. */}
       {lifecycleOppId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 95, overflowY: 'auto' }}>
-          <OpportunityLifecycle key={`${lifecycleOppId}-${pendingStage ?? 'x'}`} opportunityId={lifecycleOppId} initialStage={pendingStage ?? undefined} onClose={closeLifecycle} />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 95, overflowY: 'auto', background: NEXUS_BG }}>
+          <NexusBackdropLayers variant="page" />
+          <div style={{ position: 'relative' }}>
+            <OpportunityLifecycle key={`${lifecycleOppId}-${pendingStage ?? 'x'}`} opportunityId={lifecycleOppId} initialStage={pendingStage ?? undefined} onClose={closeLifecycle} />
+          </div>
         </div>
       )}
       {activePanel === 'rough-calc' && (
