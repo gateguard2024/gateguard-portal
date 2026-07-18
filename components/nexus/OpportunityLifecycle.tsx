@@ -444,6 +444,46 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
     onSaved?.()
   }
 
+  // Inline task editor — tasks were view-only once listed; now click one to
+  // change its title, date, or who it's assigned to, or delete it.
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editT, setEditT] = useState<{ title: string; due: string; assignee: string }>({ title: '', due: '', assignee: '' })
+  const [editErr, setEditErr] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function openTaskEdit(t: any) {
+    setEditId(t.id)
+    setEditErr(null)
+    setEditT({ title: t.title || '', due: t.due_date ? String(t.due_date).slice(0, 10) : '', assignee: t.assigned_to || '' })
+  }
+  async function saveTaskEdit(id: string) {
+    if (!editT.title.trim()) { setEditErr('Task needs a title.'); return }
+    setPosting(true); setEditErr(null)
+    try {
+      const chosen = editT.assignee ? teammates.find(t => t.id === editT.assignee) : null
+      const res = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editT.title.trim(),
+          due_date: editT.due || null,
+          ...(chosen ? { assigned_to: chosen.id, assigned_to_name: chosen.name } : {}),
+        }),
+      })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setEditErr(j?.error || `Could not save (${res.status}).`); return }
+      setEditId(null); onSaved?.()
+    } catch (e) { setEditErr(e instanceof Error ? e.message : 'Could not save the task.') }
+    finally { setPosting(false) }
+  }
+  async function deleteTask(id: string) {
+    if (typeof window !== 'undefined' && !window.confirm('Delete this task?')) return
+    setPosting(true); setEditErr(null)
+    try {
+      const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setEditErr(j?.error || `Could not delete (${res.status}).`); return }
+      setEditId(null); onSaved?.()
+    } catch (e) { setEditErr(e instanceof Error ? e.message : 'Could not delete the task.') }
+    finally { setPosting(false) }
+  }
+
   const field = (label: string, value?: string | number | null) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
@@ -527,13 +567,36 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
             {todos.slice(0, 8).map((t, i) => {
               const done = t.status === 'done'
+              if (editId && t.id === editId) {
+                return (
+                  <div key={t.id || i} style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.28)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
+                    <input value={editT.title} onChange={e => setEditT(v => ({ ...v, title: e.target.value }))} placeholder="Task…" style={{ ...inputStyle }} />
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <input type="date" value={editT.due} onChange={e => setEditT(v => ({ ...v, due: e.target.value }))} style={{ ...inputStyle, flex: 1, minWidth: 130 }} />
+                      {teammates.length > 0 && (
+                        <select value={editT.assignee} onChange={e => setEditT(v => ({ ...v, assignee: e.target.value }))} style={{ ...inputStyle, flex: 1, minWidth: 130 }}>
+                          <option value="" style={{ background: '#0b1424' }}>Me</option>
+                          {teammates.map(tm => <option key={tm.id} value={tm.id} style={{ background: '#0b1424' }}>{tm.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    {editErr && <div style={{ fontSize: 11, color: '#fca5a5' }}>{editErr}</div>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => t.id && saveTaskEdit(t.id)} disabled={posting} style={{ ...btn, flex: 1, opacity: posting ? 0.5 : 1 }}>Save</button>
+                      <button onClick={() => setEditId(null)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)' }}>Cancel</button>
+                      <button onClick={() => t.id && deleteTask(t.id)} disabled={posting} title="Delete task" style={{ ...btn, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5', opacity: posting ? 0.5 : 1 }}>Delete</button>
+                    </div>
+                  </div>
+                )
+              }
               return (
                 <div key={t.id || i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
                   <button onClick={() => t.id && toggleTask(t.id, !done)} title={done ? 'Mark open' : 'Mark done'} style={{ flexShrink: 0, marginTop: 1, width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: done ? 'rgba(110,231,183,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${done ? 'rgba(110,231,183,0.6)' : 'rgba(255,255,255,0.2)'}`, color: '#6ee7b7', fontSize: 11, lineHeight: '16px' }}>{done ? '✓' : ''}</button>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ color: done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.85)', textDecoration: done ? 'line-through' : 'none' }}>{t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>
+                  {/* Click the task to edit it — title, date, assignee, or delete. */}
+                  <button onClick={() => openTaskEdit(t)} title="Open to edit" style={{ minWidth: 0, flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                    <div style={{ color: done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.85)', textDecoration: done ? 'line-through' : 'none' }}>{t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}{t.assigned_to_name ? ` · ${t.assigned_to_name}` : ''}</div>
                     {t.body && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{String(t.body)}</div>}
-                  </div>
+                  </button>
                 </div>
               )
             })}

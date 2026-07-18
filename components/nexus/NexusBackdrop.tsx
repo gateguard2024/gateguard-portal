@@ -35,6 +35,15 @@ export const NEXUS_BG =
 export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVariant }) {
   return (
     <>
+      {/* Global darkening scrim — ~8%. The glass panels are translucent over the
+          backdrop, so darkening behind them reads as slightly darker / less
+          see-through glass across the whole app, in one place. Sits below the
+          grid so the grid stays visible; behind all content so text is untouched. */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+        style={{ background: 'rgba(2,6,16,0.08)' }}
+      />
       {/* The 48px grid — on EVERY variant. This is the layer that makes a screen
           read as part of Nexus, so it must not stop at the home screen. It fades
           out down the page, so long content-heavy screens (Ops Hub, Work Orders)

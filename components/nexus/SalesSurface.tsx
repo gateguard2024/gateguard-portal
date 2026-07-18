@@ -49,9 +49,8 @@ const GROUPS: SalesGroup[] = [
   {
     id: 'opportunities', title: 'Opportunities', subtitle: 'The deals you are actively working.', hex: '#007CFF', glyph: 'pipeline',
     items: [
-      { title: 'Work Opportunities', subtitle: 'See and work all your open deals in one list.', glyph: 'pipeline', panel: 'opps-workbench' },
       { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
-      { title: 'Existing Opportunity', subtitle: 'Pick a deal you own or can see, and work it.', glyph: 'pipeline', panel: 'existing-opp' },
+      { title: 'Existing Opportunities', subtitle: 'Browse and work the deals you own or can see.', glyph: 'pipeline', panel: 'existing-opp' },
       { title: 'Site Surveys', subtitle: 'Open a deal and capture its site survey.', glyph: 'research', stageJump: 1 },
       { title: 'Rough Calculator', subtitle: 'Quick monthly pricing from gates, doors, cameras, and units.', glyph: 'quote', panel: 'rough-calc' },
     ],

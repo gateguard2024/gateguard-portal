@@ -15,7 +15,7 @@ export function NexusActionCard({
   hex,
   glyph,
   badge,
-  actionLabel = 'Open →',
+  actionLabel = 'Open',
   onClick,
   disabled = false,
 }: {
@@ -29,6 +29,10 @@ export function NexusActionCard({
   disabled?: boolean
 }) {
   const color = rgb(hex)
+  // The whole card is the button, so the footer is an AFFORDANCE HINT, not a
+  // second tappable pill. Strip any trailing arrow from a passed label so we
+  // don't double it — the arrow is rendered separately and slides on hover.
+  const label = actionLabel.replace(/\s*[→>]\s*$/, '').trim() || 'Open'
   return (
     <button
       type="button"
@@ -51,7 +55,15 @@ export function NexusActionCard({
       <NexusGlyphTile kind={glyph} color={hex} />
       <div className="text-lg font-bold leading-tight" style={{ color: '#ffffff' }}>{title}</div>
       <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{subtitle}</div>
-      <div className="mt-auto pt-4 self-center text-center rounded-full px-3.5 py-1.5 text-[13px] font-semibold opacity-95 transition-opacity group-hover:opacity-100" style={{ background: `rgba(${color},0.20)`, border: `1px solid rgba(${color},0.45)`, color: '#ffffff', boxShadow: `0 0 14px rgba(${color},0.22)` }}>{actionLabel}</div>
+      {/* Link-style affordance, not a boxed pill. A thin accent divider, the
+          label in the card's accent colour, and an arrow that slides right on
+          hover — reads as "this whole card opens", not "click this little box". */}
+      <div className="mt-auto pt-3" style={{ borderTop: `1px solid rgba(${color},0.18)` }}>
+        <div className="flex items-center gap-1.5 pt-2.5 text-[13px] font-semibold" style={{ color: `rgba(${color},0.95)` }}>
+          <span>{label}</span>
+          <span className="transition-transform duration-200 ease-out group-hover:translate-x-1" aria-hidden="true">→</span>
+        </div>
+      </div>
     </button>
   )
 }
