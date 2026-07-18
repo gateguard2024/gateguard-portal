@@ -40,6 +40,66 @@ export async function GET() {
 
 const EDITABLE = ['floor_price', 'target_price', 'base_price', 'status', 'quotable', 'dealer_visible', 'notes'] as const
 
+// POST /api/admin/pricing — corporate adds a NEW line item to the catalog.
+// Body: { name, bucket, category, billing_type, unit_label, floor_price?, target_price?, status?, notes?, item_code? }
+export async function POST(req: NextRequest) {
+  const caller = await getCurrentUser()
+  if (!caller.isCorporate || caller.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  let body: any
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+  const { name, bucket, category, billing_type, unit_label, floor_price, target_price, status, notes, item_code } = body ?? {}
+  if (!name?.trim() || !['A', 'B', 'C'].includes(bucket) || !billing_type) {
+    return NextResponse.json({ error: 'name, bucket (A|B|C), and billing_type are required' }, { status: 400 })
+  }
+  if (floor_price != null && target_price != null && Number(floor_price) > Number(target_price)) {
+    return NextResponse.json({ error: 'floor cannot exceed target' }, { status: 400 })
+  }
+  const st = ['approved', 'for_review', 'open'].includes(status) ? status : 'for_review'
+  const code = (item_code?.trim() || `CUSTOM.${name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 40)}`)
+
+  const { data, error } = await supabase
+    .from('service_catalog')
+    .insert({
+      item_code: code,
+      name: name.trim(),
+      provider: 'GateGuard',
+      category: category || 'other',
+      billing_type,
+      unit_label: unit_label || 'unit',
+      base_price: target_price ?? 0,
+      floor_price: floor_price ?? null,
+      target_price: target_price ?? null,
+      bucket,
+      status: st,
+      quotable: st !== 'open',
+      dealer_visible: true,
+      is_gateguard_program: true,
+      requires_enrollment: false,
+      contract_months: 60,
+      notes: notes ?? null,
+      sort_order: 500,
+    })
+    .select()
+    .single()
+  if (error) {
+    const msg = error.message.includes('duplicate') ? `Item code "${code}" already exists — pick a different code.` : error.message
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+  const { error: logErr } = await supabase.from('catalog_pricing_log').insert({
+    item_code: code,
+    changed_by: caller.name,
+    changes: { created: true, name: data.name, bucket, floor_price, target_price, status: st },
+  })
+  if (logErr) console.error('pricing log write failed:', logErr.message)
+  return NextResponse.json({ ok: true, item: data }, { status: 201 })
+}
+
 export async function PATCH(req: NextRequest) {
   const caller = await getCurrentUser()
   if (!caller.isCorporate || caller.role !== 'admin') {
