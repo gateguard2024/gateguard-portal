@@ -11,6 +11,7 @@ import {
   ChevronLeft, Trash2, RefreshCw, MapPin,
 } from "lucide-react";
 import { TrackerBoard } from "@/components/tracker/TrackerBoard";
+import EmailsPanel from "@/components/crm/EmailsPanel";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CalendarClock, StickyNote, Pencil, AlertCircle, Edit2, CheckSquare, Square } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
@@ -25,7 +26,7 @@ type Stage =
   | "lost";
 
 type ActivityType = "call" | "email" | "meeting" | "task" | "note";
-type Tab = "details" | "activity" | "documents" | "tasks";
+type Tab = "details" | "activity" | "emails" | "documents" | "tasks";
 
 interface Contact {
   id: string;
@@ -1251,7 +1252,7 @@ export default function OpportunityDetailPage() {
         <div className="col-span-2 space-y-5">
           {/* Tab Bar */}
           <div className="flex items-center gap-1 border-b border-border">
-            {(["details", "activity", "documents", "tasks"] as Tab[]).map((tab) => {
+            {(["details", "activity", "emails", "documents", "tasks"] as Tab[]).map((tab) => {
               const needsSig = tab === "documents" ? docSigs.filter(s => s.status === 'counterparty_signed').length : 0;
               return (
                 <button
@@ -1264,7 +1265,7 @@ export default function OpportunityDetailPage() {
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {tab === "activity" ? "Activity" : tab === "documents" ? "Documents" : tab === "tasks" ? "Tasks" : "Details"}
+                  {tab === "activity" ? "Activity" : tab === "emails" ? "Emails" : tab === "documents" ? "Documents" : tab === "tasks" ? "Tasks" : "Details"}
                   {needsSig > 0 && (
                     <span className="bg-amber-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{needsSig}</span>
                   )}
@@ -1774,6 +1775,14 @@ export default function OpportunityDetailPage() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* ── EMAILS TAB ── */}
+          {activeTab === "emails" && id && (
+            <EmailsPanel
+              opportunityId={id}
+              defaultTo={opp.site_contact_email ?? undefined}
+            />
           )}
 
           {/* ── TASKS TAB ── */}

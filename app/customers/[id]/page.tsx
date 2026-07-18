@@ -12,6 +12,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
 import { QuickActions } from "@/components/shared/QuickActions";
+import CustomerEmailsCard from "@/components/crm/CustomerEmailsCard";
 
 type OrgTier =
   | "corporate" | "master_agent" | "master_dealer"
@@ -795,6 +796,9 @@ export default function CustomerDetailPage() {
             </div>
           )}
         </div>
+
+        {/* ── Emails (auto-matched via contact addresses) ─────────────────────── */}
+        {id && <CustomerEmailsCard orgId={id} />}
 
         {/* ── Attachments ─────────────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-xl p-5">

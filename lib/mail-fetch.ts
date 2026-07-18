@@ -4,13 +4,16 @@
 // Currently implements Gmail (REST API + stored OAuth refresh token). IMAP for
 // generic SMTP mailboxes is a future addition — SMTP connectors are send-only today.
 //
-// fetchGmailInbox() pulls recent INBOX messages, dedupes by Gmail message id,
-// groups them into message_threads by Gmail threadId, inserts inbound rows, and
-// recomputes each touched thread's last_message_at + unread_count (so it works
-// whether or not the 095 thread triggers are present).
+// fetchGmailInbox() pulls recent INBOX **and SENT** messages, dedupes by Gmail
+// message id, groups them into message_threads by Gmail threadId, inserts rows
+// with the correct direction, and recomputes each touched thread's
+// last_message_at + unread_count (so it works whether or not the 095 thread
+// triggers are present). After each sync it runs the CRM auto-matcher so new
+// conversations attach themselves to opportunities/customers (lib/email-match).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getGmailAccessToken } from './mail-send'
+import { autoLinkThread } from './email-match'
 
 interface GmailHeader { name: string; value: string }
 interface GmailPart { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] }
@@ -24,6 +27,14 @@ function parseAddress(raw: string): { name: string; address: string } {
   const m = raw.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/)
   if (m) return { name: m[1].trim(), address: m[2].trim() }
   return { name: '', address: raw.trim() }
+}
+
+// Parse a full To/Cc header ("A <a@x>, b@y, ...") into address objects.
+function parseAddressList(raw: string): { name: string; address: string }[] {
+  if (!raw.trim()) return []
+  // Split on commas that are not inside quoted display names.
+  const parts = raw.match(/(?:[^,"]|"[^"]*")+/g) ?? []
+  return parts.map((p) => parseAddress(p)).filter((p) => p.address.includes('@'))
 }
 
 // Recursively pull the best text body out of a Gmail payload.
@@ -75,8 +86,10 @@ export async function fetchGmailInbox(
   const { token, error } = await getGmailAccessToken(channel.oauth_refresh_token)
   if (!token) return { fetched: 0, error: error ?? 'no Gmail access token' }
 
-  const q = encodeURIComponent(opts.query ?? 'in:inbox newer_than:7d')
-  const max = opts.maxResults ?? 20
+  // Inbox AND sent — sent mail must sync so it can auto-attach to CRM records.
+  const q = encodeURIComponent(opts.query ?? '(in:inbox OR in:sent) newer_than:7d')
+  const max = opts.maxResults ?? 40
+  const selfAddress: string = (channel.config?.from_address ?? '').toLowerCase()
 
   // 1) List recent message ids.
   let ids: { id: string; threadId: string }[] = []
@@ -105,6 +118,7 @@ export async function fetchGmailInbox(
   if (toFetch.length === 0) return { fetched: 0 }
 
   const touchedThreads = new Set<string>()
+  const threadAddrs = new Map<string, Set<string>>() // dbThreadId → all non-self addresses seen
   let fetched = 0
 
   // 3) Fetch + store each new message.
@@ -117,12 +131,17 @@ export async function fetchGmailInbox(
       if (!msgRes.ok) continue
       const msg = (await msgRes.json()) as {
         threadId: string
+        labelIds?: string[]
         snippet?: string
         internalDate?: string
         payload?: { headers?: GmailHeader[] } & GmailPart
       }
       const headers = msg.payload?.headers ?? []
       const from = parseAddress(headerValue(headers, 'From'))
+      const toList = [
+        ...parseAddressList(headerValue(headers, 'To')),
+        ...parseAddressList(headerValue(headers, 'Cc')),
+      ]
       const subject = headerValue(headers, 'Subject')
       const dateHeader = headerValue(headers, 'Date')
       const receivedAt = msg.internalDate
@@ -133,17 +152,37 @@ export async function fetchGmailInbox(
       const body = extractBody(msg.payload) || msg.snippet || ''
       const bodyHtml = extractHtml(msg.payload)
 
+      // Sent mail syncs too now — direction from Gmail labels (fallback: From = self).
+      const isOutbound =
+        (msg.labelIds ?? []).includes('SENT') ||
+        (!!selfAddress && from.address.toLowerCase() === selfAddress)
+
+      // Every address on the message except our own — participants + CRM matching.
+      const others = [from, ...toList].filter(
+        (p) => p.address && p.address.toLowerCase() !== selfAddress,
+      )
+
       // Find or create the thread for this Gmail conversation.
       const gthread = msg.threadId || threadId
       let dbThreadId: string
       const { data: thread } = await supabase
         .from('message_threads')
-        .select('id')
+        .select('id, participants')
         .eq('channel_id', channel.id)
         .eq('external_thread_id', gthread)
         .maybeSingle()
       if (thread) {
         dbThreadId = thread.id
+        // Union new addresses into the stored participants list.
+        const existing = Array.isArray(thread.participants) ? thread.participants : []
+        const known = new Set(existing.map((p: any) => String(p?.address ?? '').toLowerCase()))
+        const additions = others.filter((p) => !known.has(p.address.toLowerCase()))
+        if (additions.length) {
+          await supabase
+            .from('message_threads')
+            .update({ participants: [...existing, ...additions] })
+            .eq('id', dbThreadId)
+        }
       } else {
         const { data: created, error: cErr } = await supabase
           .from('message_threads')
@@ -153,7 +192,7 @@ export async function fetchGmailInbox(
             channel_id: channel.id,
             external_thread_id: gthread,
             subject: subject || '(no subject)',
-            participants: [{ name: from.name, address: from.address }],
+            participants: others.length ? others : [{ name: from.name, address: from.address }],
             last_message_at: receivedAt,
           })
           .select('id')
@@ -166,18 +205,24 @@ export async function fetchGmailInbox(
         thread_id: dbThreadId,
         channel_id: channel.id,
         external_message_id: id,
-        direction: 'inbound',
+        direction: isOutbound ? 'outbound' : 'inbound',
         source_type: 'gmail',
         from_address: from.address,
         from_name: from.name || null,
-        to_addresses: [{ name: '', address: channel.config?.from_address ?? '' }],
+        to_addresses: toList.length
+          ? toList
+          : [{ name: '', address: channel.config?.from_address ?? '' }],
         subject: subject || null,
         body,
         body_html: bodyHtml || null,
-        status: 'delivered',
+        status: isOutbound ? 'sent' : 'delivered',
+        sent_at: isOutbound ? receivedAt : null,
         created_at: receivedAt,
       })
       touchedThreads.add(dbThreadId)
+      const bag = threadAddrs.get(dbThreadId) ?? new Set<string>()
+      for (const p of others) bag.add(p.address.toLowerCase())
+      threadAddrs.set(dbThreadId, bag)
       fetched++
     } catch {
       /* skip this message, continue */
@@ -197,6 +242,15 @@ export async function fetchGmailInbox(
       .from('message_threads')
       .update({ last_message_at: last, unread_count: unread })
       .eq('id', tid)
+  }
+
+  // 5) Auto-attach touched threads to opportunities/customers by contact email.
+  for (const [tid, addrs] of threadAddrs) {
+    try {
+      await autoLinkThread(supabase, tid, [...addrs], selfAddress)
+    } catch {
+      /* matching is best-effort — never fail the sync */
+    }
   }
 
   await supabase
