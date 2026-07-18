@@ -94,8 +94,7 @@ function NexusMark() {
         </div>
         <p className="uppercase" style={{ letterSpacing: '0.22em', marginTop: 6 }}>
           <span className="text-xs" style={{ color: 'rgba(125,229,255,0.74)' }}>by </span>
-          <span className="text-[13px] font-bold" style={{ color: '#000000' }}>Gate</span>
-          <span className="text-[13px] font-bold" style={{ color: '#FFFFFF' }}> Guard</span>
+          <span className="text-[13px] font-bold" style={{ color: '#FFFFFF' }}>Gate Guard</span>
         </p>
       </div>
     </div>
