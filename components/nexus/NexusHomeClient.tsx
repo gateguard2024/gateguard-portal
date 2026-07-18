@@ -88,11 +88,15 @@ function NexusMark() {
         </svg>
       </div>
       <div className="text-center">
-        <div className="flex items-center justify-center gap-2">
-          <h1 className="text-4xl font-bold uppercase" style={{ color: 'rgba(255,255,255,0.97)', letterSpacing: '0.28em', lineHeight: 1, textShadow: '0 0 20px rgba(0,124,255,0.45)' }}>NEXUS</h1>
-          <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.45)', color: '#7DE5FF', alignSelf: 'flex-start', marginTop: 2 }}>Beta</span>
+        <h1 className="text-4xl font-bold uppercase" style={{ color: 'rgba(255,255,255,0.97)', letterSpacing: '0.28em', lineHeight: 1, textShadow: '0 0 20px rgba(0,124,255,0.45)' }}>NEXUS</h1>
+        <div className="mt-2 flex justify-center">
+          <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.45)', color: '#7DE5FF' }}>Professional</span>
         </div>
-        <p className="text-xs uppercase" style={{ color: 'rgba(125,229,255,0.74)', letterSpacing: '0.22em', marginTop: 4 }}>by Gate Guard</p>
+        <p className="uppercase" style={{ letterSpacing: '0.22em', marginTop: 6 }}>
+          <span className="text-xs" style={{ color: 'rgba(125,229,255,0.74)' }}>by </span>
+          <span className="text-[13px] font-bold" style={{ color: '#000000' }}>Gate</span>
+          <span className="text-[13px] font-bold" style={{ color: '#FFFFFF' }}> Guard</span>
+        </p>
       </div>
     </div>
   )
