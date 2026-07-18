@@ -19,6 +19,7 @@ import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
+import { NexusConsoleRail, type RailItem } from '@/components/nexus/NexusConsoleRail'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -39,6 +40,12 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Catalog', id: 'catalog' },
   { label: 'Systems', id: 'systems' },
 ]
+
+// Right console rail (pop in/out) — SAME destinations as the bottom nav plus
+// Help/Admin. Cosmetic addition only; the mockup's rail items were placeholders.
+const RAIL_ICONS: Record<string, RailItem['icon']> = {
+  'my-day': 'home', opps: 'sales', jobs: 'ops', design: 'design', catalog: 'catalog', systems: 'systems',
+}
 
 const COMMAND_SUGGESTIONS = [
   "What's my next job?",
@@ -190,10 +197,10 @@ export default function NexusHomeClient() {
               onClick={() => void handleQuery(suggestion)}
               className="rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-40"
               style={{
-                background: 'rgba(0,200,255,0.08)',
-                border: '1px solid rgba(0,200,255,0.18)',
-                color: 'rgba(210,245,255,0.86)',
-                boxShadow: '0 0 14px rgba(0,124,255,0.08)',
+                // Neutral chip language (mockup §3) — white-alpha, not cyan.
+                background: 'rgba(255,255,255,0.045)',
+                border: '1px solid rgba(255,255,255,0.13)',
+                color: 'rgba(255,255,255,0.78)',
               }}
             >
               {suggestion}
@@ -223,6 +230,22 @@ export default function NexusHomeClient() {
           })}
         </div>
       </nav>
+
+      {/* Right console rail — pops in/out from the right edge (mockup §6).
+          Same destinations as the bottom nav; no new IA. Desktop only. */}
+      <NexusConsoleRail
+        activeId={activeTab}
+        onSelect={(id) => {
+          if (id === 'help' || id === 'people') { setActiveTab(id as NexusTabId); setNavNonce(n => n + 1); return }
+          setActiveTab(id as NexusTabId)
+          setNavNonce(n => n + 1)
+        }}
+        items={[
+          ...NAV_ITEMS.map(({ label, id }) => ({ id: id as string, label, icon: RAIL_ICONS[id] ?? 'home' })),
+          { id: 'help', label: 'Help', icon: 'help' as const },
+          ...(isAdmin ? [{ id: 'people', label: 'Admin', icon: 'admin' as const }] : []),
+        ]}
+      />
 
       {/* Movable how-to window — floats over any screen (#73) */}
       <HowToWindow />

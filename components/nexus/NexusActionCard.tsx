@@ -9,6 +9,13 @@ function rgb(hex: string): string {
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
 }
 
+export interface NexusCardStat {
+  value: string
+  label: string
+  /** Tint this value in the card's accent colour. Max ONE per card (cosmetic guide §5). */
+  accent?: boolean
+}
+
 export function NexusActionCard({
   title,
   subtitle,
@@ -18,6 +25,7 @@ export function NexusActionCard({
   actionLabel = 'Open',
   onClick,
   disabled = false,
+  stats,
 }: {
   title: string
   subtitle: string
@@ -27,6 +35,8 @@ export function NexusActionCard({
   actionLabel?: string
   onClick?: () => void
   disabled?: boolean
+  /** Optional bottom stat row (value + label pairs separated by hairlines) — July 2026 mockup. */
+  stats?: NexusCardStat[]
 }) {
   const color = rgb(hex)
   // The whole card is the button, so the footer is an AFFORDANCE HINT, not a
@@ -40,9 +50,9 @@ export function NexusActionCard({
       disabled={disabled}
       className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
       style={{
-        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.34), transparent 36%), linear-gradient(145deg, rgba(14,26,46,0.92), rgba(6,14,30,0.86))`,
-        border: `1px solid rgba(${color},0.55)`,
-        boxShadow: `0 0 30px rgba(${color},0.22), 0 22px 58px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.14)`,
+        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.28), transparent 36%), linear-gradient(145deg, rgba(14,26,46,0.92), rgba(6,14,30,0.86))`,
+        border: `1px solid rgba(${color},0.38)`,
+        boxShadow: `0 0 26px rgba(${color},0.16), 0 22px 58px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.12)`,
         backdropFilter: 'blur(20px)',
       }}
     >
@@ -55,6 +65,22 @@ export function NexusActionCard({
       <NexusGlyphTile kind={glyph} color={hex} />
       <div className="text-lg font-bold leading-tight" style={{ color: '#ffffff' }}>{title}</div>
       <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{subtitle}</div>
+      {/* Optional stat row — value + label pairs separated by vertical hairlines,
+          at most one value tinted in the card's accent (mockup §5). */}
+      {stats && stats.length > 0 && (
+        <div className="mt-3 flex items-stretch">
+          {stats.slice(0, 3).map((s, i) => (
+            <div
+              key={s.label}
+              className="flex-1 pr-3"
+              style={i > 0 ? { borderLeft: '1px solid rgba(255,255,255,0.10)', paddingLeft: 12 } : undefined}
+            >
+              <div className="text-[15px] font-bold leading-tight" style={{ color: s.accent ? `rgba(${color},0.95)` : 'rgba(255,255,255,0.94)' }}>{s.value}</div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: 'rgba(255,255,255,0.44)' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Link-style affordance, not a boxed pill. A thin accent divider, the
           label in the card's accent colour, and an arrow that slides right on
           hover — reads as "this whole card opens", not "click this little box". */}

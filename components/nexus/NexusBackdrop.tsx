@@ -59,6 +59,39 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
           maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.28) 62%, transparent)',
         }}
       />
+      {/* Constellation mesh — hero only (July 2026 mockup, §1 of
+          docs/nexus/COSMETIC_GUIDE_2026-07_MOCKUP.md). Fixed node positions —
+          NEVER Math.random() here (SSR mismatch + the PIPELINE_PARTICLES lesson).
+          Strokes sit at ~0.06 alpha so text contrast is untouched. */}
+      {variant === 'hero' && (
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden="true"
+          preserveAspectRatio="xMidYMin slice"
+          viewBox="0 0 1440 900"
+        >
+          <g stroke="rgba(0,200,255,0.06)" strokeWidth="1" fill="none">
+            <path d="M60 80 L220 40 L390 110 L300 250 L60 80" />
+            <path d="M220 40 L300 250 L120 330 L60 80" />
+            <path d="M390 110 L560 60 L640 200 L300 250" />
+            <path d="M1380 90 L1220 50 L1080 130 L1180 270 L1380 90" />
+            <path d="M1220 50 L1180 270 L1340 330" />
+            <path d="M1080 130 L900 70 L840 210 L1180 270" />
+            <path d="M120 330 L260 480 L90 560" />
+            <path d="M1340 330 L1200 500 L1370 590" />
+            <path d="M640 200 L720 90 L840 210" />
+          </g>
+          <g fill="rgba(0,200,255,0.16)">
+            {[
+              [60, 80], [220, 40], [390, 110], [300, 250], [120, 330], [560, 60],
+              [640, 200], [720, 90], [840, 210], [900, 70], [1080, 130], [1220, 50],
+              [1180, 270], [1380, 90], [1340, 330], [260, 480], [90, 560], [1200, 500], [1370, 590],
+            ].map(([x, y]) => (
+              <circle key={`${x}-${y}`} cx={x} cy={y} r="2" />
+            ))}
+          </g>
+        </svg>
+      )}
       {/* Centre glow — hero only. It's an 860x360 ellipse positioned behind the
           home logo; on a data page it just reads as a smudge. */}
       {variant === 'hero' && (
