@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { ContactsCard } from '@/components/nexus/ContactsCard'
-import { ActivityTimeline } from '@/components/nexus/ActivityTimeline'
 import { normalizeStage } from '@/lib/pipeline'
 
 const cyan = '#00C8FF'
@@ -60,6 +59,12 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId])
   useEffect(() => { void loadData() }, [loadData])
+
+  // onSaved for the activity composer: reload the opportunity payload so a
+  // freshly-posted note/call/email appears in the Activity timeline card.
+  const refreshAfterSave = useCallback(async () => {
+    await loadData()
+  }, [loadData])
 
   // Mark the deal lost — mirrors how leads are closed out (stage='lost' + reason).
   const [markingLost, setMarkingLost] = useState(false)
@@ -175,7 +180,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
           })}
         </div>
 
-        {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={loadData} />}
+        {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={refreshAfterSave} />}
         {stage === 1 && <Survey opportunityId={opportunityId} opp={opp} />}
         {stage === 2 && <Financials opp={opp} opportunityId={opportunityId} />}
         {stage === 3 && <Proposal opp={opp} opportunityId={opportunityId} onSaved={loadData} />}
@@ -189,8 +194,10 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
           <button onClick={() => stage === STAGES.length - 1 ? onClose?.() : goToStage(Math.min(STAGES.length - 1, stage + 1))} style={btn}>{stage === STAGES.length - 1 ? 'Done' : `Next: ${STAGES[stage + 1]} →`}</button>
         </div>
 
-        {/* Unified activity timeline — always visible for this deal */}
-        {opportunityId && <div style={{ marginTop: 24 }}><ActivityTimeline entity="opportunity" id={opportunityId} title="Deal activity" /></div>}
+        {/* The separate "Deal activity" feed was removed — the Overview's own
+            "Activity timeline" card (composer + list) shows the same notes/calls/
+            emails/meetings, so this was a duplicate that only added a second,
+            often-blank panel. One feed, one place to add. */}
       </div>
     </div>
   )
@@ -304,7 +311,14 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           setActMsg({ text: j?.error || `Could not save this ${actType} (${res.status}).`, error: true })
           return
         }
-        if (actType === 'meeting' && actWhen) setActMsg({ text: 'Meeting scheduled — added to the calendar.', error: false })
+        // Confirm EVERY type, not just meetings — a note/call previously saved
+        // with zero feedback, so it looked like nothing happened.
+        setActMsg({
+          text: actType === 'meeting' && actWhen
+            ? 'Meeting scheduled — added to the calendar.'
+            : `${actType[0].toUpperCase()}${actType.slice(1)} added to the timeline.`,
+          error: false,
+        })
       }
       setActSubject(''); setActBody(''); setActWhen('')
       onSaved?.()
@@ -312,15 +326,26 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   }
   // Quick note (its own box) → posts a note activity so notes stack in the timeline.
   const [noteText, setNoteText] = useState('')
+  const [noteErr, setNoteErr] = useState<string | null>(null)
   async function saveNote() {
     if (!opportunityId || !noteText.trim()) return
-    setPosting(true)
+    setPosting(true); setNoteErr(null)
     try {
-      await fetch('/api/crm/activities', {
+      // Subject is the date, not the literal word "Note" — the list already
+      // prefixes the type, so subject 'Note' rendered as "Note · Note". Now it
+      // reads "Note · 7/18/2026".
+      const res = await fetch('/api/crm/activities', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'note', subject: 'Note', body: noteText.trim(), opportunity_id: opportunityId }),
+        body: JSON.stringify({ type: 'note', subject: new Date().toLocaleDateString(), body: noteText.trim(), opportunity_id: opportunityId }),
       })
-      setNoteText(''); onSaved?.()
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setNoteErr(j?.error || `Could not save the note (${res.status}).`)
+        return
+      }
+      setNoteText(''); onSaved?.()   // onSaved = refreshAfterSave → timeline refetches
+    } catch (e) {
+      setNoteErr(e instanceof Error ? e.message : 'Could not save the note.')
     } finally { setPosting(false) }
   }
 
@@ -361,20 +386,53 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
     onSaved?.()
   }
 
-  // Quick task → real todo linked to this opportunity (self-assigned → my tasks + calendar).
+  // Quick task → real todo linked to this opportunity. Defaults to self, but can
+  // be assigned to a teammate.
   const [taskTitle, setTaskTitle] = useState('')
   const [taskBody, setTaskBody] = useState('')
   const [taskDue, setTaskDue] = useState('')
   const [taskOpen, setTaskOpen] = useState(false)   // expand to add details
+  const [taskErr, setTaskErr] = useState<string | null>(null)
+  // Teammate picker — '' means "assign to me". Loaded from the org's user list.
+  const [taskAssignee, setTaskAssignee] = useState('')
+  const [teammates, setTeammates] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    let live = true
+    // Same endpoint TrackerBoard uses. If the caller isn't privileged enough to
+    // list users (403), the picker just stays hidden and tasks self-assign — no
+    // error, graceful fallback.
+    void fetch('/api/admin/users').then(r => r.ok ? r.json() : null).then(d => {
+      if (!live || !d?.users) return
+      const list = (d.users as Array<Record<string, unknown>>)
+        .map(u => ({ id: String(u.clerk_user_id ?? u.id ?? ''), name: String(u.full_name ?? u.name ?? u.email ?? 'User') }))
+        .filter(u => u.id)
+      setTeammates(list)
+    }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
   async function addTask() {
     if (!opportunityId || !taskTitle.trim()) return
-    setPosting(true)
+    setPosting(true); setTaskErr(null)
     try {
-      await fetch('/api/todos', {
+      const chosen = taskAssignee ? teammates.find(t => t.id === taskAssignee) : null
+      const res = await fetch('/api/todos', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: taskTitle.trim(), body: taskBody || null, due_date: taskDue || null, linked_type: 'opportunity', linked_id: opportunityId, linked_label: 'Opportunity' }),
+        body: JSON.stringify({
+          title: taskTitle.trim(), body: taskBody || null, due_date: taskDue || null,
+          linked_type: 'opportunity', linked_id: opportunityId, linked_label: 'Opportunity',
+          // Only send an assignee when a teammate is picked; the API defaults to self.
+          ...(chosen ? { assigned_to: chosen.id, assigned_to_name: chosen.name } : {}),
+        }),
       })
-      setTaskTitle(''); setTaskBody(''); setTaskDue(''); setTaskOpen(false); onSaved?.()
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setTaskErr(j?.error || `Could not add the task (${res.status}).`)
+        return
+      }
+      setTaskTitle(''); setTaskBody(''); setTaskDue(''); setTaskOpen(false); setTaskAssignee(''); onSaved?.()
+    } catch (e) {
+      setTaskErr(e instanceof Error ? e.message : 'Could not add the task.')
     } finally { setPosting(false) }
   }
   async function toggleTask(id: string, done: boolean) {
@@ -455,6 +513,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <H>Notes</H>
         <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note…" style={{ ...inputStyle, minHeight: 70 }} />
         <button onClick={saveNote} disabled={posting || !noteText.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !noteText.trim() ? 0.5 : 1 }}>Save note</button>
+        {noteErr && <Sub><span style={{ color: '#fca5a5' }}>{noteErr}</span></Sub>}
         <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
 
@@ -482,12 +541,24 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         )}
         <input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="New task…" style={{ ...inputStyle, marginBottom: 8 }} />
         {taskOpen && <textarea value={taskBody} onChange={e => setTaskBody(e.target.value)} placeholder="Details (optional)…" style={{ ...inputStyle, minHeight: 56, marginBottom: 8 }} />}
+        {/* Assign-to teammate picker. Only shown when the org's user list loaded;
+            otherwise the task self-assigns as before. */}
+        {teammates.length > 0 && (
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Assign to</div>
+            <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)} style={{ ...inputStyle }}>
+              <option value="" style={{ background: '#0b1424' }}>Me</option>
+              {teammates.map(t => <option key={t.id} value={t.id} style={{ background: '#0b1424' }}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
           {!taskOpen && <button onClick={() => setTaskOpen(true)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)' }}>+ Details</button>}
           <button onClick={addTask} disabled={posting || !taskTitle.trim()} style={{ ...btn, opacity: posting || !taskTitle.trim() ? 0.5 : 1 }}>Add task</button>
         </div>
-        <Sub>Tasks save to your own tasks &amp; calendar.</Sub>
+        {taskErr && <Sub><span style={{ color: '#fca5a5' }}>{taskErr}</span></Sub>}
+        <Sub>{teammates.length > 0 ? 'Assign to yourself or a teammate — it lands on their tasks & calendar.' : 'Tasks save to your own tasks & calendar.'}</Sub>
       </Card>
 
       {/* Activity timeline — full width, the home for notes/calls/emails/meetings */}

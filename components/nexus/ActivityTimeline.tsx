@@ -31,7 +31,12 @@ function timeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString()
 }
 
-export function ActivityTimeline({ entity, id, limit = 40, title = 'Activity' }: { entity: 'opportunity' | 'site' | 'lead'; id?: string; limit?: number; title?: string }) {
+// `reloadKey` — bump it from the parent to force a refetch. This is a
+// self-fetching component keyed only on entity/id/limit, so when you post a new
+// note or call right next to it, nothing here changed and the feed never
+// updated — the activity WAS saved, it just never showed, which reads as
+// "can't add activity." Pass a counter that increments on each save.
+export function ActivityTimeline({ entity, id, limit = 40, title = 'Activity', reloadKey = 0 }: { entity: 'opportunity' | 'site' | 'lead'; id?: string; limit?: number; title?: string; reloadKey?: number }) {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -43,7 +48,7 @@ export function ActivityTimeline({ entity, id, limit = 40, title = 'Activity' }:
       .then(r => r.json()).then(j => { if (live) setItems(j.items ?? []) })
       .catch(() => {}).finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [entity, id, limit])
+  }, [entity, id, limit, reloadKey])
 
   const card = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 18 } as const
   const sub = { fontSize: 12.5, color: 'rgba(255,255,255,0.5)' } as const
