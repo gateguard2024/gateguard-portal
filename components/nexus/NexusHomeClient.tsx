@@ -189,7 +189,9 @@ export default function NexusHomeClient() {
       <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
         <NexusMark />
         <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
-        <div className="w-full max-w-3xl rounded-[1.35rem]" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
+        {/* Wrapper width/radius must MATCH ActionCommandBar's own box (max-w-2xl,
+            rounded-2xl) — a wider wrapper draws the glow ring past the bar. */}
+        <div className="w-full max-w-2xl rounded-2xl" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
           <ActionCommandBar onSubmit={handleQuery} isLoading={isLoading} />
         </div>
         <div className="mt-3 flex w-full max-w-3xl flex-wrap justify-center gap-2">
