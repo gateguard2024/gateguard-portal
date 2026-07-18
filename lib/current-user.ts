@@ -137,9 +137,16 @@ export async function getCurrentUser(): Promise<PortalUser> {
         : false
 
     // Who can see invoice amounts, billing, commission details:
+    //
+    // Tier AND role — same shape as canViewSensitive above. This used to end in
+    // a standalone `|| ['admin','supervisor'].includes(role)`, which is
+    // orthogonal to the hierarchy: a client- or sales_partner-tier user whose
+    // Clerk role happened to be 'admin' or 'supervisor' got financials for
+    // their org. Role qualifies a tier; it must never grant one.
     const canViewFinancials =
-      isCorporate || isMasterAgent || isMasterDealer || isFullDealer ||
-      ['admin', 'supervisor'].includes(role)
+      isCorporate || isMasterAgent || isMasterDealer || isFullDealer
+        ? ['admin', 'supervisor', 'agent', 'dealer'].includes(role)
+        : false
 
     return {
       id, name, initials, email,

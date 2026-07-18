@@ -222,8 +222,10 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [newTask,  setNewTask]  = useState('')
   const [saving,   setSaving]   = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   useEffect(() => {
+    // status is a comma list; the API must split it (see /api/todos GET).
     fetch('/api/todos?limit=20&status=open,in_progress')
       .then(r => r.json())
       .then(d => {
@@ -244,20 +246,27 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
 
   async function handleAddTask() {
     if (!newTask.trim() || saving) return
-    setSaving(true)
+    setSaving(true); setAddError(null)
     try {
       const res  = await fetch('/api/todos', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ title: newTask.trim(), status: 'open', priority: 'medium' }),
+        // 'normal', NOT 'medium'. todos.priority has a CHECK constraint allowing
+        // only ('high','normal','low') — migration 023. Sending 'medium' made
+        // Postgres reject every single add. (work_orders.priority DOES allow
+        // 'medium', which is where the wrong value was copied from.)
+        body:    JSON.stringify({ title: newTask.trim(), status: 'open', priority: 'normal' }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      // Was: no res.ok check, and setNewTask('') ran regardless — so a 100%
+      // failure looked exactly like success. Input cleared, task never saved.
+      if (!res.ok) { setAddError(data?.error || `Could not add that task (${res.status}).`); return }
       const t = data.todo ?? data
-      if (t?.id) {
-        const scored = { ...t, ai_score: computeScore(t) }
-        setTodos(prev => [scored, ...prev])
-      }
+      if (!t?.id) { setAddError('Could not add that task — nothing came back.'); return }
+      setTodos(prev => [{ ...t, ai_score: computeScore(t) }, ...prev])
       setNewTask('')
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'Could not add that task.')
     } finally { setSaving(false) }
   }
 
@@ -383,6 +392,12 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
             </button>
           )}
         </div>
+
+        {addError && (
+          <div className="rounded-lg px-2.5 py-1.5 text-[10px]" style={{ background: 'rgba(248,113,113,0.12)', border: '0.5px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>
+            {addError}
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-0.5" style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
           <span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>

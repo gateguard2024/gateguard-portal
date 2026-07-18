@@ -155,8 +155,13 @@ export function InternalSurface() {
         </InternalDetailShell>
       )}
 
+      {/* "Open Platform Users" (→ /admin/users) was removed from the actions:
+          that legacy page cannot create a corporate user (no org picker, no
+          corporate option) and left invitees scope-less. The "+ Add Person"
+          glass wizard in the board below is the correct path — it stamps
+          org_tier and sends the Clerk invite. */}
       {activePanel === 'users-features' && (
-        <InternalDetailShell title="Users & Features" subtitle="Users, roles, feature flags, permissions, and platform setup." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Platform Users" onClick={() => router.push('/admin/users')} /><ActionButton label="Open Feature Settings" onClick={() => router.push('/admin/settings/features')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
+        <InternalDetailShell title="Users & Features" subtitle="Users, roles, feature flags, permissions, and platform setup." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Feature Settings" onClick={() => router.push('/admin/settings/features')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
           <InternalUsersFeaturesBoard />
         </InternalDetailShell>
       )}

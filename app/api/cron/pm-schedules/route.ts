@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
   }
 
   let generated = 0
+  // Schedules whose WO was created but whose next_due_at failed to advance.
+  const stalled: string[] = []
 
   for (const schedule of schedules) {
     // 2. Fetch site name for the work order customer_name field
@@ -79,21 +81,30 @@ export async function GET(req: NextRequest) {
     const nextDue = new Date(schedule.next_due_at)
     nextDue.setDate(nextDue.getDate() + schedule.interval_days)
 
-    void (async () => {
-      try {
-        await supabase
-          .from('pm_schedules')
-          .update({
-            last_generated_at: now,
-            next_due_at:       nextDue.toISOString(),
-            updated_at:        now,
-          })
-          .eq('id', schedule.id)
-      } catch (_) { /* non-blocking */ }
-    })()
+    // Awaited. Detached, this could lose the race with response teardown and
+    // leave next_due_at unchanged — so the next cron run regenerated the SAME
+    // PM work order, every day, forever. Duplicates compound silently.
+    const { error: advErr } = await supabase
+      .from('pm_schedules')
+      .update({
+        last_generated_at: now,
+        next_due_at:       nextDue.toISOString(),
+        updated_at:        now,
+      })
+      .eq('id', schedule.id)
+
+    if (advErr) {
+      // The WO was created but the schedule didn't move — surface it, because the
+      // consequence is a duplicate PM work order on tomorrow's run.
+      console.error(`[cron/pm-schedules] WO created but schedule ${schedule.id} did not advance:`, advErr.message)
+      stalled.push(schedule.id)
+      continue
+    }
 
     generated++
   }
 
-  return NextResponse.json({ generated })
+  // Report stalled schedules — a cron that quietly returns { generated: n } while
+  // seeding duplicates is exactly the kind of silent failure we keep paying for.
+  return NextResponse.json(stalled.length ? { generated, stalled } : { generated })
 }

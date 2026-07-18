@@ -166,10 +166,17 @@ export async function POST(req: NextRequest) {
       .insert(items)
 
     if (liError) {
-      // Roll back invoice
-      void (async () => {
-        try { await supabase.from('invoices').delete().eq('id', invoice.id) } catch (_) { /* noop */ }
-      })()
+      // Roll back the invoice. This MUST be awaited: it was detached, and the
+      // 500 immediately below made teardown instant — so the "rollback" never
+      // ran and left an orphan invoice with no line items sitting in the list,
+      // even though the user was told creation failed.
+      const { error: rbErr } = await supabase.from('invoices').delete().eq('id', invoice.id)
+      if (rbErr) {
+        return NextResponse.json(
+          { error: `Could not save the line items (${liError.message}), and invoice ${invoice.invoice_number ?? invoice.id} could not be cleaned up. Please delete it manually.` },
+          { status: 500 }
+        )
+      }
       return NextResponse.json({ error: liError.message }, { status: 500 })
     }
   }
@@ -185,20 +192,27 @@ export async function POST(req: NextRequest) {
     if (site?.master_dealer_id && total > 0) {
       // Default dealer commission: 10% of invoice total (configurable per org in future)
       const defaultRate = 10
-      void (async () => {
-        try {
-          await supabase.from('commission_payouts').insert({
-            org_id:      site.master_dealer_id,
-            invoice_id:  invoice.id,
-            site_id,
-            payout_type: 'dealer',
-            amount:      parseFloat((total * defaultRate / 100).toFixed(2)),
-            rate_percent: defaultRate,
-            status:      'pending',
-            pay_period:  new Date().toISOString().slice(0, 7),
-          })
-        } catch (_) { /* non-blocking */ }
-      })()
+      // Awaited. Detached, this silently skipped the dealer's commission — the
+      // invoice existed but the payout never did, so it never showed up in a
+      // payout run and nobody could tell why.
+      const { error: commErr } = await supabase.from('commission_payouts').insert({
+        org_id:      site.master_dealer_id,
+        invoice_id:  invoice.id,
+        site_id,
+        payout_type: 'dealer',
+        amount:      parseFloat((total * defaultRate / 100).toFixed(2)),
+        rate_percent: defaultRate,
+        status:      'pending',
+        pay_period:  new Date().toISOString().slice(0, 7),
+      })
+      // The invoice itself is valid, so don't fail the request — but say so
+      // rather than pretending the commission exists.
+      if (commErr) {
+        return NextResponse.json(
+          { invoice, warning: `Invoice saved, but the dealer commission could not be created: ${commErr.message}` },
+          { status: 201 }
+        )
+      }
     }
   }
 

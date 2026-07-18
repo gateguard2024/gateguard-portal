@@ -305,19 +305,25 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
     return NextResponse.json({ error: `Save failed: ${coreErr.message}` }, { status: 500 })
   }
 
-  // Try to save extended AI columns — non-fatal if columns don't exist yet
-  void (async () => {
-    try {
-      await supabase
-        .from('surveys')
-        .update({
-          ai_urgent_items:  generated.ai_urgent_items  ?? [],
-          ai_install_notes: generated.ai_install_notes ?? [],
-          updated_at:       new Date().toISOString(),
-        })
-        .eq('id', params.id)
-    } catch (_) { /* columns may not exist — run migration 054 to add them */ }
-  })()
+  // Save the extended AI columns.
+  //
+  // This was detached with a "columns may not exist — run migration 054" excuse.
+  // The excuse was FALSE: ai_urgent_items / ai_install_notes exist in migration
+  // 041 AND 054. So the catch wasn't guarding a missing column, it was hiding a
+  // real error on a write that mostly never ran — the route then returned these
+  // very fields to the client, which rendered them. User saw AI urgent items and
+  // install notes appear, refreshed, and they were gone.
+  const { error: aiErr } = await supabase
+    .from('surveys')
+    .update({
+      ai_urgent_items:  generated.ai_urgent_items  ?? [],
+      ai_install_notes: generated.ai_install_notes ?? [],
+      updated_at:       new Date().toISOString(),
+    })
+    .eq('id', params.id)
+  if (aiErr) {
+    return NextResponse.json({ error: `Generated, but could not save the AI notes: ${aiErr.message}` }, { status: 500 })
+  }
 
   // Return ONLY the AI fields — voice_transcript / notes_raw / devices can be
   // many KB and were causing JSON truncation on Vercel's response pipe.

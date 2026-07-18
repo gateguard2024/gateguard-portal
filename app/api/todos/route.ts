@@ -40,7 +40,14 @@ export async function GET(req: NextRequest) {
       query = query.or(`created_by.eq.${caller.id},assigned_to.eq.${caller.id}`)
     }
 
-    if (status) query = query.eq('status', status)
+    // status accepts a comma list ("open,in_progress"). This was `.eq(status)`,
+    // which searched for the literal string "open,in_progress" — no row has that,
+    // so My Day and the Task Explorer always rendered zero tasks even when tasks
+    // existed. Split it and use .in().
+    if (status) {
+      const wanted = status.split(',').map(s => s.trim()).filter(Boolean)
+      query = wanted.length > 1 ? query.in('status', wanted) : query.eq('status', wanted[0])
+    }
 
     // unscheduled=true → only todos without a due_date
     if (unscheduled) query = query.is('due_date', null)

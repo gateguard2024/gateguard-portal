@@ -108,19 +108,27 @@ export async function POST(req: NextRequest) {
   // 3. QR code URL (Google Charts — reliable, no sign-up needed)
   const qrUrl = `https://chart.googleapis.com/chart?chs=256x256&cht=qr&chl=${encodeURIComponent(pl.url)}&choe=UTF-8`
 
-  // 4. Save to invoices table (non-fatal if table doesn't have payment_link_id col yet)
-  void (async () => {
-    try {
-      await supabase.from('invoices').insert({
-        work_order_id:      work_order_id,
-        invoice_number:     `GG-INV-${Date.now().toString().slice(-6)}`,
-        status:             'sent',
-        total:              amount_cents / 100,
-        stripe_payment_link: pl.url,
-        created_at:         new Date().toISOString(),
-      })
-    } catch (_) { /* non-fatal */ }
-  })()
+  // 4. Save to invoices table.
+  //
+  // This was `void (async () => { ... })()`. In a serverless function that promise
+  // is abandoned the moment the response returns — so the customer could pay a
+  // Stripe link for an invoice that was never recorded. Real money, no paper.
+  // Awaited now; the insert must land BEFORE we hand back the payment URL.
+  const { error: invErr } = await supabase.from('invoices').insert({
+    work_order_id:      work_order_id,
+    invoice_number:     `GG-INV-${Date.now().toString().slice(-6)}`,
+    status:             'sent',
+    total:              amount_cents / 100,
+    stripe_payment_link: pl.url,
+    created_at:         new Date().toISOString(),
+  })
+  if (invErr) {
+    // Do NOT hand out a payment link we can't account for.
+    return NextResponse.json(
+      { error: `Payment link created but the invoice could not be saved, so it was not sent: ${invErr.message}` },
+      { status: 500 }
+    )
+  }
 
   // 5. Fire SMS notification if phone provided
   if (notify_phone) {

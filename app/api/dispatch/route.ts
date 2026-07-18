@@ -180,6 +180,10 @@ export async function POST(req: NextRequest) {
     if (!error) break
     const m = /Could not find the '(\w+)' column|column "?(\w+)"? .* does not exist/.exec(error.message)
     const bad = m?.[1] || m?.[2]
+    // Never strip the scoping column — a work order written with org_id = NULL
+    // is invisible to the dealer who created it (applyOrgScope filters on it)
+    // and would leak into corporate's unfiltered view. Fail loudly instead.
+    if (bad === 'org_id') break
     if ((error.code === 'PGRST204' || error.code === '42703') && bad && bad in row) { delete row[bad]; continue }
     // 23503 = foreign key violation. One bad id sinks the whole row, so drop the
     // *link* rather than the job: the person still gets their work order, just

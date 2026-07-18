@@ -335,10 +335,41 @@ const { Edit2, Pen, RotateCcw, ListChecks } = require('lucide-react') as any
 ```
 
 ### Supabase PromiseLike vs Promise
-Never use `.catch()` directly on Supabase queries. Use:
+
+**⚠️ THIS RULE USED TO BE WRONG AND IT CAUSED REAL DATA LOSS. Read it fully.**
+
+The old advice here was:
 ```typescript
+// ❌ NEVER DO THIS — the write silently never happens
 void (async () => { try { await supabase.from('table').select() } catch (_) {} })()
 ```
+That pattern was applied to ~20 API routes. **In a serverless function the promise is
+abandoned the moment `NextResponse` returns** — Vercel freezes the container, so the
+write only lands if it wins a race against response teardown. The `catch (_) {}` then
+guarantees nobody ever finds out. This is why things "sometimes don't save."
+
+Confirmed damage from this exact pattern: payments collected with no invoice row,
+Gmail OAuth reporting "Connected!" without storing the token, PM schedules never
+advancing (duplicate work orders every day), dealer commissions never created.
+
+**The real problem** is only that a Supabase query builder is a `PromiseLike`, so
+`.catch()` on it isn't a real Promise `.catch()`. **The fix is to destructure the
+error, not to detach the promise:**
+
+```typescript
+// ✅ CORRECT — await it and check the error
+const { data, error } = await supabase.from('table').insert(row).select().single()
+if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+```
+
+Rules:
+1. **Always `await` a write.** No exceptions in a serverless route.
+2. **Always check `error`.** A write whose failure you can't see is worse than no write.
+3. If work genuinely must outlive the response, use **Inngest** (already wired —
+   `inngest/`), not a detached promise.
+4. `void (async () => …)()` is acceptable ONLY for a fire-and-forget **read** where a
+   failure has no consequence. If it touches `.insert`/`.update`/`.delete`/`.upsert`,
+   it is a bug.
 
 ### lib/current-user.ts
 `getCurrentUser()` must extract `const id = user.id` before the return statement.

@@ -80,9 +80,29 @@ async function getDescendantIds(org_id: string): Promise<string[]> {
 }
 
 export async function resolveOrgScope(user: PortalUser): Promise<OrgScope> {
-  // Corporate = see everything
-  if (user.isCorporate || !user.org_id) {
+  // Corporate = see everything. Gate on the TIER only.
+  if (user.isCorporate) {
     return { all: true, ids: [], own_id: user.org_id }
+  }
+
+  // ⚠️ SECURITY — FAIL CLOSED. This used to read:
+  //     if (user.isCorporate || !user.org_id) return { all: true, ... }
+  //
+  // `!user.org_id` meant "no org context" was treated as CORPORATE, i.e. full
+  // cross-tenant read on every route that scopes through resolveOrgScope.
+  // That is backwards, and it was reachable two ways:
+  //   1. ANON_USER — deliberately built to fail closed (org_tier: null,
+  //      isCorporate: false) but it carries org_id: null, so it landed here
+  //      and got { all: true }. The anon user could read every tenant.
+  //   2. Any authenticated-but-unprovisioned user (Clerk publicMetadata.org_id
+  //      missing / not yet onboarded / wiped) — org_tier defaults to null in
+  //      getCurrentUser, so isCorporate is false and org_id is null.
+  //
+  // Corporate users legitimately have org_id === null, but they are already
+  // returned above on isCorporate, so nothing legitimate depends on this branch.
+  // hasOrgContext() below always had this right — match it.
+  if (!user.org_id) {
+    return { all: false, ids: [], own_id: null }
   }
 
   // Master agent: sees their signed dealers' subtree (for commission oversight)

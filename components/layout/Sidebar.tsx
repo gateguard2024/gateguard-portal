@@ -139,7 +139,7 @@ const NAV_SECTIONS: NavSection[] = [
     color: "#7C3AED",
     items: [
       { label: "Dealers",         href: "/admin/dealers",          icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
-      { label: "Platform Users",  href: "/admin/users",            icon: Shield,        description: "Set module permissions per user", badge: "Admin" },
+      { label: "Platform Users",  href: "/?view=admin",            icon: Shield,        description: "Add users, roles & feature access", badge: "Admin" },
       { label: "Feature Settings",href: "/admin/settings/features",icon: Settings,      description: "Global tier defaults + Stripe hooks", badge: "Admin" },
       { label: "ARIA Credits",    href: "/admin/credits",          icon: DollarSign,    description: "Grant and manage ARIA search credits", badge: "Admin" },
       { label: "Compliance",    href: "/compliance",        icon: ShieldCheck,   description: "Permits, certs, expiry alerts" },
@@ -493,14 +493,14 @@ export function Sidebar() {
               <span className="text-[8px] font-semibold leading-tight">Dealers</span>
             </Link>
             <Link
-              href="/admin/users"
+              href="/?view=admin"
               className={cn(
                 "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
                 pathname.startsWith("/admin/users")
                   ? "bg-brand-400/20 text-brand-400"
                   : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
               )}
-              title="Platform Users — Per-user feature access"
+              title="Platform Users — add users, roles & feature access"
             >
               <UserCheck size={13} />
               <span className="text-[8px] font-semibold leading-tight">Users</span>

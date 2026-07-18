@@ -4,6 +4,10 @@ import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 import { STAGE_ORDER, STAGE_LABELS, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
+// Columns the drift-resilient insert retry must NEVER drop. Stripping a scoping
+// column doesn't fail — it silently writes an unscoped/orphaned row.
+const SCOPE_COLUMNS = new Set(['dealer_org_id', 'org_id'])
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -89,14 +93,32 @@ export async function POST(req: NextRequest) {
 
     // Determine org_id:
     // - Corporate, master_agent, master_dealer, full_dealer can pass a body.org_id
-    //   to assign the opportunity to a specific org within their network.
+    //   to assign the opportunity to a specific org WITHIN THEIR OWN NETWORK.
     // - All others always get their own org_id stamped automatically.
     const canChooseOrg =
       user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer
     // dealer_org_id is now nullable (migration 028) — corporate SO users have no org
-    const dealer_org_id = canChooseOrg
-      ? (body.dealer_org_id ?? body.org_id ?? user.org_id ?? null)
+    const requestedOrg = body.dealer_org_id ?? body.org_id ?? null
+    let dealer_org_id = canChooseOrg
+      ? (requestedOrg ?? user.org_id ?? null)
       : (user.org_id ?? null)
+
+    // ⚠️ Validate the requested org is actually in the caller's subtree.
+    // "canChooseOrg" only established that this TIER may target another org —
+    // it never checked WHICH org. A full_dealer could pass any dealer_org_id and
+    // plant an opportunity in a sibling dealer's (or corporate's) pipeline.
+    // Corporate is unrestricted by design; everyone else is capped at their own
+    // subtree, which resolveOrgScope already computes.
+    if (canChooseOrg && !user.isCorporate && requestedOrg && requestedOrg !== user.org_id) {
+      const scope = await resolveOrgScope(user)
+      if (!scope.all && !scope.ids.includes(requestedOrg)) {
+        return NextResponse.json(
+          { error: 'You can only create opportunities for companies in your own network.' },
+          { status: 403 }
+        )
+      }
+      dealer_org_id = requestedOrg
+    }
 
     // Strip any client-supplied fields that don't exist on the table
     const { org_id: _orgId, contact_name: _cn, lead_id, ...safeBody } = body
@@ -150,6 +172,13 @@ export async function POST(req: NextRequest) {
       if (error.code === '42703' || error.code === 'PGRST204') {
         const m = /Could not find the '([a-z_]+)' column/i.exec(error.message) || /column "?([a-z_]+)"?/i.exec(error.message)
         const col = m?.[1]
+        // NEVER strip a scoping column. dealer_org_id is nullable (migration
+        // 028), so dropping it would let the retry SUCCEED and insert an
+        // orphaned row with dealer_org_id = NULL — a 201 to the dealer, and an
+        // opportunity that never appears in their pipeline again, because
+        // applyOrgScope uses .in('dealer_org_id', ids) and SQL IN never matches
+        // NULL. Fail loudly instead of silently orphaning the deal.
+        if (col && SCOPE_COLUMNS.has(col)) break
         if (col && col in insertRow) { delete insertRow[col]; continue }
       }
       break

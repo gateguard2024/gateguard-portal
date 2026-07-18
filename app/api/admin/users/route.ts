@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { normalizeRole } from '@/lib/permissions'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -113,16 +114,37 @@ export async function POST(req: NextRequest) {
   try {
     const caller = await getCurrentUser()
 
+    // AUTH GATE — this route had NONE. Any logged-in user could invite users.
+    // Inviting a portal login is a corporate/admin action.
+    if (!caller.isCorporate && normalizeRole(caller.role) !== 'admin') {
+      return NextResponse.json({ error: 'Only an Admin can invite users.' }, { status: 403 })
+    }
+
     const { email, role, full_name } = await req.json()
     if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
     const client = await clerkClient()
 
-    // Send Clerk invitation
+    // Send Clerk invitation.
+    //
+    // ⚠️ HIERARCHY: this used to stamp only `{ role, invited_by }` — NO org_id,
+    // NO org_tier. A user invited here signed up with no org context, so
+    // resolveOrgScope failed them closed and they saw NOTHING (and could never
+    // be corporate, since this page has no corporate option). We now stamp the
+    // caller's own org context, so an invitee lands at the inviter's level —
+    // a corporate admin inviting here produces a working corporate user.
+    // The preferred path is still the glass "+ Add Person" wizard, which has an
+    // org picker; this is the safety net so the legacy page can't mint a
+    // scope-less user.
     const invitation = await client.invitations.createInvitation({
       emailAddress: email,
       redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'}/sign-up`,
-      publicMetadata: { role: role ?? 'viewer', invited_by: caller.id },
+      publicMetadata: {
+        role: role ?? 'viewer',
+        org_id: caller.org_id ?? null,
+        org_tier: caller.org_tier ?? null,
+        invited_by: caller.id,
+      },
     })
 
     // Pre-create permissions row in Supabase (will be linked when user signs up)
