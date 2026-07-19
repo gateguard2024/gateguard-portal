@@ -25,6 +25,7 @@ interface PricingItem {
   floor_price: number | null
   target_price: number | null
   gg_cost: number | null
+  floor_inputs: FloorInputs | null
   status: 'approved' | 'for_review' | 'open'
   quotable: boolean
   dealer_visible: boolean
@@ -37,6 +38,45 @@ interface PricingSetting {
   key: string
   value: number
   description: string | null
+}
+
+// The floor build-up. Each item uses whichever parts apply; the rest stay blank.
+//   gg_cost     = hardware + labor + platform
+//   floor_price = gg_cost + gg_net + dist + sales + dealer
+interface FloorInputs {
+  hardware_cost?: number | null
+  labor_cost?: number | null
+  platform_cost?: number | null
+  gg_net?: number | null
+  dist?: number | null
+  sales?: number | null
+  dealer?: number | null
+}
+
+function floorFrom(fi: FloorInputs | null): { cost: number; floor: number } {
+  const n = (v: number | null | undefined) => (v == null || isNaN(Number(v)) ? 0 : Number(v))
+  const cost = n(fi?.hardware_cost) + n(fi?.labor_cost) + n(fi?.platform_cost)
+  const floor = cost + n(fi?.gg_net) + n(fi?.dist) + n(fi?.sales) + n(fi?.dealer)
+  return { cost, floor }
+}
+
+function FloorField({ label, value, onChange }: { label: string; value: number | null; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+        <input
+          type="number"
+          min="0"
+          value={value ?? ''}
+          placeholder="—"
+          onChange={e => onChange(e.target.value)}
+          className="w-full rounded-lg border border-border bg-background py-1.5 pl-5 pr-2 text-sm font-semibold outline-none focus:border-[#6B7EFF]"
+        />
+      </div>
+    </label>
+  )
 }
 
 const SECTIONS: Array<{ key: string; title: string; subtitle: string; icon: any }> = [
@@ -248,6 +288,15 @@ export function PricingConsoleBody() {
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<{ ok: boolean; msg: string } | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
 
   const load = useCallback(() => {
     fetch('/api/admin/pricing', { cache: 'no-store' })
@@ -265,6 +314,15 @@ export function PricingConsoleBody() {
     setItems(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)))
     setDirty(prev => new Set(prev).add(id))
   }, [])
+
+  // Edit one component of a line's floor build-up; recompute cost + floor live.
+  const setFloorInput = useCallback((item: PricingItem, key: keyof FloorInputs, raw: string) => {
+    const parsed = raw === '' ? null : Number(raw)
+    const val = parsed == null || isNaN(parsed) ? null : parsed
+    const fi: FloorInputs = { ...(item.floor_inputs || {}), [key]: val }
+    const { cost, floor } = floorFrom(fi)
+    patchItem(item.id, { floor_inputs: fi, gg_cost: cost, floor_price: floor })
+  }, [patchItem])
 
   const patchSetting = useCallback((key: string, value: number) => {
     setSettings(prev => prev.map(s => (s.key === key ? { ...s, value } : s)))
@@ -288,8 +346,8 @@ export function PricingConsoleBody() {
         body: JSON.stringify({
           updates: items
             .filter(i => dirty.has(i.id))
-            .map(({ id, base_price, floor_price, target_price, gg_cost, status, quotable, dealer_visible, notes }) => ({
-              id, base_price, floor_price, target_price, gg_cost, status, quotable, dealer_visible, notes,
+            .map(({ id, base_price, floor_price, target_price, gg_cost, floor_inputs, status, quotable, dealer_visible, notes }) => ({
+              id, base_price, floor_price, target_price, gg_cost, floor_inputs, status, quotable, dealer_visible, notes,
             })),
           settings: settings
             .filter(s => dirtySettings.has(s.key))
@@ -399,6 +457,9 @@ export function PricingConsoleBody() {
                   {rows.map(i => {
                     const isDirty = dirty.has(i.id)
                     const noPrice = i.billing_type === 'case_by_case'
+                    const built = !!i.floor_inputs
+                    const isOpen = expanded.has(i.id)
+                    const fb = floorFrom(i.floor_inputs)
                     const marginAbs = i.target_price != null && i.gg_cost != null ? i.target_price - i.gg_cost : null
                     const marginPct = marginAbs != null && i.target_price ? marginAbs / i.target_price : null
                     const marginCls = marginAbs == null ? 'text-muted-foreground'
@@ -406,8 +467,8 @@ export function PricingConsoleBody() {
                       : marginPct != null && marginPct < 0.25 ? 'text-amber-600'
                       : 'text-emerald-700'
                     return (
+                      <div key={i.id}>
                       <div
-                        key={i.id}
                         className={`grid grid-cols-2 items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/30 lg:grid-cols-[minmax(190px,1.7fr)_84px_78px_78px_78px_96px_104px_58px_minmax(130px,1.1fr)] ${isDirty ? 'bg-[#6B7EFF]/[0.04]' : ''}`}
                       >
                         <div className="col-span-2 lg:col-span-1">
@@ -415,12 +476,24 @@ export function PricingConsoleBody() {
                             {isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />}
                             {i.name}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">{i.item_code ?? i.provider}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground">{i.item_code ?? i.provider}</span>
+                            {!noPrice && (
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(i.id)}
+                                className={`flex items-center gap-0.5 text-[11px] font-semibold hover:underline ${built ? 'text-emerald-600' : 'text-[#6B7EFF]'}`}
+                              >
+                                {built ? 'Floor built' : 'Build floor'}
+                                <ChevronDown size={11} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="whitespace-nowrap rounded-full bg-muted px-2 py-1 text-center text-[11px] font-medium text-muted-foreground">{unitLabel(i)}</div>
-                        <MoneyInput value={i.floor_price} disabled={noPrice} accent="floor" onChange={v => patchItem(i.id, { floor_price: v })} />
+                        <MoneyInput value={i.floor_price} disabled={noPrice || built} accent="floor" onChange={v => patchItem(i.id, { floor_price: v })} />
                         <MoneyInput value={i.target_price} disabled={noPrice} accent="target" onChange={v => patchItem(i.id, { target_price: v, ...(v != null ? { base_price: v } : {}) })} />
-                        <MoneyInput value={i.gg_cost} disabled={noPrice} onChange={v => patchItem(i.id, { gg_cost: v })} />
+                        <MoneyInput value={i.gg_cost} disabled={noPrice || built} onChange={v => patchItem(i.id, { gg_cost: v })} />
                         <div className={`text-sm font-bold leading-tight ${marginCls}`}>
                           {marginAbs == null ? '—' : (
                             <>
@@ -445,6 +518,37 @@ export function PricingConsoleBody() {
                           className="col-span-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-[#6B7EFF] lg:col-span-1"
                           placeholder="internal guidance…"
                         />
+                      </div>
+                      {isOpen && (
+                        <div className="border-t border-dashed border-border bg-muted/20 px-5 py-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Build floor from cost components</div>
+                            {built && (
+                              <button
+                                type="button"
+                                onClick={() => patchItem(i.id, { floor_inputs: null })}
+                                className="text-[11px] font-semibold text-muted-foreground hover:text-red-600"
+                              >
+                                Clear · type floor manually
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-7">
+                            <FloorField label="Hardware" value={i.floor_inputs?.hardware_cost ?? null} onChange={v => setFloorInput(i, 'hardware_cost', v)} />
+                            <FloorField label="Labor / install" value={i.floor_inputs?.labor_cost ?? null} onChange={v => setFloorInput(i, 'labor_cost', v)} />
+                            <FloorField label="Platform / mo" value={i.floor_inputs?.platform_cost ?? null} onChange={v => setFloorInput(i, 'platform_cost', v)} />
+                            <FloorField label="GG net" value={i.floor_inputs?.gg_net ?? null} onChange={v => setFloorInput(i, 'gg_net', v)} />
+                            <FloorField label="Distributor" value={i.floor_inputs?.dist ?? null} onChange={v => setFloorInput(i, 'dist', v)} />
+                            <FloorField label="Sales / rep" value={i.floor_inputs?.sales ?? null} onChange={v => setFloorInput(i, 'sales', v)} />
+                            <FloorField label="Dealer" value={i.floor_inputs?.dealer ?? null} onChange={v => setFloorInput(i, 'dealer', v)} />
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                            <span className="text-muted-foreground">GG Cost <b className="text-foreground">${fb.cost.toLocaleString()}</b></span>
+                            <span className="text-muted-foreground">Floor <b className="text-emerald-700">${fb.floor.toLocaleString()}</b></span>
+                            <span className="text-[11px] text-muted-foreground">= hardware + labor + platform + GG net + distributor + sales + dealer</span>
+                          </div>
+                        </div>
+                      )}
                       </div>
                     )
                   })}

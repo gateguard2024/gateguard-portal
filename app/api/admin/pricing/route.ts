@@ -27,7 +27,7 @@ export async function GET() {
   const [{ data: items, error: iErr }, { data: settings, error: sErr }] = await Promise.all([
     supabase
       .from('service_catalog')
-      .select('id, item_code, name, provider, category, billing_type, unit_label, base_price, floor_price, target_price, gg_cost, bucket, status, quotable, dealer_visible, is_gateguard_program, notes, sort_order, is_active')
+      .select('id, item_code, name, provider, category, billing_type, unit_label, base_price, floor_price, target_price, gg_cost, floor_inputs, bucket, status, quotable, dealer_visible, is_gateguard_program, notes, sort_order, is_active')
       .eq('is_active', true)
       .order('is_gateguard_program', { ascending: false })
       .order('sort_order', { ascending: true }),
@@ -38,7 +38,18 @@ export async function GET() {
   return NextResponse.json({ items: items ?? [], settings: settings ?? [] })
 }
 
-const EDITABLE = ['floor_price', 'target_price', 'gg_cost', 'base_price', 'status', 'quotable', 'dealer_visible', 'notes'] as const
+const EDITABLE = ['floor_price', 'target_price', 'gg_cost', 'floor_inputs', 'base_price', 'status', 'quotable', 'dealer_visible', 'notes'] as const
+
+// The floor build-up: gg_cost = hardware+labor+platform;
+// floor_price = gg_cost + gg_net + dist + sales + dealer. Server is authoritative
+// whenever floor_inputs is present so the stored floor can never drift from its parts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deriveFromFloorInputs(fi: any): { gg_cost: number; floor_price: number } {
+  const n = (v: any) => (v == null || v === '' || isNaN(Number(v)) ? 0 : Number(v))
+  const gg_cost = n(fi.hardware_cost) + n(fi.labor_cost) + n(fi.platform_cost)
+  const floor_price = gg_cost + n(fi.gg_net) + n(fi.dist) + n(fi.sales) + n(fi.dealer)
+  return { gg_cost, floor_price }
+}
 
 // POST /api/admin/pricing — corporate adds a NEW line item to the catalog.
 // Body: { name, bucket, category, billing_type, unit_label, floor_price?, target_price?, status?, notes?, item_code? }
@@ -53,7 +64,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
-  const { name, bucket, category, billing_type, unit_label, floor_price, target_price, gg_cost, status, notes, item_code } = body ?? {}
+  const { name, bucket, category, billing_type, unit_label, floor_price, target_price, gg_cost, floor_inputs, status, notes, item_code } = body ?? {}
+  const derived = floor_inputs && typeof floor_inputs === 'object' ? deriveFromFloorInputs(floor_inputs) : null
   if (!name?.trim() || !['A', 'B', 'C'].includes(bucket) || !billing_type) {
     return NextResponse.json({ error: 'name, bucket (A|B|C), and billing_type are required' }, { status: 400 })
   }
@@ -73,9 +85,10 @@ export async function POST(req: NextRequest) {
       billing_type,
       unit_label: unit_label || 'unit',
       base_price: target_price ?? 0,
-      floor_price: floor_price ?? null,
+      floor_price: derived ? derived.floor_price : (floor_price ?? null),
       target_price: target_price ?? null,
-      gg_cost: gg_cost ?? null,
+      gg_cost: derived ? derived.gg_cost : (gg_cost ?? null),
+      floor_inputs: floor_inputs ?? null,
       bucket,
       status: st,
       quotable: st !== 'open',
@@ -124,6 +137,14 @@ export async function PATCH(req: NextRequest) {
     if (!u?.id) continue
     const patch: Record<string, any> = { updated_at: new Date().toISOString() }
     for (const k of EDITABLE) if (k in u) patch[k] = u[k]
+
+    // Floor build-up is authoritative: if floor_inputs is a live object, the
+    // server recomputes gg_cost + floor_price from it (client values ignored).
+    if (patch.floor_inputs && typeof patch.floor_inputs === 'object') {
+      const d = deriveFromFloorInputs(patch.floor_inputs)
+      patch.gg_cost = d.gg_cost
+      patch.floor_price = d.floor_price
+    }
 
     // Guardrails: an [Open] item can never be quotable; a floor above the
     // target is a data error, not a pricing strategy.
