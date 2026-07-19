@@ -24,6 +24,7 @@ interface PricingItem {
   base_price: number
   floor_price: number | null
   target_price: number | null
+  gg_cost: number | null
   status: 'approved' | 'for_review' | 'open'
   quotable: boolean
   dealer_visible: boolean
@@ -105,7 +106,7 @@ function MoneyInput({
 function AddItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
     name: '', bucket: 'C', category: 'other', billing_type: 'per_unit', unit_label: 'unit',
-    floor_price: '', target_price: '', status: 'for_review', notes: '', item_code: '',
+    floor_price: '', target_price: '', gg_cost: '', status: 'for_review', notes: '', item_code: '',
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -127,6 +128,7 @@ function AddItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           unit_label: form.unit_label,
           floor_price: form.floor_price === '' ? null : Number(form.floor_price),
           target_price: form.target_price === '' ? null : Number(form.target_price),
+          gg_cost: form.gg_cost === '' ? null : Number(form.gg_cost),
           status: form.status,
           notes: form.notes || null,
           item_code: form.item_code || null,
@@ -199,6 +201,10 @@ function AddItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <div>
             <div className={label}>Target $ (sweet spot)</div>
             <input type="number" min="0" className={field} value={form.target_price} onChange={e => set('target_price', e.target.value)} placeholder="should meet or exceed" />
+          </div>
+          <div>
+            <div className={label}>GG Cost $ (COGS)</div>
+            <input type="number" min="0" className={field} value={form.gg_cost} onChange={e => set('gg_cost', e.target.value)} placeholder="what it costs GateGuard" />
           </div>
           <div>
             <div className={label}>Status</div>
@@ -282,8 +288,8 @@ export function PricingConsoleBody() {
         body: JSON.stringify({
           updates: items
             .filter(i => dirty.has(i.id))
-            .map(({ id, base_price, floor_price, target_price, status, quotable, dealer_visible, notes }) => ({
-              id, base_price, floor_price, target_price, status, quotable, dealer_visible, notes,
+            .map(({ id, base_price, floor_price, target_price, gg_cost, status, quotable, dealer_visible, notes }) => ({
+              id, base_price, floor_price, target_price, gg_cost, status, quotable, dealer_visible, notes,
             })),
           settings: settings
             .filter(s => dirtySettings.has(s.key))
@@ -385,18 +391,24 @@ export function PricingConsoleBody() {
                   <div className="ml-auto rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">{rows.length} lines</div>
                 </div>
 
-                <div className="hidden grid-cols-[minmax(220px,2fr)_100px_100px_100px_110px_70px_minmax(160px,1.5fr)] items-center gap-3 border-b border-border bg-muted/30 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:grid">
-                  <div>Line Item</div><div>Billed</div><div>Floor</div><div>Target</div><div>Status</div><div>Quote</div><div>Notes</div>
+                <div className="hidden grid-cols-[minmax(190px,1.7fr)_84px_78px_78px_78px_96px_104px_58px_minmax(130px,1.1fr)] items-center gap-3 border-b border-border bg-muted/30 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:grid">
+                  <div>Line Item</div><div>Billed</div><div>Floor</div><div>Target</div><div>GG Cost</div><div>Margin</div><div>Status</div><div>Quote</div><div>Notes</div>
                 </div>
 
                 <div className="divide-y divide-border">
                   {rows.map(i => {
                     const isDirty = dirty.has(i.id)
                     const noPrice = i.billing_type === 'case_by_case'
+                    const marginAbs = i.target_price != null && i.gg_cost != null ? i.target_price - i.gg_cost : null
+                    const marginPct = marginAbs != null && i.target_price ? marginAbs / i.target_price : null
+                    const marginCls = marginAbs == null ? 'text-muted-foreground'
+                      : marginAbs < 0 ? 'text-red-600'
+                      : marginPct != null && marginPct < 0.25 ? 'text-amber-600'
+                      : 'text-emerald-700'
                     return (
                       <div
                         key={i.id}
-                        className={`grid grid-cols-2 items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/30 lg:grid-cols-[minmax(220px,2fr)_100px_100px_100px_110px_70px_minmax(160px,1.5fr)] ${isDirty ? 'bg-[#6B7EFF]/[0.04]' : ''}`}
+                        className={`grid grid-cols-2 items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/30 lg:grid-cols-[minmax(190px,1.7fr)_84px_78px_78px_78px_96px_104px_58px_minmax(130px,1.1fr)] ${isDirty ? 'bg-[#6B7EFF]/[0.04]' : ''}`}
                       >
                         <div className="col-span-2 lg:col-span-1">
                           <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -408,6 +420,15 @@ export function PricingConsoleBody() {
                         <div className="whitespace-nowrap rounded-full bg-muted px-2 py-1 text-center text-[11px] font-medium text-muted-foreground">{unitLabel(i)}</div>
                         <MoneyInput value={i.floor_price} disabled={noPrice} accent="floor" onChange={v => patchItem(i.id, { floor_price: v })} />
                         <MoneyInput value={i.target_price} disabled={noPrice} accent="target" onChange={v => patchItem(i.id, { target_price: v, ...(v != null ? { base_price: v } : {}) })} />
+                        <MoneyInput value={i.gg_cost} disabled={noPrice} onChange={v => patchItem(i.id, { gg_cost: v })} />
+                        <div className={`text-sm font-bold leading-tight ${marginCls}`}>
+                          {marginAbs == null ? '—' : (
+                            <>
+                              ${Math.round(marginAbs).toLocaleString()}
+                              {marginPct != null && <span className="ml-1 text-[11px] font-semibold opacity-70">{Math.round(marginPct * 100)}%</span>}
+                            </>
+                          )}
+                        </div>
                         <StatusSelect value={i.status} onChange={v => patchItem(i.id, { status: v, ...(v === 'open' ? { quotable: false } : {}) })} />
                         <button
                           type="button"

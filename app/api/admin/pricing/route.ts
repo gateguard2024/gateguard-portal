@@ -27,7 +27,7 @@ export async function GET() {
   const [{ data: items, error: iErr }, { data: settings, error: sErr }] = await Promise.all([
     supabase
       .from('service_catalog')
-      .select('id, item_code, name, provider, category, billing_type, unit_label, base_price, floor_price, target_price, bucket, status, quotable, dealer_visible, is_gateguard_program, notes, sort_order, is_active')
+      .select('id, item_code, name, provider, category, billing_type, unit_label, base_price, floor_price, target_price, gg_cost, bucket, status, quotable, dealer_visible, is_gateguard_program, notes, sort_order, is_active')
       .eq('is_active', true)
       .order('is_gateguard_program', { ascending: false })
       .order('sort_order', { ascending: true }),
@@ -38,7 +38,7 @@ export async function GET() {
   return NextResponse.json({ items: items ?? [], settings: settings ?? [] })
 }
 
-const EDITABLE = ['floor_price', 'target_price', 'base_price', 'status', 'quotable', 'dealer_visible', 'notes'] as const
+const EDITABLE = ['floor_price', 'target_price', 'gg_cost', 'base_price', 'status', 'quotable', 'dealer_visible', 'notes'] as const
 
 // POST /api/admin/pricing — corporate adds a NEW line item to the catalog.
 // Body: { name, bucket, category, billing_type, unit_label, floor_price?, target_price?, status?, notes?, item_code? }
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
-  const { name, bucket, category, billing_type, unit_label, floor_price, target_price, status, notes, item_code } = body ?? {}
+  const { name, bucket, category, billing_type, unit_label, floor_price, target_price, gg_cost, status, notes, item_code } = body ?? {}
   if (!name?.trim() || !['A', 'B', 'C'].includes(bucket) || !billing_type) {
     return NextResponse.json({ error: 'name, bucket (A|B|C), and billing_type are required' }, { status: 400 })
   }
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
       base_price: target_price ?? 0,
       floor_price: floor_price ?? null,
       target_price: target_price ?? null,
+      gg_cost: gg_cost ?? null,
       bucket,
       status: st,
       quotable: st !== 'open',
