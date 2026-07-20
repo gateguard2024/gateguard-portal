@@ -246,6 +246,29 @@ Return ONLY JSON, no prose:
 
 type AreaProperty = BaseProperty & { pain_signal?: boolean; pain_note?: string | null; lead_score?: number }
 
+// Parse the Haiku area response. If the JSON is truncated (30 properties can
+// overrun the token budget), salvage every property object that DID complete by
+// brace-scanning the properties array — so a partial answer still shows results
+// instead of erroring with "Could not read the search results."
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function looseParseAreaJson(text: string): any | null {
+  const m = text.match(/\{[\s\S]*\}/)
+  if (m) { try { const p = JSON.parse(m[0]); if (Array.isArray(p?.properties)) return p } catch { /* fall through to salvage */ } }
+  // Salvage: pull complete top-level objects out of the "properties" array.
+  const pi = text.indexOf('"properties"')
+  const start = pi >= 0 ? text.indexOf('[', pi) : -1
+  if (start < 0) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const props: any[] = []
+  let depth = 0, objStart = -1
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (c === '{') { if (depth === 0) objStart = i; depth++ }
+    else if (c === '}') { depth--; if (depth === 0 && objStart >= 0) { try { props.push(JSON.parse(text.slice(objStart, i + 1))) } catch { /* skip */ } objStart = -1 } }
+  }
+  return props.length ? { query_interpretation: '', properties: props } : null
+}
+
 // ─── Lead score (first-find ranking) ──────────────────────────────────────────
 // 0–100 from the signals the cheap base pass reliably has: buy intent (pain),
 // opportunity size (units), and a rough pro-tech fit (something to displace).
@@ -332,12 +355,16 @@ ${snippets}`
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let parsed: any = null
   try {
-    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 6000, messages: [{ role: 'user', content: prompt }] })
+    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] })
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
-    const m = text.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0])
+    parsed = looseParseAreaJson(text)
   } catch (e) {
     console.error('[aria/base area] extraction failed:', e instanceof Error ? e.message : e)
     return NextResponse.json({ error: 'Could not read the search results.' }, { status: 502 })
+  }
+  // Truncated / malformed JSON returns null — don't error out, just show what we could read.
+  if (!parsed) {
+    return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `Found sites in ${loc}, but couldn't format them — try the search again.`, filters: f })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
