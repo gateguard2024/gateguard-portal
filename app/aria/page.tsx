@@ -618,6 +618,9 @@ export default function AriaExplorePage() {
         photo_url: p.photo_url ?? null,
         name_aliases: Array.isArray(p.name_aliases) ? p.name_aliases : [],
         systems: p.systems,
+        // Area/criteria hunts return the review-evidence for the pain the rep asked
+        // for — surface it as the pain_brief that drives the "Gate complaints" flag.
+        pain_brief: p.pain_note ?? undefined,
         // Mirror the base flags onto the legacy signals the filters/pins read.
         bulk_detected: !!p.systems?.bulk,
         gate_signal: !!p.systems?.gates,
@@ -626,7 +629,9 @@ export default function AriaExplorePage() {
       }))
 
       if (!list.length) {
-        setError('No properties matched that. Try the full name, or add a city.')
+        setError(data.type === 'multi'
+          ? 'No matching properties found. Try a broader area, a lower unit count, or fewer filters.'
+          : 'No properties matched that. Try the full name, or add a city.')
       }
       setItems(list)
       const geo = await Promise.all(list.map(async it => ({ ...it, ...(await geocode(it)) })))

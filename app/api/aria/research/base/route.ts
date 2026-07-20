@@ -177,6 +177,195 @@ function looksLikeArea(q: string): boolean {
   return false
 }
 
+// ─── AREA / CRITERIA SEARCH ───────────────────────────────────────────────────
+// A rep hunts by PROBLEM ("gate issues in SLC over 250 units"), not by name. The
+// old area path stuffed that whole sentence into Google and swept only listing
+// sites — so it found noise and returned nothing. This path instead: (1) parses
+// the sentence into structured filters, (2) runs clean discovery for the big
+// communities, (3) sweeps resident REVIEWS for the pain signal, (4) filters by
+// unit count and ranks pain-first.
+
+// Pain keyword → review-search expression. This is the signal listings don't carry.
+const PAIN_EXPR: Record<string, string> = {
+  gate: '"gate" (broken OR "always open" OR "won\'t close" OR "not working" OR "left open" OR tailgating)',
+  security: '(security OR "not safe" OR "break-in" OR "car break-in" OR stolen OR crime)',
+  camera: '(cameras OR CCTV OR surveillance) (broken OR "not working" OR "don\'t work")',
+  access: '("access control" OR keypad OR callbox OR intercom OR "key fob") (broken OR "not working")',
+}
+function painToExpr(pains: string[]): string {
+  const parts = pains.map(p => {
+    if (/gate/.test(p)) return PAIN_EXPR.gate
+    if (/secur|crime|break|steal|stolen|theft|safe/.test(p)) return PAIN_EXPR.security
+    if (/camera|cctv|surveil/.test(p)) return PAIN_EXPR.camera
+    if (/access|callbox|intercom|keypad|fob|entry/.test(p)) return PAIN_EXPR.access
+    return `"${p}"`
+  })
+  return Array.from(new Set(parts)).join(' OR ')
+}
+
+interface AreaFilters { location: string; state: string; min_units: number | null; max_units: number | null; pains: string[] }
+
+async function parseAreaQuery(anthropic: Anthropic, query: string): Promise<AreaFilters> {
+  const fallback: AreaFilters = { location: '', state: '', min_units: null, max_units: null, pains: [] }
+  try {
+    const msg = await anthropic.messages.create({
+      model: HAIKU, max_tokens: 400,
+      messages: [{ role: 'user', content:
+`Parse this multifamily prospecting query into search filters. Query: "${query}"
+Return ONLY JSON, no prose:
+{"location":"","state":"","min_units":null,"max_units":null,"pains":[]}
+- location: city/metro name only (e.g. "Salt Lake City"). "" if none.
+- state: 2-letter (e.g. "UT"). "" if none.
+- min_units: number from "over 250 units","250+ units","at least 300 units","250 doors". null if none.
+- max_units: number from "under 400 units". null if none.
+- pains: short problem/system keywords the rep is hunting (e.g. "gate issues" -> ["gate"]; "no cameras and old gates" -> ["camera","gate"]). [] if the query names no problem.` }],
+    })
+    const t = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const m = t.match(/\{[\s\S]*\}/); if (!m) return fallback
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p: any = JSON.parse(m[0])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toU = (v: any) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : null }
+    return {
+      location: String(p.location || '').trim(),
+      state: String(p.state || '').trim(),
+      min_units: toU(p.min_units),
+      max_units: toU(p.max_units),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pains: Array.isArray(p.pains) ? p.pains.filter((x: any) => typeof x === 'string' && x.trim()).map((x: string) => x.toLowerCase().trim()).slice(0, 4) : [],
+    }
+  } catch { return fallback }
+}
+
+type AreaProperty = BaseProperty & { pain_signal?: boolean; pain_note?: string | null }
+
+async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextResponse> {
+  const f = await parseAreaQuery(anthropic, query)
+  const loc = [f.location, f.state].filter(Boolean).join(' ').trim() || query
+  const unitPhrase = f.min_units ? `${f.min_units}+ units ` : ''
+
+  // 1) Discovery — the big communities in the area.
+  const discovery = await Promise.all([
+    serper(`largest apartment complexes ${loc} ${unitPhrase}`.trim(), 10),
+    serper(`${loc} apartment communities ${unitPhrase}(site:apartments.com OR site:rentcafe.com OR site:loopnet.com OR site:yardimatrix.com)`, 10),
+  ])
+
+  // 2) Pain sweep — resident reviews reveal WHICH of them have the problem.
+  let pain: Snip[][] = []
+  if (f.pains.length) {
+    const expr = painToExpr(f.pains)
+    pain = await Promise.all([
+      serper(`${loc} apartment ${expr} (site:apartmentratings.com OR site:reddit.com OR site:yelp.com)`, 10),
+      serper(`${loc} apartment reviews ${expr}`, 8),
+    ])
+  }
+
+  const all = [...discovery.flat(), ...pain.flat()]
+  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 16000)
+  if (!snippets.trim()) {
+    return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `No web results for ${loc}.`, filters: f })
+  }
+
+  const painLine = f.pains.length
+    ? `The rep is hunting for properties with this PROBLEM: ${f.pains.join(', ')}. For each property set "pain_signal": true and a short "pain_note" ONLY when the snippets show real resident/review evidence of that problem AT THAT property (e.g. a review that the gate is broken or always open). No evidence -> pain_signal=false, pain_note="".`
+    : 'No specific problem was requested; pain_signal=false and pain_note="" for all.'
+
+  const prompt = `You are building a prospect list of US multifamily communities from web snippets. Return JSON only.
+
+AREA / CRITERIA search${f.location ? ` in ${f.location}${f.state ? ', ' + f.state : ''}` : ''}${f.min_units ? `, target ${f.min_units}+ units` : ''}.
+List up to 12 DISTINCT real apartment communities you can identify in the snippets. Prefer larger communities.
+
+${painLine}
+
+For each property return:
+- name, address, city, state (2-letter)
+- units: TOTAL unit count. *** COPY ONLY, NEVER CALCULATE, NEVER SUM. *** A number ONLY if it appears verbatim in the snippets as that property's total; else null.
+- phone: property's own leasing line or "" (NEVER a toll-free 800/833/844/855/866/877/888 number).
+- website, management_company: or ""
+- systems: presence flags (internet, video, bulk, gates, cameras, smart_lockers, smart_rent, ev_chargers) — true only with real evidence.
+- pain_signal: boolean, pain_note: short string (see above).
+
+JSON shape:
+{"query_interpretation":"one short line","properties":[{"name":"","address":"","city":"","state":"","units":null,"phone":"","website":"","management_company":"","systems":{"internet":false,"video":false,"bulk":false,"gates":false,"cameras":false,"smart_lockers":false,"smart_rent":false,"ev_chargers":false},"pain_signal":false,"pain_note":""}]}
+
+SNIPPETS:
+${snippets}`
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsed: any = null
+  try {
+    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] })
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const m = text.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0])
+  } catch (e) {
+    console.error('[aria/base area] extraction failed:', e instanceof Error ? e.message : e)
+    return NextResponse.json({ error: 'Could not read the search results.' }, { status: 502 })
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawProps: any[] = Array.isArray(parsed?.properties) ? parsed.properties : []
+  let properties: AreaProperty[] = rawProps
+    .filter(p => (p?.name ?? '').trim().length > 1 || (p?.address ?? '').trim().length > 5)
+    .map(p => {
+      const u = typeof p.units === 'number' ? p.units : Number(p.units)
+      const units = Number.isFinite(u) && u > 0 && unitsAppearVerbatim(u, snippets) ? Math.round(u) : null
+      const systems = { ...EMPTY_SYSTEMS, ...(p.systems ?? {}) }
+      // A confirmed gate pain implies a gate exists — light the gate signal so the
+      // pin/filters read it, even if the amenity list didn't mention one.
+      const gatePain = !!p.pain_signal && /gate/.test(`${p.pain_note ?? ''} ${f.pains.join(' ')}`)
+      if (gatePain) systems.gates = true
+      return {
+        name: String(p.name ?? '').trim() || String(p.address ?? '').trim(),
+        name_aliases: [],
+        address: String(p.address ?? '').trim(),
+        city: String(p.city ?? '').trim(),
+        state: String(p.state ?? '').trim(),
+        units,
+        phone: cleanPhone(p.phone),
+        website: p.website || null,
+        management_company: p.management_company || null,
+        systems,
+        pain_signal: !!p.pain_signal,
+        pain_note: (p.pain_note ?? '').toString().trim() || null,
+      }
+    })
+
+  // Unit gate: drop only CONFIRMED-below-min. Null units stay (unverified),
+  // ranked last — inventing a number to filter on would be worse than showing it.
+  if (f.min_units != null) properties = properties.filter(p => p.units == null || p.units >= f.min_units!)
+  if (f.max_units != null) properties = properties.filter(p => p.units == null || p.units <= f.max_units!)
+
+  // Rank: pain match first, then larger known unit count.
+  properties.sort((a, b) => {
+    if (!!b.pain_signal !== !!a.pain_signal) return b.pain_signal ? 1 : -1
+    return (b.units ?? 0) - (a.units ?? 0)
+  })
+  properties = properties.slice(0, 12)
+
+  // Hero images — best-effort, parallel, never blocks.
+  await Promise.all(properties.map(async p => { if (p.website) p.photo_url = await heroImage(p.website) }))
+
+  // Which are already in the Intel DB? (drives the All / New / Saved chips)
+  if (properties.length) {
+    const { data: known } = await supabase
+      .from('aria_properties').select('id, property_name')
+      .or(properties.map(p => `property_name.ilike.%${p.name.replace(/[,()%]/g, '')}%`).join(','))
+      .limit(200)
+    for (const p of properties) {
+      const hit = (known ?? []).find(k =>
+        String(k.property_name ?? '').toLowerCase().trim() === p.name.toLowerCase().trim() ||
+        String(k.property_name ?? '').toLowerCase().includes((p.name.toLowerCase().split(/\s+/)[0]) ?? '~'))
+      p.already_saved = !!hit
+      p.saved_id = hit?.id ?? null
+    }
+  }
+
+  const interp = parsed?.query_interpretation
+    || `${properties.length} communit${properties.length === 1 ? 'y' : 'ies'} in ${loc}${f.min_units ? `, ${f.min_units}+ units` : ''}${f.pains.length ? `, ${f.pains.join('/')} signal` : ''}`
+
+  return NextResponse.json({ type: 'multi', query_interpretation: interp, properties, count: properties.length, filters: f, snippets_seen: all.length })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -196,6 +385,10 @@ export async function POST(req: NextRequest) {
 
     const isArea = looksLikeArea(query)
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    // Criteria/area hunt ("gate issues in SLC over 250 units") takes the dedicated
+    // path: parse filters → discovery → review pain-sweep → unit filter → rank.
+    if (isArea) return await runAreaSearch(anthropic, query)
 
     // Quote the NAME only — never the whole query. `"Aster Buckhead Atlanta GA"`
     // as one phrase matches nothing on the web, which is how a search for a real
