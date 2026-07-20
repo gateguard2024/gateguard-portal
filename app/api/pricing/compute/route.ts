@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     cameraType:     body.cameraType    as 'new' | 'existing' | undefined,
     smartLockUnits: (body.smartLockUnits ?? body.commonLocks) as number | string | undefined,
     cellular:       body.cellular      as number | string | undefined,
+    dealerMaintainsEntry: body.dealerMaintainsEntry as boolean | undefined,
   }, internalView)
 
   return NextResponse.json({ result, canViewInternal, internalView })

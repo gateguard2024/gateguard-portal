@@ -45,6 +45,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
   const [cameraType, setCameraType] = useState<'new' | 'existing'>('new')
   const [smartLocks, setSmartLocks] = useState(seed(initialCommonLocks))
   const [cellular, setCellular] = useState('')
+  const [dealerMaintains, setDealerMaintains] = useState(true)
   const passthru = useRef({ unitsApp: seed(initialUnitsApp), unitsGw: seed(initialUnitsGw), camBackup: seed(initialCamBackup) })
 
   const [viewAsDealer, setViewAsDealer] = useState(false)
@@ -52,7 +53,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
   const [internalView, setInternalView] = useState(false)
   const [calc, setCalc] = useState<Result>({ empty: true, noUnits: true })
 
-  const inputs = useMemo(() => ({ livingUnits, entryPoints, cameras, cameraType, smartLockUnits: smartLocks, cellular }), [livingUnits, entryPoints, cameras, cameraType, smartLocks, cellular])
+  const inputs = useMemo(() => ({ livingUnits, entryPoints, cameras, cameraType, smartLockUnits: smartLocks, cellular, dealerMaintainsEntry: dealerMaintains }), [livingUnits, entryPoints, cameras, cameraType, smartLocks, cellular, dealerMaintains])
 
   const onComputeRef = useRef(onCompute)
   useEffect(() => { onComputeRef.current = onCompute }, [onCompute])
@@ -121,6 +122,10 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
             <button type="button" onClick={() => setCameraType('existing')} className="rounded-full px-3 py-1.5" style={cameraType === 'existing' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Existing · $85</button>
           </div>
         </div>
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
+          <input type="checkbox" checked={dealerMaintains} onChange={e => setDealerMaintains(e.target.checked)} className="h-4 w-4" />
+          Dealer maintains the entry points <span style={{ color: 'rgba(255,255,255,0.4)' }}>— guarantees ≥ $150 / gate / mo</span>
+        </label>
       </div>
 
       {/* Customer price */}
@@ -144,7 +149,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
           <div className="mt-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Enter a site above to see the split.</div>
         ) : (
           <div className="mt-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <Row label="Dealer" total={calc.dealerCut ?? 0} units={units} strong cap={usd(calc.dealerPerUnit ?? 3) + '/unit'} />
+            <Row label="Dealer" total={calc.dealerCut ?? 0} units={units} strong cap={calc.dealerFloorBinds ? `${usd(calc.dealerEntryFloorRate ?? 150)}/gate × ${calc.entryPoints}` : `${usd(calc.dealerPerUnit ?? 3)}/unit`} />
             <Row label="Sales rep" total={calc.salesCut ?? 0} units={units} cap={usd(calc.salesPerUnit ?? 1) + '/unit'} />
             <Row label="Distribution" total={calc.distCut ?? 0} units={units} cap={usd(calc.distPerUnit ?? 1) + '/unit'} />
             {showInternal && <>

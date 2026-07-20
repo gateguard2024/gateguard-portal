@@ -28,6 +28,10 @@ const ADDON_CAM_EXISTING = 85
 const DEALER_PER_UNIT = 3
 const SALES_PER_UNIT = 1
 const DIST_PER_UNIT = 1
+// A dealer who MAINTAINS the entry points must clear at least $150 per entry
+// point per month — gate service has to pay. This can lift the dealer above the
+// $3/unit cap on gate-heavy / smaller sites; the customer bill covers it.
+const DEALER_MIN_PER_ENTRY = 150
 
 // ── Real recurring cost sheet ────────────────────────────────────────────────
 const COST_BRIVO_SITE = 90
@@ -68,6 +72,7 @@ export interface PricingInputs {
   cameraType?: 'new' | 'existing' | string
   smartLockUnits?: number | string
   cellular?: number | string
+  dealerMaintainsEntry?: boolean
   // Legacy field names still accepted.
   doors?: number | string
   camMon?: number | string
@@ -98,6 +103,10 @@ export interface PricingResult {
   dealerPerUnit: number
   salesPerUnit: number
   distPerUnit: number
+  dealerMaintainsEntry: boolean
+  dealerEntryFloor: number
+  dealerEntryFloorRate: number
+  dealerFloorBinds: boolean
   // legacy callback fields
   ggFee: number                // GG net (internal) — 0 for dealers
   suggestedRetail: number      // = customerMonthly
@@ -145,8 +154,12 @@ export function computePricing(input: PricingInputs, internal: boolean): Pricing
   const costCellular = cellular * COST_CELLULAR
   const ggCost = costBrivo + costEntry + costSmartLock + costNvr + costCameras + costCellular
 
-  // Distribution — flat per-unit caps
-  const dealer = DEALER_PER_UNIT * units
+  // Distribution — flat per-unit caps, with a dealer-maintenance floor.
+  const dealerMaintainsEntry = input.dealerMaintainsEntry !== false   // default true
+  const dealerByUnit = DEALER_PER_UNIT * units
+  const dealerEntryFloor = DEALER_MIN_PER_ENTRY * entryPoints
+  const dealer = dealerMaintainsEntry ? Math.max(dealerByUnit, dealerEntryFloor) : dealerByUnit
+  const dealerFloorBinds = dealerMaintainsEntry && dealerEntryFloor > dealerByUnit
   const sales = SALES_PER_UNIT * units
   const dist = DIST_PER_UNIT * units
 
@@ -173,6 +186,10 @@ export function computePricing(input: PricingInputs, internal: boolean): Pricing
     dealerPerUnit: DEALER_PER_UNIT,
     salesPerUnit: SALES_PER_UNIT,
     distPerUnit: DIST_PER_UNIT,
+    dealerMaintainsEntry,
+    dealerEntryFloor: round2(dealerEntryFloor),
+    dealerEntryFloorRate: DEALER_MIN_PER_ENTRY,
+    dealerFloorBinds,
     ggFee: internal ? round2(ggNet) : 0,
     suggestedRetail: bill,
     commission: round2(sales + dist),
@@ -196,7 +213,7 @@ export function computePricing(input: PricingInputs, internal: boolean): Pricing
 }
 
 export const PRICING_PUBLIC = {
-  DEALER_PER_UNIT, SALES_PER_UNIT, DIST_PER_UNIT,
+  DEALER_PER_UNIT, SALES_PER_UNIT, DIST_PER_UNIT, DEALER_MIN_PER_ENTRY,
   ADDON_GATE, ADDON_CAM_NEW, ADDON_CAM_EXISTING,
   INCL_GATES_PER_100, INCL_CAMS_PER_100,
 }
