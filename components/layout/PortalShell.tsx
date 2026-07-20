@@ -13,6 +13,7 @@
 import { usePathname } from 'next/navigation'
 import { ThemeProvider } from 'next-themes'
 import { Sidebar }          from '@/components/layout/Sidebar'
+import { GlassNavDrawer }   from '@/components/layout/GlassNavDrawer'
 import { AddToL10Button }   from '@/components/layout/AddToL10Button'
 import { NexusAssistant }   from '@/components/layout/NexusAssistant'
 import { MobileNav }        from '@/components/layout/MobileNav'
@@ -54,6 +55,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       }}>
         {/* No admin launcher on the public booking page (prospect-facing) */}
         {!isSchedule && <AdminLauncher />}
+        {/* Full-glass pages (ARIA) render outside the sidebar — give them the main
+            nav as a left-edge slide-out drawer so it's always one click away. */}
+        {isAria && <GlassNavDrawer />}
         {children}
       </div>
     )

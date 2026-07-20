@@ -1705,28 +1705,71 @@ export default function AriaExplorePage() {
                           </div>
                         )
                       })()}
-                      {openCard === 'community' && (
-                        <div className="space-y-2">
-                          {community.length === 0 && (
-                            communityErr ? (
-                              <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-[11px] text-rose-200">{communityErr}</div>
-                            ) : (
-                              <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
-                                {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
-                              </div>
-                            )
-                          )}
-                          {community.slice(0, 12).map((c, i) => (
-                            <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <span className="text-[9px] font-bold text-slate-400">{c.platform || 'Review'}</span>
-                                {c.signal_type && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-200 border border-amber-400/30">{String(c.signal_type).replace(/_/g, ' ')}</span>}
-                              </div>
-                              <p className="text-[11px] text-slate-200 italic leading-relaxed">&ldquo;{c.quote}&rdquo;</p>
+                      {openCard === 'community' && (() => {
+                        // Negative resident posts from the last 8 months, newest first,
+                        // each linked to its source. Undated posts are kept (we can't
+                        // date-exclude them); positives fall to a collapsed remainder.
+                        const EIGHT_MO = 1000 * 60 * 60 * 24 * 30 * 8
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const isNeg = (c: any) => {
+                          const sev = String(c?.severity || '').toLowerCase()
+                          const sig = String(c?.signal_type || '').toLowerCase()
+                          return sev === 'high' || sev === 'medium' || /complaint/.test(sig)
+                        }
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const within8mo = (c: any) => {
+                          const d = c?.date
+                          if (!d || d === 'unknown') return true
+                          const t = Date.parse(d)
+                          return isNaN(t) ? true : t >= Date.now() - EIGHT_MO
+                        }
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const ts = (c: any) => { const t = Date.parse(c?.date ?? ''); return isNaN(t) ? 0 : t }
+                        const negRecent = (community as any[]).filter(c => isNeg(c) && within8mo(c)).sort((a, b) => ts(b) - ts(a)) // eslint-disable-line @typescript-eslint/no-explicit-any
+                        const others = (community as any[]).filter(c => !negRecent.includes(c)) // eslint-disable-line @typescript-eslint/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const Card = (c: any, i: number) => (
+                          <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
+                            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                              <span className="text-[9px] font-bold text-slate-400">{c.platform || 'Review'}</span>
+                              {c.date && c.date !== 'unknown' && <span className="text-[9px] text-slate-500">{c.date}</span>}
+                              {c.signal_type && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-200 border border-amber-400/30">{String(c.signal_type).replace(/_/g, ' ')}</span>}
+                              {c.severity === 'high' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-400/30">high</span>}
                             </div>
-                          ))}
-                        </div>
-                      )}
+                            <p className="text-[11px] text-slate-200 italic leading-relaxed">&ldquo;{c.quote}&rdquo;</p>
+                            {c.url && (
+                              <a href={c.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9AA8FF] hover:underline">
+                                View source ↗
+                              </a>
+                            )}
+                          </div>
+                        )
+                        return (
+                          <div className="space-y-2">
+                            {community.length === 0 && (
+                              communityErr ? (
+                                <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-[11px] text-rose-200">{communityErr}</div>
+                              ) : (
+                                <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
+                                  {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
+                                </div>
+                              )
+                            )}
+                            {negRecent.length > 0 && (
+                              <>
+                                <p className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-rose-300/80">Negative reviews · last 8 months ({negRecent.length})</p>
+                                {negRecent.map(Card)}
+                              </>
+                            )}
+                            {others.length > 0 && (
+                              <>
+                                <p className="px-0.5 pt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Other posts ({others.length})</p>
+                                {others.slice(0, 12).map(Card)}
+                              </>
+                            )}
+                          </div>
+                        )
+                      })()}
                       {openCard === 'proptech' && (
                         <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
                           {/* By CATEGORY — never a merged blob of brand names. Knowing

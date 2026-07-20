@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
 
     // ── Haiku Pass 1: extract social posts (up to 10) ────────────────────────
 
-    const extractionPrompt = `You are analyzing search results about a multifamily property. Extract individual resident reviews, social media posts, and community complaints. Extract up to 10 of the best, most specific posts.
+    const extractionPrompt = `You are analyzing search results about a multifamily property. Extract individual resident reviews, social media posts, and community complaints. Extract up to 20 posts — prioritise NEGATIVE/complaint posts and the most recent ones.
 
 Property: "${property_name}", ${loc}
 
@@ -347,7 +347,7 @@ Rules:
       haikusExtractArray<{
         platform: string; date: string; quote: string; tech_mentioned: string[];
         signal_type: string; severity: string; url?: string;
-      }>(extractionPrompt, `SEARCH RESULTS:\n${allSnippets}`, 2800),
+      }>(extractionPrompt, `SEARCH RESULTS:\n${allSnippets}`, 3600),
     ])
 
     // Now run cross-ref with actual posts
@@ -376,7 +376,7 @@ Rules:
         source:        'social_search' as const,
       }))
       .filter(p => p.quote.length > 10)
-      .slice(0, 10)
+      .slice(0, 20)
 
     const cross_reference_notes = actualCrossRefNotes.map(n => ({
       provider:       n.provider      || '',
