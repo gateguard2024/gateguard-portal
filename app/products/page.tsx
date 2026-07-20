@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { TopBar } from "@/components/layout/TopBar";
@@ -46,6 +47,7 @@ interface Product {
   msrp: number;
   dealerCost: number;
   sellPrice: number;
+  ggCost: number;        // Gate Guard COGS — corporate only, merged from product_costs (never in the products row)
   adiSku: string;
   imageUrl: string;
   active: boolean;
@@ -83,6 +85,7 @@ const fromDb = (row: any): Product => ({
   msrp:         Number(row.msrp) ?? 0,
   dealerCost:   Number(row.dealer_cost) ?? 0,
   sellPrice:    Number(row.sell_price) ?? 0,
+  ggCost:       row.gg_cost != null ? Number(row.gg_cost) : 0,  // usually merged in later (corporate only)
   adiSku:       row.adi_sku ?? "",
   imageUrl:     row.image_url ?? "",
   active:       row.active ?? true,
@@ -167,8 +170,8 @@ function ProductImage({ product, size = 40, className }: { product: Product; siz
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 // Used only on first load when the DB table is empty.
 // tags / fieldService / manualUrl are optional here; defaults filled at seed time.
-type SeedProduct = Omit<Product,"id"|"tags"|"fieldService"|"manualUrl"|"designMeta"> & {
-  tags?: string[]; fieldService?: boolean; manualUrl?: string; designMeta?: DesignMeta;
+type SeedProduct = Omit<Product,"id"|"tags"|"fieldService"|"manualUrl"|"designMeta"|"ggCost"> & {
+  tags?: string[]; fieldService?: boolean; manualUrl?: string; designMeta?: DesignMeta; ggCost?: number;
 };
 
 const SEED: SeedProduct[] = [
@@ -283,7 +286,7 @@ const CAT_ICONS: Record<string, React.ElementType> = {
 
 const emptyProduct = (): Omit<Product,"id"> => ({
   sku:"", name:"", brand:"GateGuard", category:"Camera", subcategory:"",
-  description:"", specs:"", msrp:0, dealerCost:0, sellPrice:0,
+  description:"", specs:"", msrp:0, dealerCost:0, sellPrice:0, ggCost:0,
   adiSku:"", imageUrl:"", active:true, tags:[], fieldService:false, manualUrl:"",
   designMeta:{},
 });
@@ -291,6 +294,14 @@ const emptyProduct = (): Omit<Product,"id"> => ({
 const fmt$ = (n: number) => n > 0 ? `$${n.toLocaleString()}` : "—";
 const calcMargin = (cost: number, sell: number) =>
   sell > 0 && cost > 0 ? Math.round(((sell - cost) / sell) * 100) : null;
+
+// ─── The cost waterfall ───────────────────────────────────────────────────────
+// GG cost (our COGS, corporate only) → dealer cost = GG cost + 10% (locked) →
+// suggested retail = dealer cost at a 40% margin. MSRP is shown alongside.
+const DEALER_MARKUP = 0.10;   // dealer cost = GG cost × 1.10
+const RETAIL_MARGIN = 0.40;   // suggested retail = dealer cost ÷ (1 − 0.40)
+const dealerCostFromGg   = (gg: number) => gg > 0 ? Math.round(gg * (1 + DEALER_MARKUP) * 100) / 100 : 0;
+const suggestedRetail    = (dealerCost: number) => dealerCost > 0 ? Math.round(dealerCost / (1 - RETAIL_MARGIN)) : 0;
 
 // ─── Inline Sell Price Cell ───────────────────────────────────────────────────
 function SellCell({ product, onChange }: { product: Product; onChange:(id:string,v:number)=>void }) {
@@ -329,14 +340,14 @@ function Field({label,required,children}:{label:string;required?:boolean;childre
   return <div className="space-y-1.5"><label className="text-xs font-medium text-foreground">{label}{required&&<span className="text-red-500 ml-0.5">*</span>}</label>{children}</div>;
 }
 
-function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Product>&{id?:string}; onSave:(p:Product)=>void; onClose:()=>void; saving?:boolean }) {
+function ProductModal({ product, onSave, onClose, saving, isCorporate }: { product:Partial<Product>&{id?:string}; onSave:(p:Product)=>void; onClose:()=>void; saving?:boolean; isCorporate?:boolean }) {
   const isEdit = !!product.id;
   const [form, setForm] = useState<Omit<Product,"id">>({
     sku:product.sku??"", name:product.name??"", brand:product.brand??"",
     category:product.category??"Camera", subcategory:product.subcategory??"",
     description:product.description??"", specs:product.specs??"",
     msrp:product.msrp??0, dealerCost:product.dealerCost??0,
-    sellPrice:product.sellPrice??0, adiSku:product.adiSku??"",
+    sellPrice:product.sellPrice??0, ggCost:product.ggCost??0, adiSku:product.adiSku??"",
     imageUrl:product.imageUrl??"", active:product.active??true,
     tags:product.tags??[], fieldService:product.fieldService??false,
     manualUrl:product.manualUrl??"",
@@ -522,9 +533,42 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
           </div>
           <Field label="Description"><textarea value={form.description} onChange={e=>set("description",e.target.value)} rows={2} className={iCls+" resize-none"}/></Field>
           <Field label="Key Specs"><textarea value={form.specs} onChange={e=>set("specs",e.target.value)} rows={2} className={iCls+" resize-none"}/></Field>
+          {/* ── Corporate-only cost waterfall: GG cost → +10% dealer cost → retail ── */}
+          {isCorporate && (
+            <div className="rounded-xl border border-red-200 bg-red-50/60 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700">Corporate only</span>
+                <span className="text-[11px] text-muted-foreground">Our cost never shows to dealers. Dealer cost auto-locks at GG cost + {Math.round(DEALER_MARKUP*100)}%.</span>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <Field label="GG cost ($)">
+                  <input type="number" value={form.ggCost||""} placeholder="Our COGS"
+                    onChange={e=>{const g=Number(e.target.value)||0; set("ggCost",g); set("dealerCost",dealerCostFromGg(g));}}
+                    className={iCls+" border-red-300"}/>
+                </Field>
+                <Field label={`Dealer cost (+${Math.round(DEALER_MARKUP*100)}%)`}>
+                  <div className="px-3 py-2 rounded-lg text-sm font-semibold text-center border border-border bg-white text-amber-700">
+                    {form.ggCost>0?fmt$(dealerCostFromGg(form.ggCost)):"—"}
+                  </div>
+                </Field>
+                <Field label="Suggested retail">
+                  <div className="px-3 py-2 rounded-lg text-sm font-semibold text-center border border-border bg-white text-emerald-700">
+                    {form.dealerCost>0?fmt$(suggestedRetail(form.dealerCost)):"—"}
+                  </div>
+                </Field>
+                <Field label="MSRP ($)"><input type="number" value={form.msrp||""} onChange={e=>set("msrp",Number(e.target.value))} className={iCls}/></Field>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-3">
-            <Field label="MSRP ($)"><input type="number" value={form.msrp||""} onChange={e=>set("msrp",Number(e.target.value))} className={iCls}/></Field>
-            <Field label="Your Cost ($)"><input type="number" value={form.dealerCost||""} onChange={e=>set("dealerCost",Number(e.target.value))} className={iCls+" border-amber-300"}/></Field>
+            {!isCorporate && <Field label="MSRP ($)"><input type="number" value={form.msrp||""} onChange={e=>set("msrp",Number(e.target.value))} className={iCls}/></Field>}
+            <Field label={isCorporate?"Dealer cost ($)":"Your Cost ($)"}>
+              {/* When GG cost drives it (corporate), dealer cost is locked/read-only. */}
+              {isCorporate && form.ggCost>0
+                ? <div className="px-3 py-2 rounded-lg text-sm font-semibold text-center border border-amber-200 bg-amber-50 text-amber-700">{fmt$(form.dealerCost)}</div>
+                : <input type="number" value={form.dealerCost||""} onChange={e=>set("dealerCost",Number(e.target.value))} className={iCls+" border-amber-300"}/>}
+            </Field>
+            {!isCorporate && <Field label="Suggested retail"><div className="px-3 py-2 rounded-lg text-sm font-semibold text-center border border-border bg-emerald-50 text-emerald-700">{form.dealerCost>0?fmt$(suggestedRetail(form.dealerCost)):"—"}</div></Field>}
             <Field label="Sell Price ($)"><input type="number" value={form.sellPrice||""} onChange={e=>set("sellPrice",Number(e.target.value))} className={iCls+" border-blue-300"}/></Field>
             <Field label="Margin"><div className={cn("px-3 py-2 rounded-lg text-sm font-bold text-center border border-border",m===null?"text-muted-foreground bg-slate-50":m>=40?"text-emerald-600 bg-emerald-50":m>=25?"text-amber-600 bg-amber-50":"text-red-600 bg-red-50")}>{m!==null?`${m}%`:"—"}</div></Field>
           </div>
@@ -781,7 +825,7 @@ function ImportModal({ onImport, onClose, saving }: { onImport:(rows:Omit<Produc
         msrp:Number(c[7]?.replace(/[^0-9.]/g,""))||0,
         dealerCost:Number(c[8]?.replace(/[^0-9.]/g,""))||0,
         sellPrice:Number(c[9]?.replace(/[^0-9.]/g,""))||0,
-        adiSku:c[10]??"", imageUrl:c[11]??"",
+        ggCost:0, adiSku:c[10]??"", imageUrl:c[11]??"",
         active:c[12]?.toLowerCase()!=="n",
         tags:[], fieldService:false, manualUrl:"", designMeta:{} });
     }
@@ -862,6 +906,20 @@ export default function ProductsPage() {
   const [editing,      setEditing]      = useState<Product|null>(null);
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
 
+  // Corporate sees our GG cost; it's fetched separately (never in the products row).
+  const { user } = useUser();
+  const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === "corporate";
+  const [costMap, setCostMap] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!isCorporate) return;
+    let alive = true;
+    fetch("/api/admin/product-costs")
+      .then(r => r.ok ? r.json() : { costs: {} })
+      .then(d => { if (alive) setCostMap(d.costs ?? {}); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isCorporate]);
+
   // ── Load from Supabase, seed if empty ──────────────────────────────────────
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -877,7 +935,7 @@ export default function ProductsPage() {
 
       if (!data || data.length === 0) {
         // First run — seed the table
-        const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", designMeta:{}, ...p }));
+        const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", designMeta:{}, ggCost:0, ...p }));
         const { data: inserted, error: seedErr } = await supabase
           .from("products")
           .upsert(seedRows, { onConflict: "sku" })
@@ -917,8 +975,9 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       const isNew = p.id === "new";
-      const row = toDb(p);
+      const row = toDb(p);   // gg_cost is intentionally NOT here — it's server-only
 
+      let savedId = p.id;
       if (isNew) {
         const { data, error } = await supabase
           .from("products")
@@ -926,6 +985,7 @@ export default function ProductsPage() {
           .select()
           .single();
         if (error) throw error;
+        savedId = data.id;
         setProducts(prev => [...prev, fromDb(data)]);
       } else {
         const { data, error } = await supabase
@@ -936,6 +996,22 @@ export default function ProductsPage() {
           .single();
         if (error) throw error;
         setProducts(prev => prev.map(x => x.id === p.id ? fromDb(data) : x));
+      }
+
+      // Corporate: persist our GG cost through the server (it re-derives + locks
+      // dealer cost = GG cost + 10%). Only fires when the value actually changed.
+      if (isCorporate && savedId && (costMap[savedId] ?? 0) !== (p.ggCost ?? 0)) {
+        const res = await fetch("/api/admin/product-costs", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ product_id: savedId, gg_cost: p.ggCost || null }),
+        });
+        if (res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setCostMap(prev => ({ ...prev, [savedId]: p.ggCost || 0 }));
+          if (typeof d.dealer_cost === "number") {
+            setProducts(prev => prev.map(x => x.id === savedId ? { ...x, dealerCost: d.dealer_cost } : x));
+          }
+        }
       }
       setModal(null);
       setEditing(null);
@@ -1214,7 +1290,7 @@ export default function ProductsPage() {
               ]}
               actions={(row) => (
                 <div className="flex items-center gap-1">
-                  <button onClick={() => { setEditing(row); setModal("edit"); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                  <button onClick={() => { setEditing({ ...row, ggCost: costMap[row.id] ?? 0 }); setModal("edit"); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
                     <Edit2 size={13} />
                   </button>
                   <button onClick={() => deleteOne(row.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
@@ -1231,8 +1307,8 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {modal==="add"&&<ProductModal product={emptyProduct()} onSave={handleSave} onClose={()=>setModal(null)} saving={saving}/>}
-      {modal==="edit"&&editing&&<ProductModal product={editing} onSave={handleSave} onClose={()=>{setModal(null);setEditing(null);}} saving={saving}/>}
+      {modal==="add"&&<ProductModal product={emptyProduct()} onSave={handleSave} onClose={()=>setModal(null)} saving={saving} isCorporate={isCorporate}/>}
+      {modal==="edit"&&editing&&<ProductModal product={editing} onSave={handleSave} onClose={()=>{setModal(null);setEditing(null);}} saving={saving} isCorporate={isCorporate}/>}
       {modal==="import"&&<ImportModal onImport={handleImport} onClose={()=>setModal(null)} saving={saving}/>}
     </div>
   );
