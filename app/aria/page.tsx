@@ -423,21 +423,25 @@ export default function AriaExplorePage() {
 
   const mapRef     = useRef<any>(null)               // eslint-disable-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<Record<string, any>>({}) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const cssReadyRef = useRef(false)                  // Mapbox CSS must apply before the map is created
   const [mapTick, setMapTick] = useState(0) // forces the map effect to retry until Mapbox GL loads
   const [mapErr, setMapErr]   = useState<string | null>(
     MAPBOX_TOKEN ? null : 'Map is not configured (NEXT_PUBLIC_MAPBOX_TOKEN is missing on this deployment).'
   )
 
-  // Load Mapbox GL once
+  // Load Mapbox GL once. v3.26.0 to match Mapbox's own working example. The CSS
+  // MUST be applied before the map is created — creating it first paints a black
+  // canvas with no error (that was the ARIA "no map" bug).
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof window !== 'undefined' && (window as any).mapboxgl) return
+    if (typeof window !== 'undefined' && (window as any).mapboxgl) { cssReadyRef.current = true; return }
     const link = document.createElement('link')
     link.rel = 'stylesheet'
-    link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css'
+    link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.26.0/mapbox-gl.css'
+    link.onload = () => { cssReadyRef.current = true; setMapTick(x => x + 1) }
     document.head.appendChild(link)
     const s = document.createElement('script')
-    s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'
+    s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.26.0/mapbox-gl.js'
     // Kick the map effect the instant the library lands. Relying only on the
     // poll meant the map could sit blank if a retry landed in a gap.
     s.onload = () => setMapTick(x => x + 1)
@@ -454,6 +458,14 @@ export default function AriaExplorePage() {
     const mapboxgl = (window as any).mapboxgl
     if (!mapboxgl || !MAPBOX_TOKEN || mapRef.current) return
 
+    // The Mapbox stylesheet must be applied before we create the map, or the
+    // canvas sizes to 0 and paints black with no error. A stylesheet only appears
+    // in document.styleSheets once it has loaded, so this is a reliable gate.
+    const cssLoaded = cssReadyRef.current ||
+      Array.from(document.styleSheets).some(ss => (ss.href || '').includes('mapbox-gl'))
+    if (!cssLoaded) { setTimeout(() => setMapTick(x => x + 1), 150); return }
+    cssReadyRef.current = true
+
     // Cause #1 of "static images work but GL is black": WebGL is off. GL needs a
     // WebGL context; the static image API doesn't. Say so plainly rather than
     // painting black.
@@ -469,8 +481,10 @@ export default function AriaExplorePage() {
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
         center: [-96.8, 32.8], zoom: 9,
       })
-      // Style loaded = everything's fine; clear any earlier diagnostic.
-      map.on('load', () => setMapErr(null))
+      // Style/tiles loaded = everything's fine; clear any diagnostic and re-measure
+      // (covers the case where the canvas was sized before layout settled).
+      map.on('load', () => { setMapErr(null); try { map.resize() } catch { /* noop */ } })
+      map.on('style.load', () => { try { map.resize() } catch { /* noop */ } })
       // Surface Mapbox's real failure instead of a silent black pane. A token that
       // 401s on the style/tiles (URL restrictions or missing scopes) is the usual
       // cause — the style never loads, so there are no controls, just black.

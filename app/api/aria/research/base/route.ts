@@ -289,8 +289,17 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
     ])
   }
 
-  const all = [...discovery.flat(), ...pain.flat()]
-  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 34000)
+  // 3) Bulk-internet + gate signal sweep — ALWAYS run, even when no pain was typed,
+  //    so every one of the 30 base cards can flag connectivity (bulk deal) and
+  //    access (gate) up front. These are our two biggest buying signals.
+  const signals = await Promise.all([
+    serper(`${loc} apartments ("bulk internet" OR "internet included" OR "wifi included" OR "managed wifi" OR "fiber included" OR "cable included in rent")`, 15),
+    serper(`${loc} apartments (gated OR "gated community" OR "controlled access" OR "gate code" OR keypad OR callbox OR "key fob" OR "access control")`, 15),
+  ])
+  // Tag the signal snippets so Haiku weighs them for the bulk/gate presence flags.
+  const tag = (arr: Snip[], t: string) => arr.map(s => ({ ...s, title: `[${t}] ${s.title}` }))
+  const all = [...discovery.flat(), ...pain.flat(), ...tag(signals[0] ?? [], 'bulk'), ...tag(signals[1] ?? [], 'gate')]
+  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 40000)
   if (!snippets.trim()) {
     return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `No web results for ${loc}.`, filters: f })
   }
