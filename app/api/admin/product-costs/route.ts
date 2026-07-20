@@ -15,7 +15,7 @@ const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 export const dynamic = 'force-dynamic'
 
 // Dealer cost = our cost + 10%, locked (the waterfall). Change here to change it everywhere.
-export const DEALER_MARKUP = 0.10
+const DEALER_MARKUP = 0.10
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 export async function GET() {
