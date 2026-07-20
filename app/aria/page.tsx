@@ -284,6 +284,19 @@ function normalizeReport(raw: any): any {
       bulk_agreements: p.property?.bulk_agreements ?? [], roe_expiry_year: p.property?.roe_expiry_year,
       proptech: p.property?.proptech ?? {}, inferred_proptech: p.property?.inferred_proptech ?? [],
     },
+    // Fresh deep result (raw payload, not yet re-read from DB): use the engine's
+    // presence object if present, else derive from the brand arrays so unbranded-
+    // but-present systems don't read as "No data found".
+    presence: {
+      internet:      !!p.property?.presence?.internet      || (p.property?.isp_providers?.length ?? 0) > 0,
+      video:         !!p.property?.presence?.video         || (p.property?.video_providers?.length ?? 0) > 0,
+      bulk:          !!p.property?.presence?.bulk          || (p.property?.bulk_agreements?.length ?? 0) > 0 || !!p.property?.roe_detected,
+      gates:         !!p.property?.presence?.gates         || ((p.property?.proptech?.gate_operators?.length ?? 0) + (p.property?.proptech?.access_control?.length ?? 0)) > 0,
+      cameras:       !!p.property?.presence?.cameras       || (p.property?.proptech?.cameras?.length ?? 0) > 0,
+      smart_lockers: !!p.property?.presence?.smart_lockers || (p.property?.proptech?.package_solutions?.length ?? 0) > 0,
+      smart_rent:    !!p.property?.presence?.smart_rent    || (p.property?.proptech?.smart_locks?.length ?? 0) > 0,
+      ev_chargers:   !!p.property?.presence?.ev_chargers,
+    },
     contacts: (p.decision_maker_chain?.length ? p.decision_maker_chain : (p.decision_maker ? [p.decision_maker] : [])),
     community: p.social_posts ?? [],
     ai_intel: { key_finding: p.profile?.primary_concern ?? p.key_finding, buying_trends: p.buying_trends, pitch_hook: p.pitch_strategy?.primary_hook },

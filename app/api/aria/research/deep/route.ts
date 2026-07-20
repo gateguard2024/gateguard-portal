@@ -3257,6 +3257,11 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2', 'call_2', 'email_3'],
     }
 
+    // Last sale — computed in Phase 2 but previously dropped (sale_price hardcoded
+    // null). Carry it through; treat "No data found"/empty as null.
+    const lastSalePrice = ((): string | null => { const s = normStr(p2Final.last_sale_price); return s && !/no data/i.test(s) ? s : null })()
+    const lastSaleDate  = ((): string | null => { const s = normStr(p2Final.last_sale_date);  return s && !/no data/i.test(s) ? s : null })()
+
     const prospectPayload = {
       property: {
         name: property_name,
@@ -3296,6 +3301,19 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
           replacement_window: normStr(rawData.proptech?.replacement_window),
           displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
         },
+        // Presence flags for a FRESH result (before the row is re-read from the DB).
+        // Same keys the upsert persists + the UI reads, so "present, brand unknown"
+        // shows immediately, not just on reopen.
+        presence: {
+          internet:      cleanIspProviders.length > 0,
+          video:         cleanVideoProviders.length > 0,
+          bulk:          cleanBulkAgreements.length > 0 || !!p2Final.roe_detected,
+          gates:         (p3Final.proptech.gate_operators.length + p3Final.proptech.access_control.length) > 0,
+          cameras:       p3Final.proptech.cameras.length > 0,
+          smart_lockers: p3Final.proptech.package_solutions.length > 0,
+          smart_rent:    p3Final.proptech.smart_locks.length > 0,
+          ev_chargers:   false,
+        },
         inferred_proptech: rawData.inferred_proptech ?? [],
       },
       decision_maker: {
@@ -3328,7 +3346,8 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
         owner_type: normStr(p2Final.owner_type || rawData.ownership?.owner_type),
         portfolio_size: normStr(rawData.ownership?.portfolio_size),
         acquisition_year: normStr(p2Final.acquisition_year || rawData.ownership?.acquisition_year),
-        sale_price: null,
+        sale_price: lastSalePrice,
+        sale_date: lastSaleDate,
         capex_signal: normStr(rawData.ownership?.capex_signal),
       },
       pain_signals: p3Final.pain_signals.length > 0 ? p3Final.pain_signals : (rawData.pain_signals ?? []),

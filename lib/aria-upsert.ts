@@ -250,6 +250,7 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
         management_company: mergeVal(existing?.management_company, prop.management_company),
         owner_entity: mergeVal(existing?.owner_entity, prop.owner_entity),
         last_sale: mergeVal(exFacts?.property?.last_sale, own.sale_price ?? null),
+        last_sale_date: mergeVal(exFacts?.property?.last_sale_date, own.sale_date ?? null),
       },
       connectivity: {
         isp_providers:   mergedIspProviders ?? [],
