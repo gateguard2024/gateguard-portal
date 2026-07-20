@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { InternalDealerOnboardingBoard } from '@/components/nexus/InternalDealerOnboardingBoard'
 import { IntegrationsConsole } from '@/components/nexus/IntegrationsConsole'
 import { ProvisioningQueue } from '@/components/nexus/ProvisioningQueue'
@@ -11,8 +12,9 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { PricingConsoleBody } from '@/components/admin/PricingConsoleBody'
+import { CostSheetBody } from '@/components/admin/CostSheetBody'
 
-type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'playbooks' | 'training' | null
+type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -102,6 +104,10 @@ function InternalInfoPanel({ copy }: { copy: string }) {
 export function InternalSurface() {
   const router = useRouter()
   const [activePanel, setActivePanel] = useState<InternalPanel>(null)
+  const { user } = useUser()
+  // Cost is corporate-only — the card is hidden from everyone else, and the
+  // /api/admin/costs route refuses non-corporate even if they reach it.
+  const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === 'corporate'
 
   const cards: InternalCard[] = [
     { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', hex: '#00C8FF', glyph: 'activity', badge: 'Build' },
@@ -110,6 +116,7 @@ export function InternalSurface() {
     { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', hex: '#00C8FF', glyph: 'job-open', badge: 'Corporate' },
     { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', hex: '#34D399', glyph: 'priority', badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', hex: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
+    ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', hex: '#F87171', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
     { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', hex: '#007CFF', glyph: 'research' },
     { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', hex: '#34D399', glyph: 'todo' },
   ]
@@ -192,6 +199,20 @@ export function InternalSurface() {
           </>}
         >
           <PricingConsoleBody />
+        </InternalDetailShell>
+      )}
+
+      {activePanel === 'costs' && isCorporate && (
+        <InternalDetailShell
+          title="Gate Guard Costs"
+          subtitle="Our true monthly platform cost and one-time install hardware. These drive the calculators' margin math and are never shown to dealers. Step 4 makes them editable and adds the dealer waterfall (our cost + 10% = dealer cost, then suggested retail)."
+          onClose={() => setActivePanel(null)}
+          actions={<>
+            <ActionButton label="← Back to Main Dashboard" onClick={() => { window.location.href = '/' }} />
+            <ActionButton label="Open Pricing Console" onClick={() => setActivePanel('pricing')} />
+          </>}
+        >
+          <CostSheetBody />
         </InternalDetailShell>
       )}
 
