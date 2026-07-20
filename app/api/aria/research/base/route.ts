@@ -244,17 +244,35 @@ Return ONLY JSON, no prose:
   } catch { return fallback }
 }
 
-type AreaProperty = BaseProperty & { pain_signal?: boolean; pain_note?: string | null }
+type AreaProperty = BaseProperty & { pain_signal?: boolean; pain_note?: string | null; lead_score?: number }
+
+// ─── Lead score (first-find ranking) ──────────────────────────────────────────
+// 0–100 from the signals the cheap base pass reliably has: buy intent (pain),
+// opportunity size (units), and a rough pro-tech fit (something to displace).
+// Contractability + team-contractability need deep research, so they're not in
+// this first-find score — they fill in once a property is deep-researched.
+function baseLeadScore(p: AreaProperty): number {
+  let s = 0
+  if (p.pain_signal) s += 40                                   // Buy: an actual complaint about the system we sell
+  const u = p.units ?? 0
+  s += Math.min(u / 1000, 1) * 30                              // Opportunity: size (caps at 1000+ units)
+  const sys = p.systems ?? EMPTY_SYSTEMS
+  if (sys.gates || sys.cameras) s += 15                        // Pro-tech fit: gate/camera to integrate or displace
+  if (sys.bulk) s += 5                                         // connectivity signal
+  if (p.units != null) s += 10                                 // verified size (data completeness)
+  return Math.round(Math.min(s, 100))
+}
 
 async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextResponse> {
   const f = await parseAreaQuery(anthropic, query)
   const loc = [f.location, f.state].filter(Boolean).join(' ').trim() || query
   const unitPhrase = f.min_units ? `${f.min_units}+ units ` : ''
 
-  // 1) Discovery — the big communities in the area.
+  // 1) Discovery — the big communities in the area. Wider net so we can surface 25.
   const discovery = await Promise.all([
-    serper(`largest apartment complexes ${loc} ${unitPhrase}`.trim(), 10),
-    serper(`${loc} apartment communities ${unitPhrase}(site:apartments.com OR site:rentcafe.com OR site:loopnet.com OR site:yardimatrix.com)`, 10),
+    serper(`largest apartment complexes ${loc} ${unitPhrase}`.trim(), 20),
+    serper(`${loc} apartment communities ${unitPhrase}(site:apartments.com OR site:rentcafe.com OR site:loopnet.com OR site:yardimatrix.com)`, 20),
+    serper(`biggest ${loc} apartment complexes list ${unitPhrase}`.trim(), 20),
   ])
 
   // 2) Pain sweep — resident reviews reveal WHICH of them have the problem.
@@ -262,13 +280,13 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
   if (f.pains.length) {
     const expr = painToExpr(f.pains)
     pain = await Promise.all([
-      serper(`${loc} apartment ${expr} (site:apartmentratings.com OR site:reddit.com OR site:yelp.com)`, 10),
-      serper(`${loc} apartment reviews ${expr}`, 8),
+      serper(`${loc} apartment ${expr} (site:apartmentratings.com OR site:reddit.com OR site:yelp.com)`, 20),
+      serper(`${loc} apartment reviews ${expr}`, 15),
     ])
   }
 
   const all = [...discovery.flat(), ...pain.flat()]
-  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 16000)
+  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 24000)
   if (!snippets.trim()) {
     return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `No web results for ${loc}.`, filters: f })
   }
@@ -280,7 +298,7 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
   const prompt = `You are building a prospect list of US multifamily communities from web snippets. Return JSON only.
 
 AREA / CRITERIA search${f.location ? ` in ${f.location}${f.state ? ', ' + f.state : ''}` : ''}${f.min_units ? `, target ${f.min_units}+ units` : ''}.
-List up to 12 DISTINCT real apartment communities you can identify in the snippets. Prefer larger communities.
+List up to 25 DISTINCT real apartment communities you can identify in the snippets. Prefer larger communities.
 
 ${painLine}
 
@@ -301,7 +319,7 @@ ${snippets}`
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let parsed: any = null
   try {
-    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] })
+    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 4500, messages: [{ role: 'user', content: prompt }] })
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
     const m = text.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0])
   } catch (e) {
@@ -342,12 +360,13 @@ ${snippets}`
   if (f.min_units != null) properties = properties.filter(p => p.units == null || p.units >= f.min_units!)
   if (f.max_units != null) properties = properties.filter(p => p.units == null || p.units <= f.max_units!)
 
-  // Rank: pain match first, then larger known unit count.
+  // Score every candidate, then rank by lead score (pain + size + fit).
+  for (const p of properties) p.lead_score = baseLeadScore(p)
   properties.sort((a, b) => {
-    if (!!b.pain_signal !== !!a.pain_signal) return b.pain_signal ? 1 : -1
-    return (b.units ?? 0) - (a.units ?? 0)
+    const d = (b.lead_score ?? 0) - (a.lead_score ?? 0)
+    return d !== 0 ? d : (b.units ?? 0) - (a.units ?? 0)
   })
-  properties = properties.slice(0, 12)
+  properties = properties.slice(0, 25)
 
   // Hero images — best-effort, parallel, never blocks.
   await Promise.all(properties.map(async p => { if (p.website) p.photo_url = await heroImage(p.website) }))

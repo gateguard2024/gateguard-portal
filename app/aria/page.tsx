@@ -49,6 +49,7 @@ interface PropItem {
   gate_signal?: boolean
   pain_brief?: string
   buy_score?: number
+  lead_score?: number           // first-find rank score (0–100): buy intent + size + pro-tech fit
   researched?: boolean          // = already in the Intel DB (the ✓ Saved badge)
   contract_expiry_year?: number
   lat?: number
@@ -649,6 +650,7 @@ export default function AriaExplorePage() {
         // Area/criteria hunts return the review-evidence for the pain the rep asked
         // for — surface it as the pain_brief that drives the "Gate complaints" flag.
         pain_brief: p.pain_note ?? undefined,
+        lead_score: typeof p.lead_score === 'number' ? p.lead_score : undefined,
         // Mirror the base flags onto the legacy signals the filters/pins read.
         bulk_detected: !!p.systems?.bulk,
         gate_signal: !!p.systems?.gates,
@@ -731,6 +733,8 @@ export default function AriaExplorePage() {
     (!fExpBefore || (it.contract_expiry_year != null && it.contract_expiry_year <= fExpBefore)) &&
     (source !== 'saved' || !query.trim() || it.name.toLowerCase().includes(query.trim().toLowerCase()))
   const visible = items.filter(matchesFilters)
+    // Order by lead score (highest first); fall back to unit size when tied/absent.
+    .sort((a, b) => ((b.lead_score ?? 0) - (a.lead_score ?? 0)) || ((b.units ?? 0) - (a.units ?? 0)))
   const alreadyCount = items.filter(i => i.researched).length
 
   // Save the selected base findings into the Intel DB. Base data only — name,
