@@ -27,10 +27,12 @@ export async function POST(req: NextRequest) {
   const internalView = canViewInternal && body.viewAsDealer !== true
 
   const result = computePricing({
-    livingUnits:   body.livingUnits   as number | string | undefined,
-    entryPoints:   (body.entryPoints ?? body.doors) as number | string | undefined,
-    cameras:       (body.cameras ?? body.camMon)    as number | string | undefined,
-    cameraType:    body.cameraType    as 'new' | 'existing' | undefined,
+    livingUnits:    body.livingUnits   as number | string | undefined,
+    entryPoints:    (body.entryPoints ?? body.doors) as number | string | undefined,
+    cameras:        (body.cameras ?? body.camMon)    as number | string | undefined,
+    cameraType:     body.cameraType    as 'new' | 'existing' | undefined,
+    smartLockUnits: (body.smartLockUnits ?? body.commonLocks) as number | string | undefined,
+    cellular:       body.cellular      as number | string | undefined,
   }, internalView)
 
   return NextResponse.json({ result, canViewInternal, internalView })

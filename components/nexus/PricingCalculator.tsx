@@ -1,11 +1,11 @@
 'use client'
 
-// Gate Guard pricing calculator — EXACT port of the locked "v14" model.
-// Graduated per-unit tiers + an included gate/camera allotment + per-item add-ons
-// + a proportional channel split + a stepped platform cost + a $350 whole-deal GG
-// net floor + whole-dollar customer rounding. The math + GG cost live SERVER-SIDE
-// (/api/pricing/compute → lib/pricing-model.ts); GG cost / net are shown only to
-// corporate. Dealers see the customer price, per-unit, and their own + channel cut.
+// Gate Guard MONTHLY RECURRING calculator — model "v16" (rough calculator).
+// Revenue = graduated per-unit tiers + included allotment + add-ons, floored.
+// Distribution = flat per-unit caps: dealer $3, sales $1, distribution $1 / unit.
+// Cost = the real recurring cost sheet. GG cost + net are computed SERVER-SIDE
+// (/api/pricing/compute → lib/pricing-model.ts) and shown only to corporate.
+// A one-time / install-fee section is coming as a separate block.
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const usd = (n: number) => (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
@@ -25,30 +25,34 @@ function Num({ label, value, onChange, hint }: { label: string; value: string; o
   )
 }
 
-function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+// A distribution / cost line: label · per-unit · total.
+function Row({ label, total, units, strong, cap }: { label: string; total: number; units: number; strong?: boolean; cap?: string }) {
+  const pu = units > 0 ? total / units : 0
   return (
-    <div className="flex items-center justify-between gap-3 text-[12px]" style={{ color: strong ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.7)' }}>
-      <span>{label}</span><span style={{ color: 'rgba(255,255,255,0.92)', fontWeight: strong ? 600 : 400 }}>{value}</span>
+    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-1 text-[12px]">
+      <span style={{ color: strong ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', fontWeight: strong ? 600 : 400 }}>{label}{cap ? <span className="ml-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>≤ {cap}</span> : null}</span>
+      <span className="w-16 text-right" style={{ color: 'rgba(255,255,255,0.5)' }}>{usd(pu)}</span>
+      <span className="w-20 text-right" style={{ color: 'rgba(255,255,255,0.92)', fontWeight: strong ? 600 : 400 }}>{usd(total)}</span>
     </div>
   )
 }
 
 export function PricingCalculator({ initialUnits, initialDoors, initialCameras, initialCommonLocks, initialUnitsApp, initialUnitsGw, initialCamBackup, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialCamBackup?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string; camBackup: string; camMon: string; doors: string; commonLocks: string }) => void } = {}) {
   const seed = (v: number | string | null | undefined) => (v != null && v !== '' && Number(v) > 0 ? String(v) : '')
-  // v14 inputs. Entry points reuse the persisted `doors` slot; cameras reuse `camMon`.
   const [livingUnits, setLivingUnits] = useState(seed(initialUnits))
   const [entryPoints, setEntryPoints] = useState(seed(initialDoors))
   const [cameras, setCameras] = useState(seed(initialCameras))
   const [cameraType, setCameraType] = useState<'new' | 'existing'>('new')
-  // Legacy persisted fields we no longer edit — kept so a save doesn't wipe them.
-  const passthru = useRef({ unitsApp: seed(initialUnitsApp), unitsGw: seed(initialUnitsGw), camBackup: seed(initialCamBackup), commonLocks: seed(initialCommonLocks) })
+  const [smartLocks, setSmartLocks] = useState(seed(initialCommonLocks))
+  const [cellular, setCellular] = useState('')
+  const passthru = useRef({ unitsApp: seed(initialUnitsApp), unitsGw: seed(initialUnitsGw), camBackup: seed(initialCamBackup) })
 
   const [viewAsDealer, setViewAsDealer] = useState(false)
   const [canViewInternal, setCanViewInternal] = useState(false)
   const [internalView, setInternalView] = useState(false)
   const [calc, setCalc] = useState<Result>({ empty: true, noUnits: true })
 
-  const inputs = useMemo(() => ({ livingUnits, entryPoints, cameras, cameraType }), [livingUnits, entryPoints, cameras, cameraType])
+  const inputs = useMemo(() => ({ livingUnits, entryPoints, cameras, cameraType, smartLockUnits: smartLocks, cellular }), [livingUnits, entryPoints, cameras, cameraType, smartLocks, cellular])
 
   const onComputeRef = useRef(onCompute)
   useEffect(() => { onComputeRef.current = onCompute }, [onCompute])
@@ -73,7 +77,6 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
     return () => clearTimeout(t)
   }, [inputs, viewAsDealer])
 
-  // Persist deal counts back to the opportunity, debounced (skips first render).
   const onPersistRef = useRef(onPersist)
   useEffect(() => { onPersistRef.current = onPersist }, [onPersist])
   const persistedFirst = useRef(false)
@@ -82,57 +85,47 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
     if (!persistedFirst.current) { persistedFirst.current = true; return }
     const t = setTimeout(() => {
       const pt = passthru.current
-      // entry points ride the `doors` slot; cameras ride `camMon` — same columns
-      // the opportunity already stores, so nothing downstream changes.
-      onPersistRef.current?.({ livingUnits, doors: entryPoints, camMon: cameras, unitsApp: pt.unitsApp, unitsGw: pt.unitsGw, camBackup: pt.camBackup, commonLocks: pt.commonLocks })
+      onPersistRef.current?.({ livingUnits, doors: entryPoints, camMon: cameras, commonLocks: smartLocks, unitsApp: pt.unitsApp, unitsGw: pt.unitsGw, camBackup: pt.camBackup })
     }, 600)
     return () => clearTimeout(t)
-  }, [livingUnits, entryPoints, cameras])
+  }, [livingUnits, entryPoints, cameras, smartLocks])
 
   const showInternal = canViewInternal && internalView
   const empty = !!calc.empty
+  const units = calc.units ?? 0
 
   return (
     <div className="space-y-5">
       {canViewInternal && (
         <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
           <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1.5" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal (cost + margin)</button>
-          <button type="button" onClick={() => setViewAsDealer(true)} className="rounded-full px-3 py-1.5" style={viewAsDealer ? { background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.5)', color: '#6ee7b7' } : { color: 'rgba(255,255,255,0.6)' }}>Dealer view (preview)</button>
+          <button type="button" onClick={() => setViewAsDealer(true)} className="rounded-full px-3 py-1.5" style={viewAsDealer ? { background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.5)', color: '#6ee7b7' } : { color: 'rgba(255,255,255,0.6)' }}>Dealer view</button>
         </div>
       )}
 
       {/* Inputs */}
       <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,200,255,0.16)' }}>
         <div className="mb-1 text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>What&apos;s on this site?</div>
-        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Living units, entry points, and cameras — pricing updates as you go.</div>
+        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Monthly recurring — pricing updates as you go.</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Num label="Living units" value={livingUnits} onChange={setLivingUnits} hint="drives the graduated base rate" />
           <Num label="Entry points" value={entryPoints} onChange={setEntryPoints} hint={`${calc.includedGates ?? 0} included`} />
           <Num label="Cameras" value={cameras} onChange={setCameras} hint={`${calc.includedCameras ?? 0} included`} />
+          <Num label="Smart-lock units" value={smartLocks} onChange={setSmartLocks} hint="per unit" />
+          <Num label="Cellular (IOT)" value={cellular} onChange={setCellular} hint="cellular connections" />
         </div>
         <div className="mt-3">
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.62)' }}>Extra cameras are</div>
           <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
-            <button type="button" onClick={() => setCameraType('new')} className="rounded-full px-3 py-1.5" style={cameraType === 'new' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>New (GG supplies) · $91</button>
-            <button type="button" onClick={() => setCameraType('existing')} className="rounded-full px-3 py-1.5" style={cameraType === 'existing' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Existing (monitor) · $85</button>
+            <button type="button" onClick={() => setCameraType('new')} className="rounded-full px-3 py-1.5" style={cameraType === 'new' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>New · $91</button>
+            <button type="button" onClick={() => setCameraType('existing')} className="rounded-full px-3 py-1.5" style={cameraType === 'existing' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Existing · $85</button>
           </div>
         </div>
       </div>
 
-      {/* Add-on stack */}
-      {!empty && ((calc.extraGates ?? 0) > 0 || (calc.extraCameras ?? 0) > 0) && (
-        <div className="rounded-2xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add-ons over the included allotment</div>
-          <div className="space-y-1.5">
-            {(calc.extraGates ?? 0) > 0 && <Line label={`Extra entry points · ${calc.extraGates} × ${usd0(calc.gatePrice ?? 155)}`} value={usd0((calc.extraGates ?? 0) * (calc.gatePrice ?? 155))} />}
-            {(calc.extraCameras ?? 0) > 0 && <Line label={`Extra cameras · ${calc.extraCameras} × ${usd0(calc.cameraPrice ?? 91)}`} value={usd0((calc.extraCameras ?? 0) * (calc.cameraPrice ?? 91))} />}
-          </div>
-        </div>
-      )}
-
       {/* Customer price */}
       <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(0,200,255,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
-        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>What the customer pays / month</div>
+        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>Customer pays / month</div>
         <div className="mt-1 flex items-baseline gap-2 flex-wrap">
           <span className="text-4xl font-bold" style={{ color: '#7DE5FF' }}>{empty ? '—' : usd0(calc.perUnit ?? 0)}</span>
           <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>per unit</span>
@@ -141,34 +134,52 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
         {!empty && calc.atFloor && <div className="mt-1 text-[11px]" style={{ color: '#fde68a' }}>At the Gate Guard minimum for a site this size.</div>}
       </div>
 
-      {/* Money distribution */}
+      {/* Distribution */}
       <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.28)' }}>
-        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Where the money goes / month</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Where the money goes / month</div>
+          <div className="hidden grid-cols-[auto_auto] gap-3 text-[9px] font-bold uppercase tracking-wider sm:grid" style={{ color: 'rgba(255,255,255,0.35)' }}><span className="w-16 text-right">/ unit</span><span className="w-20 text-right">total</span></div>
+        </div>
         {empty ? (
           <div className="mt-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Enter a site above to see the split.</div>
         ) : (
-          <div className="mt-3 space-y-1.5 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <Line label="Dealer" value={usd(calc.dealerCut ?? 0)} strong />
-            <Line label="Sales rep" value={usd(calc.salesCut ?? 0)} />
-            <Line label="Distribution" value={usd(calc.distCut ?? 0)} />
+          <div className="mt-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <Row label="Dealer" total={calc.dealerCut ?? 0} units={units} strong cap={usd(calc.dealerPerUnit ?? 3) + '/unit'} />
+            <Row label="Sales rep" total={calc.salesCut ?? 0} units={units} cap={usd(calc.salesPerUnit ?? 1) + '/unit'} />
+            <Row label="Distribution" total={calc.distCut ?? 0} units={units} cap={usd(calc.distPerUnit ?? 1) + '/unit'} />
             {showInternal && <>
-              <Line label="Gate Guard (net)" value={usd(calc.ggNet ?? 0)} />
-              <Line label="Gate Guard cost" value={`(${usd(calc.ggCost ?? 0)})`} />
-              <div className="mt-1 border-t pt-1.5" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-                <Line label="Reconciles to billed" value={usd0(calc.customerMonthly ?? 0)} strong />
-              </div>
+              <Row label="Gate Guard cost" total={calc.ggCost ?? 0} units={units} />
+              <div className="my-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }} />
+              <Row label="Gate Guard net" total={calc.ggNet ?? 0} units={units} strong />
             </>}
           </div>
         )}
-        {showInternal && !empty && (calc.units ?? 0) > 0 && (
-          <div className="mt-2 text-right text-[12px]" style={{ color: (calc.marginPerUnit ?? 0) >= 1 ? '#6ee7b7' : '#fca5a5' }}>{usd(calc.marginPerUnit ?? 0)}/unit GG margin</div>
-        )}
       </div>
+
+      {/* Cost breakdown — corporate only */}
+      {showInternal && !empty && (
+        <div className="rounded-3xl p-5" style={{ background: 'radial-gradient(circle at 14% 0%, rgba(0,124,255,0.16), transparent 40%), linear-gradient(180deg, rgba(8,18,34,0.82), rgba(3,9,22,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Gate Guard recurring cost · real sheet</div>
+          <div className="hidden grid-cols-[auto_auto] gap-3 text-[9px] font-bold uppercase tracking-wider sm:grid" style={{ color: 'rgba(255,255,255,0.35)' }}><span className="w-16 text-right">/ unit</span><span className="w-20 text-right">total</span></div>
+        </div>
+        <div className="mt-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          {(calc.costBrivo ?? 0) > 0 && <Row label="Brivo site fee" total={calc.costBrivo} units={units} />}
+          {(calc.costEntry ?? 0) > 0 && <Row label={`${calc.entryPoints} entry points (tiered)`} total={calc.costEntry} units={units} />}
+          {(calc.costSmartLock ?? 0) > 0 && <Row label={`${calc.smartLockUnits} smart locks`} total={calc.costSmartLock} units={units} />}
+          {(calc.costNvr ?? 0) > 0 && <Row label="Eagle Eye NVR" total={calc.costNvr} units={units} />}
+          {(calc.costCameras ?? 0) > 0 && <Row label={`${calc.cameras} cameras × ${usd0(calc.perCameraCost ?? 44)}`} total={calc.costCameras} units={units} />}
+          {(calc.costCellular ?? 0) > 0 && <Row label={`${calc.cellular} cellular`} total={calc.costCellular} units={units} />}
+          <div className="my-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }} />
+          <Row label="Total cost" total={calc.ggCost ?? 0} units={units} strong />
+        </div>
+        </div>
+      )}
 
       <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
         {showInternal
-          ? <>Graduated base ($10/$7/$5/$3 per unit), {calc.includedGates ?? 0} gates + {calc.includedCameras ?? 0} cameras included, add-ons over that, split 50/30/10/10 with a $350 Gate Guard floor. Cost model computed server-side.</>
-          : <>Customer price rounds down to the dollar. Dealer/sales/distribution are the monthly cuts of the billed total.</>}
+          ? <>Distribution is capped per unit — dealer $3, sales $1, distribution $1. Gate Guard keeps the rest after the real recurring cost. One-time install fees are a separate section (coming).</>
+          : <>Monthly recurring. Dealer/sales/distribution are the per-unit commissions on the billed total.</>}
       </div>
     </div>
   )
