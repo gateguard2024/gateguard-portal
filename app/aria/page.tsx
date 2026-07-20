@@ -295,7 +295,7 @@ function normalizeReport(raw: any): any {
       cameras:       !!p.property?.presence?.cameras       || (p.property?.proptech?.cameras?.length ?? 0) > 0,
       smart_lockers: !!p.property?.presence?.smart_lockers || (p.property?.proptech?.package_solutions?.length ?? 0) > 0,
       smart_rent:    !!p.property?.presence?.smart_rent    || (p.property?.proptech?.smart_locks?.length ?? 0) > 0,
-      ev_chargers:   !!p.property?.presence?.ev_chargers,
+      ev_chargers:   !!p.property?.presence?.ev_chargers   || (p.property?.proptech?.ev_chargers?.length ?? 0) > 0,
     },
     contacts: (p.decision_maker_chain?.length ? p.decision_maker_chain : (p.decision_maker ? [p.decision_maker] : [])),
     community: p.social_posts ?? [],

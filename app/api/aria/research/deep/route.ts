@@ -1854,6 +1854,7 @@ interface Phase3Result {
     smart_locks: string[]
     resident_apps: string[]
     package_solutions: string[]
+    ev_chargers: string[]
     tech_generation: 'legacy' | 'modern' | 'hybrid'
   }
   proptech_findings: ProptechFinding[]   // v8: confidence-scored + sourced proptech
@@ -1875,7 +1876,7 @@ async function runPhase3(
 ): Promise<Phase3Result> {
   const blank: Phase3Result = {
     pain_signals: [],
-    proptech: { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], package_solutions: [], tech_generation: 'legacy' },
+    proptech: { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], package_solutions: [], ev_chargers: [], tech_generation: 'legacy' },
     proptech_findings: [],
     contacts: [],
     email_format: '',
@@ -1897,8 +1898,8 @@ async function runPhase3(
   const p3ContactQuery = rewritten?.contact_search
     ?? `"${entity ?? confirmedName}" ${confirmedCity} "community manager" OR "regional manager" OR "property manager" OR "asset manager" OR "leasing manager" OR "onsite manager" OR "portfolio manager" OR "director of operations" site:linkedin.com`
   const p3ProptechQuery = rewritten?.proptech_search
-    ? `${rewritten.proptech_search} ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR CellGate OR "access control" OR intercom OR "gate system"`
-    : `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR "Deep Sentinel" OR CellGate OR "access control" OR intercom OR "gate system"`
+    ? `${rewritten.proptech_search} ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR CellGate OR "access control" OR intercom OR "gate system" OR ChargePoint OR "EV charging" OR "electric vehicle charging" OR "Tesla charger"`
+    : `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR "Deep Sentinel" OR CellGate OR "access control" OR intercom OR "gate system" OR ChargePoint OR "EV charging" OR "electric vehicle charging" OR "Tesla charger"`
   const p3ReviewQuery = rewritten?.review_search
     ?? `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com internet OR wifi OR gate OR security OR package OR locker OR intercom OR cameras OR "smart lock" OR cable OR streaming`
   const p3PainQuery = rewritten?.review_search
@@ -2005,7 +2006,7 @@ Up to 20 signals. Include BOTH complaints and positive mentions. Prefer last 12 
     proptechSnippets.length > 80
       ? haikusExtract<Phase3Result['proptech']>(
           `Extract ALL property technology brands mentioned. Return ONLY valid JSON:
-{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"tech_generation":"legacy"}
+{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"ev_chargers":[],"tech_generation":"legacy"}
 Known brands (extract company name exactly as written):
 - gate_operators: DoorKing/DKS/LiftMaster/Viking/Linear/FAAC/PDK/Elite Gates/CellGate/Rently/Doorking
 - access_control: Brivo/HID/SALTO/Openpath/Motorola/PDK/Kisi/Allegion/Schlage/Nexkey/Kastle/Swiftlane/Assa Abloy/Yale/August/Latch/Rently
@@ -2014,6 +2015,7 @@ Known brands (extract company name exactly as written):
 - smart_locks: SmartRent/Latch/August/Yale/Schlage/Kwikset/Assa Abloy/igloohome/SALTO/Allegion
 - resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio/Rent Manager/BuildingLink/Rently
 - package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Fetch"/"Butterfly Package"
+- ev_chargers: ChargePoint/Tesla/Blink/EVgo/FLO/"Enel X"/JuiceBox/Wallbox/SemaConnect/Volta/"electric vehicle charging"/"EV charging stations"
 tech_generation: "legacy"=pre-2018 brands dominant (DoorKing, Aiphone, analog cameras), "modern"=2018+ brands (ButterflyMX, Verkada, Brivo, SmartRent), "hybrid"=mix
 IMPORTANT: scan full page text — proptech brands often appear in: "Community Features", "Building Features", "Amenities", "Technology", "Access" sections${listingProptechCtx}`,
           proptechSnippets, 900, client)
@@ -2178,6 +2180,9 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
   const finalProptech: Phase3Result['proptech'] = {
     ...(proptechExtracted ?? blank.proptech),
   }
+  // ev_chargers is newer than the other keys — an older/partial Haiku response may
+  // omit it, and payload/presence call .length on it. Guarantee it's an array.
+  if (!Array.isArray(finalProptech.ev_chargers)) finalProptech.ev_chargers = []
   if (listingProptech.length > 0) {
     // Distribute listing proptech brands into the right category arrays
     for (const brand of listingProptech) {
@@ -3296,6 +3301,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
           smart_locks: normStrArr(p3Final.proptech.smart_locks.length ? p3Final.proptech.smart_locks : rawData.proptech?.smart_locks),
           resident_apps: normStrArr(p3Final.proptech.resident_apps.length ? p3Final.proptech.resident_apps : rawData.proptech?.resident_apps),
           package_solutions: normStrArr(p3Final.proptech.package_solutions.length ? p3Final.proptech.package_solutions : rawData.proptech?.package_solutions),
+          ev_chargers: normStrArr(p3Final.proptech.ev_chargers.length ? p3Final.proptech.ev_chargers : rawData.proptech?.ev_chargers),
           tech_generation: normStr(p3Final.proptech.tech_generation ?? rawData.proptech?.tech_generation) ?? 'legacy',
           sara_signals: rawData.proptech?.sara_signals ?? false,
           replacement_window: normStr(rawData.proptech?.replacement_window),
@@ -3312,7 +3318,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
           cameras:       p3Final.proptech.cameras.length > 0,
           smart_lockers: p3Final.proptech.package_solutions.length > 0,
           smart_rent:    p3Final.proptech.smart_locks.length > 0,
-          ev_chargers:   false,
+          ev_chargers:   p3Final.proptech.ev_chargers.length > 0,
         },
         inferred_proptech: rawData.inferred_proptech ?? [],
       },

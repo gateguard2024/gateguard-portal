@@ -234,6 +234,8 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
     const mLocks    = mergeArr(existing?.smart_locks,       pt.smart_locks)       ?? []
     const mApps     = mergeArr(existing?.resident_apps,     pt.resident_apps)     ?? []
     const mPackages = mergeArr(existing?.package_solutions, pt.package_solutions) ?? []
+    // EV chargers live only in facts JSONB (no top-level column) — merge from there.
+    const mEv       = mergeArr((exFacts?.proptech_found?.ev_chargers as string[] | undefined), pt.ev_chargers) ?? []
 
     const facts = {
       property: {
@@ -275,6 +277,7 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
         smart_locks:       mLocks,
         resident_apps:     mApps,
         package_solutions: mPackages,
+        ev_chargers:       mEv,
         tech_generation:   mergeVal(existing?.tech_generation, pt.tech_generation),
         // Presence survives even when no brand was named (see note above). Never
         // let a deep run downgrade a base-find "present" to "unknown".
@@ -282,7 +285,7 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
         cameras_present:       mCameras.length > 0 || !!exFacts?.proptech_found?.cameras_present,
         smart_lockers_present: mPackages.length > 0 || !!exFacts?.proptech_found?.smart_lockers_present,
         smart_rent_present:    mLocks.length > 0 || !!exFacts?.proptech_found?.smart_rent_present,
-        ev_chargers_present:   !!exFacts?.proptech_found?.ev_chargers_present,
+        ev_chargers_present:   mEv.length > 0 || !!exFacts?.proptech_found?.ev_chargers_present,
       },
       decision_makers: unionBy<any>(exFacts?.decision_makers, freshDMs, d => (d?.name ?? '').toLowerCase()),
       ownership: {
