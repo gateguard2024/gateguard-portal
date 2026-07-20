@@ -453,6 +453,15 @@ export default function AriaExplorePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mapboxgl = (window as any).mapboxgl
     if (!mapboxgl || !MAPBOX_TOKEN || mapRef.current) return
+
+    // Cause #1 of "static images work but GL is black": WebGL is off. GL needs a
+    // WebGL context; the static image API doesn't. Say so plainly rather than
+    // painting black.
+    if (typeof mapboxgl.supported === 'function' && !mapboxgl.supported()) {
+      setMapErr('This browser has WebGL turned off, so the live map can’t draw (the property photos still use static images). Turn on hardware acceleration / WebGL, or update the browser.')
+      return
+    }
+
     mapboxgl.accessToken = MAPBOX_TOKEN
     try {
       const map = new mapboxgl.Map({
@@ -460,6 +469,8 @@ export default function AriaExplorePage() {
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
         center: [-96.8, 32.8], zoom: 9,
       })
+      // Style loaded = everything's fine; clear any earlier diagnostic.
+      map.on('load', () => setMapErr(null))
       // Surface Mapbox's real failure instead of a silent black pane. A token that
       // 401s on the style/tiles (URL restrictions or missing scopes) is the usual
       // cause — the style never loads, so there are no controls, just black.
@@ -471,6 +482,23 @@ export default function AriaExplorePage() {
           : `Map error: ${msg}`)
       })
       mapRef.current = map
+
+      // If the style still hasn't loaded after 7s with NO error event, the usual
+      // culprit is a zero-size container (hidden/unlaid-out) or silently blocked
+      // tiles. Report the real container size so the cause is obvious.
+      setTimeout(() => {
+        try {
+          const m = mapRef.current
+          if (!m || (m.isStyleLoaded && m.isStyleLoaded())) return
+          const el = document.getElementById('aria-explore-map')
+          const w = el?.clientWidth ?? 0, h = el?.clientHeight ?? 0
+          if (w === 0 || h === 0) {
+            setMapErr(`Map area has no size yet (${w}×${h}) — it loaded while hidden. Switching to the map view should fix it; tell me if it stays blank.`)
+          } else {
+            setMapErr(`Map tiles didn’t load (map area is ${w}×${h}, so it’s visible). Likely blocked map tiles or the token is missing tiles/styles scope on this domain.`)
+          }
+        } catch { /* noop */ }
+      }, 7000)
     } catch (err) {
       setMapErr(err instanceof Error ? err.message : 'Map failed to initialize')
     }
@@ -496,12 +524,13 @@ export default function AriaExplorePage() {
     setTimeout(() => { try { map.resize() } catch { /* noop */ } }, 400)
     Object.values(markersRef.current).forEach((m: any) => m.remove()) // eslint-disable-line @typescript-eslint/no-explicit-any
     markersRef.current = {}
-    // Same predicate as matchesFilters, so pin numbers line up 1:1 with the
-    // numbers shown in the results list on the right.
+    // Same predicate AND same lead-score order as the right-hand list, so pin
+    // number N is always the same property as list row N (highest score = #1).
     const filtered = items.filter(i =>
       (!fMinUnits || (i.units ?? 0) >= fMinUnits) && (!fGate || i.gate_signal) && (!fBulk || i.bulk_detected) && (!fNew || !i.researched)
       && (!fExpBefore || (i.contract_expiry_year != null && i.contract_expiry_year <= fExpBefore))
       && (source !== 'saved' || !query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase())))
+      .sort((a, b) => ((b.lead_score ?? 0) - (a.lead_score ?? 0)) || ((b.units ?? 0) - (a.units ?? 0)))
     const withCoords = filtered.filter(i => i.lat != null && i.lng != null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bounds = withCoords.length ? new mapboxgl.LngLatBounds() : null
@@ -1231,7 +1260,9 @@ export default function AriaExplorePage() {
               {visible.map(it => {
                 const s = it.buy_score ?? 5
                 const isSel = selected.has(it.id)
-                const thumb = staticThumb(it.lat, it.lng, 320, 150)
+                // Hero = the property's OWN photo (website og:image) only. The map is
+                // the map view — never a satellite tile masquerading as a hero shot.
+                const thumb = it.photo_url ?? null
                 return (
                   <div key={it.id} className={`relative rounded-xl border overflow-hidden transition-all bg-[#131B2E]/70 ${isSel ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40' : 'border-white/10 hover:border-[#6B7EFF]/50'}`}>
                     {/* Aerial thumbnail */}
@@ -1256,6 +1287,10 @@ export default function AriaExplorePage() {
                       <h3 className="text-sm font-bold text-slate-100 truncate">{it.name}</h3>
                       <p className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5"><MapPin size={10} className="opacity-70" /> {[it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {typeof it.lead_score === 'number' && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded text-white" title="Lead score (0–100): buy intent + size + pro-tech fit"
+                            style={{ background: it.lead_score >= 70 ? '#059669' : it.lead_score >= 40 ? '#D97706' : '#475569' }}>LEAD {it.lead_score}</span>
+                        )}
                         {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
                         {triggerFlags(it).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
                       </div>
@@ -1399,6 +1434,10 @@ export default function AriaExplorePage() {
                       <h3 className="text-[12.5px] font-bold text-slate-100 truncate leading-tight">{it.name}</h3>
                       <p className="text-[10.5px] text-slate-400 truncate mt-0.5">{it.address || [it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
                       <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        {typeof it.lead_score === 'number' && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded text-white" title="Lead score (0–100): buy intent + size + pro-tech fit"
+                            style={{ background: it.lead_score >= 70 ? '#059669' : it.lead_score >= 40 ? '#D97706' : '#475569' }}>LEAD {it.lead_score}</span>
+                        )}
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${it.units ? 'bg-[#0F1830] text-slate-300 border-white/10' : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
                           {it.units ? `${it.units} units` : 'Units: no data'}
                         </span>
