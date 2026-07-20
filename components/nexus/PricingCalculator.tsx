@@ -7,6 +7,7 @@
 // (/api/pricing/compute → lib/pricing-model.ts) and shown only to corporate.
 // A one-time / install-fee section is coming as a separate block.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { InstallCalculator } from '@/components/nexus/InstallCalculator'
 
 const usd = (n: number) => (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 const usd0 = (n: number) => (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -46,6 +47,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
   const [smartLocks, setSmartLocks] = useState(seed(initialCommonLocks))
   const [cellular, setCellular] = useState('')
   const [dealerMaintains, setDealerMaintains] = useState(true)
+  const [tab, setTab] = useState<'monthly' | 'install'>('monthly')
   const passthru = useRef({ unitsApp: seed(initialUnitsApp), unitsGw: seed(initialUnitsGw), camBackup: seed(initialCamBackup) })
 
   const [viewAsDealer, setViewAsDealer] = useState(false)
@@ -97,6 +99,15 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
 
   return (
     <div className="space-y-5">
+      {/* Monthly recurring / one-time install */}
+      <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
+        <button type="button" onClick={() => setTab('monthly')} className="rounded-full px-3.5 py-1.5" style={tab === 'monthly' ? { background: 'rgba(107,126,255,0.25)', border: '1px solid rgba(107,126,255,0.5)', color: '#c7d0ff' } : { color: 'rgba(255,255,255,0.6)' }}>Monthly recurring</button>
+        <button type="button" onClick={() => setTab('install')} className="rounded-full px-3.5 py-1.5" style={tab === 'install' ? { background: 'rgba(107,126,255,0.25)', border: '1px solid rgba(107,126,255,0.5)', color: '#c7d0ff' } : { color: 'rgba(255,255,255,0.6)' }}>One-time install</button>
+      </div>
+
+      {tab === 'install' ? (
+        <InstallCalculator initialWorkingGates={Number(entryPoints) || undefined} initialCameras={Number(cameras) || undefined} />
+      ) : (<>
       {canViewInternal && (
         <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
           <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1.5" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal (cost + margin)</button>
@@ -186,6 +197,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
           ? <>Distribution is capped per unit — dealer $3, sales $1, distribution $1. Gate Guard keeps the rest after the real recurring cost. One-time install fees are a separate section (coming).</>
           : <>Monthly recurring. Dealer/sales/distribution are the per-unit commissions on the billed total.</>}
       </div>
+      </>)}
     </div>
   )
 }
