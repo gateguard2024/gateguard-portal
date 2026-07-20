@@ -225,6 +225,16 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
       ?? (Array.isArray(existing?.facts?.community_posts) ? existing.facts.community_posts : [])
     const freshInferred: any[]  = Array.isArray(prop.inferred_proptech) ? prop.inferred_proptech : []
 
+    // Merge the proptech brand arrays once, reused for both the stored arrays and
+    // the presence flags below.
+    const mGate     = mergeArr(existing?.gate_operators,    pt.gate_operators)    ?? []
+    const mAccess   = mergeArr(existing?.access_control,    pt.access_control)    ?? []
+    const mIntercom = mergeArr(existing?.intercoms,         pt.intercoms)         ?? []
+    const mCameras  = mergeArr(existing?.cameras,           pt.cameras)           ?? []
+    const mLocks    = mergeArr(existing?.smart_locks,       pt.smart_locks)       ?? []
+    const mApps     = mergeArr(existing?.resident_apps,     pt.resident_apps)     ?? []
+    const mPackages = mergeArr(existing?.package_solutions, pt.package_solutions) ?? []
+
     const facts = {
       property: {
         name: propName, address: propAddr,
@@ -249,16 +259,29 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
         roe_providers:   mergedRoeProviders ?? [],
         roe_expiry_year: mergeVal(existing?.roe_expiry_year, prop.roe_expiry_year),
         fcc_verified:    prop._fcc_verified || existing?.fcc_verified || false,
+        // Presence flags — "present, brand unknown" ≠ "no data found". Deep
+        // research rebuilds this block, so preserve the base-find flags and OR in
+        // whatever the arrays now prove.
+        internet_present: (mergedIspProviders?.length ?? 0) > 0 || !!exFacts?.connectivity?.internet_present,
+        video_present:    (mergedVideoProviders?.length ?? 0) > 0 || !!exFacts?.connectivity?.video_present,
+        bulk_present:     (mergedBulkAgreements?.length ?? 0) > 0 || !!(prop.roe_detected || existing?.roe_detected) || !!exFacts?.connectivity?.bulk_present,
       },
       proptech_found: {
-        gate_operators:    mergeArr(existing?.gate_operators, pt.gate_operators) ?? [],
-        access_control:    mergeArr(existing?.access_control, pt.access_control) ?? [],
-        intercoms:         mergeArr(existing?.intercoms, pt.intercoms) ?? [],
-        cameras:           mergeArr(existing?.cameras, pt.cameras) ?? [],
-        smart_locks:       mergeArr(existing?.smart_locks, pt.smart_locks) ?? [],
-        resident_apps:     mergeArr(existing?.resident_apps, pt.resident_apps) ?? [],
-        package_solutions: mergeArr(existing?.package_solutions, pt.package_solutions) ?? [],
+        gate_operators:    mGate,
+        access_control:    mAccess,
+        intercoms:         mIntercom,
+        cameras:           mCameras,
+        smart_locks:       mLocks,
+        resident_apps:     mApps,
+        package_solutions: mPackages,
         tech_generation:   mergeVal(existing?.tech_generation, pt.tech_generation),
+        // Presence survives even when no brand was named (see note above). Never
+        // let a deep run downgrade a base-find "present" to "unknown".
+        gates_present:         mGate.length > 0 || mAccess.length > 0 || !!exFacts?.proptech_found?.gates_present,
+        cameras_present:       mCameras.length > 0 || !!exFacts?.proptech_found?.cameras_present,
+        smart_lockers_present: mPackages.length > 0 || !!exFacts?.proptech_found?.smart_lockers_present,
+        smart_rent_present:    mLocks.length > 0 || !!exFacts?.proptech_found?.smart_rent_present,
+        ev_chargers_present:   !!exFacts?.proptech_found?.ev_chargers_present,
       },
       decision_makers: unionBy<any>(exFacts?.decision_makers, freshDMs, d => (d?.name ?? '').toLowerCase()),
       ownership: {
