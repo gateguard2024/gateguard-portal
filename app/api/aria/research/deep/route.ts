@@ -1919,17 +1919,19 @@ async function runPhase3(
         : `"${confirmedName}" ${confirmedCity} "managed by" OR "management company" OR "owned by" OR "ownership" OR "developer"`,
       5, 'mgmt-web'
     ),
-    // Reddit — last 6 months, expanded proptech keywords
+    // Reddit — UNDATED. A subreddit thread or review page isn't "published" in the
+    // last 6 months, so a qdr:m6 filter throws away almost every hit (the exact bug
+    // the social route documents). Cast wide; recency is judged from post content.
     serperSearch(
       `"${confirmedName}" site:reddit.com internet OR wifi OR fiber OR gate OR "access control" OR intercom OR package OR locker OR "smart lock" OR cameras OR security OR management OR lease OR maintenance`,
-      8, 'reddit', 'search', 'qdr:m6'
+      8, 'reddit', 'search'
     ),
-    // Review sites — last 6 months — IMP-4: use rewritten review query
-    serperSearch(p3ReviewQuery, 8, 'reviews', 'search', 'qdr:m6'),
-    // Proptech brand mentions in resident reviews
+    // Review sites — UNDATED (see note above) — IMP-4: use rewritten review query
+    serperSearch(p3ReviewQuery, 8, 'reviews', 'search'),
+    // Proptech brand mentions in resident reviews — UNDATED
     serperSearch(
       `"${confirmedName}" ButterflyMX OR SmartRent OR Latch OR Verkada OR "Flock Safety" OR "package locker" OR "package room" OR "Amazon Hub" OR "gate code" OR "key fob" OR "water damage" OR "water sensor" OR thermostat OR "smart home" OR automation reviews OR residents`,
-      8, 'proptech_reviews', 'search', 'qdr:m6'
+      8, 'proptech_reviews', 'search'
     ),
     // Property website raw content — IMP-1: filter low-score Tavily results
     confirmedWebsite

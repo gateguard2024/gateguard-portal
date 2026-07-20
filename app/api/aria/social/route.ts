@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
     if (stripped && stripped !== property_name) aliasSet.add(stripped)
     const aliasQ = `(${[...aliasSet].slice(0, 4).map(a => `"${a}"`).join(' OR ')})`
 
-    const [propertyResults, mgmtResults, bulkResults, phoneResults, negativeResults, aliasResults] = await Promise.all([
+    const [propertyResults, mgmtResults, bulkResults, phoneResults, negativeResults, aliasResults, hubResults] = await Promise.all([
 
       // Search 1 — property reviews, deliberately BROAD and undated.
       // Previously this stacked 4 site: filters + 15 tech keywords + a 6-month
@@ -234,6 +234,14 @@ export async function POST(req: NextRequest) {
         `${aliasQ} ${city} (gate OR internet OR wifi OR cable OR package OR "smart lock" OR camera) (review OR complaint OR resident OR reddit)`,
         8
       ),
+
+      // Search 7 — the named review hubs, explicitly. UNDATED (review pages aren't
+      // "published" recently). Guarantees Reddit / ApartmentRatings / Apartments.com /
+      // Yelp coverage even when the broad searches drift to marketing pages.
+      serperSocial(
+        `"${property_name}" ${city} (site:reddit.com OR site:apartmentratings.com OR site:apartments.com OR site:yelp.com) (gate OR internet OR security OR package OR maintenance OR review OR complaint OR resident)`,
+        10
+      ),
     ])
 
     // Also grab recent news for this property (gate incidents, security events, etc.)
@@ -245,6 +253,7 @@ export async function POST(req: NextRequest) {
     const allSnippets = [
       // Negative-first: these are the posts that make the pitch.
       formatSnippets(negativeResults, `NEGATIVE POSTS ABOUT ON-SITE TECH${onSiteTech.length ? ` (${onSiteTech.join(', ')})` : ''}`),
+      formatSnippets(hubResults,      'REVIEW HUBS (Reddit / ApartmentRatings / Apartments.com / Yelp)'),
       formatSnippets(aliasResults,    'SAME PROPERTY UNDER OTHER NAMES (rebrands)'),
       formatSnippets(propertyResults, 'PROPERTY SOCIAL (Reddit / Google Reviews / Yelp)'),
       formatSnippets(mgmtResults,     'MANAGEMENT CO SOCIAL'),
