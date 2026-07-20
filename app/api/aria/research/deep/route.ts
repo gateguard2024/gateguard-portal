@@ -1636,24 +1636,29 @@ async function runPhase2(
     coords ? fccBroadbandLookup(coords.lat, coords.lng) : Promise.resolve([] as string[]),
     // IMP-1: filter by Tavily score (min 0.5 for Phase 2 — precision over recall here)
     tavilySearch(
-      // Use brand-name shortening — "Northland" not "Northland Investment Corporation"
-      `"${confirmedName}" "${confirmedCity}" ${mgmtBrandName ? `"${mgmtBrandName}"` : ''} bulk internet OR "internet included" OR MDU OR "exclusive provider" OR ${ispKeywords}`,
-      5, 'bulk', 'advanced', false
-    ).then(r => filterByScore(r, 0.5)),
+      // Use brand-name shortening — "Northland" not "Northland Investment Corporation".
+      // Strong bulk-deal tells: a technology/amenity/connectivity FEE, "managed wifi",
+      // and "included in rent" — these surface exclusive agreements the brand-name
+      // keyword list misses.
+      `"${confirmedName}" "${confirmedCity}" ${mgmtBrandName ? `"${mgmtBrandName}"` : ''} bulk internet OR "internet included" OR "wifi included" OR "included in rent" OR "technology fee" OR "amenity fee" OR "connectivity fee" OR "managed wifi" OR "community wifi" OR MDU OR "exclusive provider" OR "bulk agreement" OR ${ispKeywords}`,
+      6, 'bulk', 'advanced', false
+    ).then(r => filterByScore(r, 0.45)),
     // City-level ISP fallback — catches MDU deals that mention the city but not the property name
     serperSearch(
-      `"${confirmedCity}" apartments OR "apartment homes" "internet included" OR GIGstreem OR Hotwire OR "bulk internet" OR "MDU internet" OR "exclusive internet" ${mgmtBrandName ? `OR "${mgmtBrandName}"` : ''}`,
-      4, 'isp-city'
+      `"${confirmedCity}" apartments OR "apartment homes" ("internet included" OR "wifi included" OR "technology fee" OR "managed wifi" OR "bulk internet" OR "MDU internet" OR "exclusive internet" OR GIGstreem OR Hotwire OR Smartaira OR "Pavlov Media" OR Boingo OR "Single Digits") ${mgmtBrandName ? `"${mgmtBrandName}"` : ''}`,
+      5, 'isp-city'
     ),
     serperSearch(
       `"${confirmedAddress || confirmedName}" ownership OR owner OR acquired OR sold OR purchased "private equity" OR REIT OR LLC OR "real estate" OR "investment" OR "capital" OR "fund"`,
       5, 'owner', 'news'
     ),
-    // Dedicated video provider search — cable/satellite/IPTV agreements
-    // REQUIRE property name (not OR city alone) to avoid city-level noise
+    // Dedicated video provider search — cable/satellite/IPTV/streaming agreements.
+    // Was on the 'news' tab, which returns almost nothing for a specific property's
+    // TV provider — organic search + named carriers hits far more. REQUIRE the
+    // property name (not city alone) to avoid city-level noise.
     serperSearch(
-      `"${confirmedName}" ${confirmedCity} ${videoKeywords} OR "cable included" OR "satellite included" OR "bulk video" OR "cable agreement" OR "TV included"`,
-      5, 'video', 'news'
+      `"${confirmedName}" ${confirmedCity} ${videoKeywords} OR "cable included" OR "satellite included" OR "streaming included" OR "bulk video" OR "cable agreement" OR "TV included" OR "DirecTV" OR "DISH" OR "Spectrum" OR "Xfinity" OR "Comcast" OR "Cox" OR "Frontier" OR "bulk TV" OR "video package"`,
+      6, 'video'
     ),
     // ROE / bulk telecom agreement search — contract terms + expiry signals
     serperSearch(

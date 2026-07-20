@@ -453,11 +453,26 @@ export default function AriaExplorePage() {
     const mapboxgl = (window as any).mapboxgl
     if (!mapboxgl || !MAPBOX_TOKEN || mapRef.current) return
     mapboxgl.accessToken = MAPBOX_TOKEN
-    mapRef.current = new mapboxgl.Map({
-      container: 'aria-explore-map',
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
-      center: [-96.8, 32.8], zoom: 9,
-    })
+    try {
+      const map = new mapboxgl.Map({
+        container: 'aria-explore-map',
+        style: 'mapbox://styles/mapbox/satellite-streets-v12',
+        center: [-96.8, 32.8], zoom: 9,
+      })
+      // Surface Mapbox's real failure instead of a silent black pane. A token that
+      // 401s on the style/tiles (URL restrictions or missing scopes) is the usual
+      // cause — the style never loads, so there are no controls, just black.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.on('error', (e: any) => {
+        const msg = String(e?.error?.message || e?.error || 'Map failed to load')
+        setMapErr(/401|403|unauthorized|forbidden|not authorized|access token|invalid/i.test(msg)
+          ? 'Mapbox rejected the token — remove URL restrictions (or add this domain) and confirm public scopes on NEXT_PUBLIC_MAPBOX_TOKEN.'
+          : `Map error: ${msg}`)
+      })
+      mapRef.current = map
+    } catch (err) {
+      setMapErr(err instanceof Error ? err.message : 'Map failed to initialize')
+    }
   }, [])
 
   // (Re)draw markers when items change. The map is the centre of the Find screen
