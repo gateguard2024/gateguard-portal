@@ -1,67 +1,55 @@
 'use client'
 
-// Gate Guard cost + dealer-price calculator.
-// The COST model is computed SERVER-SIDE (/api/pricing/compute) so GateGuard's
-// true Brivo / Eagle Eye costs and margin math never ship in the browser bundle.
-// This component only collects counts, sends them to the API, and renders the
-// gated result. See lib/pricing-model.ts + docs/nexus/PRICING_MODEL.md.
+// Gate Guard pricing calculator — EXACT port of the locked "v14" model.
+// Graduated per-unit tiers + an included gate/camera allotment + per-item add-ons
+// + a proportional channel split + a stepped platform cost + a $350 whole-deal GG
+// net floor + whole-dollar customer rounding. The math + GG cost live SERVER-SIDE
+// (/api/pricing/compute → lib/pricing-model.ts); GG cost / net are shown only to
+// corporate. Dealers see the customer price, per-unit, and their own + channel cut.
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-// Dealer-facing display constants only (NOT cost basis — safe in the client):
-const OVERAGE_MARKUP = 2
-const ADDON_MARGIN = 2
-const MSO_AGENT_PER_UNIT = 1
-
 const usd = (n: number) => (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+const usd0 = (n: number) => (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Result = Record<string, any>
 
-function Num({ label, value, onChange, hint, decimal }: { label: string; value: string; onChange: (v: string) => void; hint?: string; decimal?: boolean }) {
+function Num({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
   return (
     <label className="block">
       <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.62)' }}>{label}</div>
-      <input value={value} onChange={e => onChange(decimal ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value.replace(/[^0-9]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2.5 text-base outline-none" style={inputStyle} />
+      <input value={value} onChange={e => onChange(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="0" className="w-full rounded-xl px-3 py-2.5 text-base outline-none" style={inputStyle} />
       {hint && <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{hint}</div>}
     </label>
   )
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
-      <span>{label}</span><span style={{ color: 'rgba(255,255,255,0.92)' }}>{value}</span>
+    <div className="flex items-center justify-between gap-3 text-[12px]" style={{ color: strong ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.7)' }}>
+      <span>{label}</span><span style={{ color: 'rgba(255,255,255,0.92)', fontWeight: strong ? 600 : 400 }}>{value}</span>
     </div>
   )
 }
 
-export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, initialCamBackup, initialUnitsApp, initialUnitsGw, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialCamBackup?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string; camBackup: string; camMon: string; doors: string; commonLocks: string }) => void } = {}) {
-  const seedUnits = initialUnits != null && initialUnits !== '' ? String(initialUnits) : ''
+export function PricingCalculator({ initialUnits, initialDoors, initialCameras, initialCommonLocks, initialUnitsApp, initialUnitsGw, initialCamBackup, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialCamBackup?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string; camBackup: string; camMon: string; doors: string; commonLocks: string }) => void } = {}) {
   const seed = (v: number | string | null | undefined) => (v != null && v !== '' && Number(v) > 0 ? String(v) : '')
-  const [livingUnits, setLivingUnits] = useState(seedUnits)
-  const [doors, setDoors] = useState(seed(initialDoors))
-  const [commonLocks, setCommonLocks] = useState(seed(initialCommonLocks))
-  // Unit-lock add-ons persist too — seed from saved values, else fall back to the
-  // automation-implied default for the app column (Financials save bug fix).
-  const [unitsApp, setUnitsApp] = useState(seed(initialUnitsApp) || (initialUnitAutomation ? seedUnits : ''))
-  const [unitsGw, setUnitsGw] = useState(seed(initialUnitsGw))
-  const [camMon, setCamMon] = useState(seed(initialCameras))
-  // camBackup had no seed argument and no initial prop — it was pure local state
-  // that fed the live math and then died on unmount. Typing a number in it
-  // genuinely saved nothing anywhere.
-  const [camBackup, setCamBackup] = useState(seed(initialCamBackup))
-  const [passesPerUnit, setPassesPerUnit] = useState('1.5')
+  // v14 inputs. Entry points reuse the persisted `doors` slot; cameras reuse `camMon`.
+  const [livingUnits, setLivingUnits] = useState(seed(initialUnits))
+  const [entryPoints, setEntryPoints] = useState(seed(initialDoors))
+  const [cameras, setCameras] = useState(seed(initialCameras))
+  const [cameraType, setCameraType] = useState<'new' | 'existing'>('new')
+  // Legacy persisted fields we no longer edit — kept so a save doesn't wipe them.
+  const passthru = useRef({ unitsApp: seed(initialUnitsApp), unitsGw: seed(initialUnitsGw), camBackup: seed(initialCamBackup), commonLocks: seed(initialCommonLocks) })
 
-  const [viewAsDealer, setViewAsDealer] = useState(false)   // admins can preview the dealer copy
+  const [viewAsDealer, setViewAsDealer] = useState(false)
   const [canViewInternal, setCanViewInternal] = useState(false)
   const [internalView, setInternalView] = useState(false)
   const [calc, setCalc] = useState<Result>({ empty: true, noUnits: true })
 
-  const inputs = useMemo(() => ({ livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit }),
-    [livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit])
+  const inputs = useMemo(() => ({ livingUnits, entryPoints, cameras, cameraType }), [livingUnits, entryPoints, cameras, cameraType])
 
-  // Compute server-side, debounced. Re-runs when inputs or the admin preview toggle change.
   const onComputeRef = useRef(onCompute)
   useEffect(() => { onComputeRef.current = onCompute }, [onCompute])
   useEffect(() => {
@@ -76,7 +64,7 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
         setInternalView(!!j.internalView)
         const c = j.result
         onComputeRef.current?.({
-          units: c.units, ggFee: c.ggFee, ggCost: c.ggCost ?? 0,
+          units: c.units, ggFee: c.ggFee ?? 0, ggCost: c.ggCost ?? 0,
           suggestedRetail: c.suggestedRetail, commission: c.commission,
           dealerMonthlyNet: c.dealerMonthlyNet, empty: c.empty,
         })
@@ -85,9 +73,7 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
     return () => clearTimeout(t)
   }, [inputs, viewAsDealer])
 
-  // Persist the deal-critical counts (living units + unit-lock add-ons) back to the
-  // opportunity, debounced. Skips the initial render so seeded values don't
-  // immediately re-save. Fixes: these three fields never saved before.
+  // Persist deal counts back to the opportunity, debounced (skips first render).
   const onPersistRef = useRef(onPersist)
   useEffect(() => { onPersistRef.current = onPersist }, [onPersist])
   const persistedFirst = useRef(false)
@@ -95,104 +81,94 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
     if (!onPersistRef.current) return
     if (!persistedFirst.current) { persistedFirst.current = true; return }
     const t = setTimeout(() => {
-      onPersistRef.current?.({ livingUnits, unitsApp, unitsGw, camBackup, camMon, doors, commonLocks })
+      const pt = passthru.current
+      // entry points ride the `doors` slot; cameras ride `camMon` — same columns
+      // the opportunity already stores, so nothing downstream changes.
+      onPersistRef.current?.({ livingUnits, doors: entryPoints, camMon: cameras, unitsApp: pt.unitsApp, unitsGw: pt.unitsGw, camBackup: pt.camBackup, commonLocks: pt.commonLocks })
     }, 600)
     return () => clearTimeout(t)
-  }, [livingUnits, unitsApp, unitsGw, camBackup, camMon, doors, commonLocks])
+  }, [livingUnits, entryPoints, cameras])
 
   const showInternal = canViewInternal && internalView
-  const ggFee = calc.ggFee ?? 0
-  const suggestedRetail = calc.suggestedRetail ?? 0
-  const commission = calc.commission ?? 0
-  const dealerProfit = calc.dealerProfit ?? 0
+  const empty = !!calc.empty
 
   return (
     <div className="space-y-5">
       {canViewInternal && (
         <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
-          <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1.5" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal (cost + profit)</button>
+          <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1.5" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal (cost + margin)</button>
           <button type="button" onClick={() => setViewAsDealer(true)} className="rounded-full px-3 py-1.5" style={viewAsDealer ? { background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.5)', color: '#6ee7b7' } : { color: 'rgba(255,255,255,0.6)' }}>Dealer view (preview)</button>
         </div>
       )}
+
+      {/* Inputs */}
       <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,200,255,0.16)' }}>
         <div className="mb-1 text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>What&apos;s on this site?</div>
-        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each — cost + dealer price update as you go.</div>
+        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Living units, entry points, and cameras — pricing updates as you go.</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Num label="Total living units" value={livingUnits} onChange={setLivingUnits} hint="property size — drives $5/unit access" />
-          <Num label="Gates / common doors" value={doors} onChange={setDoors} hint="tiered pricing by count" />
-          <Num label="Common-area smart locks" value={commonLocks} onChange={setCommonLocks} hint="per lock" />
-          <Num label="Unit locks — app" value={unitsApp} onChange={setUnitsApp} hint={`add-on · ${usd(calc.appPrice ?? 4.25)}/unit`} />
-          <Num label="Unit locks — gateway" value={unitsGw} onChange={setUnitsGw} hint={`add-on · ${usd(calc.gwPrice ?? 6.5)}/unit`} />
-          <Num label="Cameras — monitored" value={camMon} onChange={setCamMon} hint="per camera" />
-          <Num label="Cameras — backup only" value={camBackup} onChange={setCamBackup} hint="per camera" />
-          <Num label="Passes per unit" value={passesPerUnit} onChange={setPassesPerUnit} hint="500 incl · billed per 100 over" decimal />
+          <Num label="Living units" value={livingUnits} onChange={setLivingUnits} hint="drives the graduated base rate" />
+          <Num label="Entry points" value={entryPoints} onChange={setEntryPoints} hint={`${calc.includedGates ?? 0} included`} />
+          <Num label="Cameras" value={cameras} onChange={setCameras} hint={`${calc.includedCameras ?? 0} included`} />
+        </div>
+        <div className="mt-3">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.62)' }}>Extra cameras are</div>
+          <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
+            <button type="button" onClick={() => setCameraType('new')} className="rounded-full px-3 py-1.5" style={cameraType === 'new' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>New (GG supplies) · $91</button>
+            <button type="button" onClick={() => setCameraType('existing')} className="rounded-full px-3 py-1.5" style={cameraType === 'existing' ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Existing (monitor) · $85</button>
+          </div>
         </div>
       </div>
 
-      {showInternal && (
-        <div className="rounded-3xl p-5" style={{ background: 'radial-gradient(circle at 14% 0%, rgba(0,124,255,0.16), transparent 40%), linear-gradient(180deg, rgba(8,18,34,0.82), rgba(3,9,22,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
-          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Gate Guard cost / month · internal</div>
-          <div className="mt-1 text-4xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(calc.ggCost ?? 0)}</div>
-          {!calc.empty && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Access {usd(calc.accessCost ?? 0)} + unit locks {usd(calc.unitLockCost ?? 0)}</div>}
+      {/* Add-on stack */}
+      {!empty && ((calc.extraGates ?? 0) > 0 || (calc.extraCameras ?? 0) > 0) && (
+        <div className="rounded-2xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add-ons over the included allotment</div>
+          <div className="space-y-1.5">
+            {(calc.extraGates ?? 0) > 0 && <Line label={`Extra entry points · ${calc.extraGates} × ${usd0(calc.gatePrice ?? 155)}`} value={usd0((calc.extraGates ?? 0) * (calc.gatePrice ?? 155))} />}
+            {(calc.extraCameras ?? 0) > 0 && <Line label={`Extra cameras · ${calc.extraCameras} × ${usd0(calc.cameraPrice ?? 91)}`} value={usd0((calc.extraCameras ?? 0) * (calc.cameraPrice ?? 91))} />}
+          </div>
         </div>
       )}
 
-      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.28)' }}>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Gate Guard Fee / month</div>
-            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(ggFee)}</div>
-          </div>
-          {showInternal && (
-            <div className="text-right text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {!calc.empty && !calc.noUnits && <>
-                <div style={{ color: (calc.marginPerUnit ?? 0) >= 2.25 ? '#6ee7b7' : '#fca5a5' }}>{usd(calc.marginPerUnit ?? 0)}/unit margin</div>
-                <div>{usd(calc.margin ?? 0)} total margin</div>
-              </>}
-            </div>
-          )}
-        </div>
-        {!calc.empty && (
-          <div className="mt-3 space-y-1.5 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            {!calc.noUnits && <Line label={`Access — ${usd(calc.pricePerUnit ?? 0)}/unit${calc.sliding ? ' (sliding, over 500)' : ''} × ${calc.units}`} value={usd((calc.pricePerUnit ?? 0) * (calc.units ?? 0))} />}
-            {(calc.equipFee ?? 0) > 0 && <Line label={`Equipment fee (door/camera-heavy${(calc.doors ?? 0) > 0 ? `, ≈ ${usd(calc.perDoorFee ?? 0)}/door` : ''})`} value={usd(calc.equipFee ?? 0)} />}
-            {(calc.appUnits ?? 0) > 0 && <Line label={`Unit locks — app · ${calc.appUnits} × ${usd(calc.appPrice ?? 0)}`} value={usd(calc.appAddon ?? 0)} />}
-            {(calc.gwUnits ?? 0) > 0 && <Line label={`Unit locks — gateway · ${calc.gwUnits} × ${usd(calc.gwPrice ?? 0)}`} value={usd(calc.gwAddon ?? 0)} />}
-          </div>
-        )}
-        {calc.noUnits && !calc.empty && <div className="mt-3 text-[11px]" style={{ color: '#fde68a' }}>Add living units to price the access service (gate-only / camera-only rule still TBD).</div>}
-      </div>
-
+      {/* Customer price */}
       <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(0,200,255,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
-        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>Suggested retail / month</div>
-        <div className="mt-1 text-3xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(suggestedRetail)}</div>
-        <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>Recommended price to the property — you set the final number.</div>
+        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>What the customer pays / month</div>
+        <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+          <span className="text-4xl font-bold" style={{ color: '#7DE5FF' }}>{empty ? '—' : usd0(calc.perUnit ?? 0)}</span>
+          <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>per unit</span>
+          {!empty && <span className="text-[15px] font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>= {usd0(calc.customerMonthly ?? 0)} / mo</span>}
+        </div>
+        {!empty && calc.atFloor && <div className="mt-1 text-[11px]" style={{ color: '#fde68a' }}>At the Gate Guard minimum for a site this size.</div>}
       </div>
 
-      {/* Your expected profit — reconciles retail vs fee vs commission so nothing is "missing" */}
-      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.10), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Your expected profit / month</div>
-            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(dealerProfit)}</div>
-          </div>
-          {!calc.empty && !calc.noUnits && (calc.units ?? 0) > 0 && <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>≈ {usd(dealerProfit / calc.units)}/unit</div>}
-        </div>
-        {!calc.empty && (
+      {/* Money distribution */}
+      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.28)' }}>
+        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Where the money goes / month</div>
+        {empty ? (
+          <div className="mt-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Enter a site above to see the split.</div>
+        ) : (
           <div className="mt-3 space-y-1.5 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <Line label="Suggested retail" value={usd(suggestedRetail)} />
-            <Line label="Gate Guard Fee" value={`(${usd(ggFee)})`} />
-            <Line label={`MSO & Agent Override${(calc.units ?? 0) > 0 ? ` · ${usd(MSO_AGENT_PER_UNIT)}/unit` : ''}`} value={`(${usd(commission)})`} />
-            <div className="mt-1 border-t pt-1.5" style={{ borderColor: 'rgba(255,255,255,0.1)' }}><Line label="Your net profit" value={usd(dealerProfit)} /></div>
+            <Line label="Dealer" value={usd(calc.dealerCut ?? 0)} strong />
+            <Line label="Sales rep" value={usd(calc.salesCut ?? 0)} />
+            <Line label="Distribution" value={usd(calc.distCut ?? 0)} />
+            {showInternal && <>
+              <Line label="Gate Guard (net)" value={usd(calc.ggNet ?? 0)} />
+              <Line label="Gate Guard cost" value={`(${usd(calc.ggCost ?? 0)})`} />
+              <div className="mt-1 border-t pt-1.5" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+                <Line label="Reconciles to billed" value={usd0(calc.customerMonthly ?? 0)} strong />
+              </div>
+            </>}
           </div>
         )}
-        <div className="mt-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>MSO &amp; Agent Override is the network commission ({usd(MSO_AGENT_PER_UNIT)}/unit/mo) paid through Gate Guard to the master operator and agent.</div>
+        {showInternal && !empty && (calc.units ?? 0) > 0 && (
+          <div className="mt-2 text-right text-[12px]" style={{ color: (calc.marginPerUnit ?? 0) >= 1 ? '#6ee7b7' : '#fca5a5' }}>{usd(calc.marginPerUnit ?? 0)}/unit GG margin</div>
+        )}
       </div>
 
       <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
         {showInternal
-          ? <>Access = $5/unit ≤ 500 (slides above); over-budget doors/cameras billed at {OVERAGE_MARKUP}× as equipment fees. Unit locks always cost + ${ADDON_MARGIN.toFixed(2)}. Cost model is computed server-side.</>
-          : <>Gate Guard Fee is your monthly cost from Gate Guard. Suggested retail is a recommended price to the property — you set the final number.</>}
+          ? <>Graduated base ($10/$7/$5/$3 per unit), {calc.includedGates ?? 0} gates + {calc.includedCameras ?? 0} cameras included, add-ons over that, split 50/30/10/10 with a $350 Gate Guard floor. Cost model computed server-side.</>
+          : <>Customer price rounds down to the dollar. Dealer/sales/distribution are the monthly cuts of the billed total.</>}
       </div>
     </div>
   )

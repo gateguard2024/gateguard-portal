@@ -28,13 +28,9 @@ export async function POST(req: NextRequest) {
 
   const result = computePricing({
     livingUnits:   body.livingUnits   as number | string | undefined,
-    doors:         body.doors         as number | string | undefined,
-    commonLocks:   body.commonLocks   as number | string | undefined,
-    unitsApp:      body.unitsApp      as number | string | undefined,
-    unitsGw:       body.unitsGw       as number | string | undefined,
-    camMon:        body.camMon        as number | string | undefined,
-    camBackup:     body.camBackup     as number | string | undefined,
-    passesPerUnit: body.passesPerUnit as number | string | undefined,
+    entryPoints:   (body.entryPoints ?? body.doors) as number | string | undefined,
+    cameras:       (body.cameras ?? body.camMon)    as number | string | undefined,
+    cameraType:    body.cameraType    as 'new' | 'existing' | undefined,
   }, internalView)
 
   return NextResponse.json({ result, canViewInternal, internalView })
