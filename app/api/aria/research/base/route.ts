@@ -246,6 +246,29 @@ Return ONLY JSON, no prose:
 
 type AreaProperty = BaseProperty & { pain_signal?: boolean; pain_note?: string | null; lead_score?: number }
 
+// Parse the Haiku area response. If the JSON is truncated (30 properties can
+// overrun the token budget), salvage every property object that DID complete by
+// brace-scanning the properties array — so a partial answer still shows results
+// instead of erroring with "Could not read the search results."
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function looseParseAreaJson(text: string): any | null {
+  const m = text.match(/\{[\s\S]*\}/)
+  if (m) { try { const p = JSON.parse(m[0]); if (Array.isArray(p?.properties)) return p } catch { /* fall through to salvage */ } }
+  // Salvage: pull complete top-level objects out of the "properties" array.
+  const pi = text.indexOf('"properties"')
+  const start = pi >= 0 ? text.indexOf('[', pi) : -1
+  if (start < 0) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const props: any[] = []
+  let depth = 0, objStart = -1
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (c === '{') { if (depth === 0) objStart = i; depth++ }
+    else if (c === '}') { depth--; if (depth === 0 && objStart >= 0) { try { props.push(JSON.parse(text.slice(objStart, i + 1))) } catch { /* skip */ } objStart = -1 } }
+  }
+  return props.length ? { query_interpretation: '', properties: props } : null
+}
+
 // ─── Lead score (first-find ranking) ──────────────────────────────────────────
 // 0–100 from the signals the cheap base pass reliably has: buy intent (pain),
 // opportunity size (units), and a rough pro-tech fit (something to displace).
@@ -268,11 +291,15 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
   const loc = [f.location, f.state].filter(Boolean).join(' ').trim() || query
   const unitPhrase = f.min_units ? `${f.min_units}+ units ` : ''
 
-  // 1) Discovery — the big communities in the area. Wider net so we can surface 25.
+  // 1) Discovery — the big communities in the area. Wide net across ranking lists,
+  //    listing sites, new construction, and management portfolios so we surface 30+.
   const discovery = await Promise.all([
     serper(`largest apartment complexes ${loc} ${unitPhrase}`.trim(), 20),
     serper(`${loc} apartment communities ${unitPhrase}(site:apartments.com OR site:rentcafe.com OR site:loopnet.com OR site:yardimatrix.com)`, 20),
     serper(`biggest ${loc} apartment complexes list ${unitPhrase}`.trim(), 20),
+    serper(`${loc} luxury AND affordable apartment communities ${unitPhrase}(site:zillow.com OR site:rent.com OR site:apartmentguide.com OR site:trulia.com)`, 20),
+    serper(`new AND newest apartment developments ${loc} ${unitPhrase}`.trim(), 15),
+    serper(`${loc} multifamily properties managed by (Greystar OR "Cushman" OR RPM OR Pinnacle OR "Asset Living" OR BH OR Willow)`, 15),
   ])
 
   // 2) Pain sweep — resident reviews reveal WHICH of them have the problem.
@@ -285,8 +312,17 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
     ])
   }
 
-  const all = [...discovery.flat(), ...pain.flat()]
-  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 24000)
+  // 3) Bulk-internet + gate signal sweep — ALWAYS run, even when no pain was typed,
+  //    so every one of the 30 base cards can flag connectivity (bulk deal) and
+  //    access (gate) up front. These are our two biggest buying signals.
+  const signals = await Promise.all([
+    serper(`${loc} apartments ("bulk internet" OR "internet included" OR "wifi included" OR "managed wifi" OR "fiber included" OR "cable included in rent")`, 15),
+    serper(`${loc} apartments (gated OR "gated community" OR "controlled access" OR "gate code" OR keypad OR callbox OR "key fob" OR "access control")`, 15),
+  ])
+  // Tag the signal snippets so Haiku weighs them for the bulk/gate presence flags.
+  const tag = (arr: Snip[], t: string) => arr.map(s => ({ ...s, title: `[${t}] ${s.title}` }))
+  const all = [...discovery.flat(), ...pain.flat(), ...tag(signals[0] ?? [], 'bulk'), ...tag(signals[1] ?? [], 'gate')]
+  const snippets = all.map(s => `${s.title}\n${s.url}\n${s.content}`).join('\n---\n').slice(0, 40000)
   if (!snippets.trim()) {
     return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `No web results for ${loc}.`, filters: f })
   }
@@ -298,7 +334,7 @@ async function runAreaSearch(anthropic: Anthropic, query: string): Promise<NextR
   const prompt = `You are building a prospect list of US multifamily communities from web snippets. Return JSON only.
 
 AREA / CRITERIA search${f.location ? ` in ${f.location}${f.state ? ', ' + f.state : ''}` : ''}${f.min_units ? `, target ${f.min_units}+ units` : ''}.
-List up to 25 DISTINCT real apartment communities you can identify in the snippets. Prefer larger communities.
+List up to 30 DISTINCT real apartment communities you can identify in the snippets. Prefer larger communities. Include every distinct real community you can find — do not stop early.
 
 ${painLine}
 
@@ -319,12 +355,16 @@ ${snippets}`
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let parsed: any = null
   try {
-    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 4500, messages: [{ role: 'user', content: prompt }] })
+    const msg = await anthropic.messages.create({ model: HAIKU, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] })
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
-    const m = text.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0])
+    parsed = looseParseAreaJson(text)
   } catch (e) {
     console.error('[aria/base area] extraction failed:', e instanceof Error ? e.message : e)
     return NextResponse.json({ error: 'Could not read the search results.' }, { status: 502 })
+  }
+  // Truncated / malformed JSON returns null — don't error out, just show what we could read.
+  if (!parsed) {
+    return NextResponse.json({ type: 'multi', properties: [], count: 0, query_interpretation: `Found sites in ${loc}, but couldn't format them — try the search again.`, filters: f })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -366,7 +406,7 @@ ${snippets}`
     const d = (b.lead_score ?? 0) - (a.lead_score ?? 0)
     return d !== 0 ? d : (b.units ?? 0) - (a.units ?? 0)
   })
-  properties = properties.slice(0, 25)
+  properties = properties.slice(0, 30)
 
   // Hero images — best-effort, parallel, never blocks.
   await Promise.all(properties.map(async p => { if (p.website) p.photo_url = await heroImage(p.website) }))
