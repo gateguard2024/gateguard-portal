@@ -837,22 +837,44 @@ export default function AriaExplorePage() {
       const term = tokens[0] || it.name
       const city = (it.city || '').toLowerCase()
       const r = await fetch(`/api/aria/properties?search=${encodeURIComponent(term)}&limit=30`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let matched: any = null
       if (r.ok) {
         const d = await r.json()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rows: any[] = d.properties ?? []
-        const row = rows.find(p => (p.property_name ?? '').toLowerCase() === nm)
+        matched = rows.find(p => (p.property_name ?? '').toLowerCase() === nm)
           ?? rows.find(p => {
             const pn = (p.property_name ?? '').toLowerCase()
             const pc = (p.facts?.property?.city ?? p.city ?? '').toLowerCase()
             const shares = tokens.some(t => pn.includes(t))
             return shares && (!city || !pc || pc === city)
           })
-        if (row) {
-          const rep = normalizeReport(row)
-          setDetailReport(rep)
-          void hydrateCommunity(rep, it)
+      }
+      if (matched) {
+        const rep = normalizeReport(matched)
+        setDetailReport(rep)
+        void hydrateCommunity(rep, it)
+      } else {
+        // Not in the Intel DB yet — a fresh base/area find. Build a lightweight
+        // base report straight from the row so the panel renders AND community
+        // insights (resident posts) load right now, without a full deep run.
+        // `_base` marks it so the "Deep research" CTA still shows.
+        const baseRep = {
+          _base: true,
+          property: {
+            name: it.name, address: it.address, city: it.city, state: it.state,
+            units: it.units ?? null, management_company: it.management_company ?? null,
+            website: it.website ?? null, photo_url: it.photo_url ?? null,
+            isp_providers: [], video_providers: [], bulk_agreements: [],
+            proptech: { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], package_solutions: [] },
+            inferred_proptech: [],
+          },
+          contacts: [],
+          community: [],
         }
+        setDetailReport(baseRep)
+        void hydrateCommunity(baseRep, it)
       }
     } catch { /* ignore */ } finally { setDetailBusy(false) }
   }, [hydrateCommunity])
@@ -1507,8 +1529,9 @@ export default function AriaExplorePage() {
               {detailBusy && !detailReport && (
                 <div className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Checking your database…</div>
               )}
-              {/* Deep research is always an explicit, deliberate choice — never automatic. */}
-              {!detailBusy && !detailReport && (
+              {/* Deep research is always an explicit, deliberate choice — never automatic.
+                  A base report (community-only, not yet deep-researched) still offers it. */}
+              {!detailBusy && (!detailReport || detailReport._base) && (
                 <button onClick={() => researchDetail(detail)}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
                   <Zap size={14} /> Deep research this property <span className="opacity-60 text-[11px]">· runs a full search</span>
@@ -1518,7 +1541,7 @@ export default function AriaExplorePage() {
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
                 <Star size={14} /> Add to Leads
               </button>
-              {detailReport && (
+              {detailReport && !detailReport._base && (
                 <button onClick={() => researchDetail(detail)} disabled={detailBusy}
                   className="w-full text-center text-[11px] font-semibold text-slate-500 hover:text-slate-300 py-1 disabled:opacity-60">
                   {detailBusy ? 'Refreshing…' : '↻ Refresh data (runs a new search)'}
