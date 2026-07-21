@@ -1079,7 +1079,7 @@ export default function AriaExplorePage() {
       </aside>
 
       {/* Main column */}
-      <div className="flex flex-col flex-1 min-w-0 h-full">
+      <div className="flex flex-col flex-1 min-w-0 h-full" style={{ height: '100dvh' }}>
       {/* Header */}
       <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
         <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
@@ -1252,7 +1252,7 @@ export default function AriaExplorePage() {
       )}
 
       {/* Results */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
         {/* NOTE: the empty/loading states must NOT cover the map.
             They used to render here as h-full siblings ABOVE the map container,
             so with zero results they blanketed the whole centre — the map was
