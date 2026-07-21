@@ -475,6 +475,9 @@ export default function AriaExplorePage() {
     }
 
     mapboxgl.accessToken = MAPBOX_TOKEN
+    // Don't create the map into a 0-size container — it paints black. Wait for layout.
+    const el0 = document.getElementById('aria-explore-map')
+    if (!el0 || el0.clientWidth === 0 || el0.clientHeight === 0) { setTimeout(() => setMapTick(x => x + 1), 150); return }
     try {
       const map = new mapboxgl.Map({
         container: 'aria-explore-map',
@@ -496,6 +499,8 @@ export default function AriaExplorePage() {
           : `Map error: ${msg}`)
       })
       mapRef.current = map
+      // Re-measure whenever the container resizes (view toggles, window, layout).
+      try { const ro = new ResizeObserver(() => { try { map.resize() } catch { /* noop */ } }); const c = document.getElementById('aria-explore-map'); if (c) ro.observe(c) } catch { /* noop */ }
 
       // If the style still hasn't loaded after 7s with NO error event, the usual
       // culprit is a zero-size container (hidden/unlaid-out) or silently blocked
