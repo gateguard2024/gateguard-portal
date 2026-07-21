@@ -321,14 +321,28 @@ function dmScoreN(rep: any): number {
   return Math.min(10, s)
 }
 
-async function geocode(it: PropItem): Promise<{ lat: number; lng: number } | null> {
+async function geocode(it: PropItem): Promise<{ lat: number; lng: number; address?: string } | null> {
   if (!MAPBOX_TOKEN) return null
-  const q = [it.address, it.city, it.state].filter(Boolean).join(', ') || `${it.name} ${it.city} ${it.state}`
+  // When we have no street address yet, search by NAME first so Mapbox returns the
+  // property's real POI address (not just the city centroid) — that address is what
+  // reps need to paste. Fall back to whatever address/city we do have.
+  const q = it.address
+    ? [it.address, it.city, it.state].filter(Boolean).join(', ')
+    : `${it.name} ${[it.city, it.state].filter(Boolean).join(', ')}`.trim()
   try {
     const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=1&country=us`)
     const d = await r.json()
-    const c = d?.features?.[0]?.center
-    return Array.isArray(c) ? { lng: c[0], lat: c[1] } : null
+    const feat = d?.features?.[0]
+    const c = feat?.center
+    if (!Array.isArray(c)) return null
+    const out: { lat: number; lng: number; address?: string } = { lng: c[0], lat: c[1] }
+    // Fill in a real street address when the base find didn't capture one, but only
+    // from a specific POI/address match (never a city-level guess).
+    if (!it.address && typeof feat?.place_name === 'string' && Array.isArray(feat?.place_type)
+        && (feat.place_type.includes('poi') || feat.place_type.includes('address'))) {
+      out.address = feat.place_name.replace(/,?\s*United States$/i, '').trim()
+    }
+    return out
   } catch { return null }
 }
 
