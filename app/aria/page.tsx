@@ -1328,7 +1328,7 @@ export default function AriaExplorePage() {
         <div className={`absolute inset-0 flex ${view === 'map' ? '' : 'hidden'}`}>
           {/* Map (centre) */}
           <div className="relative flex-1 min-w-0">
-            <div id="aria-explore-map" className="absolute inset-0" />
+            <div id="aria-explore-map" className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
             {mapErr && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 pointer-events-none" style={{ background: '#0F1830' }}>
                 <MapIcon size={26} className="text-slate-600" />
