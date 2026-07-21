@@ -321,14 +321,28 @@ function dmScoreN(rep: any): number {
   return Math.min(10, s)
 }
 
-async function geocode(it: PropItem): Promise<{ lat: number; lng: number } | null> {
+async function geocode(it: PropItem): Promise<{ lat: number; lng: number; address?: string } | null> {
   if (!MAPBOX_TOKEN) return null
-  const q = [it.address, it.city, it.state].filter(Boolean).join(', ') || `${it.name} ${it.city} ${it.state}`
+  // When we have no street address yet, search by NAME first so Mapbox returns the
+  // property's real POI address (not just the city centroid) — that address is what
+  // reps need to paste. Fall back to whatever address/city we do have.
+  const q = it.address
+    ? [it.address, it.city, it.state].filter(Boolean).join(', ')
+    : `${it.name} ${[it.city, it.state].filter(Boolean).join(', ')}`.trim()
   try {
     const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=1&country=us`)
     const d = await r.json()
-    const c = d?.features?.[0]?.center
-    return Array.isArray(c) ? { lng: c[0], lat: c[1] } : null
+    const feat = d?.features?.[0]
+    const c = feat?.center
+    if (!Array.isArray(c)) return null
+    const out: { lat: number; lng: number; address?: string } = { lng: c[0], lat: c[1] }
+    // Fill in a real street address when the base find didn't capture one, but only
+    // from a specific POI/address match (never a city-level guess).
+    if (!it.address && typeof feat?.place_name === 'string' && Array.isArray(feat?.place_type)
+        && (feat.place_type.includes('poi') || feat.place_type.includes('address'))) {
+      out.address = feat.place_name.replace(/,?\s*United States$/i, '').trim()
+    }
+    return out
   } catch { return null }
 }
 
@@ -475,6 +489,9 @@ export default function AriaExplorePage() {
     }
 
     mapboxgl.accessToken = MAPBOX_TOKEN
+    // Don't create the map into a 0-size container — it paints black. Wait for layout.
+    const el0 = document.getElementById('aria-explore-map')
+    if (!el0 || el0.clientWidth === 0 || el0.clientHeight === 0) { setTimeout(() => setMapTick(x => x + 1), 150); return }
     try {
       const map = new mapboxgl.Map({
         container: 'aria-explore-map',
@@ -496,6 +513,8 @@ export default function AriaExplorePage() {
           : `Map error: ${msg}`)
       })
       mapRef.current = map
+      // Re-measure whenever the container resizes (view toggles, window, layout).
+      try { const ro = new ResizeObserver(() => { try { map.resize() } catch { /* noop */ } }); const c = document.getElementById('aria-explore-map'); if (c) ro.observe(c) } catch { /* noop */ }
 
       // If the style still hasn't loaded after 7s with NO error event, the usual
       // culprit is a zero-size container (hidden/unlaid-out) or silently blocked
@@ -1051,7 +1070,7 @@ export default function AriaExplorePage() {
     // Shared Nexus backdrop instead of a flat one-off #0B1728, so ARIA reads as
     // the same app as the dashboard. Panels below still paint their own darker
     // surfaces on top; only the page base changed.
-    <div className="relative flex h-full" style={{ background: NEXUS_BG, minHeight: '100vh' }}>
+    <div className="relative flex h-full" style={{ background: NEXUS_BG, height: '100dvh', minHeight: '100vh' }}>
       <NexusBackdropLayers variant="page" />
       {/* Left icon nav */}
       <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
@@ -1074,7 +1093,7 @@ export default function AriaExplorePage() {
       </aside>
 
       {/* Main column */}
-      <div className="flex flex-col flex-1 min-w-0 h-full">
+      <div className="flex flex-col flex-1 min-w-0 h-full" style={{ height: '100dvh' }}>
       {/* Header */}
       <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
         <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
@@ -1247,7 +1266,7 @@ export default function AriaExplorePage() {
       )}
 
       {/* Results */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
         {/* NOTE: the empty/loading states must NOT cover the map.
             They used to render here as h-full siblings ABOVE the map container,
             so with zero results they blanketed the whole centre — the map was
@@ -1323,7 +1342,7 @@ export default function AriaExplorePage() {
         <div className={`absolute inset-0 flex ${view === 'map' ? '' : 'hidden'}`}>
           {/* Map (centre) */}
           <div className="relative flex-1 min-w-0">
-            <div id="aria-explore-map" className="absolute inset-0" />
+            <div id="aria-explore-map" className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
             {mapErr && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 pointer-events-none" style={{ background: '#0F1830' }}>
                 <MapIcon size={26} className="text-slate-600" />

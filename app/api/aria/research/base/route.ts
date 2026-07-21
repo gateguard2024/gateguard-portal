@@ -174,11 +174,11 @@ function looksLikeArea(q: string): boolean {
   // Location prepositions ("in/near/around Salt Lake City").
   if (/\b(in|near|around|within|throughout|across)\b/.test(ql)) return true
   // A unit/door count ("over 250 units", "300+ doors").
-  if (/\d{2,}\s*\+?\s*(unit|units|doors)/.test(ql)) return true
+  if (/\b(units?|doors?)\b/.test(ql) && /\d/.test(ql)) return true
   // Generic collective nouns anywhere — a rep hunting a SET, not one named
   // property. (Left out "apartments" on purpose: single properties are often
   // literally named "<Name> Apartments" and must stay on the single path.)
-  if (/\b(properties|complexes|communities|listings|multifamily|buildings|mdus?)\b/.test(ql)) return true
+  if (/\b(properties|complexes|communities|listings|multifamily|buildings|mdus?|sites|portfolios?)\b/.test(ql)) return true
   // Problem/criteria hunts ("... with gate issues", "broken gates", "old cameras").
   if (/\b(issues?|problems?|complaints?|broken|outdated|failing)\b/.test(ql)) return true
   return false
