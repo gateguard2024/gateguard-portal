@@ -1056,7 +1056,7 @@ export default function AriaExplorePage() {
     // Shared Nexus backdrop instead of a flat one-off #0B1728, so ARIA reads as
     // the same app as the dashboard. Panels below still paint their own darker
     // surfaces on top; only the page base changed.
-    <div className="relative flex h-full" style={{ background: NEXUS_BG, minHeight: '100vh' }}>
+    <div className="relative flex h-full" style={{ background: NEXUS_BG, height: '100dvh', minHeight: '100vh' }}>
       <NexusBackdropLayers variant="page" />
       {/* Left icon nav */}
       <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
