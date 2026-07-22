@@ -162,8 +162,8 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
           <div className="mt-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <Row label="Dealer" total={calc.dealerCut ?? 0} units={units} strong cap={calc.dealerFloorBinds ? `${usd(calc.dealerEntryFloorRate ?? 150)}/gate × ${calc.entryPoints}` : `${usd(calc.dealerPerUnit ?? 3)}/unit`} />
             <Row label="Sales rep" total={calc.salesCut ?? 0} units={units} cap={usd(calc.salesPerUnit ?? 1) + '/unit'} />
-            <Row label="Distribution" total={calc.distCut ?? 0} units={units} cap={usd(calc.distPerUnit ?? 1) + '/unit'} />
             {showInternal && <>
+              <Row label="Distribution" total={calc.distCut ?? 0} units={units} cap={usd(calc.distPerUnit ?? 1) + '/unit'} />
               <Row label="Gate Guard cost" total={calc.ggCost ?? 0} units={units} />
               <div className="my-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }} />
               <Row label="Gate Guard net" total={calc.ggNet ?? 0} units={units} strong />
@@ -195,7 +195,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
       <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
         {showInternal
           ? <>Distribution is capped per unit — dealer $3, sales $1, distribution $1. Gate Guard keeps the rest after the real recurring cost. One-time install fees are a separate section (coming).</>
-          : <>Monthly recurring. Dealer/sales/distribution are the per-unit commissions on the billed total.</>}
+          : <>Monthly recurring. Your dealer payment and the sales-rep commission are per-unit on the billed total.</>}
       </div>
       </>)}
     </div>
