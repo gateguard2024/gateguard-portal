@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { AddEventModal } from '@/components/calendar/AddEventModal'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
@@ -70,6 +71,8 @@ type MessageNote = {
 
 const MESSAGE_NOTE_KEY = 'nexus_my_day_message_notes'
 
+const LEAD_STAGE_COLORS = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f472b6', '#22d3ee']
+
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
@@ -113,50 +116,57 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
   )
 }
 
-function DaySummaryBlock({ needAttention, dueToday, jobs, unread, high, medium, low }: { needAttention: number; dueToday: number; jobs: number; unread: number; high: number; medium: number; low: number }) {
-  // Gauge fill: fraction of the day's attention load (capped at ~12 items = full).
-  const f = Math.max(0.04, Math.min(1, needAttention / 12))
+function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages }: { openTasks: number; high: number; medium: number; low: number; leadsTotal: number; leadStages: { label: string; value: number; color: string }[] }) {
+  // Open-tasks gauge fill: fraction of the load (capped at ~12 = full arc).
+  const f = Math.max(0.04, Math.min(1, openTasks / 12))
   const ang = Math.PI * (1 - f)
   const ex = (88 + 72 * Math.cos(ang)).toFixed(1)
   const ey = (96 - 72 * Math.sin(ang)).toFixed(1)
   const mixTotal = Math.max(1, high + medium + low)
   const seg = (v: number) => `${((v / mixTotal) * 100).toFixed(1)}%`
-  const stat = (value: number, label: string, tone: string) => (
-    <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
-      <span className="text-[15px] font-semibold" style={{ color: tone }}>{value}</span>
-      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.65)' }}> {label}</span>
-    </div>
-  )
+  const leadMax = Math.max(1, ...leadStages.map(st => st.value))
   return (
     <div className="flex flex-col rounded-3xl p-4" style={{ background: 'rgba(4,18,38,0.42)', border: '1px solid rgba(0,200,255,0.24)', backdropFilter: 'blur(16px)' }}>
       <div className="text-center text-[10px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Summary</div>
+
+      <div className="mt-1 text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>Open tasks</div>
       <div className="flex justify-center">
-        <svg width="188" height="110" viewBox="0 0 176 104" role="img" aria-label={`${needAttention} items need attention today`}>
-          <path d="M16 96 A72 72 0 0 1 160 96" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="12" strokeLinecap="round" />
-          <path d={`M16 96 A72 72 0 0 1 ${ex} ${ey}`} fill="none" stroke="#00c8ff" strokeWidth="12" strokeLinecap="round" />
-          <text x="88" y="82" textAnchor="middle" fill="#ffffff" fontSize="30" fontWeight="500">{needAttention}</text>
-          <text x="88" y="98" textAnchor="middle" fill="rgba(255,255,255,0.72)" fontSize="11">need attention</text>
+        <svg width="182" height="98" viewBox="0 0 176 100" role="img" aria-label={`${openTasks} open tasks`}>
+          <path d="M16 96 A72 72 0 0 1 160 96" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="11" strokeLinecap="round" />
+          <path d={`M16 96 A72 72 0 0 1 ${ex} ${ey}`} fill="none" stroke="#00c8ff" strokeWidth="11" strokeLinecap="round" />
+          <text x="88" y="80" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="500">{openTasks}</text>
+          <text x="88" y="95" textAnchor="middle" fill="rgba(255,255,255,0.72)" fontSize="10.5">open tasks</text>
         </svg>
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {stat(dueToday, 'due today', '#ffffff')}
-        {stat(high, 'high', '#fca5a5')}
-        {stat(jobs, 'jobs', '#ffffff')}
-        {stat(unread, 'unread', '#ffffff')}
-      </div>
-      <div className="mb-1 mt-3 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'rgba(255,255,255,0.55)' }}>Priority mix</span>
-        <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{high + medium + low} items</span>
-      </div>
-      <div className="mt-auto flex h-2.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+      <div className="flex h-2 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
         <div style={{ width: seg(high), background: '#f87171' }} />
         <div style={{ width: seg(medium), background: '#fbbf24' }} />
         <div style={{ width: seg(low), background: '#38bdf8' }} />
       </div>
-      <div className="mt-1.5 flex items-center gap-3 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+      <div className="mt-1 flex items-center gap-2.5 text-[9.5px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
         <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#f87171' }} />High {high}</span>
         <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#fbbf24' }} />Med {medium}</span>
         <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#38bdf8' }} />Low {low}</span>
+      </div>
+
+      <div className="my-3 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
+
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>Leads</span>
+        <span className="text-[18px] font-semibold" style={{ color: '#ffffff' }}>{leadsTotal}</span>
+      </div>
+      <div className="mt-auto flex flex-col gap-1.5 pt-2">
+        {leadStages.length === 0 ? (
+          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>No leads yet.</div>
+        ) : leadStages.map(st => (
+          <div key={st.label} className="flex items-center gap-2">
+            <span className="w-14 shrink-0 truncate text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.6)' }}>{st.label}</span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div style={{ width: `${Math.max(6, (st.value / leadMax) * 100)}%`, height: '100%', background: st.color }} />
+            </div>
+            <span className="w-5 shrink-0 text-right text-[10px]" style={{ color: 'rgba(255,255,255,0.75)' }}>{st.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -209,7 +219,10 @@ function MessageChannelCard({ title, subtitle }: { title: string; subtitle: stri
 }
 
 export function MyDaySurface() {
+  const { user } = useUser()
+  const firstName = user?.firstName ?? 'there'
   const [summary, setSummary] = useState<MyDaySummary | null>(null)
+  const [leads, setLeads] = useState<{ stage?: string }[]>([])
   const [addEventOpen, setAddEventOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<MyDayPanel>(null)
   const [selectedTopItemId, setSelectedTopItemId] = useState<string | null>(null)
@@ -241,8 +254,13 @@ export function MyDaySurface() {
     void loadSummary()
   }, [loadSummary])
 
+  useEffect(() => {
+    let alive = true
+    fetch('/api/crm/leads').then(r => r.json()).then((d) => { if (alive) setLeads(Array.isArray(d) ? d : []) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+
   const todayCount = summary?.counts?.today_total ?? 0
-  const weekCount = summary?.counts?.week_total ?? 0
   const todayEvents = summary?.today?.events ?? []
   const top10 = summary?.top_10 ?? []
   const todoItems = top10.filter(item => item.type === 'todo' || item.type === 'tracker_task')
@@ -252,10 +270,11 @@ export function MyDaySurface() {
   const todoCount = summary?.counts?.today_todos ?? 0
   const workSignalCount = top10.length
   const messageCount = messageNotes.length
-  const jobsCount = top10.filter(item => item.type === 'work_order').length
   const highCount = top10.filter(item => item.urgency === 'high').length
   const medCount  = top10.filter(item => item.urgency === 'medium').length
   const lowCount  = top10.filter(item => item.urgency === 'low').length
+  const leadStageCounts = leads.reduce<Record<string, number>>((acc, l) => { const st = (l.stage || 'new'); acc[st] = (acc[st] || 0) + 1; return acc }, {})
+  const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value], i) => ({ label, value, color: LEAD_STAGE_COLORS[i % LEAD_STAGE_COLORS.length] }))
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
@@ -329,19 +348,18 @@ export function MyDaySurface() {
   return (
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))', border: '1px solid rgba(45,212,191,0.14)', boxShadow: '0 20px 60px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2><p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>Choose a category below to view your schedule, priorities, tasks, or messages.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div></div>
+        <div className="mb-4 text-center"><h2 className="text-lg font-semibold leading-tight sm:text-xl" style={{ color: 'rgba(255,255,255,0.96)', textShadow: '0 0 18px rgba(0,124,255,0.20)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.66)', fontWeight: 400 }}>what are we working on today?</span></h2></div>
         <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
           <div className="flex flex-col gap-3">
             <MyDayCardButton card={cards[0]} fill onClick={() => openCard(cards[0])} />
             <MyDayCardButton card={cards[1]} fill onClick={() => openCard(cards[1])} />
           </div>
-          <DaySummaryBlock needAttention={workSignalCount} dueToday={todoCount} jobs={jobsCount} unread={messageCount} high={highCount} medium={medCount} low={lowCount} />
+          <DaySummaryBlock openTasks={workSignalCount} high={highCount} medium={medCount} low={lowCount} leadsTotal={leads.length} leadStages={leadStages} />
           <div className="flex flex-col gap-3">
             <MyDayCardButton card={cards[2]} fill onClick={() => openCard(cards[2])} />
             <MyDayCardButton card={cards[3]} fill onClick={() => openCard(cards[3])} />
           </div>
         </div>
-        <div className="mt-5 text-xs" style={{ color: 'rgba(255,255,255,0.72)' }}>Pick one card above. Nexus will open the right work board.</div>
       </div>
 
       {activePanel === 'schedule' && <DetailShell title="Schedule" subtitle="Your calendar — day, week, month, and list views." onClose={() => setActivePanel(null)}>

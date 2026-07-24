@@ -49,14 +49,6 @@ const RAIL_ICONS: Record<string, RailItem['icon']> = {
   'my-day': 'home', opps: 'sales', jobs: 'ops', design: 'design', catalog: 'catalog', systems: 'systems',
 }
 
-const COMMAND_SUGGESTIONS = [
-  "What's my next job?",
-  'Show overdue tasks',
-  'Create a new lead',
-  'Find a customer',
-  'Send dealer NDA',
-]
-
 function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
@@ -114,7 +106,6 @@ async function postAssistant(messages: ChatMessage[]) {
 
 export default function NexusHomeClient() {
   const { user } = useUser()
-  const firstName = user?.firstName ?? 'there'
   // Admin affordance is visible only to GateGuard staff + dealer admins/supervisors —
   // never to regular dealer users/techs. Keeps Internal out of the normal flow.
   const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
@@ -204,32 +195,11 @@ export default function NexusHomeClient() {
       <NexusBackdropLayers variant="hero" />
 
       <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
-        {/* Slim brand band (shrunk hero) — small NEXUS mark + Ask bar. */}
+        {/* Slim brand band — small NEXUS mark + narrow Ask bar. Greeting now
+            lives centered above the My Day summary. */}
         <NexusMark />
-        <p className="mb-4 text-center text-base" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
-        {/* Wrapper width/radius must MATCH ActionCommandBar's own box (max-w-2xl,
-            rounded-2xl) — a wider wrapper draws the glow ring past the bar. */}
-        <div className="w-full max-w-2xl rounded-2xl" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
+        <div className="mt-2 w-full max-w-md rounded-2xl" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
           <ActionCommandBar onSubmit={handleQuery} isLoading={isLoading} />
-        </div>
-        <div className="mt-3 flex w-full max-w-3xl flex-wrap justify-center gap-2">
-          {COMMAND_SUGGESTIONS.map(suggestion => (
-            <button
-              key={suggestion}
-              type="button"
-              disabled={isLoading}
-              onClick={() => void handleQuery(suggestion)}
-              className="rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-40"
-              style={{
-                // Neutral chip language (mockup §3) — white-alpha, not cyan.
-                background: 'rgba(255,255,255,0.045)',
-                border: '1px solid rgba(255,255,255,0.13)',
-                color: 'rgba(255,255,255,0.78)',
-              }}
-            >
-              {suggestion}
-            </button>
-          ))}
         </div>
 
         {messages.length > 0 && (
