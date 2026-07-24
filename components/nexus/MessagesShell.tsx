@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, MessageSquare, Send, Clock, Settings } from 'lucide-react';
 import MessagesConnectorPane from '@/components/nexus/MessagesConnectorPane';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -182,6 +182,9 @@ export default function MessagesShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [replyText, setReplyText] = useState('');
+  const [composerMode, setComposerMode] = useState<'reply' | 'forward'>('reply');
+  const [forwardTo, setForwardTo] = useState('');
+  const editorRef = useRef<HTMLDivElement>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -315,6 +318,10 @@ export default function MessagesShell() {
   const [signature, setSignature] = useState('');
   const [sigSaved, setSigSaved] = useState(false);
   useEffect(() => { if (showSetup) void fetch('/api/nexus/messages/signature').then(r => r.json()).then(j => setSignature(j.signature ?? '')).catch(() => {}); }, [showSetup]);
+  useEffect(() => { void fetch('/api/nexus/messages/signature').then(r => r.json()).then(j => setSignature(j.signature ?? '')).catch(() => {}); }, []);
+  // Rich-text composer commands (contentEditable + execCommand).
+  const exec = (cmd: string, val?: string) => { document.execCommand(cmd, false, val); editorRef.current?.focus(); setReplyText(editorRef.current?.innerText ?? ''); };
+  const addLink = () => { const url = window.prompt('Link URL (https://…):'); if (url) exec('createLink', url); };
   const saveSignature = async () => {
     await fetch('/api/nexus/messages/signature', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signature }) }).catch(() => {});
     setSigSaved(true); setTimeout(() => setSigSaved(false), 1800);
@@ -339,8 +346,13 @@ export default function MessagesShell() {
 
   const handleSend = async () => {
     const conv = selectedConversation;
-    if (!replyText.trim() || !conv) return;
-    const text = replyText.trim();
+    if (!conv) return;
+    const html = editorRef.current?.innerHTML ?? '';
+    const text = (editorRef.current?.innerText ?? replyText).trim();
+    if (!text) return;
+    const isForward = composerMode === 'forward';
+    const to = isForward ? forwardTo.trim() : conv.contact_address;
+    if (isForward && !to) return;
 
     // Optimistically append; reconcile from the server on success.
     const optimistic: Message = {
@@ -348,20 +360,21 @@ export default function MessagesShell() {
       at: new Date().toISOString(),
     };
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, messages: [...c.messages, optimistic], preview: text, last_at: optimistic.at } : c));
-    setReplyText('');
+    setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = '';
 
     // Only email connectors can send today (SMTP / Gmail). Calls/texts are read-only.
-    if (conv.channel !== 'email' || !conv.channel_id || !conv.contact_address) return;
+    if (conv.channel !== 'email' || !conv.channel_id || !to) return;
     setSending(true);
     try {
       await fetch('/api/nexus/messages/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel_id: conv.channel_id,
-          to: conv.contact_address,
-          thread_id: conv.id,
-          subject: `Re: ${conv.preview || 'Message'}`,
+          to,
+          ...(isForward ? {} : { thread_id: conv.id }),
+          subject: isForward ? `Fwd: ${conv.preview || 'Message'}` : `Re: ${conv.preview || 'Message'}`,
           text,
+          html,
         }),
       });
       loadConversations().then(setConversations);
@@ -529,15 +542,36 @@ export default function MessagesShell() {
               })}
             </div>
             <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="rounded-xl flex flex-col" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div className="flex items-center gap-2 px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
-                  <span className="font-semibold">Reply via:</span>
-                  <span className="px-2 py-0.5 rounded capitalize" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)' }}>{selectedConversation.channel === 'email' ? 'Email' : selectedConversation.channel}</span>
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-cyan-500/25" style={{ background: 'rgba(15,23,42,0.9)' }}>
+                <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}>↩ Reply</button>
+                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}>↪ Forward</button>
+                  </div>
+                  <span className="text-[10px] text-slate-500">Signature added automatically</span>
                 </div>
-                <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleSend(); } }} placeholder="Type your reply… (⌘↵ to send)" className="w-full bg-transparent border-none outline-none resize-none p-4 text-[14px] placeholder:text-white/30 min-h-[72px]" style={textPrimary} />
-                <div className="flex justify-between items-center px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <span className="text-[11px]" style={textFaint}>Signature added automatically</span>
-                  <button onClick={handleSend} disabled={!replyText.trim() || sending} className="px-4 py-1.5 rounded-md text-[13px] font-semibold flex items-center gap-2 disabled:opacity-40" style={{ background: '#6366f1', color: 'white' }}>{sending ? 'Sending…' : 'Send'} <span className="font-mono text-[10px] px-1 rounded" style={{ background: 'rgba(255,255,255,0.2)' }}>⌘↵</span></button>
+                {composerMode === 'forward' && (
+                  <input value={forwardTo} onChange={e => setForwardTo(e.target.value)} placeholder="Forward to (email address)…" className="bg-transparent px-4 py-2 text-[13px] text-slate-200 outline-none placeholder:text-white/30" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }} />
+                )}
+                <div className="flex items-center gap-1 px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); exec('bold'); }} className="h-7 w-7 rounded text-[13px] font-bold text-slate-300 hover:bg-white/10">B</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); exec('italic'); }} className="h-7 w-7 rounded text-[13px] italic text-slate-300 hover:bg-white/10">I</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); exec('underline'); }} className="h-7 w-7 rounded text-[13px] text-slate-300 underline hover:bg-white/10">U</button>
+                  <span className="mx-1 h-4 w-px bg-white/10" />
+                  <button type="button" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} className="h-7 rounded px-2 text-[12px] text-slate-300 hover:bg-white/10">• List</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} className="h-7 rounded px-2 text-[12px] text-slate-300 hover:bg-white/10">1. List</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); addLink(); }} className="h-7 rounded px-2 text-[12px] text-slate-300 hover:bg-white/10">Link</button>
+                </div>
+                <div className="relative">
+                  {!replyText && <div className="pointer-events-none absolute left-4 top-3 text-[14px] text-white/30">{composerMode === 'forward' ? 'Add a note…' : 'Type your reply… (⌘↵ to send)'}</div>}
+                  <div ref={editorRef} contentEditable suppressContentEditableWarning onInput={e => setReplyText((e.target as HTMLDivElement).innerText)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleSend(); } }} className="min-h-[84px] max-h-[220px] overflow-y-auto px-4 py-3 text-[14px] text-slate-100 outline-none" />
+                </div>
+                {signature.trim() && (
+                  <div className="whitespace-pre-wrap px-4 pb-2 pt-2 text-[11px] text-slate-500" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>{signature}</div>
+                )}
+                <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button type="button" onClick={() => { setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = ''; }} className="text-[12px] text-slate-400 hover:text-white">Discard</button>
+                  <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)', color: '#67e8f9' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
                 </div>
               </div>
             </div>
