@@ -22,12 +22,13 @@ export type BackdropVariant = 'hero' | 'page'
 
 // The base gradient. Every Nexus screen shares this exact value.
 export const NEXUS_BG =
-  // 2036 Hybrid canvas: deep charcoal-navy #0b1329 -> #101b3b with a soft teal/cyan
-  // accent glow up top. One token; every Nexus screen inherits it.
-  'radial-gradient(ellipse at 50% -6%, rgba(45,212,191,0.12) 0%, transparent 42%),' +
-  'radial-gradient(ellipse at 86% 10%, rgba(56,189,248,0.12) 0%, transparent 36%),' +
-  'radial-gradient(ellipse at 10% 30%, rgba(79,70,229,0.10) 0%, transparent 34%),' +
-  'linear-gradient(160deg, #0b1329 0%, #0d1733 52%, #101b3b 100%)'
+  // 2036 Hybrid canvas: charcoal-navy that reads clearly (not near-black). Base runs
+  // #0b1329 -> #101b3b -> #16254d with teal/cyan/indigo accent glows up top. One
+  // token; every Nexus screen inherits it.
+  'radial-gradient(ellipse at 50% -6%, rgba(45,212,191,0.16) 0%, transparent 44%),' +
+  'radial-gradient(ellipse at 86% 8%, rgba(56,189,248,0.16) 0%, transparent 38%),' +
+  'radial-gradient(ellipse at 8% 26%, rgba(79,70,229,0.14) 0%, transparent 36%),' +
+  'linear-gradient(160deg, #0b1329 0%, #101b3b 55%, #16254d 100%)'
 
 /**
  * Decorative layers only — render inside a `relative` container that already
@@ -44,7 +45,7 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden="true"
-        style={{ background: 'rgba(2,6,16,0.08)' }}
+        style={{ background: 'rgba(2,6,16,0.03)' }}
       />
       {/* The 48px grid — on EVERY variant. This is the layer that makes a screen
           read as part of Nexus, so it must not stop at the home screen. It fades

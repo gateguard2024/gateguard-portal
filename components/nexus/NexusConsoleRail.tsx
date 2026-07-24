@@ -65,11 +65,11 @@ export function NexusConsoleRail({
         className="fixed top-1/2 z-40 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-xl transition-all duration-300"
         style={{
           right: open ? 232 : 0,
-          background: 'linear-gradient(180deg, rgba(10,20,38,0.95), rgba(4,10,24,0.95))',
-          border: '1px solid rgba(0,200,255,0.28)',
+          background: '#0e1e38',
+          border: '1px solid rgba(45,212,191,0.30)',
           borderRight: 'none',
           color: '#7DE5FF',
-          boxShadow: '0 0 18px rgba(0,124,255,0.18)',
+          boxShadow: '0 0 18px rgba(45,212,191,0.20)',
         }}
       >
         {open ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -81,10 +81,9 @@ export function NexusConsoleRail({
         className="fixed bottom-0 right-0 top-0 z-30 flex w-[232px] flex-col pt-6 transition-transform duration-300"
         style={{
           transform: hydrated && open ? 'translateX(0)' : 'translateX(100%)',
-          background: 'linear-gradient(180deg, rgba(8,18,34,0.94), rgba(3,9,22,0.96))',
-          borderLeft: '1px solid rgba(0,200,255,0.16)',
+          background: '#0e1e38',
+          borderLeft: '1px solid rgba(45,212,191,0.22)',
           boxShadow: '-18px 0 60px rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(24px)',
         }}
       >
         <div className="px-5 pb-5">
