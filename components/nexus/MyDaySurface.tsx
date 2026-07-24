@@ -91,11 +91,11 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
       onClick={onClick}
       className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
       style={{
-        // 2036: teal-accented frosted tile that sits LIGHTER than the steel
-        // canvas (mockup). One accent, restrained glow — not neon-on-black.
-        background: 'linear-gradient(160deg, rgba(45,212,191,0.10) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.03) 100%)',
-        border: '1px solid rgba(45,212,191,0.26)',
-        boxShadow: '0 0 22px rgba(45,212,191,0.10), 0 16px 40px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.16)',
+        // 2036: rich teal glass tile — deeper/more saturated teal so it reads
+        // clearly (not washed out). One accent, restrained glow.
+        background: 'linear-gradient(155deg, rgba(20,184,166,0.40) 0%, rgba(17,94,89,0.52) 45%, rgba(11,46,54,0.62) 100%)',
+        border: '1px solid rgba(45,212,191,0.50)',
+        boxShadow: '0 0 20px rgba(20,184,166,0.18), 0 16px 40px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12)',
         backdropFilter: 'blur(16px)',
       }}
     >

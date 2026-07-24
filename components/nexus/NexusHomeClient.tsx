@@ -199,8 +199,6 @@ export default function NexusHomeClient() {
 
   // Backdrop now comes from the shared NexusBackdrop module — same values, one
   // source of truth. Every tab below renders inside this shell and inherits it;
-  const topTitle = (NAV_ITEMS.find(n => n.id === activeTab)?.label)
-    ?? (activeTab === 'people' ? 'Admin' : activeTab === 'help' ? 'Help' : 'Main')
   // a surface must never paint its own page background.
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
@@ -208,8 +206,7 @@ export default function NexusHomeClient() {
 
       {/* Top bar (2036 shell) — title + centered search/ask pill + bell + avatar.
           Padded to sit between the docked rails. */}
-      <header className={`relative z-10 flex items-center gap-4 px-6 py-3 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
-        <div className="hidden shrink-0 text-sm font-semibold uppercase tracking-[0.18em] sm:block" style={{ color: 'rgba(255,255,255,0.82)' }}>{topTitle}</div>
+      <header className={`relative z-10 flex items-center px-6 py-3 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
         <form
           onSubmit={(e) => { e.preventDefault(); const q = topQuery.trim(); if (q) { void handleQuery(q); setTopQuery('') } }}
           className="mx-auto flex w-full max-w-xl items-center gap-2 rounded-full px-4 py-2"
@@ -224,18 +221,6 @@ export default function NexusHomeClient() {
             style={{ color: 'rgba(255,255,255,0.9)' }}
           />
         </form>
-        <div className="flex shrink-0 items-center gap-3">
-          <button type="button" aria-label="Notifications" className="rounded-full p-2 transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>
-            <Bell size={15} />
-          </button>
-          <div
-            className="h-8 w-8 shrink-0 rounded-full bg-cover bg-center"
-            aria-label="You"
-            style={user?.imageUrl
-              ? { backgroundImage: `url(${user.imageUrl})`, border: '1px solid rgba(0,200,255,0.4)' }
-              : { background: 'linear-gradient(135deg, rgba(0,124,255,0.6), rgba(0,200,255,0.4))', border: '1px solid rgba(0,200,255,0.4)' }}
-          />
-        </div>
       </header>
 
       <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
@@ -282,11 +267,24 @@ export default function NexusHomeClient() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-        <div className="flex gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(59,130,246,0.22)', boxShadow: '0 0 44px rgba(0,124,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(59,130,246,0.22)', boxShadow: '0 0 44px rgba(0,124,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
           {NAV_ITEMS.map(({ label, id }) => {
             const active = activeTab === id
             return <button key={id} type="button" onClick={() => { setActiveTab(id); setNavNonce(n => n + 1) }} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)', border: '1px solid rgba(0,200,255,0.42)', color: 'rgba(255,255,255,0.94)', boxShadow: '0 0 22px rgba(0,124,255,0.34), inset 0 1px 0 rgba(255,255,255,0.12)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.42)' }}>{label}</button>
           })}
+          {/* Bell + avatar relocated here from the top bar. */}
+          <div className="mx-1.5 h-6 w-px shrink-0" style={{ background: 'rgba(255,255,255,0.14)' }} />
+          <button type="button" aria-label="Notifications" className="relative shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <Bell size={16} />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: '#2dd4bf' }} />
+          </button>
+          <div
+            className="ml-0.5 h-8 w-8 shrink-0 rounded-full bg-cover bg-center"
+            aria-label="You"
+            style={user?.imageUrl
+              ? { backgroundImage: `url(${user.imageUrl})`, border: '1px solid rgba(45,212,191,0.45)' }
+              : { background: 'linear-gradient(135deg, rgba(0,124,255,0.6), rgba(0,200,255,0.4))', border: '1px solid rgba(45,212,191,0.45)' }}
+          />
         </div>
       </nav>
 
