@@ -82,24 +82,24 @@ function formatEventTime(event?: { time?: string | null; starts_at?: string | nu
   return ''
 }
 
-function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => void }) {
+function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: () => void; fill?: boolean }) {
   const color = rgb(card.hex)
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
+      className={`group relative flex flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
       style={{
-        // 2036: TRUE teal glass (cyan-green, not forest green). Brighter teal-400
-        // -> teal-600 so it reads teal against the steel canvas. One accent.
-        background: 'linear-gradient(155deg, rgba(45,212,191,0.36) 0%, rgba(20,184,166,0.46) 45%, rgba(15,118,110,0.55) 100%)',
-        border: '1px solid rgba(94,234,212,0.55)',
-        boxShadow: '0 0 22px rgba(45,212,191,0.22), 0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)',
+        // 2036: same blue glass as the highlighted My Day nav tab (brand blue ->
+        // cyan). One accent, matches the active bottom-nav pill.
+        background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)',
+        border: '1px solid rgba(0,200,255,0.42)',
+        boxShadow: '0 0 22px rgba(0,124,255,0.30), 0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)',
         backdropFilter: 'blur(16px)',
       }}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: 'rgba(45,212,191,0.20)', filter: 'blur(18px)' }} />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: 'rgba(0,124,255,0.22)', filter: 'blur(18px)' }} />
       {card.badge && (
         <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.26)`, border: `1px solid rgba(${color},0.55)`, color: '#ffffff' }}>
           {card.badge}
@@ -110,6 +110,55 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
       <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{card.subtitle}</div>
       <div className="mt-auto pt-4 self-center text-center rounded-full px-3.5 py-1.5 text-[13px] font-semibold opacity-95 transition-opacity group-hover:opacity-100" style={{ background: `rgba(${color},0.20)`, border: `1px solid rgba(${color},0.45)`, color: '#ffffff', boxShadow: `0 0 14px rgba(${color},0.22)` }}>{card.actionLabel}</div>
     </button>
+  )
+}
+
+function DaySummaryBlock({ needAttention, dueToday, jobs, unread, high, medium, low }: { needAttention: number; dueToday: number; jobs: number; unread: number; high: number; medium: number; low: number }) {
+  // Gauge fill: fraction of the day's attention load (capped at ~12 items = full).
+  const f = Math.max(0.04, Math.min(1, needAttention / 12))
+  const ang = Math.PI * (1 - f)
+  const ex = (88 + 72 * Math.cos(ang)).toFixed(1)
+  const ey = (96 - 72 * Math.sin(ang)).toFixed(1)
+  const mixTotal = Math.max(1, high + medium + low)
+  const seg = (v: number) => `${((v / mixTotal) * 100).toFixed(1)}%`
+  const stat = (value: number, label: string, tone: string) => (
+    <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
+      <span className="text-[15px] font-semibold" style={{ color: tone }}>{value}</span>
+      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.65)' }}> {label}</span>
+    </div>
+  )
+  return (
+    <div className="flex flex-col rounded-3xl p-4" style={{ background: 'rgba(4,18,38,0.42)', border: '1px solid rgba(0,200,255,0.24)', backdropFilter: 'blur(16px)' }}>
+      <div className="text-center text-[10px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Summary</div>
+      <div className="flex justify-center">
+        <svg width="188" height="110" viewBox="0 0 176 104" role="img" aria-label={`${needAttention} items need attention today`}>
+          <path d="M16 96 A72 72 0 0 1 160 96" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="12" strokeLinecap="round" />
+          <path d={`M16 96 A72 72 0 0 1 ${ex} ${ey}`} fill="none" stroke="#00c8ff" strokeWidth="12" strokeLinecap="round" />
+          <text x="88" y="82" textAnchor="middle" fill="#ffffff" fontSize="30" fontWeight="500">{needAttention}</text>
+          <text x="88" y="98" textAnchor="middle" fill="rgba(255,255,255,0.72)" fontSize="11">need attention</text>
+        </svg>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {stat(dueToday, 'due today', '#ffffff')}
+        {stat(high, 'high', '#fca5a5')}
+        {stat(jobs, 'jobs', '#ffffff')}
+        {stat(unread, 'unread', '#ffffff')}
+      </div>
+      <div className="mb-1 mt-3 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'rgba(255,255,255,0.55)' }}>Priority mix</span>
+        <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{high + medium + low} items</span>
+      </div>
+      <div className="mt-auto flex h-2.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <div style={{ width: seg(high), background: '#f87171' }} />
+        <div style={{ width: seg(medium), background: '#fbbf24' }} />
+        <div style={{ width: seg(low), background: '#38bdf8' }} />
+      </div>
+      <div className="mt-1.5 flex items-center gap-3 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#f87171' }} />High {high}</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#fbbf24' }} />Med {medium}</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#38bdf8' }} />Low {low}</span>
+      </div>
+    </div>
   )
 }
 
@@ -203,6 +252,10 @@ export function MyDaySurface() {
   const todoCount = summary?.counts?.today_todos ?? 0
   const workSignalCount = top10.length
   const messageCount = messageNotes.length
+  const jobsCount = top10.filter(item => item.type === 'work_order').length
+  const highCount = top10.filter(item => item.urgency === 'high').length
+  const medCount  = top10.filter(item => item.urgency === 'medium').length
+  const lowCount  = top10.filter(item => item.urgency === 'low').length
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
@@ -260,6 +313,8 @@ export function MyDaySurface() {
     setActivePanel(null)
   }
 
+  const openCard = (card: MyDayCard) => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }
+
   const cards: MyDayCard[] = [
     { id: 'schedule', title: "Today's Schedule", subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : "See today's calendar, site visits, jobs, and appointments.", hex: '#00C8FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
     { id: 'top10', title: "Today's Priorities", subtitle: workSignalCount > 0 ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.` : 'Important work will appear here when Nexus finds it.', hex: '#007CFF', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : undefined, actionLabel: 'Open →' },
@@ -275,7 +330,17 @@ export function MyDaySurface() {
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))', border: '1px solid rgba(45,212,191,0.14)', boxShadow: '0 20px 60px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2><p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>Choose a category below to view your schedule, priorities, tasks, or messages.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }} />)}</div>
+        <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
+          <div className="flex flex-col gap-3">
+            <MyDayCardButton card={cards[0]} fill onClick={() => openCard(cards[0])} />
+            <MyDayCardButton card={cards[1]} fill onClick={() => openCard(cards[1])} />
+          </div>
+          <DaySummaryBlock needAttention={workSignalCount} dueToday={todoCount} jobs={jobsCount} unread={messageCount} high={highCount} medium={medCount} low={lowCount} />
+          <div className="flex flex-col gap-3">
+            <MyDayCardButton card={cards[2]} fill onClick={() => openCard(cards[2])} />
+            <MyDayCardButton card={cards[3]} fill onClick={() => openCard(cards[3])} />
+          </div>
+        </div>
         <div className="mt-5 text-xs" style={{ color: 'rgba(255,255,255,0.72)' }}>Pick one card above. Nexus will open the right work board.</div>
       </div>
 

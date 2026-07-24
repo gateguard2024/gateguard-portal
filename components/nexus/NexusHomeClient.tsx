@@ -21,7 +21,7 @@ import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { NexusConsoleRail, type RailItem } from '@/components/nexus/NexusConsoleRail'
 import { NexusActionsRail } from '@/components/nexus/NexusActionsRail'
-import { Search, Bell } from 'lucide-react'
+import { Bell } from 'lucide-react'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -135,7 +135,6 @@ export default function NexusHomeClient() {
   // rail collapses. Persisted in the same localStorage keys the rails used.
   const [leftOpen, setLeftOpen] = useState(true)
   const [rightOpen, setRightOpen] = useState(true)
-  const [topQuery, setTopQuery] = useState('')
 
   // The global Admin launcher (all pages) opens admin two ways:
   //  - from another page → navigates to /?view=admin (read on mount)
@@ -203,25 +202,6 @@ export default function NexusHomeClient() {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
       <NexusBackdropLayers variant="hero" />
-
-      {/* Top bar (2036 shell) — title + centered search/ask pill + bell + avatar.
-          Padded to sit between the docked rails. */}
-      <header className={`relative z-10 flex items-center px-6 py-3 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
-        <form
-          onSubmit={(e) => { e.preventDefault(); const q = topQuery.trim(); if (q) { void handleQuery(q); setTopQuery('') } }}
-          className="mx-auto flex w-full max-w-xl items-center gap-2 rounded-full px-4 py-2"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)' }}
-        >
-          <Search size={15} style={{ color: 'rgba(255,255,255,0.5)' }} />
-          <input
-            value={topQuery}
-            onChange={(e) => setTopQuery(e.target.value)}
-            placeholder="Search or ask Nexus…"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-white/35"
-            style={{ color: 'rgba(255,255,255,0.9)' }}
-          />
-        </form>
-      </header>
 
       <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
         {/* Slim brand band (shrunk hero) — small NEXUS mark + Ask bar. */}
