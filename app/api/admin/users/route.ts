@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { clerkClient } from '@clerk/nextjs/server'
+import { sendClerkInvite } from '@/lib/send-invite'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { normalizeRole } from '@/lib/permissions'
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
     // The preferred path is still the glass "+ Add Person" wizard, which has an
     // org picker; this is the safety net so the legacy page can't mint a
     // scope-less user.
-    const invitation = await client.invitations.createInvitation({
+    const invitation = await sendClerkInvite({
       emailAddress: email,
       redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'}/sign-up`,
       publicMetadata: {

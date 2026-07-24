@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
+import { sendClerkInvite } from '@/lib/send-invite'
 import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
         })
         invite_statuses.push({ email: u.email, status: 'existing_user_updated' })
       } else {
-        await clerk.invitations.createInvitation({
+        await sendClerkInvite({
           emailAddress: u.email,
           publicMetadata: {
             org_id:      org.id,
