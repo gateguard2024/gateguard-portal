@@ -109,7 +109,7 @@ export function TodoBoard() {
             return (
               <button key={f.id} type="button" onClick={() => { setFilter(f.id); setOpenId(null); setSelectedId(null) }}
                 className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
-                style={{ background: active ? `${VIOLET}26` : 'rgba(0,0,0,0.18)', border: `1px solid ${active ? VIOLET : 'rgba(255,255,255,0.08)'}`, color: active ? '#ddd6fe' : 'rgba(255,255,255,0.55)' }}>
+                style={{ background: active ? `${VIOLET}26` : 'rgba(15,23,42,0.6)', border: `1px solid ${active ? VIOLET : 'rgba(255,255,255,0.08)'}`, color: active ? '#ddd6fe' : 'rgba(255,255,255,0.55)' }}>
                 {f.label}
               </button>
             )
@@ -127,13 +127,13 @@ export function TodoBoard() {
       <div className="flex gap-2">
         <input value={quick} onChange={e => setQuick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void quickAdd() }}
           placeholder="Add a task and press Enter…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
-          style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }} />
+          style={{ background: 'rgba(15,23,42,0.65)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }} />
         <button type="button" disabled={busy || !quick.trim()} onClick={() => void quickAdd()} className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)' }}>Add</button>
       </div>
 
       {msg && <div className="rounded-xl p-3 text-xs" style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#fca5a5' }}>{msg}</div>}
       {loading && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading tasks…</div>}
-      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No tasks here. Add one above.</div>}
+      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No tasks here. Add one above.</div>}
 
       {/* Selected-task action bar — the side-panel actions operate on the chosen task */}
       {selectedTodo && (
@@ -162,7 +162,7 @@ export function TodoBoard() {
           const expanded = openId === t.id
           const selected = selectedId === t.id
           return (
-            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'rgba(139,92,246,0.14)' : 'rgba(0,0,0,0.18)', border: `1px solid ${selected ? 'rgba(139,92,246,0.6)' : expanded ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
+            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'rgba(139,92,246,0.14)' : 'rgba(15,23,42,0.6)', border: `1px solid ${selected ? 'rgba(139,92,246,0.6)' : expanded ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
               <div className="flex items-center gap-2.5 px-3 py-2.5">
                 <button type="button" disabled={busy} onClick={() => void patch(t.id, { status: done ? 'open' : 'done' })}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
@@ -181,15 +181,15 @@ export function TodoBoard() {
                 <div className="space-y-2 border-t px-3 py-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                   <div className="flex flex-wrap gap-2">
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Priority
-                      <select defaultValue={t.priority} onChange={e => void patch(t.id, { priority: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
+                      <select defaultValue={t.priority} onChange={e => void patch(t.id, { priority: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
                         <option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option>
                       </select>
                     </label>
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Due
-                      <input type="date" defaultValue={t.due_date ?? ''} onChange={e => void patch(t.id, { due_date: e.target.value || null })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }} />
+                      <input type="date" defaultValue={t.due_date ?? ''} onChange={e => void patch(t.id, { due_date: e.target.value || null })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }} />
                     </label>
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Status
-                      <select defaultValue={t.status} onChange={e => void patch(t.id, { status: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
+                      <select defaultValue={t.status} onChange={e => void patch(t.id, { status: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
                         <option value="open">Open</option><option value="in_progress">In progress</option><option value="done">Done</option>
                       </select>
                     </label>

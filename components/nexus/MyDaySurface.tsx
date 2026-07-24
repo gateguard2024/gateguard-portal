@@ -298,6 +298,7 @@ export function MyDaySurface() {
   const highCount = top10.filter(item => item.urgency === 'high').length
   const medCount  = top10.filter(item => item.urgency === 'medium').length
   const lowCount  = top10.filter(item => item.urgency === 'low').length
+  const sortedTop10 = [...top10].sort((a, b) => (({ high: 0, medium: 1, low: 2 } as Record<string, number>)[a.urgency] ?? 1) - (({ high: 0, medium: 1, low: 2 } as Record<string, number>)[b.urgency] ?? 1))
   const leadStageCounts = leads.reduce<Record<string, number>>((acc, l) => { const st = (l.stage || 'new'); acc[st] = (acc[st] || 0) + 1; return acc }, {})
   const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value]) => ({ label, value }))
 
@@ -391,8 +392,38 @@ export function MyDaySurface() {
         <CalendarViews />
       </DetailShell>}
 
-      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Tap an item to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.6)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
-        {top10.length > 0 ? top10.map((item, index) => <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="mb-1.5 w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div><div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{item.urgency}</div></div></button>) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No priority items yet. Add an event or to-do to start building the day.</div>}
+      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.6)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
+        {top10.length > 0 ? (
+          <>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(244,63,94,0.12)', color: '#fda4af', border: '1px solid rgba(244,63,94,0.3)' }}>{highCount} high</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(251,191,36,0.12)', color: '#fcd34d', border: '1px solid rgba(251,191,36,0.3)' }}>{medCount} medium</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(34,211,238,0.12)', color: '#67e8f9', border: '1px solid rgba(34,211,238,0.3)' }}>{lowCount} low</span>
+            </div>
+            <div className="space-y-2">
+              {sortedTop10.map((item, index) => {
+                const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#22d3ee'
+                return (
+                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-white/10 py-3 pl-4 pr-3 text-left backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-white/20" style={{ background: 'rgba(15,23,42,0.66)' }}>
+                    <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-500">{index + 1}</span>
+                          <span className="truncate text-sm font-semibold text-white">{item.title}</span>
+                        </div>
+                        <div className="mt-1 truncate text-[10.5px] capitalize text-slate-400">{item.reason} · {item.type.replace(/_/g, ' ')}</div>
+                      </div>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ background: `${accent}1f`, color: accent, border: `1px solid ${accent}59` }}>{item.urgency}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-white/10 px-3 py-6 text-center text-xs text-slate-400" style={{ background: 'rgba(15,23,42,0.5)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
+        )}
       </DetailShell>}
 
       {priorityOpen && selectedTopItem && (
