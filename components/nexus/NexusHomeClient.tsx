@@ -20,6 +20,7 @@ import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { NexusConsoleRail, type RailItem } from '@/components/nexus/NexusConsoleRail'
+import { NexusActionsRail } from '@/components/nexus/NexusActionsRail'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -239,6 +240,7 @@ export default function NexusHomeClient() {
       {/* Right console rail — pops in/out from the right edge (mockup §6).
           Same destinations as the bottom nav; no new IA. Desktop only. */}
       <NexusConsoleRail
+        side="left"
         activeId={activeTab}
         onSelect={(id) => {
           if (id === 'help' || id === 'people') { setActiveTab(id as NexusTabId); setNavNonce(n => n + 1); return }
@@ -251,6 +253,10 @@ export default function NexusHomeClient() {
           ...(isAdmin ? [{ id: 'people', label: 'Admin', icon: 'admin' as const }] : []),
         ]}
       />
+
+      {/* Right actions pop-out — to-dos + follow-ups (real data). Opening jumps
+          to My Day where the full task list lives. */}
+      <NexusActionsRail onOpenList={() => { setActiveTab('my-day'); setNavNonce(n => n + 1) }} />
 
       {/* Movable how-to window — floats over any screen (#73) */}
       <HowToWindow />
