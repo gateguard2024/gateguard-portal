@@ -91,13 +91,15 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
       onClick={onClick}
       className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
       style={{
-        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.34), transparent 36%), linear-gradient(145deg, rgba(14,26,46,0.92), rgba(6,14,30,0.86))`,
-        border: `1px solid rgba(${color},0.55)`,
-        boxShadow: `0 0 30px rgba(${color},0.22), 0 22px 58px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.14)`,
-        backdropFilter: 'blur(20px)',
+        // 2036: teal-accented frosted tile that sits LIGHTER than the steel
+        // canvas (mockup). One accent, restrained glow — not neon-on-black.
+        background: 'linear-gradient(160deg, rgba(45,212,191,0.10) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.03) 100%)',
+        border: '1px solid rgba(45,212,191,0.26)',
+        boxShadow: '0 0 22px rgba(45,212,191,0.10), 0 16px 40px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.16)',
+        backdropFilter: 'blur(16px)',
       }}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.20)`, filter: 'blur(18px)' }} />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: 'rgba(45,212,191,0.20)', filter: 'blur(18px)' }} />
       {card.badge && (
         <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.26)`, border: `1px solid rgba(${color},0.55)`, color: '#ffffff' }}>
           {card.badge}
@@ -271,7 +273,7 @@ export function MyDaySurface() {
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))', border: '1px solid rgba(45,212,191,0.14)', boxShadow: '0 20px 60px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2><p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>Choose a category below to view your schedule, priorities, tasks, or messages.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }} />)}</div>
         <div className="mt-5 text-xs" style={{ color: 'rgba(255,255,255,0.72)' }}>Pick one card above. Nexus will open the right work board.</div>
