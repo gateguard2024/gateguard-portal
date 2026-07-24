@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Calendar, X, Clock, MapPin } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ChevronDown } = require('lucide-react') as any;
+import { NEXUS_BG } from '@/components/nexus/NexusBackdrop';
 // --- Data Contracts & Types ---
 type CalCategory = 'jobs' | 'sales' | 'todos' | 'google';
 type CalEvent = {
@@ -231,7 +232,7 @@ export default function CalendarViews() {
     for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(year, month, i));
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-white/5 bg-[#0e1e38]/80 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-white/5 bg-white/5 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
         <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-2">
@@ -247,16 +248,16 @@ export default function CalendarViews() {
                 onClick={() => setSelectedDate(date)}
                 className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
                   isSelected
-                    ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_15px_rgba(56,189,248,0.25)]'
+                    ? 'border-[#00c8ff] bg-[#007cff]/20 shadow-[0_0_18px_rgba(0,124,255,0.3)]'
                     : isToday
-                    ? 'border-cyan-500/50 bg-slate-800/80'
-                    : 'border-white/5 bg-[#0e1e38]/50 hover:border-white/10 hover:bg-slate-800/50'
+                    ? 'border-[#00c8ff]/60 bg-white/10'
+                    : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-cyan-400 px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-400'}`}>{date.getDate()}</span>
                   {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-cyan-400">Today</span>}
-                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#22d3ee', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#00c8ff', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.slice(0, 2).map(e => {
@@ -527,7 +528,7 @@ export default function CalendarViews() {
             );
           })}
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-cyan-500/40 bg-cyan-500/15 py-2.5 text-xs font-bold text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.15)] transition-all hover:bg-cyan-500/25">
+        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#00c8ff]/45 bg-[#007cff]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,124,255,0.2)] transition-all hover:bg-[#007cff]/40">
           <Plus size={14} /> Add to {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </button>
       </div>
@@ -537,14 +538,14 @@ export default function CalendarViews() {
   const monthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <div className="relative flex w-full flex-1 flex-col font-sans">
+    <div className="relative flex w-full flex-1 flex-col rounded-3xl p-4 font-sans" style={{ background: NEXUS_BG }}>
       <div className="pointer-events-none absolute left-8 top-6 h-72 w-72 rounded-full" style={{ background: 'rgba(34,211,238,0.08)', filter: 'blur(80px)' }} />
       <div className="pointer-events-none absolute bottom-8 right-8 h-72 w-72 rounded-full" style={{ background: 'rgba(99,102,241,0.08)', filter: 'blur(80px)' }} />
 
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-400">
           {(['Month', 'Week', 'Day', 'List'] as const).map(mode => (
-            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-cyan-500/40 bg-cyan-500/20 font-bold text-cyan-300' : 'hover:text-slate-200'}`}>{mode}</button>
+            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#00c8ff]/45 bg-[#007cff]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
           ))}
         </div>
         <div className="flex items-center gap-2">
@@ -554,7 +555,7 @@ export default function CalendarViews() {
             <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronRight size={16} /></button>
           </div>
           <span className="min-w-[128px] text-center text-lg font-bold text-slate-100">{monthLabel}</span>
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/20 px-3.5 py-1.5 text-xs font-bold text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all hover:bg-cyan-500/30"><Plus size={14} /> Add Event</button>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#00c8ff]/45 bg-[#007cff]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,124,255,0.25)] transition-all hover:bg-[#007cff]/40"><Plus size={14} /> Add Event</button>
         </div>
       </div>
 
