@@ -129,13 +129,12 @@ const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): 
 // --- Theme & Styles ---
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const textFaint = { color: 'rgba(255,255,255,0.34)' };
 const glassBg = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
 const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
-  jobs: { label: 'Jobs', color: '#C2410C' },
-  sales: { label: 'Sales', color: '#00C8FF' },
-  todos: { label: 'To-Dos', color: '#8B5CF6' },
-  google: { label: 'Google', color: '#34D399' }
+  jobs: { label: 'Jobs', color: '#34D399' },
+  sales: { label: 'Sales', color: '#22D3EE' },
+  todos: { label: 'To-Dos', color: '#A78BFA' },
+  google: { label: 'Google', color: '#FBBF24' }
 };
 // --- Helpers ---
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -151,6 +150,7 @@ export default function CalendarViews() {
   const [view, setView] = useState<'Month' | 'Week' | 'Day' | 'List'>('Month');
   const [scope, setScope] = useState<'me' | 'team'>('me');
   const [activeFilters, setActiveFilters] = useState<Set<CalCategory>>(new Set(['jobs', 'sales', 'todos', 'google']));
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -185,11 +185,6 @@ export default function CalendarViews() {
     }
   }
 
-  // Find time — jump to this week's Week view so open slots are visible.
-  function handleFindTime() {
-    setCurrentDate(new Date());
-    setView('Week');
-  }
   // Load events when period/scope changes
   useEffect(() => {
     setIsLoading(true);
@@ -231,55 +226,53 @@ export default function CalendarViews() {
     const month = currentDate.getMonth();
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
-
-    const days = [];
-    for (let i = 0; i < firstDay; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+    const cells: (Date | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(year, month, i));
     return (
-      <div className="flex flex-col flex-1 border border-white/5 rounded-2xl overflow-hidden mt-4 bg-black/10">
-        <div className="grid grid-cols-7 border-b border-white/5 bg-white/5">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-            <div key={d} className="py-2 text-center text-[10px] font-semibold uppercase tracking-wider" style={textSecondary}>
-              {d}
-            </div>
-          ))}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-white/5 bg-[#0e1e38]/80 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
-        <div className="grid grid-cols-7 flex-1 auto-rows-fr">
-          {days.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="border-r border-b border-white/5 p-1" />;
-
+        <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-2">
+          {cells.map((date, idx) => {
+            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-white/5 bg-transparent" />;
             const isToday = new Date().toDateString() === date.toDateString();
+            const isSelected = selectedDate.toDateString() === date.toDateString();
             const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === date.toDateString());
             return (
-              <div key={idx} className="border-r border-b border-white/5 p-1.5 min-h-[100px] flex flex-col gap-1">
-                <div className="flex justify-between items-start">
-                  <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-[#6B7EFF] text-white font-bold' : ''}`} style={!isToday ? textSecondary : {}}>
-                    {date.getDate()}
-                  </span>
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setSelectedDate(date)}
+                className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
+                  isSelected
+                    ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_15px_rgba(56,189,248,0.25)]'
+                    : isToday
+                    ? 'border-cyan-500/50 bg-slate-800/80'
+                    : 'border-white/5 bg-[#0e1e38]/50 hover:border-white/10 hover:bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-cyan-400 px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-400'}`}>{date.getDate()}</span>
+                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-cyan-400">Today</span>}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#22d3ee', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
                 </div>
-                <div className="flex flex-col gap-1 overflow-hidden">
-                  {dayEvents.slice(0, 3).map(e => (
-                    <button
-                      key={e.id}
-                      onClick={() => setSelectedEvent(e)}
-                      className="text-left truncate text-[10px] px-1.5 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1.5 w-full"
-                      style={textPrimary}
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORIES[e.category].color }} />
-                      <span className="truncate">{e.title}</span>
-                    </button>
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <div className="text-[9px] px-1" style={textFaint}>+ {dayEvents.length - 3} more</div>
-                  )}
+                <div className="mt-1 flex flex-col gap-1 overflow-hidden">
+                  {dayEvents.slice(0, 2).map(e => {
+                    const color = CATEGORIES[e.category].color;
+                    return <div key={e.id} className="truncate rounded border px-1.5 py-0.5 text-[9px] font-medium" style={{ background: `${color}1f`, color, borderColor: `${color}4d` }}>{e.title}</div>;
+                  })}
+                  {dayEvents.length > 2 && <div className="rounded border border-rose-500/30 bg-rose-950/60 px-1.5 py-0.5 text-center text-[9px] font-bold text-rose-300">+{dayEvents.length - 2} more</div>}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
     );
   };
+
   const renderWeekView = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -504,129 +497,105 @@ export default function CalendarViews() {
       </div>
     );
   };
-  const currentLabel = useMemo(() => {
-    if (view === 'Day') return currentDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-    if (view === 'Month' || view === 'List') return currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const renderDayInspector = () => {
+    const dayEvents = filteredEvents
+      .filter(e => new Date(e.start).toDateString() === selectedDate.toDateString())
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    const dLabel = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    return (
+      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: 'rgba(14,30,56,0.7)', backdropFilter: 'blur(12px)' }}>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">Day Inspector</span>
+          <span className="rounded-full border border-white/5 bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">{dayEvents.length} items</span>
+        </div>
+        <h3 className="mb-3 text-lg font-extrabold text-white">{dLabel}</h3>
+        <hr className="mb-3 border-white/10" />
+        <div className="flex max-h-[440px] min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+          {dayEvents.length === 0 ? (
+            <div className="rounded-2xl border border-white/5 bg-slate-900/30 py-14 text-center text-xs text-slate-500">No events scheduled for this day.</div>
+          ) : dayEvents.map(e => {
+            const color = CATEGORIES[e.category].color;
+            return (
+              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-slate-900/80 p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{formatTime(e.start, e.all_day)}{e.end ? ` - ${formatTime(e.end)}` : ''}</span>
+                <h4 className="mt-0.5 text-sm font-bold text-white">{e.title}</h4>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold" style={{ background: `${color}1a`, color, borderColor: `${color}4d` }}>{CATEGORIES[e.category].label}</span>
+                  {e.location && <span className="truncate text-[10px] text-slate-400">{e.location}</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-cyan-500/40 bg-cyan-500/15 py-2.5 text-xs font-bold text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.15)] transition-all hover:bg-cyan-500/25">
+          <Plus size={14} /> Add to {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        </button>
+      </div>
+    );
+  };
 
-    const start = new Date(currentDate);
-    start.setDate(start.getDate() - start.getDay());
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  }, [currentDate, view]);
+  const monthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
   return (
-    <div className="w-full flex flex-col font-sans">
+    <div className="relative flex w-full flex-1 flex-col font-sans">
+      <div className="pointer-events-none absolute left-8 top-6 h-72 w-72 rounded-full" style={{ background: 'rgba(34,211,238,0.08)', filter: 'blur(80px)' }} />
+      <div className="pointer-events-none absolute bottom-8 right-8 h-72 w-72 rounded-full" style={{ background: 'rgba(99,102,241,0.08)', filter: 'blur(80px)' }} />
 
-      {/* 1. SLIM TOOLBAR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
-
-        <div className="flex items-center p-1 rounded-xl w-max" style={glassBg}>
-          {(['Month', 'Week', 'Day', 'List'] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                backgroundColor: view === v ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: view === v ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'
-              }}
-            >
-              {v}
-            </button>
+      <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-400">
+          {(['Month', 'Week', 'Day', 'List'] as const).map(mode => (
+            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-cyan-500/40 bg-cyan-500/20 font-bold text-cyan-300' : 'hover:text-slate-200'}`}>{mode}</button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1" style={textPrimary}>
-            <button onClick={handlePrev} className="p-1.5 rounded-full hover:bg-white/10 transition-colors"><ChevronLeft size={18} /></button>
-            <button onClick={handleToday} className="px-3 py-1 text-xs font-medium rounded-full hover:bg-white/10 transition-colors">Today</button>
-            <button onClick={handleNext} className="p-1.5 rounded-full hover:bg-white/10 transition-colors"><ChevronRight size={18} /></button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] px-1 py-1 text-slate-300">
+            <button onClick={handlePrev} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronLeft size={16} /></button>
+            <button onClick={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }} className="rounded-lg px-2.5 py-1 text-xs font-semibold hover:bg-white/10">Today</button>
+            <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronRight size={16} /></button>
           </div>
-          <span className="text-base font-medium min-w-[140px] text-center" style={textPrimary}>
-            {currentLabel}
-          </span>
+          <span className="min-w-[128px] text-center text-lg font-bold text-slate-100">{monthLabel}</span>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/20 px-3.5 py-1.5 text-xs font-bold text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all hover:bg-cyan-500/30"><Plus size={14} /> Add Event</button>
         </div>
-        <div className="flex items-center gap-3 justify-end">
-          <div className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-white/5 transition-colors text-sm font-medium" style={textSecondary}>
-            <Calendar size={14} />
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as 'me' | 'team')}
-              className="bg-transparent appearance-none outline-none cursor-pointer pr-4"
-              style={textSecondary}
-            >
+      </div>
+
+      <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => {
+            const isActive = activeFilters.has(cat); const color = CATEGORIES[cat].color;
+            return (
+              <button key={cat} onClick={() => toggleFilter(cat)} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${isActive ? 'bg-slate-800 text-white' : 'border-white/5 bg-slate-900/60 text-slate-400 hover:border-white/20'}`} style={isActive ? { borderColor: `${color}66` } : undefined}>
+                <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                {CATEGORIES[cat].label}
+              </button>
+            );
+          })}
+          {isLoading && <span className="ml-1 animate-pulse text-[10px] text-slate-500">Updating...</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-1.5 rounded-full border border-white/5 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-400">
+            <Calendar size={12} />
+            <select value={scope} onChange={e => setScope(e.target.value as 'me' | 'team')} className="cursor-pointer appearance-none bg-transparent pr-4 outline-none">
               <option value="me" className="bg-neutral-900">My Calendar</option>
               <option value="team" className="bg-neutral-900">My Team</option>
             </select>
-            <ChevronDown size={14} className="absolute right-2 pointer-events-none" />
+            <ChevronDown size={12} className="pointer-events-none absolute right-2" />
           </div>
-          <button
-            onClick={handleFindTime}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10"
-            style={textSecondary}
-            title="Jump to this week to spot open slots"
-          >
-            Find time
-          </button>
-          <button
-            onClick={() => setView('Week')}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10"
-            style={textSecondary}
-          >
-            View week
-          </button>
-          <button
-            onClick={handleSyncCalendar}
-            disabled={syncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
-            style={textSecondary}
-            title="Sync with Google Calendar"
-          >
-            {syncing ? 'Syncing…' : 'Sync calendar'}
-          </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
-            style={{ backgroundColor: '#6B7EFF', color: 'white' }}
-          >
-            <Plus size={16} /> Add event
-          </button>
+          <button onClick={handleSyncCalendar} disabled={syncing} className="rounded-full border border-white/5 bg-slate-900/60 px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:border-white/20 disabled:opacity-50">{syncing ? 'Syncing...' : 'Sync'}</button>
         </div>
       </div>
-      {syncMsg && (
-        <div className="mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(107,126,255,0.12)', border: '1px solid rgba(107,126,255,0.28)', color: '#c7d2fe' }}>
-          {syncMsg}
+
+      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(34,211,238,0.10)', border: '1px solid rgba(34,211,238,0.28)', color: '#a5f3fc' }}>{syncMsg}</div>)}
+
+      <div className="relative z-10 flex min-h-0 flex-1 gap-4">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {view === 'Month' && renderMonthView()}
+          {view === 'Week' && renderWeekView()}
+          {view === 'Day' && renderDayView()}
+          {view === 'List' && renderListView()}
         </div>
-      )}
-      {/* 2. CATEGORY FILTERS */}
-      <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
-        {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => {
-          const isActive = activeFilters.has(cat);
-          const color = CATEGORIES[cat].color;
-          return (
-            <button
-              key={cat}
-              onClick={() => toggleFilter(cat)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all"
-              style={{
-                backgroundColor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
-                border: isActive ? `1px solid rgba(255,255,255,0.1)` : '1px solid transparent',
-                color: isActive ? textPrimary.color : textSecondary.color,
-                opacity: isActive ? 1 : 0.6
-              }}
-            >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-              {CATEGORIES[cat].label}
-            </button>
-          );
-        })}
-        {isLoading && <span className="text-[10px] ml-2 animate-pulse" style={textFaint}>Updating...</span>}
+        {renderDayInspector()}
       </div>
-      {/* 3. CALENDAR VIEW RENDERER */}
-      {view === 'Month' && renderMonthView()}
-      {view === 'Week' && renderWeekView()}
-      {view === 'Day' && renderDayView()}
-      {view === 'List' && renderListView()}
-      {/* MODALS */}
+
       {renderEventPopover()}
       {renderAddModal()}
     </div>
