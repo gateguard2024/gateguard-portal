@@ -71,7 +71,13 @@ type MessageNote = {
 
 const MESSAGE_NOTE_KEY = 'nexus_my_day_message_notes'
 
-const LEAD_STAGE_COLORS = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f472b6', '#22d3ee']
+const LEAD_BAR_GRADIENTS = [
+  'linear-gradient(90deg,#06b6d4,#38bdf8,#5eead4)',
+  'linear-gradient(90deg,#6366f1,#a78bfa)',
+  'linear-gradient(90deg,#10b981,#5eead4)',
+  'linear-gradient(90deg,#f59e0b,#fb923c)',
+  'linear-gradient(90deg,#ec4899,#fb7185)',
+]
 
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
@@ -92,86 +98,100 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex flex-col overflow-hidden rounded-3xl p-5 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
-      style={{
-        // 2036: same blue glass as the highlighted My Day nav tab (brand blue ->
-        // cyan). One accent, matches the active bottom-nav pill.
-        background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)',
-        border: '1px solid rgba(0,200,255,0.42)',
-        boxShadow: '0 0 22px rgba(0,124,255,0.30), 0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)',
-        backdropFilter: 'blur(16px)',
-      }}
+      className={`group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 p-5 text-left backdrop-blur-2xl transition-all duration-200 hover:-translate-y-1 hover:border-white/20 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
+      style={{ background: 'rgba(15,23,42,0.66)', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: 'rgba(0,124,255,0.22)', filter: 'blur(18px)' }} />
+      {/* Specular top highlight + ambient accent glow (guide) */}
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, rgba(${color},0.55), transparent)` }} />
+      <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full" style={{ background: `rgba(${color},0.16)`, filter: 'blur(42px)' }} />
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.26)`, border: `1px solid rgba(${color},0.55)`, color: '#ffffff' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.4)`, color: '#e2e8f0' }}>
           {card.badge}
         </div>
       )}
       <NexusGlyphTile kind={card.glyph} color={card.hex} />
       <div className="text-lg font-bold leading-tight" style={{ color: '#ffffff' }}>{card.title}</div>
-      <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{card.subtitle}</div>
+      <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(203,213,225,0.85)' }}>{card.subtitle}</div>
       <div className="mt-auto flex items-center pt-4">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium transition-all duration-200 group-hover:gap-2.5" style={{ color: 'rgba(207,234,255,0.95)' }}>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold transition-all duration-200 group-hover:gap-2.5" style={{ color: `rgb(${color})` }}>
           Open
-          <span aria-hidden="true" className="text-[15px] leading-none" style={{ color: 'rgba(207,234,255,0.7)' }}>&rarr;</span>
+          <span aria-hidden="true" className="text-[15px] leading-none">&rarr;</span>
         </span>
       </div>
     </button>
   )
 }
 
-function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages }: { openTasks: number; high: number; medium: number; low: number; leadsTotal: number; leadStages: { label: string; value: number; color: string }[] }) {
-  // Open-tasks gauge fill: fraction of the load (capped at ~12 = full arc).
-  const f = Math.max(0.04, Math.min(1, openTasks / 12))
+function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages }: { openTasks: number; high: number; medium: number; low: number; leadsTotal: number; leadStages: { label: string; value: number }[] }) {
+  // Speedometer arc (viewBox 100x55, centre 50,50, r40). Fraction of ~12 = full.
+  const f = Math.max(0.03, Math.min(1, openTasks / 12))
   const ang = Math.PI * (1 - f)
-  const ex = (88 + 72 * Math.cos(ang)).toFixed(1)
-  const ey = (96 - 72 * Math.sin(ang)).toFixed(1)
-  const mixTotal = Math.max(1, high + medium + low)
-  const seg = (v: number) => `${((v / mixTotal) * 100).toFixed(1)}%`
-  const leadMax = Math.max(1, ...leadStages.map(st => st.value))
+  const ex = (50 + 40 * Math.cos(ang)).toFixed(2)
+  const ey = (50 - 40 * Math.sin(ang)).toFixed(2)
+  const pill = (label: string, value: number, dot: string) => (
+    <div className="flex items-center gap-1.5">
+      <span className="h-2 w-2 rounded-full" style={{ background: dot, boxShadow: `0 0 8px ${dot}` }} />
+      <span className="font-medium text-slate-400">{label}</span>
+      <span className="ml-0.5 font-bold text-slate-100">{value}</span>
+    </div>
+  )
   return (
-    <div className="flex flex-col rounded-3xl p-4" style={{ background: 'rgba(4,18,38,0.42)', border: '1px solid rgba(0,200,255,0.24)', backdropFilter: 'blur(16px)' }}>
-      <div className="text-center text-[10px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Summary</div>
+    <div className="relative flex flex-col overflow-hidden rounded-3xl border border-white/10 p-5 backdrop-blur-2xl" style={{ background: 'rgba(15,23,42,0.70)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent)' }} />
+      <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full" style={{ background: 'rgba(6,182,212,0.10)', filter: 'blur(48px)' }} />
 
-      <div className="mt-1 text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>Open tasks</div>
-      <div className="flex justify-center">
-        <svg width="182" height="98" viewBox="0 0 176 100" role="img" aria-label={`${openTasks} open tasks`}>
-          <path d="M16 96 A72 72 0 0 1 160 96" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="11" strokeLinecap="round" />
-          <path d={`M16 96 A72 72 0 0 1 ${ex} ${ey}`} fill="none" stroke="#00c8ff" strokeWidth="11" strokeLinecap="round" />
-          <text x="88" y="80" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="500">{openTasks}</text>
-          <text x="88" y="95" textAnchor="middle" fill="rgba(255,255,255,0.72)" fontSize="10.5">open tasks</text>
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">Summary</span>
+        <span className="rounded-full border border-white/5 bg-slate-800/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-400">Live data</span>
+      </div>
+
+      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-300">Open tasks</h4>
+      <div className="relative mb-3 flex items-center justify-center">
+        <svg viewBox="0 0 100 55" className="h-24 w-44">
+          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="rgba(15,23,42,0.9)" strokeWidth="8" strokeLinecap="round" />
+          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="9" strokeLinecap="round" />
+          <path d={`M 10 50 A 40 40 0 0 1 ${ex} ${ey}`} fill="none" stroke="url(#otGauge)" strokeWidth="8" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px rgba(34,211,238,0.85))' }} />
+          <defs>
+            <linearGradient id="otGauge" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#06b6d4" />
+              <stop offset="100%" stopColor="#38bdf8" />
+            </linearGradient>
+          </defs>
         </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
+          <span className="text-3xl font-extrabold leading-none text-white">{openTasks}</span>
+          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">open tasks</span>
+        </div>
       </div>
-      <div className="flex h-2 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
-        <div style={{ width: seg(high), background: '#f87171' }} />
-        <div style={{ width: seg(medium), background: '#fbbf24' }} />
-        <div style={{ width: seg(low), background: '#38bdf8' }} />
-      </div>
-      <div className="mt-1 flex items-center gap-2.5 text-[9.5px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#f87171' }} />High {high}</span>
-        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#fbbf24' }} />Med {medium}</span>
-        <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#38bdf8' }} />Low {low}</span>
+      <div className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-950/50 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
+        {pill('High', high, '#f43f5e')}
+        {pill('Med', medium, '#fbbf24')}
+        {pill('Low', low, '#22d3ee')}
       </div>
 
-      <div className="my-3 h-px" style={{ background: 'rgba(255,255,255,0.10)' }} />
+      <hr className="my-4 border-white/5" />
 
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>Leads</span>
-        <span className="text-[18px] font-semibold" style={{ color: '#ffffff' }}>{leadsTotal}</span>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">Leads</span>
+        <span className="text-2xl font-extrabold text-white">{leadsTotal}</span>
       </div>
-      <div className="mt-auto flex flex-col gap-1.5 pt-2">
+      <div className="mt-auto flex flex-col gap-2.5">
         {leadStages.length === 0 ? (
-          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>No leads yet.</div>
-        ) : leadStages.map(st => (
-          <div key={st.label} className="flex items-center gap-2">
-            <span className="w-14 shrink-0 truncate text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.6)' }}>{st.label}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <div style={{ width: `${Math.max(6, (st.value / leadMax) * 100)}%`, height: '100%', background: st.color }} />
+          <div className="text-[11px] text-slate-500">No leads yet.</div>
+        ) : leadStages.map((st, i) => {
+          const pct = Math.max(8, Math.min(100, (st.value / Math.max(1, leadsTotal)) * 100))
+          return (
+            <div key={st.label} className="space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="font-medium capitalize text-slate-400">{st.label}</span>
+                <span className="font-semibold text-slate-200">{st.value}</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full border border-white/5 bg-slate-950/90 p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: LEAD_BAR_GRADIENTS[i % LEAD_BAR_GRADIENTS.length], boxShadow: '0 0 10px rgba(56,189,248,0.5)' }} />
+              </div>
             </div>
-            <span className="w-5 shrink-0 text-right text-[10px]" style={{ color: 'rgba(255,255,255,0.75)' }}>{st.value}</span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -279,7 +299,7 @@ export function MyDaySurface() {
   const medCount  = top10.filter(item => item.urgency === 'medium').length
   const lowCount  = top10.filter(item => item.urgency === 'low').length
   const leadStageCounts = leads.reduce<Record<string, number>>((acc, l) => { const st = (l.stage || 'new'); acc[st] = (acc[st] || 0) + 1; return acc }, {})
-  const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value], i) => ({ label, value, color: LEAD_STAGE_COLORS[i % LEAD_STAGE_COLORS.length] }))
+  const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value]) => ({ label, value }))
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
