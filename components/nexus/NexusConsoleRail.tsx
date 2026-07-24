@@ -14,17 +14,17 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Home } = require('lucide-react') as any
+const { Home, Megaphone } = require('lucide-react') as any
 
 export interface RailItem {
   id: string
   label: string
-  icon: 'home' | 'sales' | 'ops' | 'design' | 'catalog' | 'systems' | 'help' | 'admin'
+  icon: 'home' | 'sales' | 'ops' | 'design' | 'catalog' | 'systems' | 'help' | 'admin' | 'events'
 }
 
 const ICONS = {
   home: Home, sales: TrendingUp, ops: Wrench, design: Layers,
-  catalog: Package, systems: Activity, help: Info, admin: Shield,
+  catalog: Package, systems: Activity, help: Info, admin: Shield, events: Megaphone,
 } as const
 
 export function NexusConsoleRail({

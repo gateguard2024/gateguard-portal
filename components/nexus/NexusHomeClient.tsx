@@ -20,6 +20,7 @@ import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { NexusConsoleRail, type RailItem } from '@/components/nexus/NexusConsoleRail'
+import { EventsSurface } from '@/components/nexus/EventsSurface'
 import { NexusActionsRail } from '@/components/nexus/NexusActionsRail'
 import { Bell } from 'lucide-react'
 
@@ -41,12 +42,13 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Design', id: 'design' },
   { label: 'Catalog', id: 'catalog' },
   { label: 'Systems', id: 'systems' },
+  { label: 'Events', id: 'events' },
 ]
 
 // Right console rail (pop in/out) — SAME destinations as the bottom nav plus
 // Help/Admin. Cosmetic addition only; the mockup's rail items were placeholders.
 const RAIL_ICONS: Record<string, RailItem['icon']> = {
-  'my-day': 'home', opps: 'sales', jobs: 'ops', design: 'design', catalog: 'catalog', systems: 'systems',
+  'my-day': 'home', opps: 'sales', jobs: 'ops', design: 'design', catalog: 'catalog', systems: 'systems', events: 'events',
 }
 
 function NexusMark() {
@@ -212,7 +214,7 @@ export default function NexusHomeClient() {
         )}
 
         <div key={`${activeTab}-${navNonce}`} className="w-full flex justify-center">
-          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'catalog' ? <CatalogSurface /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'catalog' ? <CatalogSurface /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : activeTab === 'events' ? <EventsSurface /> : <ActionFlowSurface activeTab={activeTab} />}
         </div>
       </main>
 
