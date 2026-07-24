@@ -40,17 +40,21 @@ const PRIORITY_DOT: Record<string, string> = {
   urgent: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#64748b',
 }
 
-export function NexusActionsRail({ onOpenList }: { onOpenList?: () => void }) {
-  const [open, setOpen] = useState(false)
+export function NexusActionsRail({ onOpenList, open: openProp, onToggle }: { onOpenList?: () => void; open?: boolean; onToggle?: () => void }) {
+  const controlled = openProp !== undefined
+  const [openState, setOpenState] = useState(false)
   const [hydrated, setHydrated] = useState(false)
   const [rows, setRows] = useState<TodoRow[]>([])
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const open = controlled ? !!openProp : openState
 
   useEffect(() => {
-    try { setOpen(localStorage.getItem(OPEN_KEY) === '1') } catch { /* closed */ }
+    if (!controlled) {
+      try { setOpenState(localStorage.getItem(OPEN_KEY) === '1') } catch { /* closed */ }
+    }
     setHydrated(true)
-  }, [])
+  }, [controlled])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -67,7 +71,8 @@ export function NexusActionsRail({ onOpenList }: { onOpenList?: () => void }) {
   useEffect(() => { if (open) void load() }, [open, load])
 
   function toggle() {
-    setOpen((v) => {
+    if (controlled) { onToggle?.(); return }
+    setOpenState((v) => {
       try { localStorage.setItem(OPEN_KEY, v ? '0' : '1') } catch { /* ignore */ }
       return !v
     })

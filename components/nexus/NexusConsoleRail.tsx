@@ -32,26 +32,33 @@ export function NexusConsoleRail({
   activeId,
   onSelect,
   side = 'left',
+  open: openProp,
+  onToggle,
 }: {
   items: RailItem[]
   activeId?: string
   onSelect: (id: string) => void
   side?: 'left' | 'right'
+  open?: boolean
+  onToggle?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const controlled = openProp !== undefined
+  const [openState, setOpenState] = useState(false)
   const [hydrated, setHydrated] = useState(false)
   const OPEN_KEY = `gg_nexus_rail_open_${side}`
   const isLeft = side === 'left'
+  const open = controlled ? !!openProp : openState
 
   useEffect(() => {
-    try {
-      setOpen(localStorage.getItem(OPEN_KEY) === '1')
-    } catch { /* default closed */ }
+    if (!controlled) {
+      try { setOpenState(localStorage.getItem(OPEN_KEY) === '1') } catch { /* default closed */ }
+    }
     setHydrated(true)
-  }, [OPEN_KEY])
+  }, [OPEN_KEY, controlled])
 
   function toggle() {
-    setOpen((v) => {
+    if (controlled) { onToggle?.(); return }
+    setOpenState((v) => {
       try { localStorage.setItem(OPEN_KEY, v ? '0' : '1') } catch { /* ignore */ }
       return !v
     })

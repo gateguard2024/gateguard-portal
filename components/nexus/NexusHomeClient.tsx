@@ -21,6 +21,7 @@ import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { NexusConsoleRail, type RailItem } from '@/components/nexus/NexusConsoleRail'
 import { NexusActionsRail } from '@/components/nexus/NexusActionsRail'
+import { Search, Bell } from 'lucide-react'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -129,6 +130,12 @@ export default function NexusHomeClient() {
   const [navNonce, setNavNonce] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  // 2036 shell: left launch-pad + right actions dock OPEN on desktop by default,
+  // collapsible. State is lifted here so center content reflows (padding) when a
+  // rail collapses. Persisted in the same localStorage keys the rails used.
+  const [leftOpen, setLeftOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(true)
+  const [topQuery, setTopQuery] = useState('')
 
   // The global Admin launcher (all pages) opens admin two ways:
   //  - from another page → navigates to /?view=admin (read on mount)
@@ -159,6 +166,17 @@ export default function NexusHomeClient() {
     return () => window.removeEventListener('nexus:open-admin', openAdmin)
   }, [isAdmin])
 
+  useEffect(() => {
+    try {
+      const l = localStorage.getItem('gg_nexus_rail_open_left')
+      const r = localStorage.getItem('gg_nexus_actions_open')
+      if (l !== null) setLeftOpen(l === '1')
+      if (r !== null) setRightOpen(r === '1')
+    } catch { /* keep defaults (open) */ }
+  }, [])
+  const toggleLeft  = useCallback(() => setLeftOpen(v => { const nv = !v; try { localStorage.setItem('gg_nexus_rail_open_left', nv ? '1' : '0') } catch { /* ignore */ } return nv }), [])
+  const toggleRight = useCallback(() => setRightOpen(v => { const nv = !v; try { localStorage.setItem('gg_nexus_actions_open', nv ? '1' : '0') } catch { /* ignore */ } return nv }), [])
+
   const handleQuery = useCallback(async (query: string) => {
     // Fast path: plain navigation commands ("dispatch", "go to money") jump
     // straight to the screen with no AI call. Anything else falls through.
@@ -181,14 +199,49 @@ export default function NexusHomeClient() {
 
   // Backdrop now comes from the shared NexusBackdrop module — same values, one
   // source of truth. Every tab below renders inside this shell and inherits it;
+  const topTitle = (NAV_ITEMS.find(n => n.id === activeTab)?.label)
+    ?? (activeTab === 'people' ? 'Admin' : activeTab === 'help' ? 'Help' : 'Main')
   // a surface must never paint its own page background.
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
       <NexusBackdropLayers variant="hero" />
 
-      <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
+      {/* Top bar (2036 shell) — title + centered search/ask pill + bell + avatar.
+          Padded to sit between the docked rails. */}
+      <header className={`relative z-10 flex items-center gap-4 px-6 py-3 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
+        <div className="hidden shrink-0 text-sm font-semibold uppercase tracking-[0.18em] sm:block" style={{ color: 'rgba(255,255,255,0.82)' }}>{topTitle}</div>
+        <form
+          onSubmit={(e) => { e.preventDefault(); const q = topQuery.trim(); if (q) { void handleQuery(q); setTopQuery('') } }}
+          className="mx-auto flex w-full max-w-xl items-center gap-2 rounded-full px-4 py-2"
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)' }}
+        >
+          <Search size={15} style={{ color: 'rgba(255,255,255,0.5)' }} />
+          <input
+            value={topQuery}
+            onChange={(e) => setTopQuery(e.target.value)}
+            placeholder="Search or ask Nexus…"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-white/35"
+            style={{ color: 'rgba(255,255,255,0.9)' }}
+          />
+        </form>
+        <div className="flex shrink-0 items-center gap-3">
+          <button type="button" aria-label="Notifications" className="rounded-full p-2 transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>
+            <Bell size={15} />
+          </button>
+          <div
+            className="h-8 w-8 shrink-0 rounded-full bg-cover bg-center"
+            aria-label="You"
+            style={user?.imageUrl
+              ? { backgroundImage: `url(${user.imageUrl})`, border: '1px solid rgba(0,200,255,0.4)' }
+              : { background: 'linear-gradient(135deg, rgba(0,124,255,0.6), rgba(0,200,255,0.4))', border: '1px solid rgba(0,200,255,0.4)' }}
+          />
+        </div>
+      </header>
+
+      <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
+        {/* Slim brand band (shrunk hero) — small NEXUS mark + Ask bar. */}
         <NexusMark />
-        <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
+        <p className="mb-4 text-center text-base" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
         {/* Wrapper width/radius must MATCH ActionCommandBar's own box (max-w-2xl,
             rounded-2xl) — a wider wrapper draws the glow ring past the bar. */}
         <div className="w-full max-w-2xl rounded-2xl" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
@@ -241,6 +294,8 @@ export default function NexusHomeClient() {
           Same destinations as the bottom nav; no new IA. Desktop only. */}
       <NexusConsoleRail
         side="left"
+        open={leftOpen}
+        onToggle={toggleLeft}
         activeId={activeTab}
         onSelect={(id) => {
           if (id === 'help' || id === 'people') { setActiveTab(id as NexusTabId); setNavNonce(n => n + 1); return }
@@ -256,7 +311,7 @@ export default function NexusHomeClient() {
 
       {/* Right actions pop-out — to-dos + follow-ups (real data). Opening jumps
           to My Day where the full task list lives. */}
-      <NexusActionsRail onOpenList={() => { setActiveTab('my-day'); setNavNonce(n => n + 1) }} />
+      <NexusActionsRail open={rightOpen} onToggle={toggleRight} onOpenList={() => { setActiveTab('my-day'); setNavNonce(n => n + 1) }} />
 
       {/* Movable how-to window — floats over any screen (#73) */}
       <HowToWindow />
