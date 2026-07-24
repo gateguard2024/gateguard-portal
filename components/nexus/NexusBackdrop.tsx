@@ -22,10 +22,12 @@ export type BackdropVariant = 'hero' | 'page'
 
 // The base gradient. Every Nexus screen shares this exact value.
 export const NEXUS_BG =
-  'radial-gradient(ellipse at 50% 0%, rgba(0,124,255,0.22) 0%, transparent 42%),' +
-  'radial-gradient(ellipse at 12% 32%, rgba(0,200,255,0.12) 0%, transparent 32%),' +
-  'radial-gradient(ellipse at 84% 18%, rgba(79,70,229,0.18) 0%, transparent 34%),' +
-  'linear-gradient(180deg, #020713 0%, #061426 48%, #01040d 100%)'
+  // 2036 Hybrid canvas: deep charcoal-navy #0b1329 -> #101b3b with a soft teal/cyan
+  // accent glow up top. One token; every Nexus screen inherits it.
+  'radial-gradient(ellipse at 50% -6%, rgba(45,212,191,0.12) 0%, transparent 42%),' +
+  'radial-gradient(ellipse at 86% 10%, rgba(56,189,248,0.12) 0%, transparent 36%),' +
+  'radial-gradient(ellipse at 10% 30%, rgba(79,70,229,0.10) 0%, transparent 34%),' +
+  'linear-gradient(160deg, #0b1329 0%, #0d1733 52%, #101b3b 100%)'
 
 /**
  * Decorative layers only — render inside a `relative` container that already
