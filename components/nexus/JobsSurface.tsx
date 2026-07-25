@@ -6,6 +6,7 @@ import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { OperationsHub } from '@/components/nexus/OperationsHub'
+import { OperationsLanding } from '@/components/nexus/OperationsLanding'
 import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
@@ -353,7 +354,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
           : 'Search jobs, sites, customers, techs, or notes.'
 
   return (
-    <section className="mt-9 w-full max-w-5xl">
+    <section className="w-full">
       {/* Operations Hub — opens inline (no page jump), seamless inside the Jobs tab.
           This is a FULL-SCREEN overlay (fixed inset-0), so it hides the shell
           behind it completely — it was painting its own #0a1430 with no grid,
@@ -368,41 +369,15 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
           </div>
         </div>
       )}
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(52,211,153,0.14), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(52,211,153,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
-        {selectedJobId && jobWindowData ? (
-          <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
-        ) : (
-          <>
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.82)' }}>Jobs</div>
-                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>What job work needs attention right now?</h2>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {JOB_CARDS.map(card => (
-                <JobCardButton key={card.title} card={card} count={card.badgeKey ? jobsWorkbench?.stats?.[card.badgeKey] ?? 0 : 0} onClick={() => { setOpsTab(card.opsTab ?? 'Dashboard'); setShowOps(true) }} />
-              ))}
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <input value={jobsSearchTerm} onChange={e => setJobsSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openJobsWorkbench('search') }} placeholder="Search job, site, customer, tech, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.22)', color: 'rgba(255,255,255,0.88)' }} />
-              <button type="button" onClick={() => void openJobsWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#34d399', color: '#06120c' }}>Search</button>
-            </div>
-
-            {status && <div className="mt-4 rounded-2xl p-3 text-xs" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{status}</div>}
-
-            <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-              Jobs stays simple: open today’s work, handle what needs attention, schedule visits, or work all open jobs.
-            </div>
-          </>
-        )}
-      </div>
+      {selectedJobId && jobWindowData ? (
+        <div className="mx-auto mt-6 w-full max-w-5xl xl:max-w-none px-3 sm:px-4">
+          <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(52,211,153,0.14), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(52,211,153,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
+            <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
+          </div>
+        </div>
+      ) : (
+        <OperationsLanding onOpenTab={(tab) => { setOpsTab(tab); setShowOps(true) }} onOpenJob={openJob} />
+      )}
 
       {activePanel && !(selectedJobId && jobWindowData) && (
         <JobsDetailShell
