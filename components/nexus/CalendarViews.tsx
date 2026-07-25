@@ -232,12 +232,12 @@ export default function CalendarViews() {
     for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(year, month, i));
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-white/5 bg-white/5 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-black/20 bg-[#1e2a3a]/50 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-300">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
         <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-2">
           {cells.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-white/5 bg-transparent" />;
+            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-black/15 bg-[#1e2a3a]/30" />;
             const isToday = new Date().toDateString() === date.toDateString();
             const isSelected = selectedDate.toDateString() === date.toDateString();
             const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === date.toDateString());
@@ -251,7 +251,7 @@ export default function CalendarViews() {
                     ? 'border-[#5FB8E0] bg-[#2f7fb8]/20 shadow-[0_0_18px_rgba(95,184,224,0.3)]'
                     : isToday
                     ? 'border-[#5FB8E0]/60 bg-white/10'
-                    : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                    : 'border-black/30 bg-[#1e2a3a] hover:border-[#5FB8E0]/45 hover:bg-[#26374a]'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -538,9 +538,8 @@ export default function CalendarViews() {
   const monthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <div className="relative flex w-full flex-1 flex-col rounded-3xl p-4 font-sans" style={{ background: NEXUS_BG }}>
-      <div className="pointer-events-none absolute left-8 top-6 h-72 w-72 rounded-full" style={{ background: 'rgba(34,211,238,0.08)', filter: 'blur(80px)' }} />
-      <div className="pointer-events-none absolute bottom-8 right-8 h-72 w-72 rounded-full" style={{ background: 'rgba(99,102,241,0.08)', filter: 'blur(80px)' }} />
+    <div className="relative flex w-full flex-1 flex-col rounded-3xl p-3 font-sans" style={{ background: NEXUS_BG }}>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
 
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-400">
@@ -595,6 +594,7 @@ export default function CalendarViews() {
           {view === 'List' && renderListView()}
         </div>
         {renderDayInspector()}
+      </div>
       </div>
 
       {renderEventPopover()}
