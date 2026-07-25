@@ -118,7 +118,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
   )
 }
 
-const SHELL_STYLE = { background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' } as const
+const SHELL_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 
 export function SalesSurface() {
   const router = useRouter()
@@ -145,25 +145,25 @@ export function SalesSurface() {
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={SHELL_STYLE}>
         {group && (
-          <button type="button" onClick={() => { setActiveGroup(null); setSoon(null) }} className="mb-4 inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.45)', color: '#7DE5FF', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>
+          <button type="button" onClick={() => { setActiveGroup(null); setSoon(null) }} className="mb-4 inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.32)', color: '#dbe7f2', boxShadow: '0 8px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.14)' }}>
             <span aria-hidden style={{ fontSize: '17px', lineHeight: 1 }}>←</span> Back to all Sales
           </button>
         )}
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Sales</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Sales</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: '#152535' }}>
               {group ? group.title : 'What sales work are we doing?'}
             </h2>
-            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: '#38506a' }}>
               {group ? group.subtitle : 'Pick a lane: leads, opportunities, quotes & proposals, or research.'}
             </p>
           </div>
-          {!group && <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>}
+          {!group && <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', color: '#bfe6ff', border: '1px solid rgba(140,170,200,0.3)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>Sales OS</div>}
         </div>
 
         {soon && (
-          <div className="mb-4 rounded-2xl px-4 py-3 text-[13px]" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.4)', color: '#fde68a' }}>{soon} We'll wire this screen in an upcoming build.</div>
+          <div className="mb-4 rounded-2xl px-4 py-3 text-[13px]" style={{ background: 'rgba(251,191,36,0.2)', border: '1px solid rgba(180,120,20,0.45)', color: '#7a5b12' }}>{soon} We'll wire this screen in an upcoming build.</div>
         )}
 
         {!group && (

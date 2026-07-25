@@ -125,11 +125,11 @@ export function TodoBoard() {
 
       {msg && <div className="rounded-xl p-3 text-xs" style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#fca5a5' }}>{msg}</div>}
       {loading && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading tasks…</div>}
-      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: '#1e2a3a', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No tasks here. Add one above.</div>}
+      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.5)' }}>No tasks here. Add one above.</div>}
 
       {/* Selected-task action bar — the side-panel actions operate on the chosen task */}
       {selectedTodo && (
-        <div className="rounded-2xl p-3" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.28)' }}>
+        <div className="rounded-2xl p-3" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.06) 0 1px,transparent 1px 4px), linear-gradient(180deg,#41566e,#33455c)', border: '1px solid rgba(95,184,224,0.4)' }}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(159,216,236,0.85)' }}>Selected task</div>
@@ -154,7 +154,7 @@ export function TodoBoard() {
           const expanded = openId === t.id
           const selected = selectedId === t.id
           return (
-            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'rgba(95,184,224,0.16)' : '#1e2a3a', border: `1px solid ${selected ? 'rgba(95,184,224,0.6)' : expanded ? 'rgba(95,184,224,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
+            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'repeating-linear-gradient(90deg,rgba(255,255,255,0.06) 0 1px,transparent 1px 4px), linear-gradient(180deg,#41566e,#33455c)' : 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: `1px solid ${selected ? 'rgba(95,184,224,0.6)' : expanded ? 'rgba(95,184,224,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
               <div className="flex items-center gap-2.5 px-3 py-2.5">
                 <button type="button" disabled={busy} onClick={() => void patch(t.id, { status: done ? 'open' : 'done' })}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
