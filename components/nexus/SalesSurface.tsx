@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
+import { LeadsHub } from '@/components/nexus/LeadsHub'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
@@ -102,6 +103,7 @@ export function SalesSurface() {
   const [activePanel, setActivePanel] = useState<PanelId | null>(null)
   const [lifecycleOppId, setLifecycleOppId] = useState<string | null>(null)
   const [pendingStage, setPendingStage] = useState<number | null>(null)
+  const [leadsHub, setLeadsHub] = useState(false)
 
   const [followups, setFollowups] = useState<Activity[]>([])
   const [opp, setOpp] = useState<OppData>({})
@@ -128,6 +130,12 @@ export function SalesSurface() {
   }, [])
 
   useEffect(() => { void loadDashboard() }, [loadDashboard])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('hub') === 'leads') { setLeadsHub(true); params.delete('hub'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/') }
+  }, [])
 
   const grouped = opp.grouped ?? {}
   const stageRecords = (k: string): OppRow[] => grouped[k]?.records ?? []
@@ -205,7 +213,7 @@ export function SalesSurface() {
         {/* 3-column row — identical to dashboard [1fr 1.3fr 1fr] */}
         <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
           <div className="flex flex-col gap-3">
-            <HubTile glyph="lead" hex="#5FB8E0" title="Leads Hub" subtitle={`${leadCount ?? '—'} leads · capture, qualify, convert.`} onClick={() => setActivePanel('leads-workbench')} />
+            <HubTile glyph="lead" hex="#5FB8E0" title="Leads Hub" subtitle={`${leadCount ?? '—'} leads · capture, qualify, convert.`} onClick={() => setLeadsHub(true)} />
             <HubTile glyph="pipeline" hex="#3f7fb8" title="Opportunity Hub" subtitle={`${counts.open} open · drive all 7 stages to won.`} onClick={() => setActivePanel('opps-workbench')} />
           </div>
 
@@ -240,7 +248,7 @@ export function SalesSurface() {
         </div>
       </div>
 
-      {(activePanel === 'new-lead-flow' || activePanel === 'leads-workbench' || activePanel === 'opps-workbench') && (
+      {(activePanel === 'new-lead-flow' || activePanel === 'opps-workbench') && (
         <SalesDetailShell
           title={activePanel === 'new-lead-flow' ? 'Add New Lead' : activePanel === 'opps-workbench' ? 'Your Opportunities' : 'Your Leads'}
           subtitle={activePanel === 'new-lead-flow' ? 'Capture a new lead — phone, walk-in, outbound, or website.' : activePanel === 'opps-workbench' ? 'Work all your open deals in one place.' : 'Work your open leads and follow-ups.'}
@@ -266,6 +274,8 @@ export function SalesSurface() {
           </div>
         </div>
       )}
+
+      {leadsHub && <LeadsHub onClose={() => { setLeadsHub(false); void loadDashboard() }} />}
 
       {activePanel === 'rough-calc' && (
         <SalesDetailShell title="Rough Calculator" subtitle="Enter what's on the site — Gate Guard cost + dealer price update live." onClose={() => setActivePanel(null)}
