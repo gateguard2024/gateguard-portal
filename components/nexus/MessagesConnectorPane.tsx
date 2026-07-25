@@ -18,15 +18,15 @@ type Connector = {
   created_at: string;
 };
 
-const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
+const glassPanel = { backgroundColor: 'rgba(95,184,224,0.06)', border: '1px solid rgba(140,170,200,0.18)' };
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
 const textFaint = { color: 'rgba(255,255,255,0.34)' };
-const brandBlue = '#6B7EFF';
-const cyan = '#00C8FF';
+const brandBlue = '#5FB8E0';
+const cyan = '#5FB8E0';
 const emerald = '#34D399';
 const amber = '#F59E0B';
-const violet = '#8B5CF6';
+const violet = '#9FD8EC';
 
 const GMAIL_CONNECT_URL = '/api/nexus/messages/google/connect';
 
@@ -135,7 +135,7 @@ function AddMailbox({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
           <div className="flex gap-2">
             {[465, 587].map((p) => (
               <button key={p} type="button" onClick={() => setPort(p)} className="flex-1 rounded-2xl px-3 py-2.5 text-sm transition"
-                style={{ color: port === p ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)', backgroundColor: port === p ? 'rgba(107,126,255,0.16)' : 'rgba(255,255,255,0.035)', border: port === p ? '1px solid rgba(107,126,255,0.45)' : '1px solid rgba(255,255,255,0.08)' }}>
+                style={{ color: port === p ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)', backgroundColor: port === p ? 'rgba(95,184,224,0.16)' : 'rgba(255,255,255,0.035)', border: port === p ? '1px solid rgba(95,184,224,0.45)' : '1px solid rgba(255,255,255,0.08)' }}>
                 {p} {p === 465 ? '(SSL)' : '(TLS)'}
               </button>
             ))}
@@ -155,7 +155,7 @@ function AddMailbox({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
 
       <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
         <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-white/5" style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
-        <button type="button" onClick={save} disabled={!ready || saving} className="rounded-2xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40" style={{ color: 'white', background: 'linear-gradient(135deg, #6B7EFF, #00C8FF)' }}>
+        <button type="button" onClick={save} disabled={!ready || saving} className="rounded-2xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40" style={{ color: 'white', background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)' }}>
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Save mailbox
         </button>
       </div>
@@ -173,7 +173,7 @@ function ConnectorDetail({ connector, onChanged }: { connector: Connector | null
   if (!connector) {
     return (
       <div className="rounded-3xl p-6 min-h-80 flex flex-col items-center justify-center text-center" style={glassPanel}>
-        <div className="h-14 w-14 rounded-3xl flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(107,126,255,0.14)', color: brandBlue }}><Mail size={24} /></div>
+        <div className="h-14 w-14 rounded-3xl flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(95,184,224,0.14)', color: brandBlue }}><Mail size={24} /></div>
         <div className="text-lg font-semibold" style={textPrimary}>Pick a mailbox</div>
         <div className="text-sm mt-2 max-w-xs" style={textSecondary}>Select a mailbox to test it, refresh it, or remove it.</div>
       </div>
@@ -230,7 +230,7 @@ function ConnectorDetail({ connector, onChanged }: { connector: Connector | null
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <button type="button" onClick={doTest} disabled={busy !== null} className="rounded-2xl px-3 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40" style={{ color: 'white', background: 'linear-gradient(135deg, #6B7EFF, #00C8FF)' }}>
+        <button type="button" onClick={doTest} disabled={busy !== null} className="rounded-2xl px-3 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40" style={{ color: 'white', background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)' }}>
           {busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send test
         </button>
         {isGmail && (
@@ -323,7 +323,7 @@ export default function MessagesConnectorPane() {
         {/* Connect actions */}
         <div className="rounded-3xl p-4 sm:p-5 space-y-3" style={glassPanel}>
           <div className="text-sm font-semibold" style={textPrimary}>Add a mailbox</div>
-          <button type="button" onClick={() => { window.location.href = GMAIL_CONNECT_URL; }} className="w-full rounded-2xl px-4 py-3.5 text-sm font-semibold flex items-center justify-center gap-2" style={{ color: 'white', background: 'linear-gradient(135deg, #6B7EFF, #00C8FF)' }}>
+          <button type="button" onClick={() => { window.location.href = GMAIL_CONNECT_URL; }} className="w-full rounded-2xl px-4 py-3.5 text-sm font-semibold flex items-center justify-center gap-2" style={{ color: 'white', background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)' }}>
             <Mail size={16} /> Connect Gmail
           </button>
           {!showAdd ? (
@@ -358,7 +358,7 @@ export default function MessagesConnectorPane() {
                   const color = kindColor(c); const st = statusOf(c); const sel = selected?.id === c.id;
                   return (
                     <button key={c.id} type="button" onClick={() => setSelectedId(c.id)} className="rounded-3xl p-4 text-left transition hover:bg-white/5"
-                      style={{ ...glassPanel, borderColor: sel ? 'rgba(107,126,255,0.55)' : 'rgba(255,255,255,0.08)', boxShadow: sel ? '0 0 0 1px rgba(107,126,255,0.18)' : 'none' }}>
+                      style={{ ...glassPanel, borderColor: sel ? 'rgba(95,184,224,0.55)' : 'rgba(255,255,255,0.08)', boxShadow: sel ? '0 0 0 1px rgba(95,184,224,0.18)' : 'none' }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-11 w-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}1A`, color, border: `1px solid ${color}44` }}><Mail size={19} /></div>

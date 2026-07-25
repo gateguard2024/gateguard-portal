@@ -73,16 +73,16 @@ type MessageNote = {
 const MESSAGE_NOTE_KEY = 'nexus_my_day_message_notes'
 
 const LEAD_BAR_GRADIENTS = [
-  'linear-gradient(90deg,#06b6d4,#38bdf8,#5eead4)',
-  'linear-gradient(90deg,#6366f1,#a78bfa)',
-  'linear-gradient(90deg,#10b981,#5eead4)',
-  'linear-gradient(90deg,#f59e0b,#fb923c)',
-  'linear-gradient(90deg,#ec4899,#fb7185)',
+  'linear-gradient(90deg,#2f7fb8,#5FB8E0,#9FD8EC)',
+  'linear-gradient(90deg,#3f7fb8,#5FB8E0)',
+  'linear-gradient(90deg,#2f7fb8,#7ec8e6)',
+  'linear-gradient(90deg,#4a6a86,#7fb6cc)',
+  'linear-gradient(90deg,#5FB8E0,#9FD8EC)',
 ]
 
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
+  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '95,184,224'
 }
 
 function formatEventTime(event?: { time?: string | null; starts_at?: string | null } | null): string {
@@ -137,7 +137,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
     <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.34)', boxShadow: 'inset 0 4px 16px rgba(0,0,0,0.4), 0 16px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(150,180,210,0.12)' }}>
 
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">Summary</span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-[#9FD8EC]">Summary</span>
         <span className="rounded-full border border-white/5 bg-slate-800/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-400">Live data</span>
       </div>
 
@@ -165,7 +165,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
       <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#16222f]/70 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
         {pill('High', high, '#f43f5e')}
         {pill('Med', medium, '#fbbf24')}
-        {pill('Low', low, '#22d3ee')}
+        {pill('Low', low, '#94a3b8')}
       </div>
 
       <hr className="my-4 border-white/5" />
@@ -186,7 +186,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
                 <span className="font-semibold text-slate-200">{st.value}</span>
               </div>
               <div className="h-2.5 w-full rounded-full border border-white/10 bg-[#16222f] p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
-                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: LEAD_BAR_GRADIENTS[i % LEAD_BAR_GRADIENTS.length], boxShadow: '0 0 10px rgba(56,189,248,0.5)' }} />
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: LEAD_BAR_GRADIENTS[i % LEAD_BAR_GRADIENTS.length], boxShadow: '0 0 10px rgba(95,184,224,0.4)' }} />
               </div>
             </div>
           )
@@ -226,7 +226,7 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
       disabled={disabled}
       onClick={onClick}
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45 active:translate-y-0"
-      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,200,255,0.055))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(0,200,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}
+      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(95,184,224,0.08))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(95,184,224,0.10), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}
     >
       {displayLabel}
     </button>
@@ -246,9 +246,9 @@ function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onO
   return (
     <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
       <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#22d3ee', boxShadow: '0 0 8px #22d3ee' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Today&apos;s Schedule</span></div>
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Today&apos;s Schedule</span></div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-cyan-800/50 bg-cyan-950/70 px-2 py-0.5 text-[10px] text-cyan-300">Live data</span>
+          <span className="rounded-full border border-[#5FB8E0]/35 bg-[#26374a] px-2 py-0.5 text-[10px] text-[#9FD8EC]">Live data</span>
           <button type="button" onClick={onClose} aria-label="Hide schedule preview" className="text-sm leading-none text-slate-500 hover:text-white">&times;</button>
         </div>
       </div>
@@ -257,7 +257,7 @@ function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onO
       ) : (
         <div className="space-y-1.5">
           {events.slice(0, 4).map((e) => (
-            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 border-cyan-400 bg-slate-800/40 px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-slate-800/70">
+            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 border-[#5FB8E0] bg-[#1e2a3a] px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-[#26374a]">
               <span className="truncate">{e.title}</span>
               <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-400">{formatEventTime(e)}</span>
             </button>
@@ -272,12 +272,12 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
   const cols: { key: 'high' | 'medium' | 'low'; label: string; accent: string }[] = [
     { key: 'high', label: 'Now', accent: '#f43f5e' },
     { key: 'medium', label: 'Next', accent: '#fbbf24' },
-    { key: 'low', label: 'Later', accent: '#22d3ee' },
+    { key: 'low', label: 'Later', accent: '#94a3b8' },
   ]
   return (
     <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
       <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#818cf8', boxShadow: '0 0 8px #818cf8' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">To-Dos</span></div>
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">To-Dos</span></div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={onOpen} className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-[10px] text-slate-300 hover:text-white">Open board</button>
           <button type="button" onClick={onClose} aria-label="Hide to-dos preview" className="text-sm leading-none text-slate-500 hover:text-white">&times;</button>
@@ -287,12 +287,12 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
         {cols.map((c) => {
           const colItems = items.filter((i) => i.urgency === c.key).slice(0, 3)
           return (
-            <div key={c.key} className="space-y-1.5 rounded-xl border border-slate-800/80 bg-slate-900/60 p-2">
+            <div key={c.key} className="space-y-1.5 rounded-xl border border-[rgba(140,170,200,0.18)] bg-[#1e2a3a] p-2">
               <div className="flex items-center gap-1.5 border-b border-slate-800 pb-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: c.accent }} /><span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{c.label}</span></div>
               {colItems.length === 0 ? (
                 <div className="py-1.5 text-[10px] text-slate-600">&mdash;</div>
               ) : colItems.map((i) => (
-                <button key={i.id} type="button" onClick={onOpen} className="block w-full truncate rounded-md bg-slate-800/60 px-1.5 py-1 text-left text-[11px] text-slate-300 hover:bg-slate-800">{i.title}</button>
+                <button key={i.id} type="button" onClick={onOpen} className="block w-full truncate rounded-md bg-[#26374a] px-1.5 py-1 text-left text-[11px] text-slate-300 hover:bg-[#2f4358]">{i.title}</button>
               ))}
             </div>
           )
@@ -434,9 +434,9 @@ export function MyDaySurface() {
   const openCard = (card: MyDayCard) => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }
 
   const cards: MyDayCard[] = [
-    { id: 'schedule', title: "Today's Schedule", subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : "See today's calendar, site visits, jobs, and appointments.", hex: '#00C8FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
-    { id: 'top10', title: "Today's Priorities", subtitle: workSignalCount > 0 ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.` : 'Important work will appear here when Nexus finds it.', hex: '#007CFF', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : undefined, actionLabel: 'Open →' },
-    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Open this list to review and finish tasks.`, hex: '#8B5CF6', glyph: 'todo', actionLabel: 'Open →' },
+    { id: 'schedule', title: "Today's Schedule", subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : "See today's calendar, site visits, jobs, and appointments.", hex: '#5FB8E0', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
+    { id: 'top10', title: "Today's Priorities", subtitle: workSignalCount > 0 ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.` : 'Important work will appear here when Nexus finds it.', hex: '#3f7fb8', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : undefined, actionLabel: 'Open →' },
+    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Open this list to review and finish tasks.`, hex: '#5FB8E0', glyph: 'todo', actionLabel: 'Open →' },
     { id: 'messages', title: 'Messages', subtitle: 'Customer calls, emails, texts, and message notes that need attention.', hex: '#34D399', glyph: 'email', badge: messageCount > 0 ? `${messageCount}` : 'New', actionLabel: 'Open →' },
   ]
 
@@ -488,11 +488,11 @@ export function MyDaySurface() {
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
               <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(244,63,94,0.12)', color: '#fda4af', border: '1px solid rgba(244,63,94,0.3)' }}>{highCount} high</span>
               <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(251,191,36,0.12)', color: '#fcd34d', border: '1px solid rgba(251,191,36,0.3)' }}>{medCount} medium</span>
-              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(34,211,238,0.12)', color: '#67e8f9', border: '1px solid rgba(34,211,238,0.3)' }}>{lowCount} low</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(148,163,184,0.14)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.32)' }}>{lowCount} low</span>
             </div>
             <div className="space-y-2">
               {sortedTop10.map((item, index) => {
-                const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#22d3ee'
+                const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#94a3b8'
                 return (
                   <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-black/30 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>
                     <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
@@ -526,7 +526,7 @@ export function MyDaySurface() {
         />
       )}
 
-      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
+      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
         <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <TodoBoard />
         </div>

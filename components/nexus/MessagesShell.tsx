@@ -390,7 +390,7 @@ export default function MessagesShell() {
       setSending(false);
     }
   };
-  const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
+  const glassPanel = { backgroundColor: 'rgba(95,184,224,0.06)', border: '1px solid rgba(140,170,200,0.18)' };
   const textPrimary = { color: 'rgba(255,255,255,0.9)' };
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
   const textFaint = { color: 'rgba(255,255,255,0.34)' };
@@ -413,11 +413,11 @@ export default function MessagesShell() {
     );
   }
   return (
-    <div className="flex w-full h-[78dvh] font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, background: '#0e0e10', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="flex w-full h-[78dvh] font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, background: '#1e2a3a', border: '1px solid rgba(140,170,200,0.22)' }}>
       <style>{`.nexus-email-html img{max-width:100%!important;height:auto!important} .nexus-email-html table{max-width:100%!important} .nexus-email-html a{color:#2563eb} .nexus-email-html *{max-width:100%} @keyframes spin{to{transform:rotate(360deg)}} .hide-scrollbar::-webkit-scrollbar{display:none} .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
 
       {/* ── LEFT: Inbox ──────────────────────────────────────────── */}
-      <div className={`w-full md:w-[320px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#121214' }}>
+      <div className={`w-full md:w-[320px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(140,170,200,0.2)', background: '#1e2a3a' }}>
         <div className="px-4 pt-4 pb-3 flex flex-col gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div className="flex items-center justify-between">
             <h1 className="text-[15px] font-semibold tracking-tight">Inbox</h1>
@@ -434,7 +434,7 @@ export default function MessagesShell() {
           </div>
           <div className="flex items-center gap-1.5">
             {FILTERS.map(filter => (
-              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(95,184,224,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(95,184,224,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#c7d2fe' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
+              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(95,184,224,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(95,184,224,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#9FD8EC' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
             ))}
           </div>
           {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
@@ -451,19 +451,19 @@ export default function MessagesShell() {
             }
             return groups.map(group => (
               <div key={group.label}>
-                <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10" style={{ color: 'rgba(255,255,255,0.4)', background: '#121214', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{group.label}</div>
+                <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10" style={{ color: 'rgba(255,255,255,0.4)', background: '#1e2a3a', borderBottom: '1px solid rgba(140,170,200,0.12)' }}>{group.label}</div>
                 {group.items.map(conv => {
                   const sel = selectedId === conv.id;
                   const badge = conv.linked_type ? RECORD_BADGE[conv.linked_type] : null;
                   const indent = conv.unread ? 16 : 0;
                   return (
-                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(95,184,224,0.10)' : 'transparent', borderLeft: sel ? '2px solid #6366f1' : '2px solid transparent' }}>
+                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(95,184,224,0.10)' : 'transparent', borderLeft: sel ? '2px solid #5FB8E0' : '2px solid transparent' }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#6366f1' }} />}
+                          {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#5FB8E0' }} />}
                           <span className="truncate text-[14px]" style={{ color: conv.unread ? '#f4f4f5' : 'rgba(255,255,255,0.7)', fontWeight: conv.unread ? 700 : 500 }}>{conv.contact_name}</span>
                         </div>
-                        <span className="text-[12px] flex-shrink-0" style={{ color: sel ? '#a5b4fc' : 'rgba(255,255,255,0.4)' }}>{formatRelativeTime(conv.last_at)}</span>
+                        <span className="text-[12px] flex-shrink-0" style={{ color: sel ? '#9FD8EC' : 'rgba(255,255,255,0.4)' }}>{formatRelativeTime(conv.last_at)}</span>
                       </div>
                       <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: indent }}>
                         {badge && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide flex-shrink-0" style={{ background: `${badge.color}22`, color: badge.color, border: `1px solid ${badge.color}33` }}>{badge.label}</span>}
@@ -479,7 +479,7 @@ export default function MessagesShell() {
         </div>
       </div>
       {/* ── CENTER: Thread ───────────────────────────────────────── */}
-      <div className={`flex-1 min-w-0 min-h-0 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#0a0a0c' }}>
+      <div className={`flex-1 min-w-0 min-h-0 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#16222f' }}>
         {!selectedConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={glassPanel}>
@@ -505,7 +505,7 @@ export default function MessagesShell() {
                   return (
                     <div key={msg.id} className="shrink-0 flex justify-center my-4">
                       <div className="px-4 py-3 rounded-2xl flex items-center gap-4 min-w-[240px]" style={glassPanel}>
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: isInbound ? 'rgba(255,255,255,0.05)' : 'rgba(107,126,255,0.1)' }}>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: isInbound ? 'rgba(255,255,255,0.05)' : 'rgba(95,184,224,0.12)' }}>
                           {isInbound ? <PhoneMissed size={18} style={textSecondary} /> : <PhoneForwarded size={18} style={{ color: brandBlue }} />}
                         </div>
                         <div>
@@ -526,7 +526,7 @@ export default function MessagesShell() {
                     <div key={msg.id} className="shrink-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(107,126,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#b3bcff' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(95,184,224,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#9FD8EC' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
                           <span className="text-xs truncate" style={textSecondary}>{isInbound ? selectedConversation.contact_name : 'You'}</span>
                         </div>
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -551,8 +551,8 @@ export default function MessagesShell() {
               <div className="flex flex-col overflow-hidden rounded-2xl border border-[#5FB8E0]/30" style={{ background: '#1e2a3a' }}>
                 <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center gap-4">
-                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}>↩ Reply</button>
-                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}>↪ Forward</button>
+                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-[#9FD8EC]' : 'text-slate-400 hover:text-slate-200'}`}>↩ Reply</button>
+                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-[#9FD8EC]' : 'text-slate-400 hover:text-slate-200'}`}>↪ Forward</button>
                   </div>
                   <span className="text-[10px] text-slate-500">Signature added automatically</span>
                 </div>
@@ -577,7 +577,7 @@ export default function MessagesShell() {
                 )}
                 <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <button type="button" onClick={() => { setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = ''; }} className="text-[12px] text-slate-400 hover:text-white">Discard</button>
-                  <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)', color: '#67e8f9' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
+                  <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
                 </div>
               </div>
             </div>
@@ -587,7 +587,7 @@ export default function MessagesShell() {
 
       {/* ── RIGHT: Context ───────────────────────────────────────── */}
       {selectedConversation && (
-        <div className="hidden lg:flex w-[280px] flex-shrink-0 border-l flex-col overflow-y-auto hide-scrollbar" style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#121214' }}>
+        <div className="hidden lg:flex w-[280px] flex-shrink-0 border-l flex-col overflow-y-auto hide-scrollbar" style={{ borderColor: 'rgba(140,170,200,0.2)', background: '#1e2a3a' }}>
           <div className="p-5 flex flex-col items-center text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl mb-3" style={{ background: `${tintFor(selectedConversation.contact_name)}22`, color: tintFor(selectedConversation.contact_name) }}>{initials(selectedConversation.contact_name)}</div>
             <h3 className="font-bold text-[15px]">{selectedConversation.contact_name}</h3>
@@ -601,15 +601,15 @@ export default function MessagesShell() {
                 {selectedConversation.linked_label && <button onClick={() => void patchLink(selectedConversation, { linked_type: null })} className="text-[11px]" style={{ color: '#fca5a5' }}>Unlink</button>}
               </div>
               {selectedConversation.linked_label ? (
-                <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#26374a', border: '1px solid rgba(255,255,255,0.1)' }}>
                   {(() => { const b = selectedConversation.linked_type ? RECORD_BADGE[selectedConversation.linked_type] : null; return b ? <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase flex-shrink-0" style={{ background: `${b.color}22`, color: b.color }}>{b.label}</span> : null; })()}
                   <span className="font-semibold text-[13px] truncate">{selectedConversation.linked_label}</span>
                 </div>
               ) : (
-                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#18181b', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
+                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#26374a', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
               )}
               {linkOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#161620', border: '1px solid rgba(95,184,224,0.3)' }}>
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#16222f', border: '1px solid rgba(95,184,224,0.3)' }}>
                   <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search…" className="w-full rounded-lg px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
                   <div className="max-h-56 overflow-y-auto flex flex-col gap-1 hide-scrollbar">
                     {linkResults.map(r => (
@@ -631,7 +631,7 @@ export default function MessagesShell() {
                 <div className="flex flex-col gap-1.5">
                   {([['contact', 'Contact', '#60a5fa'], ['lead', 'Lead', '#f59e0b'], ['opportunity', 'Opportunity', '#818cf8'], ['customer', 'Customer', '#34d399']] as const).map(([type, label, color]) => (
                     <button key={type} onClick={() => type === 'opportunity' ? openOppModal(selectedConversation) : createAndLink(selectedConversation, type)} disabled={creating !== null}
-                      className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#26374a', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <span className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
                         New {label}
@@ -676,7 +676,7 @@ export default function MessagesShell() {
                   <div style={{ flex: 1 }}><div style={lbl}>Contact name</div><input value={oppForm.contact_name} onChange={e => setOppForm({ ...oppForm, contact_name: e.target.value })} style={inp} /></div>
                   <div style={{ flex: 1 }}><div style={lbl}>Contact email</div><input value={oppForm.contact_email} onChange={e => setOppForm({ ...oppForm, contact_email: e.target.value })} style={inp} /></div>
                 </div>
-                <button onClick={submitOpportunity} disabled={oppBusy} style={{ marginTop: 4, background: '#6366f1', color: 'white', border: 0, borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: oppBusy ? 0.5 : 1 }}>{oppBusy ? 'Creating…' : 'Create opportunity & link email'}</button>
+                <button onClick={submitOpportunity} disabled={oppBusy} style={{ marginTop: 4, background: '#2f7fb8', color: 'white', border: 0, borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: oppBusy ? 0.5 : 1 }}>{oppBusy ? 'Creating…' : 'Create opportunity & link email'}</button>
               </div>;
             })()}
           </div>

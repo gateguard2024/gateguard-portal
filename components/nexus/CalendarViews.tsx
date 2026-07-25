@@ -135,8 +135,8 @@ const textSecondary = { color: 'rgba(255,255,255,0.5)' };
 const glassBg = { backgroundColor: '#26374a', border: '1px solid rgba(150,180,210,0.2)' };
 const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
   jobs: { label: 'Jobs', color: '#34D399' },
-  sales: { label: 'Sales', color: '#22D3EE' },
-  todos: { label: 'To-Dos', color: '#A78BFA' },
+  sales: { label: 'Sales', color: '#5FB8E0' },
+  todos: { label: 'To-Dos', color: '#94a3b8' },
   google: { label: 'Google', color: '#FBBF24' }
 };
 // --- Helpers ---
@@ -301,9 +301,9 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-cyan-400 px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-400'}`}>{date.getDate()}</span>
-                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-cyan-400">Today</span>}
-                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
+                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-[#5FB8E0] px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-400'}`}>{date.getDate()}</span>
+                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-[#9FD8EC]">Today</span>}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 6px rgba(95,184,224,0.6)' }} />}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.slice(0, 2).map(e => {
@@ -329,13 +329,13 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     const startOfWeek = new Date(year, month, date - dayOfWeek);
     const weekDays = Array.from({ length: 7 }).map((_, i) => new Date(year, month, startOfWeek.getDate() + i));
     return (
-      <div className="flex flex-1 border border-white/5 rounded-2xl overflow-hidden mt-4 bg-black/10">
+      <div className="flex flex-1 border border-[rgba(140,170,200,0.15)] rounded-2xl overflow-hidden mt-4 bg-[#16222f]">
         {weekDays.map((day, idx) => {
           const isToday = new Date().toDateString() === day.toDateString();
           const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === day.toDateString());
           return (
             <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-white/5">
-              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-white/5">
+              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-[#1e2a3a]">
                 <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
                 </span>
@@ -588,20 +588,20 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
     const dLabel = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     return (
-      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: 'rgba(14,30,56,0.7)', backdropFilter: 'blur(12px)' }}>
+      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: '#1e2a3a' }}>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">Day Inspector</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#9FD8EC]">Day Inspector</span>
           <span className="rounded-full border border-white/5 bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">{dayEvents.length} items</span>
         </div>
         <h3 className="mb-3 text-lg font-extrabold text-white">{dLabel}</h3>
         <hr className="mb-3 border-white/10" />
         <div className="flex max-h-[440px] min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
           {dayEvents.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-slate-900/30 py-14 text-center text-xs text-slate-500">No events scheduled for this day.</div>
+            <div className="rounded-2xl border border-white/5 bg-[#16222f] py-14 text-center text-xs text-slate-500">No events scheduled for this day.</div>
           ) : dayEvents.map(e => {
             const color = CATEGORIES[e.category].color;
             return (
-              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-slate-900/80 p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
+              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-[#1e2a3a] p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{formatTime(e.start, e.all_day)}{e.end ? ` - ${formatTime(e.end)}` : ''}</span>
                 <h4 className="mt-0.5 text-sm font-bold text-white">{e.title}</h4>
                 <div className="mt-2 flex items-center gap-2">
@@ -668,7 +668,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
         </div>
       </div>
 
-      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(34,211,238,0.10)', border: '1px solid rgba(34,211,238,0.28)', color: '#a5f3fc' }}>{syncMsg}</div>)}
+      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{syncMsg}</div>)}
 
       <div className="relative z-10 flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col">
