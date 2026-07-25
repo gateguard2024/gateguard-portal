@@ -92,28 +92,23 @@ function formatEventTime(event?: { time?: string | null; starts_at?: string | nu
 }
 
 function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: () => void; fill?: boolean }) {
-  const color = rgb(card.hex)
-
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex flex-col overflow-hidden rounded-3xl border border-slate-700/60 p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-cyan-500/50 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
-      style={{ background: '#131a26', boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl p-5 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60 ${fill ? 'flex-1 min-h-[128px]' : 'min-h-[184px]'}`}
+      style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#586778,#495868)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 10px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 2px rgba(0,0,0,0.35)' }}
     >
-      {/* Specular top highlight + ambient accent glow (guide) */}
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, rgba(${color},0.55), transparent)` }} />
-      <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full" style={{ background: `rgba(${color},0.16)`, filter: 'blur(42px)' }} />
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.4)`, color: '#e2e8f0' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(255,255,255,0.18)', color: '#DCE6F0' }}>
           {card.badge}
         </div>
       )}
       <NexusGlyphTile kind={card.glyph} color={card.hex} />
-      <div className="text-lg font-bold leading-tight" style={{ color: '#ffffff' }}>{card.title}</div>
-      <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(203,213,225,0.85)' }}>{card.subtitle}</div>
+      <div className="text-[17px] font-semibold leading-tight" style={{ color: '#F1F6FB' }}>{card.title}</div>
+      <div className="mt-1.5 text-[13px] leading-relaxed" style={{ color: 'rgba(196,207,221,0.9)' }}>{card.subtitle}</div>
       <div className="mt-auto flex items-center pt-4">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold transition-all duration-200 group-hover:gap-2.5" style={{ color: `rgb(${color})` }}>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold transition-all duration-200 group-hover:gap-2.5" style={{ color: '#8FD3EC' }}>
           Open
           <span aria-hidden="true" className="text-[15px] leading-none">&rarr;</span>
         </span>
@@ -123,11 +118,13 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
 }
 
 function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages }: { openTasks: number; high: number; medium: number; low: number; leadsTotal: number; leadStages: { label: string; value: number }[] }) {
-  // Speedometer arc (viewBox 100x55, centre 50,50, r40). Fraction of ~12 = full.
+  // Machined instrument dial (viewBox 200x128, centre 100,100, r80). ~12 open = full sweep.
   const f = Math.max(0.03, Math.min(1, openTasks / 12))
-  const ang = Math.PI * (1 - f)
-  const ex = (50 + 40 * Math.cos(ang)).toFixed(2)
-  const ey = (50 - 40 * Math.sin(ang)).toFixed(2)
+  const th = Math.PI * (1 - f)
+  const gx = (100 + 80 * Math.cos(th)).toFixed(1)
+  const gy = (100 - 80 * Math.sin(th)).toFixed(1)
+  const nx = (100 + 66 * Math.cos(th)).toFixed(1)
+  const ny = (100 - 66 * Math.sin(th)).toFixed(1)
   const pill = (label: string, value: number, dot: string) => (
     <div className="flex items-center gap-1.5">
       <span className="h-2 w-2 rounded-full" style={{ background: dot, boxShadow: `0 0 8px ${dot}` }} />
@@ -136,32 +133,33 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
     </div>
   )
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl border border-slate-700/60 p-5" style={{ background: '#131a26', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent)' }} />
-      <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full" style={{ background: 'rgba(6,182,212,0.10)', filter: 'blur(48px)' }} />
+    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: '#0d1420', border: '1px solid rgba(0,0,0,0.6)', boxShadow: 'inset 0 8px 26px rgba(0,0,0,0.8), inset 0 -1px 0 rgba(255,255,255,0.05)' }}>
 
       <div className="mb-4 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">Summary</span>
         <span className="rounded-full border border-white/5 bg-slate-800/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-400">Live data</span>
       </div>
 
-      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-300">Open tasks</h4>
-      <div className="relative mb-3 flex items-center justify-center">
-        <svg viewBox="0 0 100 55" className="h-24 w-44">
-          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="rgba(15,23,42,0.9)" strokeWidth="8" strokeLinecap="round" />
-          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="9" strokeLinecap="round" />
-          <path d={`M 10 50 A 40 40 0 0 1 ${ex} ${ey}`} fill="none" stroke="url(#otGauge)" strokeWidth="8" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px rgba(34,211,238,0.85))' }} />
+      <div className="relative mb-1 flex items-center justify-center">
+        <svg viewBox="0 0 200 128" className="h-28 w-56">
           <defs>
-            <linearGradient id="otGauge" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#06b6d4" />
-              <stop offset="100%" stopColor="#38bdf8" />
-            </linearGradient>
+            <linearGradient id="otBz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c9d6e2" /><stop offset="0.5" stopColor="#69788b" /><stop offset="1" stopColor="#202934" /></linearGradient>
+            <linearGradient id="otPg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#2f7fb8" /><stop offset="0.6" stopColor="#5FB8E0" /><stop offset="1" stopColor="#DDF3FB" /></linearGradient>
+            <radialGradient id="otHb" cx="0.38" cy="0.32"><stop offset="0" stopColor="#f6fafd" /><stop offset="0.5" stopColor="#9fb0c4" /><stop offset="1" stopColor="#232d3a" /></radialGradient>
+            <filter id="otGl" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
           </defs>
+          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#otBz)" strokeWidth="15" strokeLinecap="round" />
+          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#070b12" strokeWidth="8" strokeLinecap="round" />
+          <g stroke="#5a6a80" strokeWidth="2">
+            <line x1="20" y1="100" x2="29" y2="100" /><line x1="33" y1="57" x2="41" y2="61" /><line x1="72" y1="31" x2="76" y2="39" /><line x1="100" y1="22" x2="100" y2="31" /><line x1="128" y1="31" x2="124" y2="39" /><line x1="167" y1="57" x2="159" y2="61" /><line x1="180" y1="100" x2="171" y2="100" />
+          </g>
+          <path d={`M20 100 A80 80 0 0 1 ${gx} ${gy}`} fill="none" stroke="url(#otPg)" strokeWidth="7.5" strokeLinecap="round" filter="url(#otGl)" />
+          <path d="M32 72 A62 62 0 0 1 74 36" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2" strokeLinecap="round" />
+          <line x1="100" y1="100" x2={nx} y2={ny} stroke="#E7B15C" strokeWidth="3" strokeLinecap="round" filter="url(#otGl)" />
+          <circle cx="100" cy="100" r="10" fill="url(#otHb)" stroke="#69788b" />
+          <text x="100" y="88" textAnchor="middle" fontSize="34" fill="#F4FAFD" fontWeight="600">{openTasks}</text>
+          <text x="100" y="118" textAnchor="middle" fontSize="9" letterSpacing="3" fill="#8FA0B8">OPEN TASKS</text>
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-          <span className="text-3xl font-extrabold leading-none text-white">{openTasks}</span>
-          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">open tasks</span>
-        </div>
       </div>
       <div className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-950/50 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
         {pill('High', high, '#f43f5e')}
@@ -243,6 +241,66 @@ function MessageChannelCard({ title, subtitle }: { title: string; subtitle: stri
   )
 }
 
+function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onOpen: () => void; onClose: () => void }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+      <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#22d3ee', boxShadow: '0 0 8px #22d3ee' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Today&apos;s Schedule</span></div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-cyan-800/50 bg-cyan-950/70 px-2 py-0.5 text-[10px] text-cyan-300">Live data</span>
+          <button type="button" onClick={onClose} aria-label="Hide schedule preview" className="text-sm leading-none text-slate-500 hover:text-white">&times;</button>
+        </div>
+      </div>
+      {events.length === 0 ? (
+        <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-500 hover:text-slate-300">Nothing scheduled today &mdash; open calendar</button>
+      ) : (
+        <div className="space-y-1.5">
+          {events.slice(0, 4).map((e) => (
+            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 border-cyan-400 bg-slate-800/40 px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-slate-800/70">
+              <span className="truncate">{e.title}</span>
+              <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-400">{formatEventTime(e)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen: () => void; onClose: () => void }) {
+  const cols: { key: 'high' | 'medium' | 'low'; label: string; accent: string }[] = [
+    { key: 'high', label: 'Now', accent: '#f43f5e' },
+    { key: 'medium', label: 'Next', accent: '#fbbf24' },
+    { key: 'low', label: 'Later', accent: '#22d3ee' },
+  ]
+  return (
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+      <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#818cf8', boxShadow: '0 0 8px #818cf8' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">To-Dos</span></div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onOpen} className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-[10px] text-slate-300 hover:text-white">Open board</button>
+          <button type="button" onClick={onClose} aria-label="Hide to-dos preview" className="text-sm leading-none text-slate-500 hover:text-white">&times;</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {cols.map((c) => {
+          const colItems = items.filter((i) => i.urgency === c.key).slice(0, 3)
+          return (
+            <div key={c.key} className="space-y-1.5 rounded-xl border border-slate-800/80 bg-slate-900/60 p-2">
+              <div className="flex items-center gap-1.5 border-b border-slate-800 pb-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: c.accent }} /><span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{c.label}</span></div>
+              {colItems.length === 0 ? (
+                <div className="py-1.5 text-[10px] text-slate-600">&mdash;</div>
+              ) : colItems.map((i) => (
+                <button key={i.id} type="button" onClick={onOpen} className="block w-full truncate rounded-md bg-slate-800/60 px-1.5 py-1 text-left text-[11px] text-slate-300 hover:bg-slate-800">{i.title}</button>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function MyDaySurface() {
   const { user } = useUser()
   const firstName = user?.firstName ?? 'there'
@@ -264,6 +322,12 @@ export function MyDaySurface() {
     try { return JSON.parse(localStorage.getItem(MESSAGE_NOTE_KEY) ?? '[]') as MessageNote[] } catch { return [] }
   })
   const [messageStatus, setMessageStatus] = useState<string | null>(null)
+  const POPOUT_KEY = 'nexus_my_day_popouts'
+  const [popouts, setPopouts] = useState<{ schedule: boolean; todos: boolean }>(() => {
+    if (typeof window === 'undefined') return { schedule: true, todos: true }
+    try { return { schedule: true, todos: true, ...(JSON.parse(localStorage.getItem(POPOUT_KEY) ?? '{}') as Record<string, boolean>) } } catch { return { schedule: true, todos: true } }
+  })
+  const setPopout = (k: 'schedule' | 'todos', v: boolean) => setPopouts(prev => { const next = { ...prev, [k]: v }; try { localStorage.setItem(POPOUT_KEY, JSON.stringify(next)) } catch { /* ignore */ } ; return next })
 
   const loadSummary = useCallback(async () => {
     try {
@@ -372,8 +436,17 @@ export function MyDaySurface() {
   }
 
   return (
-    <section className="mt-9 w-full max-w-5xl">
-      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, #18202d, #111722)', border: '1px solid rgba(148,163,184,0.26)', boxShadow: '0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+    <section className="mt-6 w-full">
+      {(popouts.schedule || popouts.todos) && (
+        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {popouts.schedule && <SchedulePopout events={todayEvents} onOpen={() => openCard(cards[0])} onClose={() => setPopout('schedule', false)} />}
+          {popouts.todos && <TodosPopout items={todoItems} onOpen={() => openCard(cards[2])} onClose={() => setPopout('todos', false)} />}
+        </div>
+      )}
+      {!popouts.schedule && !popouts.todos && (
+        <button type="button" onClick={() => { setPopout('schedule', true); setPopout('todos', true) }} className="mb-3 rounded-full border border-slate-700/60 bg-slate-800/50 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:text-white">Show previews</button>
+      )}
+      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#6a7889,#515f72)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
           <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(148,163,184,0.9)', fontWeight: 400 }}>what are we working on today?</span></h2>

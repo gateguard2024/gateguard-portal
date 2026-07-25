@@ -51,6 +51,8 @@ const RAIL_ICONS: Record<string, RailItem['icon']> = {
   'my-day': 'home', opps: 'sales', jobs: 'ops', design: 'design', catalog: 'catalog', systems: 'systems', events: 'events',
 }
 
+const NEXUS_VERSION = 'v2.4.0'
+
 function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
@@ -92,6 +94,9 @@ function NexusMark() {
           <span className="text-xs" style={{ color: 'rgba(125,229,255,0.74)' }}>by </span>
           <span className="text-[13px] font-bold" style={{ color: '#FFFFFF' }}>Gate Guard</span>
         </p>
+        <div className="mt-2 flex justify-center">
+          <span className="rounded-md px-2 py-0.5 text-[10px] tracking-[0.14em]" style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', color: 'rgba(226,232,240,0.72)', background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(148,163,184,0.3)' }}>{NEXUS_VERSION}</span>
+        </div>
       </div>
     </div>
   )
