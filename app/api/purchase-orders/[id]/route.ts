@@ -44,3 +44,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   return NextResponse.json({ error: 'Could not update' }, { status: 500 })
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('purchase_orders', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { error } = await serviceDb().from('purchase_orders').delete().eq('id', params.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}

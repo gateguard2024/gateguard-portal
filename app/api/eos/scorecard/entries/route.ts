@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { hasOrgContext } from '@/lib/org-scope'
+import { recordInScope } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,12 +11,19 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  const user = await getCurrentUser()
+  if (!hasOrgContext(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
     const body = await req.json()
     const { scorecard_id, week_of, value } = body
 
     if (!scorecard_id || !week_of) {
       return NextResponse.json({ error: 'scorecard_id and week_of are required' }, { status: 400 })
+    }
+
+    // The scorecard must belong to the caller's org (corporate sees all).
+    if (!(await recordInScope('eos_scorecard', scorecard_id))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
     // Upsert: ON CONFLICT (scorecard_id, week_of) DO UPDATE SET value = excluded.value

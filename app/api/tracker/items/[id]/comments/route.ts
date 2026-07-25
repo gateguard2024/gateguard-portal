@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { guardTrackerItem } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,7 +11,8 @@ const supabase = createClient(
 /**
  * GET /api/tracker/items/[id]/comments
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardTrackerItem(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('tracker_comments')
     .select('id, item_id, author_name, author_initials, body, created_at')
@@ -28,6 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
  * POST /api/tracker/items/[id]/comments
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardTrackerItem(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     const user = await getCurrentUser()
     const body = await req.json()

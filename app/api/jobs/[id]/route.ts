@@ -102,3 +102,17 @@ export async function PATCH(
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  if (!(await recordInScope('jobs', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('id', params.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}

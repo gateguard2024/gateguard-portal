@@ -142,3 +142,27 @@ export async function recordInScope(table: string, id: string): Promise<boolean>
   if (orgId == null) return true
   return isInScope(scope, orgId)
 }
+
+/**
+ * Guard a tracker item. Items carry org_id directly, OR (for entity boards, e.g.
+ * tasks pinned to a work order/opportunity) have a null org_id and resolve scope
+ * through their group's parent entity. Corporate sees all; otherwise the item's
+ * org — or its parent entity — must be in the caller's scope.
+ */
+export async function guardTrackerItem(req: NextRequest, itemId: string): Promise<boolean> {
+  if (!itemId) return false
+  const user  = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  if (scope.all) return true
+  const { data: item } = await db().from('tracker_items').select('org_id, group_id').eq('id', itemId).maybeSingle()
+  if (!item) return false
+  const it = item as { org_id?: string | null; group_id?: string | null }
+  if (it.org_id) return isInScope(scope, it.org_id)
+  if (it.group_id) {
+    const { data: grp } = await db().from('tracker_groups').select('org_id, entity_type, entity_id').eq('id', it.group_id).maybeSingle()
+    const g = grp as { org_id?: string | null; entity_type?: string | null; entity_id?: string | null } | null
+    if (g?.org_id) return isInScope(scope, g.org_id)
+    if (g?.entity_type && g?.entity_id) return entityInScope(req, g.entity_type, g.entity_id)
+  }
+  return false
+}
