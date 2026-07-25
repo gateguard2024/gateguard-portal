@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +13,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  if (!(await recordInScope('incidents', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { status, resolved_at, description, severity, reported_by } = body
 
@@ -24,6 +27,9 @@ export async function PATCH(
   if (status === 'resolved' && !updates.resolved_at) {
     updates.resolved_at = new Date().toISOString()
   }
+  // Corporate may transfer the record to another company.
+  const caller = await getCurrentUser()
+  if (caller.isCorporate && body.org_id) updates.org_id = body.org_id
 
   const { data, error } = await supabase
     .from('incidents')
@@ -40,6 +46,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  if (!(await recordInScope('incidents', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('incidents')
     .delete()

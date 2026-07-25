@@ -124,3 +124,21 @@ async function guardWorkOrderByOrg(jobId: string): Promise<boolean> {
   if (!data) return false
   return isInScope(scope, (data as { org_id?: string | null }).org_id)
 }
+
+/**
+ * Generic ownership guard for a record identified by its own org_id column.
+ * Corporate sees all. A NULL org_id means the row is shared/unassigned (e.g. a
+ * global inventory item or PO) — not another tenant's private data — so it is
+ * allowed. Otherwise the row's org must be in the caller's subtree.
+ */
+export async function recordInScope(table: string, id: string): Promise<boolean> {
+  if (!id) return false
+  const user  = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  if (scope.all) return true
+  const { data } = await db().from(table).select('org_id').eq('id', id).maybeSingle()
+  if (!data) return false
+  const orgId = (data as { org_id?: string | null }).org_id
+  if (orgId == null) return true
+  return isInScope(scope, orgId)
+}

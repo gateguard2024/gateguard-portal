@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }         from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
+import { getCurrentUser } from '@/lib/current-user'
 
 function serviceDb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -14,6 +16,7 @@ export const dynamic = 'force-dynamic'
 const ALLOWED_STATUS = ['draft', 'ordered', 'received', 'cancelled', 'closed']
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('purchase_orders', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -26,6 +29,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if ('po_number' in body)   patch.po_number = body.po_number
   if ('notes' in body)       patch.notes = body.notes
   if ('expected_at' in body) patch.expected_at = body.expected_at
+  const caller = await getCurrentUser()
+  if (caller.isCorporate && body.org_id) patch.org_id = body.org_id   // corporate transfer
 
   // Drift-resilient (updated_at may not exist on some PO schemas)
   let attempt = { ...patch }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,7 @@ function computeStatus(on_hand: number, min_stock: number): string {
 // POST /api/inventory/[id]/adjust
 // Body: { type: "add"|"remove"|"set", qty: number, location?: "warehouse"|"truck", notes?: string }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('inventory_items', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { type, qty, location = 'warehouse' } = body
 

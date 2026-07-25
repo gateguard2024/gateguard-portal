@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { recordInScope } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   await getCurrentUser()
+  if (!(await recordInScope('subcontractors', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data, error } = await supabase
     .from('subcontractors')
@@ -38,7 +40,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  await getCurrentUser()
+  const caller = await getCurrentUser()
+  if (!(await recordInScope('subcontractors', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   const allowed = [
@@ -49,6 +52,7 @@ export async function PATCH(
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
   }
+  if (caller.isCorporate && body.org_id) updates.org_id = body.org_id   // corporate transfer
 
   const { data, error } = await supabase
     .from('subcontractors')
@@ -67,6 +71,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   await getCurrentUser()
+  if (!(await recordInScope('subcontractors', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { error } = await supabase
     .from('subcontractors')

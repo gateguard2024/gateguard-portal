@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ function computeStatus(on_hand: number, min_stock: number): string {
 
 // GET /api/inventory/[id]
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('inventory_items', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('inventory_items')
     .select('*')
@@ -29,6 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 // PATCH /api/inventory/[id]
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('inventory_items', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   const { data, error } = await supabase
@@ -46,6 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 // DELETE /api/inventory/[id] — soft delete (is_active = false)
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('inventory_items', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('inventory_items')
     .update({ is_active: false, updated_at: new Date().toISOString() })
