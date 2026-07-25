@@ -174,6 +174,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     todos,
     attachments,
     quote,
+    canReassign: user.role === 'admin' || user.isCorporate,
     nextBestActions: [
       { title: 'Edit Details',       subtitle: 'Fix contact, property, interests.',   action: 'update_details' },
       { title: 'Schedule Follow-Up', subtitle: 'Create the next touch.',              action: 'schedule_followup' },
@@ -285,7 +286,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
     if (updErr && !updated) return NextResponse.json({ success: false, message: updErr.message }, { status: 500 })
 
-    void supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity details updated', body: `Updated: ${Object.keys(map).filter(k => k !== 'updated_at').join(', ')}.`, opportunity_id: oppId })
+    await supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity details updated', body: `Updated: ${Object.keys(map).filter(k => k !== 'updated_at').join(', ')}.`, opportunity_id: oppId })
     return NextResponse.json({ success: true, message: 'Opportunity details saved.' })
   }
 
@@ -301,7 +302,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       if (patch.lost_reason) { delete patch.lost_reason; const r2 = await supabase.from('opportunities').update(patch).eq('id', oppId); if (r2.error) return NextResponse.json({ success: false, message: r2.error.message }, { status: 500 }) }
       else return NextResponse.json({ success: false, message: upErr.message }, { status: 500 })
     }
-    void supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: `Opportunity ${stage}`, body: `Stage changed to ${stage}.`, opportunity_id: oppId })
+    await supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: `Opportunity ${stage}`, body: `Stage changed to ${stage}.`, opportunity_id: oppId })
     return NextResponse.json({ success: true, message: `Opportunity marked ${stage}.`, stage })
   }
 
@@ -324,6 +325,26 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }).select('id, title, due_date').single()
     if (tErr) return NextResponse.json({ success: false, message: tErr.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
+  }
+
+  if (action === 'reassign_opp') {
+    if (!(user.role === 'admin' || user.isCorporate)) {
+      return NextResponse.json({ success: false, message: 'Only an administrator can reassign opportunities.' }, { status: 403 })
+    }
+    const assigneeId = clean(body.assignee_id)
+    const assigneeName = clean(body.assignee_name)
+    if (!assigneeId) return NextResponse.json({ success: false, message: 'Choose someone to assign this deal to.' }, { status: 400 })
+    const assigneeProfileId = await getProfileId(assigneeId)
+    const initials = (assigneeName || '').split(/\s+/).map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+    const { error } = await supabase.from('opportunities').update({
+      rep_id: assigneeProfileId || null,
+      owner_name: assigneeName || null,
+      owner_initials: initials || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', oppId)
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    await supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, opportunity_id: oppId })
+    return NextResponse.json({ success: true, message: `Opportunity assigned to ${assigneeName || 'the selected user'}.` })
   }
 
   return NextResponse.json({ success: false, message: 'Unknown opportunity action.' }, { status: 400 })

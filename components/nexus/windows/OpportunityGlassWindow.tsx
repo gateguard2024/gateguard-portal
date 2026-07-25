@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 
 type AnyRecord = Record<string, any>
+const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 
 type OpportunityGlassData = {
   opportunity?: AnyRecord | null
@@ -16,6 +18,7 @@ type OpportunityGlassData = {
   attachments?: AnyRecord[]
   quote?: AnyRecord | null
   nextBestActions?: Array<{ title: string; subtitle: string; action: string }>
+  canReassign?: boolean
 }
 
 function val(v: unknown, fallback = 'Not added yet') {
@@ -104,6 +107,35 @@ export function OpportunityGlassWindow({
   const show = (key: string, fallback?: unknown) => (ov[key] !== undefined ? ov[key] : (opp[key] ?? fallback))
   const [editing, setEditing] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const canReassign = Boolean(data.canReassign)
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [assignUsers, setAssignUsers] = useState<Array<{ id: string; full_name?: string; email: string }>>([])
+  async function openReassign() {
+    setAssignOpen(true)
+    if (assignUsers.length === 0) {
+      setAssignLoading(true)
+      try {
+        const r = await fetch('/api/admin/users')
+        const j = await r.json().catch(() => ({}))
+        const list: AnyRecord[] = Array.isArray(j?.users) ? j.users : Array.isArray(j) ? j : []
+        setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '' })).filter(u => u.id))
+      } catch { /* ignore */ } finally { setAssignLoading(false) }
+    }
+  }
+  async function doReassign(assigneeId: string, name: string) {
+    const oppId = opp.id as string | undefined
+    if (!oppId) return
+    setBusy('reassign_opp'); setMsg(null)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reassign_opp', assignee_id: assigneeId, assignee_name: name }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) throw new Error(j?.message ?? 'Could not reassign.')
+      setOv(prev => ({ ...prev, owner_name: name }))
+      setMsg({ ok: true, text: j.message ?? 'Reassigned ✓' }); setAssignOpen(false)
+      await onRefresh?.()
+    } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not reassign.' }) } finally { setBusy(null) }
+  }
   const [f, setF] = useState({
     site_contact_name: '', site_contact_title: '', site_contact_phone: '', site_contact_email: '',
     account_name: '', property_address: '', property_city: '', property_state: '', units: '', next_step: '', notes: '',
@@ -183,18 +215,20 @@ export function OpportunityGlassWindow({
     ? '#ef4444'
     : stageMeta === 'proposal' || stageMeta === 'negotiation'
     ? '#fbbf24'
-    : '#a5b4ff'
+    : '#9FD8EC'
 
   const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' } as const
 
   return (
-    <div className="space-y-4">
+    <>
+    <NexusGlassBackButton label="Back to workbench" onClick={onBack} />
+    <div className="space-y-4 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
             <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(95,184,224,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
               <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(95,184,224,0.18)' }}>
-                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(190,200,255,0.9)' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
+                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: '#9FD8EC' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
               </div>
               <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -229,14 +263,6 @@ export function OpportunityGlassWindow({
       <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#1e2a3a)', border: '1px solid rgba(95,184,224,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <button
-              type="button"
-              onClick={onBack}
-              className="mb-4 rounded-full px-3 py-1.5 text-[11px] transition-opacity hover:opacity-80"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.58)' }}
-            >
-              ← Back to workbench
-            </button>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
             <h3 className="mt-2 text-2xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>
               {val(opp.name, 'Untitled Opportunity')}
@@ -276,7 +302,7 @@ export function OpportunityGlassWindow({
 
           <Section title="People">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#c7d0ff' }}>Edit details</button>
+              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit details</button>
             </div>
             {show('site_contact_name') ? (
               <MiniRow
@@ -300,6 +326,21 @@ export function OpportunityGlassWindow({
                   subtitle={opp.owner_initials ? `Initials: ${opp.owner_initials}` : undefined}
                   meta="Owner / Rep"
                 />
+              </div>
+            )}
+            {canReassign && (
+              <div className="mt-2">
+                {!assignOpen ? (
+                  <button type="button" onClick={openReassign} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>⇄ Reassign rep</button>
+                ) : (
+                  <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.20)', border: '1px solid rgba(95,184,224,0.24)' }}>
+                    <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.6)' }}>Assign this deal to</div>
+                    {assignLoading ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading team…</div>
+                     : assignUsers.length === 0 ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>No teammates available.</div>
+                     : <div className="max-h-56 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>{assignUsers.map(u => <button key={u.id} type="button" disabled={busy === 'reassign_opp'} onClick={() => doReassign(u.id, u.full_name || u.email)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}><span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}</span><span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{u.email}</span></button>)}</div>}
+                    <div className="flex justify-end"><button type="button" onClick={() => setAssignOpen(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>Close</button></div>
+                  </div>
+                )}
               </div>
             )}
           </Section>
@@ -452,5 +493,6 @@ export function OpportunityGlassWindow({
         </div>
       </div>
     </div>
+    </>
   )
 }

@@ -41,7 +41,8 @@ export async function GET() {
       .is('opportunity_id', null)
     openQ = applyOrgScope(openQ, scope)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: openRows } = await (openQ as any).order('updated_at', { ascending: false })
+    const { data: openRows, error: openErr } = await (openQ as any).order('updated_at', { ascending: false })
+    if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const open: any[] = Array.isArray(openRows) ? openRows : []
 

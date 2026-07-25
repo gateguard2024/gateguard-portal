@@ -100,7 +100,7 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-6xl p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={loadDash} /></div>
+        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={loadDash} /></div>
       </div>
     )
   }
@@ -127,7 +127,7 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 90, overflowY: 'auto', background: NEXUS_BG }}>
       <NexusBackdropLayers variant="page" />
-      <div style={{ position: 'relative' }} className="mx-auto max-w-6xl p-4 pb-24">
+      <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4 pb-24">
         <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
         <div className="mt-3 rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

@@ -558,7 +558,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
       </Card>
 
       {/* Contacts (many-to-many) — add/remove people on this deal */}
-      {opportunityId && <ContactsCard entityType="opportunity" entityId={opportunityId} accent="#7DE5FF" />}
+      {opportunityId && <ContactsCard entityType="opportunity" entityId={opportunityId} accent="#5FB8E0" />}
 
       {/* Calendar & tasks — self-assigned, with details + check-to-complete */}
       <Card>

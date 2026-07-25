@@ -18,16 +18,19 @@ export async function GET(req: NextRequest) {
     // org's leads plus unassigned (null-org) leads (migrated legacy records).
     let query = supabase
       .from('leads')
-      .select('id, contact_name, company_name, property_name, email, phone, property_type, contact_title, unit_count, location, city, state, stage, source, notes, assigned_dealer, opportunity_id, created_at')
+      .select('id, contact_name, company_name, property_name, email, phone, property_type, contact_title, unit_count, location, city, state, stage, source, notes, assigned_dealer, opportunity_id, created_at, mrr, cameras')
       .is('opportunity_id', null)          // hide leads already converted to an opportunity
       .is('lost_at', null)
       .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .order('created_at', { ascending: false })
 
-    if (!scope.all && scope.ids.length > 0) {
-      // org's leads + legacy null-org leads + any lead ASSIGNED to me, even if it
-      // lives in another org (e.g. a Channel Sales Partner given a corporate lead).
-      query = query.or(`org_id.is.null,org_id.in.(${scope.ids.join(',')}),assigned_to_user_id.eq.${user.id}`)
+    if (!scope.all) {
+      // Fail-closed: org's leads in my subtree + any lead ASSIGNED to me (covers
+      // ARIA-imported cross-org leads). Never an unfiltered query, and no longer
+      // exposes legacy null-org leads to every tenant.
+      const parts = [`assigned_to_user_id.eq.${user.id}`]
+      if (scope.ids.length > 0) parts.push(`org_id.in.(${scope.ids.join(',')})`)
+      query = query.or(parts.join(','))
     }
 
     const { data, error } = await query
@@ -46,6 +49,8 @@ export async function GET(req: NextRequest) {
       assigned_dealer: row.assigned_dealer ?? null,
       units:          row.unit_count ?? null,
       unit_count:     row.unit_count ?? null,
+      mrr:            row.mrr ?? null,
+      cameras:        row.cameras ?? null,
       // Detail page fields
       name:          row.property_name || row.company_name || row.contact_name,
       company:       row.company_name ?? '',

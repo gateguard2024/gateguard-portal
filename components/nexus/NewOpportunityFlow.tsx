@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 type Source = 'lead' | 'customer' | 'blank'
 type Step = 'source' | 'pick' | 'form'
 
-type LeadRow = { id: string; name?: string; company?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string; units?: number; location?: string }
+type LeadRow = { id: string; name?: string; company?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string; units?: number; location?: string; mrr?: number | null; cameras?: number | null }
 
 // `data` carries the real values. `subtitle` is only the human-readable line —
 // never parse facts back out of it.
@@ -152,7 +152,10 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
     })
     const u = l.units ? Number(l.units) : 0
     setUnits(u ? String(u) : '')
-    setMrr(u ? String(u * MRR_PER_UNIT) : '')
+    // Carry the lead's SIZED MRR (units×$10 + cams×$100) forward as the starting
+    // estimate; it gets refined to the actual contract MRR later in the cycle.
+    const seedMrr = (l.mrr != null && Number(l.mrr) > 0) ? Number(l.mrr) : (u ? u * MRR_PER_UNIT : 0)
+    setMrr(seedMrr ? String(seedMrr) : '')
     setName(`${account || label} — Opportunity`)
     setStep('form')
   }

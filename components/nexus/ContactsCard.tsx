@@ -7,10 +7,10 @@ import { useCallback, useEffect, useState } from 'react'
 type Linked = { link_id: string; contact_id: string; name: string; email: string | null; phone: string | null; title: string | null; role: string | null }
 type Found = { id: string; name: string; email: string | null; title?: string | null }
 
-const card = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 } as const
-const input = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
+const card = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 16, padding: 16, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' } as const
+const input = { background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
 
-export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { entityType: string; entityId?: string; accent?: string }) {
+export function ContactsCard({ entityType, entityId, accent = '#5FB8E0' }: { entityType: string; entityId?: string; accent?: string }) {
   const [rows, setRows] = useState<Linked[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)

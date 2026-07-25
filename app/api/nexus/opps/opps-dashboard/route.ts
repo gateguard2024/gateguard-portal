@@ -33,7 +33,8 @@ export async function GET() {
       .is('deleted_at', null).is('won_at', null).is('lost_at', null)
     openQ = applyOrgScope(openQ, scope, 'dealer_org_id')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: openRows } = await (openQ as any).order('updated_at', { ascending: false })
+    const { data: openRows, error: openErr } = await (openQ as any).order('updated_at', { ascending: false })
+    if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const open: any[] = Array.isArray(openRows) ? openRows : []
 

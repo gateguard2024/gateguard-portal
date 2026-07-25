@@ -71,7 +71,8 @@ function leadBucket(stage: string | null | undefined): string {
   if (/contact|qualif/.test(v)) return 'contacted'
   return 'identified'
 }
-async function advanceLead(lead: { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, target: 'contacted' | 'sent_info') {
+async function advanceLead(lead: { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null; lost_at?: string | null }, target: 'contacted' | 'sent_info') {
+  if (lead.lost_at) return   // never auto-advance a lost/dead lead
   const now = new Date().toISOString()
   const patch: Record<string, unknown> = {}
   if (LEAD_BUCKET_RANK[target] > LEAD_BUCKET_RANK[leadBucket(lead.stage)]) patch.stage = target === 'contacted' ? 'contacted' : 'proposal'
@@ -95,7 +96,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, converted_at, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, converted_at, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name, lost_at')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
@@ -412,7 +413,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     // Best-effort activity log for the follow-up
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'task',
@@ -494,7 +495,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by:    profileId,
       type:          'note',
@@ -529,7 +530,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       updated_at: new Date().toISOString(),
     }).eq('id', lead.id)
     if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
-    void supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: 'Lead reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, lead_id: lead.id })
+    await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: 'Lead reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, lead_id: lead.id })
     return NextResponse.json({ success: true, message: `Lead assigned to ${assigneeName || 'the selected user'}.` })
   }
 
@@ -572,7 +573,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'note',

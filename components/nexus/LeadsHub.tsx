@@ -131,15 +131,16 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
       const payload: Record<string, unknown> = { action: 'update_details', [FIELD_TO_BODY[field]]: value }
       if ((field === 'units' || field === 'cameras') && next.mrr != null) payload.mrr = String(next.mrr)
       if (['units', 'cameras', 'mrr'].includes(field) && next.pcr != null) payload.pcr = String(next.pcr)
-      await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    } finally { setSavingCell(false) }
+      const res = await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) await loadDash()   // save failed — re-pull truth, don't leave a wrong optimistic value
+    } catch { await loadDash() } finally { setSavingCell(false) }
   }
 
   if (oppData) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-6xl p-4"><OpportunityGlassWindow data={oppData as never} onBack={() => setOppData(null)} onRefresh={loadDash} /></div>
+        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={oppData as never} onBack={() => setOppData(null)} onRefresh={loadDash} /></div>
       </div>
     )
   }
@@ -147,7 +148,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-6xl p-4"><LeadGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} onOpenOpportunity={openOpportunity} /></div>
+        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><LeadGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} onOpenOpportunity={openOpportunity} /></div>
       </div>
     )
   }
@@ -174,7 +175,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 90, overflowY: 'auto', background: NEXUS_BG }}>
       <NexusBackdropLayers variant="page" />
-      <div style={{ position: 'relative' }} className="mx-auto max-w-6xl p-4 pb-24">
+      <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4 pb-24">
         <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
         <div className="mt-3 rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
