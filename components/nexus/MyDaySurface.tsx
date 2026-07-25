@@ -202,13 +202,13 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
       <div className={`mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] ${actions ? 'lg:grid-cols-[1fr_260px]' : ''}`} style={{ background: NEXUS_BG, border: '1px solid rgba(150,180,210,0.22)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="min-h-0 overflow-y-auto pr-1 pb-24" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to My Day" onClick={onClose} />
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>My Day</div>
+          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>My Day</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.64)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
         {actions && (
-          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
             <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
             <div className="mt-4 space-y-2">{actions}</div>
           </aside>
@@ -226,7 +226,7 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
       disabled={disabled}
       onClick={onClick}
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45 active:translate-y-0"
-      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,200,255,0.055))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(0,200,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.22)', color: '#7dd3fc' }}
+      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,200,255,0.055))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(0,200,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}
     >
       {displayLabel}
     </button>
@@ -473,7 +473,7 @@ export function MyDaySurface() {
         <CalendarViews />
       </DetailShell>}
 
-      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.6)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
+      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.09)', border: '1px solid rgba(95,184,224,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
         {top10.length > 0 ? (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
@@ -485,7 +485,7 @@ export function MyDaySurface() {
               {sortedTop10.map((item, index) => {
                 const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#22d3ee'
                 return (
-                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-white/10 py-3 pl-4 pr-3 text-left backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-white/20" style={{ background: 'rgba(15,23,42,0.66)' }}>
+                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-black/30 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>
                     <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -503,7 +503,7 @@ export function MyDaySurface() {
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-white/10 px-3 py-6 text-center text-xs text-slate-400" style={{ background: 'rgba(15,23,42,0.5)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
+          <div className="rounded-2xl border border-black/30 px-3 py-6 text-center text-xs text-slate-300" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
         )}
       </DetailShell>}
 
