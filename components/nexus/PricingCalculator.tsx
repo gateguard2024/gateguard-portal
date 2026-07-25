@@ -68,9 +68,9 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
   const [tab, setTab] = useState<'monthly' | 'install'>('monthly')
   const passthru = useRef({ unitsApp: seedN(initialUnitsApp), unitsGw: seedN(initialUnitsGw), camBackup: seedN(initialCamBackup) })
 
-  const [viewAsDealer, setViewAsDealer] = useState(false)
-  const [canViewInternal, setCanViewInternal] = useState(false)
-  const [internalView, setInternalView] = useState(false)
+  const [preview, setPreview] = useState<'' | 'corporate' | 'distributor' | 'dealer'>('')
+  const [band, setBand] = useState<'corporate' | 'distributor' | 'dealer'>('dealer')
+  const [naturalBand, setNaturalBand] = useState<'corporate' | 'distributor' | 'dealer'>('dealer')
   const [calc, setCalc] = useState<Result>({ empty: true })
 
   const inputs = useMemo(() => ({
@@ -84,10 +84,10 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
     const t = setTimeout(() => {
       void fetch('/api/pricing/compute', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...inputs, viewAsDealer }),
+        body: JSON.stringify({ ...inputs, viewAs: preview || undefined }),
       }).then(r => r.json()).then(j => {
         if (!j || !j.result) return
-        setCalc(j.result); setCanViewInternal(!!j.canViewInternal); setInternalView(!!j.internalView)
+        setCalc(j.result); setBand(j.band ?? 'dealer'); setNaturalBand(j.naturalBand ?? 'dealer')
         const c = j.result
         onComputeRef.current?.({
           units: c.livingUnits ?? 0, ggFee: c.ggNet ?? 0, ggCost: c.ggCost ?? 0,
@@ -97,7 +97,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
       }).catch(() => {})
     }, 250)
     return () => clearTimeout(t)
-  }, [inputs, viewAsDealer])
+  }, [inputs, preview])
 
   const onPersistRef = useRef(onPersist)
   useEffect(() => { onPersistRef.current = onPersist }, [onPersist])
@@ -112,7 +112,8 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
     return () => clearTimeout(t)
   }, [units, ep, camMon])
 
-  const showInternal = canViewInternal && internalView
+  const showInternal = band === 'corporate'
+  const showDistributor = band === 'distributor'
   const empty = !!calc.empty
   const u = calc.livingUnits ?? 0
   const scale = calc.scale ?? 1
@@ -138,7 +139,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
             <Slider label="Cameras — non-monitored" value={camNon} min={0} max={50} step={1} onChange={setCamNon} />
           </div>
           <div>
-            {canViewInternal && (<div style={{ marginBottom: 10 }}>
+            {band === 'corporate' && (<div style={{ marginBottom: 10 }}>
               <div style={{ ...tagS, marginBottom: 5 }}>Gate Guard net model</div>
               <Seg<GgNet> options={[{ v: 'min2', label: '$2 / unit' }, { v: 'double', label: '2× expense' }]} value={ggNetModel} onChange={setGgNetModel} />
             </div>)}
@@ -149,10 +150,11 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
             <label className="flex cursor-pointer items-center gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.72)', marginTop: 4 }}>
               <input type="checkbox" checked={dealerMaintains} onChange={e => setDealerMaintains(e.target.checked)} style={{ accentColor: '#6B7EFF', width: 16, height: 16 }} /> Dealer maintains entry points
             </label>
-            {canViewInternal && (
-              <div className="mt-3 flex items-center gap-2 rounded-full p-1 text-[11px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
-                <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal</button>
-                <button type="button" onClick={() => setViewAsDealer(true)} className="rounded-full px-3 py-1" style={viewAsDealer ? { background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.5)', color: '#6ee7b7' } : { color: 'rgba(255,255,255,0.6)' }}>Dealer view</button>
+            {naturalBand !== 'dealer' && (
+              <div className="mt-3 flex items-center gap-1 rounded-full p-1 text-[11px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
+                {(naturalBand === 'corporate' ? ['corporate', 'distributor', 'dealer'] : ['distributor', 'dealer']).map(b => (
+                  <button key={b} type="button" onClick={() => setPreview(b === naturalBand ? '' : (b as 'corporate' | 'distributor' | 'dealer'))} className="rounded-full px-3 py-1" style={band === b ? { background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.5)', color: '#9FD8EC' } : { color: 'rgba(255,255,255,0.6)' }}>{b === 'corporate' ? 'Corporate' : b === 'distributor' ? 'Distributor' : 'Dealer'}</button>
+                ))}
               </div>
             )}
             <div style={{ ...card, marginTop: 10, textAlign: 'center', background: 'rgba(107,126,255,.1)', borderColor: 'rgba(107,126,255,.35)' }}>
@@ -189,6 +191,9 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
               <Row label="Distribution" total={calc.distCut ?? 0} units={u} />
               <Row label="Gate Guard cost" total={calc.ggCost ?? 0} units={u} />
               <Row label={`Gate Guard net ${calc.ggNetModel === 'double' ? '(2× cost)' : '($2/unit)'}`} total={calc.ggNet ?? 0} units={u} strong />
+            </>) : showDistributor ? (<>
+              <Row label="Distribution" total={calc.distCut ?? 0} units={u} />
+              <Row label="Gate Guard fee" total={calc.gateGuardFee ?? 0} units={u} strong />
             </>) : (
               <Row label="Gate Guard" total={calc.gateGuardCombined ?? 0} units={u} strong />
             )}

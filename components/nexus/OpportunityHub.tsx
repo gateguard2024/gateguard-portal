@@ -276,7 +276,7 @@ function WorkExistingDeal({ initialQuery, onBack, onOpen }: { initialQuery: stri
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: '#2f7fb8', color: '#eaf6ff' }}>{initials(o.name ?? o.account_name)}</div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold" style={{ color: '#eaf2fb' }}>{o.name || o.account_name || 'Untitled deal'}</div>
-                <div className="truncate text-[10px]" style={{ color: '#98abbd' }}>{[o.account_name, o.stage].filter(Boolean).join(' · ') || '—'}</div>
+                <div className="truncate text-[10px]" style={{ color: '#98abbd' }}>{[o.account_name, o.stage, o.est_mrr != null ? `${money(o.est_mrr)}/mo` : null].filter(Boolean).join(' · ') || '—'}</div>
               </div>
               <span className="shrink-0 text-[10px]" style={{ color: '#7d93a8' }}>{relTime(o.updated_at)}</span>
             </button>

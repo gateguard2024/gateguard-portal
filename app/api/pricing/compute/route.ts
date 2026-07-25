@@ -26,15 +26,27 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const user = await getCurrentUser()
-  const canViewInternal = user.isCorporate && user.role === 'admin'
-  const internalView = canViewInternal && body.viewAsDealer !== true
+  // Three cost-visibility bands (server-side gate — omitted numbers never reach the client):
+  //   corporate   → full sheet (cost, net, distribution, dealer, rep, customer)
+  //   distributor → Master Agent / MSO: distribution + one "Gate Guard fee" (our cost + profit), no cost sheet
+  //   dealer      → everyone below: one "Gate Guard fee" (our cost + profit + distribution)
+  const naturalBand: 'corporate' | 'distributor' | 'dealer' =
+    (user.isCorporate && user.role === 'admin') ? 'corporate'
+      : (user.isMasterAgent || user.isMasterDealer) ? 'distributor'
+        : 'dealer'
+  const RANK: Record<string, number> = { corporate: 2, distributor: 1, dealer: 0 }
+  const requested = typeof body.viewAs === 'string' ? String(body.viewAs) : (body.viewAsDealer === true ? 'dealer' : null)
+  const band: 'corporate' | 'distributor' | 'dealer' =
+    (requested && RANK[requested] != null && RANK[requested] <= RANK[naturalBand]) ? (requested as 'corporate' | 'distributor' | 'dealer') : naturalBand
 
   const smartPackage = SMART.includes(body.smartPackage as SmartPackage) ? body.smartPackage as SmartPackage : 'none'
   const cellular = CELL.includes(body.cellular as Cellular) ? body.cellular as Cellular : 'none'
-  // GG-net model is corporate-only; dealers always get 'min2' ($2/unit floor).
-  const ggNetModel: GgNetModel = internalView && body.ggNetModel === 'double' ? 'double' : 'min2'
+  // GG-net model choice is corporate-only; everyone else is locked to 'min2' ($2/unit floor).
+  const ggNetModel: GgNetModel = band === 'corporate' && body.ggNetModel === 'double' ? 'double' : 'min2'
 
-  const result = computePricing({
+  // Compute the full sheet server-side, then expose only what this band may see.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const full = computePricing({
     livingUnits: num(body.livingUnits),
     entryPoints: num(body.entryPoints),
     camerasMonitored: num(body.camerasMonitored),
@@ -43,7 +55,22 @@ export async function POST(req: NextRequest) {
     cellular,
     dealerMaintainsEntry: body.dealerMaintainsEntry === true,
     ggNetModel,
-  }, internalView)
+  }, true) as Record<string, any>
 
-  return NextResponse.json({ result, canViewInternal, internalView })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base: Record<string, any> = {
+    livingUnits: full.livingUnits, entryPoints: full.entryPoints, empty: full.empty,
+    customerMonthly: full.customerMonthly, perUnit: full.perUnit,
+    dealerCut: full.dealerCut, salesCut: full.salesCut, scale: full.scale,
+    dealerFloorBinds: full.dealerFloorBinds, dealerPerUnit: full.dealerPerUnit,
+    salesPerUnit: full.salesPerUnit, dealerEntryFloorRate: full.dealerEntryFloorRate,
+    dealerMonthlyNet: full.dealerMonthlyNet,
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let result: Record<string, any>
+  if (band === 'corporate') result = full
+  else if (band === 'distributor') result = { ...base, distCut: full.distCut, gateGuardFee: Math.round((Number(full.ggCost) + Number(full.ggNet)) * 100) / 100 }
+  else result = { ...base, gateGuardCombined: full.gateGuardCombined }
+
+  return NextResponse.json({ result, band, naturalBand, canPreviewLower: naturalBand !== 'dealer' })
 }

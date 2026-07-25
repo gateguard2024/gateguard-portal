@@ -65,7 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
+const inputStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
 
 export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }) {
   const [step, setStep] = useState<Step>('source')
@@ -241,10 +241,10 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   return (
     <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="mx-auto flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'radial-gradient(circle at 16% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(0,200,255,0.22)', boxShadow: '0 30px 100px rgba(0,0,0,0.6), 0 0 58px rgba(0,124,255,0.12)', backdropFilter: 'blur(28px)' }}>
+        style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>New Opportunity</div>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(95,184,224,0.82)' }}>New Opportunity</div>
             <h2 className="mt-1 text-xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>
               {step === 'source' ? 'Where is this deal coming from?' : step === 'pick' ? (source === 'lead' ? 'Pick the lead' : 'Find the customer') : 'Opportunity details'}
             </h2>
@@ -260,7 +260,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
           {step === 'source' && !result && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {([['lead', 'From an existing Lead', 'Convert a lead you are already working into a deal.'], ['customer', 'From an existing Customer', 'Start a new deal for a customer you already serve.']] as const).map(([s, title, sub]) => (
-                <button key={s} type="button" onClick={() => chooseSource(s)} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,200,255,0.06)', border: '1px solid rgba(0,200,255,0.22)' }}>
+                <button key={s} type="button" onClick={() => chooseSource(s)} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.06)', border: '1px solid rgba(95,184,224,0.22)' }}>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{title}</div>
                   <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{sub}</div>
                 </button>
@@ -298,7 +298,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
           {step === 'form' && !result && (
             <div className="space-y-3">
               {selected && (
-                <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.28)' }}>
+                <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.28)' }}>
                   <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(125,229,255,0.9)' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.label}</div>
                   <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{selected.sublabel}</div>
@@ -336,9 +336,9 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
             {result ? 'Close' : step === 'source' ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (
-            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #007CFF, #00C8FF)', color: 'white' }}>Done</button>
+            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)', color: 'white' }}>Done</button>
           ) : step === 'form' ? (
-            <button type="button" disabled={busy || !name.trim()} onClick={create} className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #007CFF, #00C8FF)', color: 'white' }}>{busy ? 'Creating…' : 'Create Opportunity'}</button>
+            <button type="button" disabled={busy || !name.trim()} onClick={create} className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)', color: 'white' }}>{busy ? 'Creating…' : 'Create Opportunity'}</button>
           ) : <span />}
         </div>
       </div>
