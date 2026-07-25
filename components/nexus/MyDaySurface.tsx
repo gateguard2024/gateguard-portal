@@ -474,6 +474,7 @@ export function MyDaySurface() {
       </DetailShell>}
 
       {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.09)', border: '1px solid rgba(95,184,224,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         {top10.length > 0 ? (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
@@ -505,6 +506,7 @@ export function MyDaySurface() {
         ) : (
           <div className="rounded-2xl border border-black/30 px-3 py-6 text-center text-xs text-slate-300" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
         )}
+        </div>
       </DetailShell>}
 
       {priorityOpen && selectedTopItem && (
@@ -516,8 +518,10 @@ export function MyDaySurface() {
         />
       )}
 
-      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
+      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <TodoBoard />
+        </div>
       </DetailShell>}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => setActivePanel(null)}>
