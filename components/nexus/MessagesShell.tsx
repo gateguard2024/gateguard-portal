@@ -9,6 +9,7 @@ type Channel = 'call' | 'text' | 'email';
 type Message = {
   id: string;
   direction: 'in' | 'out';
+  failed?: boolean;
   channel: Channel;
   body: string;
   body_html?: string;
@@ -48,7 +49,7 @@ const loadConversations = async (): Promise<Conversation[]> => {
   } catch {
     /* fall through to preview data */
   }
-  return loadPreviewConversations();
+  return process.env.NODE_ENV === 'development' ? loadPreviewConversations() : [];
 };
 const loadPreviewConversations = async (): Promise<Conversation[]> => {
   return [
@@ -366,7 +367,7 @@ export default function MessagesShell() {
     if (conv.channel !== 'email' || !conv.channel_id || !to) return;
     setSending(true);
     try {
-      await fetch('/api/nexus/messages/send', {
+      const r = await fetch('/api/nexus/messages/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel_id: conv.channel_id,
@@ -377,9 +378,14 @@ export default function MessagesShell() {
           html,
         }),
       });
-      loadConversations().then(setConversations);
+      const j = await r.json().catch(() => ({} as { ok?: boolean }));
+      if (!r.ok || j?.ok === false) {
+        setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, messages: c.messages.map(m => m.id === optimistic.id ? { ...m, failed: true } : m) } : c));
+      } else {
+        loadConversations().then(setConversations);
+      }
     } catch {
-      /* keep optimistic message; server reload will reconcile next open */
+      setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, messages: c.messages.map(m => m.id === optimistic.id ? { ...m, failed: true } : m) } : c));
     } finally {
       setSending(false);
     }
@@ -520,7 +526,7 @@ export default function MessagesShell() {
                     <div key={msg.id} className="shrink-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : 'rgba(107,126,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : '#b3bcff' }}>{isInbound ? 'Received' : 'Sent'}</span>
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(107,126,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#b3bcff' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
                           <span className="text-xs truncate" style={textSecondary}>{isInbound ? selectedConversation.contact_name : 'You'}</span>
                         </div>
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>

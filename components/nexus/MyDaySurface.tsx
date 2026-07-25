@@ -335,6 +335,8 @@ export function MyDaySurface() {
       const res = await fetch('/api/nexus/my-day')
       const data = await res.json().catch(() => null) as MyDaySummary | null
       if (res.ok && data?.success) setSummary(data)
+      const leadsData = await fetch('/api/crm/leads').then(r => r.json()).catch(() => [])
+      setLeads(Array.isArray(leadsData) ? leadsData : [])
     } catch {
       // My Day still renders useful entry points when summary loading fails.
     }
@@ -344,10 +346,16 @@ export function MyDaySurface() {
     void loadSummary()
   }, [loadSummary])
 
+  // Deep-link: returning from Gmail OAuth (?view=messages) opens the Messages panel.
   useEffect(() => {
-    let alive = true
-    fetch('/api/crm/leads').then(r => r.json()).then((d) => { if (alive) setLeads(Array.isArray(d) ? d : []) }).catch(() => {})
-    return () => { alive = false }
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('view') === 'messages') {
+      setActivePanel('messages')
+      params.delete('view')
+      const qs = params.toString()
+      window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
+    }
   }, [])
 
   const todayCount = summary?.counts?.today_total ?? 0
@@ -473,7 +481,7 @@ export function MyDaySurface() {
         <CalendarViews onChange={loadSummary} />
       </DetailShell>}
 
-      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.09)', border: '1px solid rgba(95,184,224,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
+      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.09)', border: '1px solid rgba(95,184,224,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
         <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         {top10.length > 0 ? (
           <>

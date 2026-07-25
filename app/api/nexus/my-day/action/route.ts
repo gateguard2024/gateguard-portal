@@ -22,6 +22,29 @@ function initials(name: string): string {
     .join('') || 'NX'
 }
 
+// Ownership columns per table — a caller may act only on their own/org records.
+const OWN_COLS: Record<string, string[]> = {
+  todos:          ['created_by', 'assigned_to', 'org_id'],
+  tracker_items:  ['owner_user_id', 'org_id'],
+  crm_activities: ['dealer_org_id'],
+  work_orders:    ['org_id', 'assigned_to', 'assignee_id'],
+}
+const TABLE_FOR: Record<string, string> = { todo: 'todos', tracker_task: 'tracker_items', crm_activity: 'crm_activities', work_order: 'work_orders' }
+
+async function canMutate(table: string, id: string, user: { id: string; org_id?: string | null; isCorporate?: boolean }): Promise<boolean> {
+  if (user.isCorporate) return true
+  const cols = OWN_COLS[table]
+  if (!cols) return false
+  const { data } = await supabase.from(table).select(cols.join(', ')).eq('id', id).maybeSingle()
+  if (!data) return false
+  const row = data as Record<string, unknown>
+  return cols.some(c => {
+    const v = row[c]
+    if (!v) return false
+    return (c === 'org_id' || c === 'dealer_org_id') ? v === user.org_id : v === user.id
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -34,6 +57,11 @@ export async function POST(req: NextRequest) {
 
     if (!action) return NextResponse.json({ success: false, message: 'Choose an action.' }, { status: 400 })
     if (!itemType || !itemId) return NextResponse.json({ success: false, message: 'Select an item first.' }, { status: 400 })
+
+    // Ownership guard — reject acting on records the caller does not own.
+    const ownerTable = TABLE_FOR[itemType]
+    if (!ownerTable) return NextResponse.json({ success: false, message: 'This item type is not supported.' }, { status: 400 })
+    if (!(await canMutate(ownerTable, itemId, user))) return NextResponse.json({ success: false, message: 'Not found.' }, { status: 404 })
 
     if (action === 'mark_done') {
       if (itemType === 'todo') {

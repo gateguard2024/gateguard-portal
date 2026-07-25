@@ -72,9 +72,12 @@ export function TodoBoard() {
     if (!title) return
     setBusy(true)
     try {
-      const res = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, due_date: filter === 'today' ? todayISO() : null }) })
+      const dueForFilter = (filter === 'today' || filter === 'week' || filter === 'overdue') ? todayISO() : null
+      const res = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, due_date: dueForFilter }) })
       if (!res.ok) throw new Error('Could not add task.')
-      setQuick(''); await load()
+      setQuick('')
+      if (filter === 'overdue') setFilter('today')  // a brand-new task can't be overdue — show it under Today
+      await load()
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not add task.') }
     finally { setBusy(false) }
   }

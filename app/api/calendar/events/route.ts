@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
       title,
       start_time: start,
-      end_time: (body.end as string) ?? start,
+      end_time: (body.end as string) ?? new Date(new Date(start as string).getTime() + 3600000).toISOString(),
       is_all_day: Boolean(body.all_day),
       location: (body.location as string) ?? null,
       related_type: (body.related_type as string) ?? null,

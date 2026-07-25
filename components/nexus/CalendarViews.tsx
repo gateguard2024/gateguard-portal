@@ -49,7 +49,7 @@ const loadEvents = async (startISO: string, _endISO: string, scope: 'me' | 'team
           all_day: ev.all_day ?? !time,
           category: ev.category ?? TYPE_TO_CAT[ev.type] ?? 'todos',
           location: ev.location ?? null,
-          href: ev.href ?? null,
+          href: ev.href ?? ev.link ?? null,
           type: ev.type ?? undefined,
         };
       });
@@ -57,7 +57,7 @@ const loadEvents = async (startISO: string, _endISO: string, scope: 'me' | 'team
   } catch {
     /* fall through to preview */
   }
-  return mockEvents(startISO);
+  return process.env.NODE_ENV === 'development' ? mockEvents(startISO) : [];
 };
 const mockEvents = (startISO: string): CalEvent[] => {
   const b = new Date(startISO); const y = b.getFullYear(); const m = b.getMonth();
@@ -174,9 +174,12 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     const t = evt.type ?? 'nexus_event';
     try {
       let ok = false;
-      if (t === 'todo' || t === 'tracker_task') {
+      if (t === 'todo') {
         const due = patch.start ? String(patch.start).split('T')[0] : null;
         ok = (await fetch(`/api/todos/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, due_date: due }) })).ok;
+      } else if (t === 'tracker_task') {
+        const due = patch.start ? String(patch.start).split('T')[0] : null;
+        ok = (await fetch(`/api/tracker/items/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, due_date: due }) })).ok;
       } else if (t === 'crm_activity') {
         ok = (await fetch(`/api/crm/activities/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: patch.title, due_at: patch.start }) })).ok;
       } else {
@@ -191,7 +194,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
   const deleteEvent = async (evt: CalEvent): Promise<boolean> => {
     const t = evt.type ?? 'nexus_event';
     let url: string | null = null;
-    if (t === 'todo' || t === 'tracker_task') url = `/api/todos/${evt.id}`;
+    if (t === 'todo') url = `/api/todos/${evt.id}`;
+    else if (t === 'tracker_task') url = `/api/tracker/items/${evt.id}`;
     else if (t === 'crm_activity') url = `/api/crm/activities/${evt.id}`;
     else if (t === 'nexus_event') url = `/api/calendar/events/${evt.id}`;
     if (!url) return false;

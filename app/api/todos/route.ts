@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
         .eq('created_by', caller.id)
         .not('assigned_to', 'is', null)
         .neq('assigned_to', caller.id)
+    } else if (view === 'team') {
+      query = caller.org_id ? query.eq('org_id', caller.org_id) : query.or(`created_by.eq.${caller.id},assigned_to.eq.${caller.id}`)
     } else {
       query = query.or(`created_by.eq.${caller.id},assigned_to.eq.${caller.id}`)
     }
