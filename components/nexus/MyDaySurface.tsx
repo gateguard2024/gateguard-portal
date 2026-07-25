@@ -97,7 +97,7 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
       type="button"
       onClick={onClick}
       className={`group relative flex flex-col overflow-hidden rounded-2xl p-5 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60 ${fill ? 'flex-1 min-h-[128px]' : 'min-h-[184px]'}`}
-      style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#586778,#495868)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 10px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 2px rgba(0,0,0,0.35)' }}
+      style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.32)', boxShadow: '0 14px 30px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 2px rgba(0,0,0,0.4)' }}
     >
       {card.badge && (
         <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(255,255,255,0.18)', color: '#DCE6F0' }}>
@@ -106,7 +106,7 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
       )}
       <NexusGlyphTile kind={card.glyph} color={card.hex} />
       <div className="text-[17px] font-semibold leading-tight" style={{ color: '#F1F6FB' }}>{card.title}</div>
-      <div className="mt-1.5 text-[13px] leading-relaxed" style={{ color: 'rgba(196,207,221,0.9)' }}>{card.subtitle}</div>
+      <div className="mt-1.5 text-[13px] leading-relaxed" style={{ color: 'rgba(201,213,227,0.96)' }}>{card.subtitle}</div>
       <div className="mt-auto flex items-center pt-4">
         <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold transition-all duration-200 group-hover:gap-2.5" style={{ color: '#8FD3EC' }}>
           Open
@@ -133,7 +133,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
     </div>
   )
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: '#0d1420', border: '1px solid rgba(0,0,0,0.6)', boxShadow: 'inset 0 8px 26px rgba(0,0,0,0.8), inset 0 -1px 0 rgba(255,255,255,0.05)' }}>
+    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.34)', boxShadow: 'inset 0 4px 16px rgba(0,0,0,0.4), 0 16px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(150,180,210,0.12)' }}>
 
       <div className="mb-4 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">Summary</span>
@@ -149,7 +149,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
             <filter id="otGl" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
           </defs>
           <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#otBz)" strokeWidth="15" strokeLinecap="round" />
-          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#070b12" strokeWidth="8" strokeLinecap="round" />
+          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#141f2c" strokeWidth="8" strokeLinecap="round" />
           <g stroke="#5a6a80" strokeWidth="2">
             <line x1="20" y1="100" x2="29" y2="100" /><line x1="33" y1="57" x2="41" y2="61" /><line x1="72" y1="31" x2="76" y2="39" /><line x1="100" y1="22" x2="100" y2="31" /><line x1="128" y1="31" x2="124" y2="39" /><line x1="167" y1="57" x2="159" y2="61" /><line x1="180" y1="100" x2="171" y2="100" />
           </g>
@@ -161,7 +161,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
           <text x="100" y="118" textAnchor="middle" fontSize="9" letterSpacing="3" fill="#8FA0B8">OPEN TASKS</text>
         </svg>
       </div>
-      <div className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-950/50 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
+      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#16222f]/70 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
         {pill('High', high, '#f43f5e')}
         {pill('Med', medium, '#fbbf24')}
         {pill('Low', low, '#22d3ee')}
@@ -184,7 +184,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
                 <span className="font-medium capitalize text-slate-400">{st.label}</span>
                 <span className="font-semibold text-slate-200">{st.value}</span>
               </div>
-              <div className="h-2.5 w-full rounded-full border border-white/5 bg-slate-950/90 p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
+              <div className="h-2.5 w-full rounded-full border border-white/10 bg-[#16222f] p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
                 <div className="h-full rounded-full" style={{ width: `${pct}%`, background: LEAD_BAR_GRADIENTS[i % LEAD_BAR_GRADIENTS.length], boxShadow: '0 0 10px rgba(56,189,248,0.5)' }} />
               </div>
             </div>
@@ -252,7 +252,7 @@ function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onO
         </div>
       </div>
       {events.length === 0 ? (
-        <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-500 hover:text-slate-300">Nothing scheduled today &mdash; open calendar</button>
+        <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-300 hover:text-white">Nothing scheduled today &mdash; open calendar</button>
       ) : (
         <div className="space-y-1.5">
           {events.slice(0, 4).map((e) => (
@@ -436,7 +436,7 @@ export function MyDaySurface() {
   }
 
   return (
-    <section className="mt-6 w-full">
+    <section className="mt-6 w-full px-3 sm:px-4">
       {(popouts.schedule || popouts.todos) && (
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {popouts.schedule && <SchedulePopout events={todayEvents} onOpen={() => openCard(cards[0])} onClose={() => setPopout('schedule', false)} />}
@@ -446,10 +446,10 @@ export function MyDaySurface() {
       {!popouts.schedule && !popouts.todos && (
         <button type="button" onClick={() => { setPopout('schedule', true); setPopout('todos', true) }} className="mb-3 rounded-full border border-slate-700/60 bg-slate-800/50 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:text-white">Show previews</button>
       )}
-      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#6a7889,#515f72)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
+      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(148,163,184,0.9)', fontWeight: 400 }}>what are we working on today?</span></h2>
+          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(224,232,241,0.92)', fontWeight: 400 }}>what are we working on today?</span></h2>
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: 'rgba(6,78,59,0.45)', border: '1px solid rgba(16,185,129,0.45)', color: '#34d399', fontFamily: 'var(--font-mono, ui-monospace)' }}>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#34d399' }} />
             Live Connection
