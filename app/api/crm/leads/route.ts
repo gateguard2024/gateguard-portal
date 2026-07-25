@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
       email:         email?.trim() ?? null,
       phone:         phone?.trim() ?? null,
       property_name: property_name?.trim() ?? company?.trim() ?? null,
+      source:        source ?? 'manual',
       city:          city?.trim() ?? null,
       state:         state?.trim() ?? null,
       property_type: property_type ?? 'Multifamily',
