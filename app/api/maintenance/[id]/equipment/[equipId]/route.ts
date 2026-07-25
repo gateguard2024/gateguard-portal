@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,6 +13,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string; equipId: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   // If confirming, stamp confirmed_at
@@ -34,9 +36,10 @@ export async function PATCH(
 
 // DELETE — remove equipment item
 export async function DELETE(
-  _: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; equipId: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('wo_installed_equipment')
     .delete()

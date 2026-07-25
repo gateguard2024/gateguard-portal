@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,9 +12,10 @@ const DEFAULT_LABOR_RATE = 65 // $65/hr burdened rate
 
 // GET /api/job-costs/[woId]
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { woId: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.woId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { woId } = params
 
   // 1. Fetch manual cost entries
@@ -146,6 +148,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { woId: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.woId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { woId } = params
   const body = await req.json()
   const { cost_type, description, quantity = 1, unit_cost } = body

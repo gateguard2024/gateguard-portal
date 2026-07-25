@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,9 +12,10 @@ const supabase = createClient(
 // DELETE /api/maintenance/[id]/parts/[partId]
 // Deletes a part record and restores inventory stock if it was consumed
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; partId: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   // Fetch the part first so we can restore stock
   const { data: part, error: fetchErr } = await supabase
     .from('work_order_parts')

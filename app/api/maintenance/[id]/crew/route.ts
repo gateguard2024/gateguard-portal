@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +9,8 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 // GET — list crew for a work order
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('work_order_crew')
     .select(`
@@ -24,6 +26,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 // POST — add a crew member
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { technician_id, role = 'crew' } = await req.json()
   if (!technician_id) return NextResponse.json({ error: 'technician_id required' }, { status: 400 })
 
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
 // DELETE — remove a crew member by work_order_crew row id
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { searchParams } = new URL(req.url)
   const memberId = searchParams.get('member_id')
   if (!memberId) return NextResponse.json({ error: 'member_id required' }, { status: 400 })

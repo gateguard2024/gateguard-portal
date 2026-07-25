@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +19,7 @@ const supabase = createClient(
 // ('task','safety','inspection','verification') used for a badge. Don't put
 // "Headend" in it; Postgres will reject the row.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { title, sort_order, category, added_by, notes, phase_id } = body
 
@@ -44,7 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 // PATCH /api/maintenance/[id]/checklist — toggle, set outcome, or update an item
-export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+  const { params } = ctx
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { item_id, title, outcome, notes, completed_by_name, sort_order, phase_id } = body
   // Accept either `completed` or `is_complete` from clients.
@@ -69,6 +73,7 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
     .from('wo_checklist_items')
     .update(update)
     .eq('id', item_id)
+    .eq('work_order_id', params.id)
     .select()
     .single()
 
@@ -77,12 +82,14 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
 }
 
 // DELETE /api/maintenance/[id]/checklist — delete an item
-export async function DELETE(req: NextRequest, _ctx: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
+  const { params } = ctx
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { item_id } = body
   if (!item_id) return NextResponse.json({ error: 'item_id required' }, { status: 400 })
 
-  const { error } = await supabase.from('wo_checklist_items').delete().eq('id', item_id)
+  const { error } = await supabase.from('wo_checklist_items').delete().eq('id', item_id).eq('work_order_id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
