@@ -55,18 +55,19 @@ function Kpi({ glyph, value, label, sub, onClick }: { glyph: string; value: stri
   )
 }
 function Dial({ label, value, unit, pct, color, note }: { label: string; value: string; unit?: string; pct: number; color: string; note: string }) {
-  const p = Math.max(0.04, Math.min(1, pct))
-  const a = Math.PI * (1 - p) // start left
-  const x = 60 + 48 * Math.cos(Math.PI - a * 0 - Math.PI * (1 - p)) // fallback; use arc path below
-  void x
-  const end = { x: 12 + 96 * ((1 - Math.cos(Math.PI * p)) / 2), y: 60 - 48 * Math.sin(Math.PI * p) }
-  const large = p > 0.5 ? 1 : 0
+  // 180° gauge: track sweeps LEFT (12,60) → over the top → RIGHT (108,60).
+  // The filled portion always sweeps the SHORT way (clockwise, sweep-flag 1),
+  // and a semicircle is never >180°, so large-arc-flag is ALWAYS 0.
+  const p = Math.max(0, Math.min(1, pct))
+  const end = { x: 60 - 48 * Math.cos(Math.PI * p), y: 60 - 48 * Math.sin(Math.PI * p) }
   return (
     <div className="rounded-2xl p-3 text-center" style={TILE_STYLE}>
       <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>{label}</div>
       <svg width="112" height="62" viewBox="0 0 120 66" className="mx-auto">
         <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="#12202c" strokeWidth="9" strokeLinecap="round" />
-        <path d={`M12 60 A48 48 0 0 ${large} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)}`} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" />
+        {p > 0.001 && (
+          <path d={`M12 60 A48 48 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" />
+        )}
         <text x="60" y="50" textAnchor="middle" fontSize="20" fill="#eaf2fb" fontWeight="800">{value}{unit ?? ''}</text>
       </svg>
       <div className="text-[9px]" style={{ color: '#98abbd' }}>{note}</div>
