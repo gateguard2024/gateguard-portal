@@ -69,7 +69,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
@@ -222,6 +222,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       { title: 'Run ARIA', subtitle: 'Research the property or company before outreach.', action: 'run_aria' },
       { title: 'Create Opportunity', subtitle: 'Convert this lead into a real revenue opportunity.', action: 'create_opportunity' },
     ],
+    canReassign: user.role === 'admin' || user.isCorporate,
   })
 }
 
@@ -340,6 +341,18 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   // ── schedule_followup ───────────────────────────────────────────────────────
+  if (action === 'log_visit') {
+    const summary = clean(body.summary ?? body.body ?? body.note) || 'Site visit completed.'
+    // Stamp the visit (drift-resilient: skip if column not migrated yet).
+    const { error: stampErr } = await supabase.from('leads').update({ visited_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', lead.id)
+    if (stampErr && !(String(stampErr.code) === '42703' || /visited_at/.test(stampErr.message ?? ''))) {
+      return NextResponse.json({ success: false, message: stampErr.message }, { status: 500 })
+    }
+    const { error: logErr } = await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'meeting', subject: 'Site visit', body: summary, lead_id: lead.id })
+    if (logErr) return NextResponse.json({ success: false, message: logErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Site visit logged.' })
+  }
+
   if (action === 'schedule_followup') {
     const title = clean(body.title) || 'Follow up on lead'
     const notes = clean(body.body ?? body.notes)
@@ -467,6 +480,24 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   // ── update_status ───────────────────────────────────────────────────────────
+  if (action === 'reassign_lead') {
+    if (!(user.role === 'admin' || user.isCorporate)) {
+      return NextResponse.json({ success: false, message: 'Only an administrator can reassign leads.' }, { status: 403 })
+    }
+    const assigneeId = clean(body.assignee_id)
+    const assigneeName = clean(body.assignee_name)
+    if (!assigneeId) return NextResponse.json({ success: false, message: 'Choose someone to assign this lead to.' }, { status: 400 })
+    const { error } = await supabase.from('leads').update({
+      assigned_to: assigneeId,
+      assigned_to_user_id: assigneeId,
+      assigned_to_name: assigneeName || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', lead.id)
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    void supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: 'Lead reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, lead_id: lead.id })
+    return NextResponse.json({ success: true, message: `Lead assigned to ${assigneeName || 'the selected user'}.` })
+  }
+
   if (action === 'update_status') {
     const stage = clean(body.stage)
 
@@ -487,6 +518,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (stage === 'converted') updates.converted_at = new Date().toISOString()
     if (stage === 'won')       updates.won_at       = new Date().toISOString()
     if (stage === 'lost' || stage === 'dead') updates.lost_at = new Date().toISOString()
+
+    // First-entry stage timestamps → time-in-stage reporting (never overwrite the first touch).
+    const Lrec = lead as unknown as Record<string, unknown>
+    const bucket = /proposal|propose|sent|negoti/.test(stage) ? 'sentInfo' : /contact|qualif/.test(stage) ? 'contacted' : 'identified'
+    const nowIso = new Date().toISOString()
+    if ((bucket === 'contacted' || bucket === 'sentInfo') && !Lrec.contacted_at) updates.contacted_at = nowIso
+    if (bucket === 'sentInfo' && !Lrec.sent_info_at) updates.sent_info_at = nowIso
 
     const { data, error: updateError } = await supabase
       .from('leads')
