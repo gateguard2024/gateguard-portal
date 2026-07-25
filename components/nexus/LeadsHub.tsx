@@ -105,6 +105,8 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   const FIELD_TO_BODY: Record<string, string> = { lead_type: 'lead_type', units: 'unit_count', entry_points: 'entry_points', cameras: 'cameras', mrr: 'mrr', pcr: 'pcr' }
   // Quick calc: MRR = Units × $10 + Cams × $100
   const mrrCalc = (r: { units: number | null; cameras: number | null }) => (r.units != null || r.cameras != null) ? (r.units ?? 0) * 10 + (r.cameras ?? 0) * 100 : null
+  // EMC (expected monthly commission) = MRR × 10%
+  const emcCalc = (r: AnalysisRow) => { const m = r.mrr ?? mrrCalc(r); return m != null ? Math.round(m * 0.10 * 100) / 100 : null }
   async function saveCell() {
     if (!edit) return
     const { id, field, value } = edit
@@ -120,11 +122,15 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
     else if (field === 'cameras') next.cameras = numify(value)
     // auto-fill MRR from the quick calc when units or cams change
     if (field === 'units' || field === 'cameras') next.mrr = mrrCalc(next)
+    // EMC = MRR × 10% (auto-derived, read-only)
+    const effMrr = next.mrr ?? mrrCalc(next)
+    next.pcr = effMrr != null ? Math.round(effMrr * 0.10 * 100) / 100 : null
     // optimistic in-place update — no full reload, no page flicker
     setDash(prev => ({ ...prev, analysis: (prev.analysis ?? []).map(r => r.id === id ? next : r) }))
     try {
       const payload: Record<string, unknown> = { action: 'update_details', [FIELD_TO_BODY[field]]: value }
       if ((field === 'units' || field === 'cameras') && next.mrr != null) payload.mrr = String(next.mrr)
+      if (['units', 'cameras', 'mrr'].includes(field) && next.pcr != null) payload.pcr = String(next.pcr)
       await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     } finally { setSavingCell(false) }
   }
@@ -211,7 +217,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
                 <thead><tr className="text-left text-[10px] uppercase tracking-[0.06em]" style={{ color: '#7d93a8' }}>
                   <th className="sticky top-0 py-1.5" style={{ background: '#233346' }}>Lead</th>
                   {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(h => (
-                    <th key={h} className="sticky top-0 py-1.5" style={{ background: '#233346' }}>{({ lead_type: 'Type', units: 'Units', entry_points: 'Entry Points', cameras: 'Cams', mrr: 'MRR', pcr: 'PCR' } as Record<string, string>)[h]}</th>
+                    <th key={h} className="sticky top-0 py-1.5" style={{ background: '#233346' }}>{({ lead_type: 'Type', units: 'Units', entry_points: 'Entry Points', cameras: 'Cams', mrr: 'MRR', pcr: 'EMC' } as Record<string, string>)[h]}</th>
                   ))}
                 </tr></thead>
                 <tbody style={{ color: '#dbeaf7' }}>
@@ -225,9 +231,9 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
                       {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(field => {
                         const editing = edit && edit.id === row.id && edit.field === field
                         const raw = row[field]
-                        const display = field === 'mrr' ? money(row.mrr ?? mrrCalc(row)) : field === 'pcr' ? money(raw as number | null) : (raw ?? '—')
+                        const display = field === 'mrr' ? money(row.mrr ?? mrrCalc(row)) : field === 'pcr' ? money(emcCalc(row)) : (raw ?? '—')
                         return (
-                          <td key={field} className="py-2" onClick={() => { if (!editing) setEdit({ id: row.id, field, value: raw == null ? '' : String(raw) }) }}>
+                          <td key={field} className="py-2" onClick={() => { if (!editing && field !== 'pcr') setEdit({ id: row.id, field, value: raw == null ? '' : String(raw) }) }}>
                             {editing ? (
                               field === 'lead_type' ? (
                                 <select autoFocus value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} onBlur={() => void saveCell()} style={CELL_INPUT}>

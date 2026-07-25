@@ -69,7 +69,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
