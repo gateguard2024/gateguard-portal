@@ -61,6 +61,32 @@ async function getProfileId(clerkUserId: string): Promise<string | null> {
 
 // Fetch lead with org-scope enforcement — uses resolveOrgScope + applyOrgScope
 // Handles corporate (all), subtree (MSO/MA/SO), self-only (SP/SD)
+// Auto-advancing lifecycle: reps' actions move the lead forward — no manual status change needed.
+// New (created_at) → Contacted (contacted_at) → Info Sent (sent_info_at) → Visited (visited_at) → Converted (converted_at).
+const LEAD_BUCKET_RANK: Record<string, number> = { identified: 0, contacted: 1, sent_info: 2, converted: 3 }
+function leadBucket(stage: string | null | undefined): string {
+  const v = String(stage ?? '').toLowerCase()
+  if (/converted|won/.test(v)) return 'converted'
+  if (/proposal|propose|sent|negoti/.test(v)) return 'sent_info'
+  if (/contact|qualif/.test(v)) return 'contacted'
+  return 'identified'
+}
+async function advanceLead(lead: { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, target: 'contacted' | 'sent_info') {
+  const now = new Date().toISOString()
+  const patch: Record<string, unknown> = {}
+  if (LEAD_BUCKET_RANK[target] > LEAD_BUCKET_RANK[leadBucket(lead.stage)]) patch.stage = target === 'contacted' ? 'contacted' : 'proposal'
+  if (!lead.contacted_at) patch.contacted_at = now                       // contact is implied by reaching either milestone
+  if (target === 'sent_info' && !lead.sent_info_at) patch.sent_info_at = now
+  if (Object.keys(patch).length === 0) return
+  patch.updated_at = now
+  // Drift-resilient: skip timestamp cols an env may not have migrated yet.
+  const { error } = await supabase.from('leads').update(patch).eq('id', lead.id)
+  if (error && (String(error.code) === '42703' || /contacted_at|sent_info_at/.test(error.message ?? ''))) {
+    delete patch.contacted_at; delete patch.sent_info_at
+    if (Object.keys(patch).length > 1) await supabase.from('leads').update(patch).eq('id', lead.id)
+  }
+}
+
 async function getScopedLead(
   leadId: string,
   user: PortalUser
@@ -69,7 +95,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, converted_at, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
@@ -337,6 +363,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
     }
 
+    await advanceLead(lead as unknown as { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, 'contacted')
     return NextResponse.json({ success: true, message: 'Call logged.', activity: data })
   }
 
@@ -480,6 +507,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   // ── update_status ───────────────────────────────────────────────────────────
+  if (action === 'send_info') {
+    const note = clean(body.note ?? body.body) || 'Information sent to the prospect.'
+    const { error } = await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'email', subject: 'Information sent', body: note, lead_id: lead.id })
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    await advanceLead(lead as unknown as { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, 'sent_info')
+    return NextResponse.json({ success: true, message: 'Marked information sent — lead moved to Sent Info.' })
+  }
+
   if (action === 'reassign_lead') {
     if (!(user.role === 'admin' || user.isCorporate)) {
       return NextResponse.json({ success: false, message: 'Only an administrator can reassign leads.' }, { status: 403 })

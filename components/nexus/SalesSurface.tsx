@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
 import { LeadsHub } from '@/components/nexus/LeadsHub'
+import { OpportunityHub } from '@/components/nexus/OpportunityHub'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
@@ -104,6 +105,7 @@ export function SalesSurface() {
   const [lifecycleOppId, setLifecycleOppId] = useState<string | null>(null)
   const [pendingStage, setPendingStage] = useState<number | null>(null)
   const [leadsHub, setLeadsHub] = useState(false)
+  const [oppsHub, setOppsHub] = useState(false)
 
   const [followups, setFollowups] = useState<Activity[]>([])
   const [opp, setOpp] = useState<OppData>({})
@@ -134,7 +136,7 @@ export function SalesSurface() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('hub') === 'leads') { setLeadsHub(true); params.delete('hub'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/') }
+    const hub = params.get('hub'); if (hub === 'leads' || hub === 'opps') { if (hub === 'leads') setLeadsHub(true); else setOppsHub(true); params.delete('hub'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/') }
   }, [])
 
   const grouped = opp.grouped ?? {}
@@ -152,7 +154,7 @@ export function SalesSurface() {
   const gaugeFrac = Math.max(0, Math.min(1, winRate / 100))
   const SEMI = 251.3
 
-  function openStatus() { setPendingStage(null); setActivePanel('opps-workbench') }
+  function openStatus() { setOppsHub(true) }
 
   return (
     <section className="mt-6 w-full px-3 sm:px-4">
@@ -214,7 +216,7 @@ export function SalesSurface() {
         <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
           <div className="flex flex-col gap-3">
             <HubTile glyph="lead" hex="#5FB8E0" title="Leads Hub" subtitle={`${leadCount ?? '—'} leads · capture, qualify, convert.`} onClick={() => setLeadsHub(true)} />
-            <HubTile glyph="pipeline" hex="#3f7fb8" title="Opportunity Hub" subtitle={`${counts.open} open · drive all 7 stages to won.`} onClick={() => setActivePanel('opps-workbench')} />
+            <HubTile glyph="pipeline" hex="#3f7fb8" title="Opportunity Hub" subtitle={`${counts.open} open · drive all 7 stages to won.`} onClick={() => setOppsHub(true)} />
           </div>
 
           {/* Center — Sales Performance */}
@@ -276,6 +278,7 @@ export function SalesSurface() {
       )}
 
       {leadsHub && <LeadsHub onClose={() => { setLeadsHub(false); void loadDashboard() }} />}
+      {oppsHub && <OpportunityHub onClose={() => { setOppsHub(false); void loadDashboard() }} />}
 
       {activePanel === 'rough-calc' && (
         <SalesDetailShell title="Rough Calculator" subtitle="Enter what's on the site — Gate Guard cost + dealer price update live." onClose={() => setActivePanel(null)}
