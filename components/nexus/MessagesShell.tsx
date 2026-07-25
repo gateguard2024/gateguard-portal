@@ -242,8 +242,15 @@ export default function MessagesShell() {
     return () => { active = false; clearTimeout(t); };
   }, [linkQuery, linkOpen]);
   const patchLink = async (conv: Conversation, payload: { linked_type: string | null; linked_id?: string | null; linked_label?: string | null }) => {
+    const prevLink = { linked_type: conv.linked_type ?? null, linked_id: conv.linked_id ?? null, linked_label: conv.linked_label ?? null };
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, linked_type: (payload.linked_type as LinkedType) ?? null, linked_id: payload.linked_id ?? null, linked_label: payload.linked_label ?? null } : c));
-    await fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+    try {
+      const r = await fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error('link failed');
+    } catch {
+      // Persistence failed — roll the optimistic link back so the UI matches the server.
+      setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, linked_type: prevLink.linked_type as LinkedType, linked_id: prevLink.linked_id, linked_label: prevLink.linked_label } : c));
+    }
   };
 
   // Create a new CRM record straight from the email (sender's name + address),
@@ -547,6 +554,7 @@ export default function MessagesShell() {
                 );
               })}
             </div>
+            {selectedConversation.channel === 'email' ? (
             <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex flex-col overflow-hidden rounded-2xl border border-[#5FB8E0]/30" style={{ background: '#1e2a3a' }}>
                 <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -581,6 +589,9 @@ export default function MessagesShell() {
                 </div>
               </div>
             </div>
+            ) : (
+              <div className="p-4 flex-shrink-0 text-center text-[12px] text-slate-500" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>Calls and texts are read-only here.</div>
+            )}
           </>
         )}
       </div>

@@ -143,7 +143,6 @@ export function SalesSurface() {
   // Gauge arc = win rate; ring = win rate too.
   const gaugeFrac = Math.max(0, Math.min(1, winRate / 100))
   const SEMI = 251.3
-  const RING = 113
 
   function openStatus() { setPendingStage(null); setActivePanel('opps-workbench') }
 
@@ -217,18 +216,11 @@ export function SalesSurface() {
               <svg viewBox="0 0 200 118" style={{ width: 210, marginTop: 4 }} role="img" aria-label={`Win rate ${winRate} percent`}>
                 <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#16222f" strokeWidth={14} strokeLinecap="round" />
                 <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#5FB8E0" strokeWidth={14} strokeLinecap="round" strokeDasharray={`${(gaugeFrac * SEMI).toFixed(1)} ${SEMI}`} />
-                <text x="100" y="84" textAnchor="middle" fill="#eaf2fb" fontSize="30" fontWeight="600">{money(opp.pipelineTotal)}</text>
-                <text x="100" y="100" textAnchor="middle" fill="#9FD8EC" fontSize="9" letterSpacing="1.5">OPEN PIPELINE · {winRate}% WIN</text>
+                <text x="100" y="84" textAnchor="middle" fill="#eaf2fb" fontSize="30" fontWeight="600">{winRate}%</text>
+                <text x="100" y="100" textAnchor="middle" fill="#9FD8EC" fontSize="9" letterSpacing="1.5">WIN RATE</text>
               </svg>
               <div className="mt-1 flex items-center gap-5">
-                <div className="flex flex-col items-center">
-                  <svg viewBox="0 0 44 44" width={44} height={44}>
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="#16222f" strokeWidth={5} />
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="#7ee0a8" strokeWidth={5} strokeLinecap="round" strokeDasharray={RING} strokeDashoffset={(RING * (1 - gaugeFrac)).toFixed(1)} transform="rotate(-90 22 22)" />
-                    <text x="22" y="26" textAnchor="middle" fill="#eaf2fb" fontSize="11" fontWeight="600">{winRate}%</text>
-                  </svg>
-                  <div className="mt-1 text-[9px]" style={{ color: '#98abbd' }}>Win rate</div>
-                </div>
+                <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#9FD8EC' }}>{money(opp.pipelineTotal)}</div><div className="text-[9px]" style={{ color: '#98abbd' }}>Pipeline</div></div>
                 <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#7ee0a8' }}>{counts.won}</div><div className="text-[9px]" style={{ color: '#98abbd' }}>Won</div></div>
                 <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#e7b15c' }}>{money(avgDeal)}</div><div className="text-[9px]" style={{ color: '#98abbd' }}>Avg deal</div></div>
               </div>

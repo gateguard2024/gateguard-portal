@@ -201,7 +201,7 @@ export async function fetchGmailInbox(
         dbThreadId = created.id
       }
 
-      await supabase.from('messages').insert({
+      const { error: insErr } = await supabase.from('messages').insert({
         thread_id: dbThreadId,
         channel_id: channel.id,
         external_message_id: id,
@@ -219,6 +219,7 @@ export async function fetchGmailInbox(
         sent_at: isOutbound ? receivedAt : null,
         created_at: receivedAt,
       })
+      if (insErr) continue
       touchedThreads.add(dbThreadId)
       const bag = threadAddrs.get(dbThreadId) ?? new Set<string>()
       for (const p of others) bag.add(p.address.toLowerCase())

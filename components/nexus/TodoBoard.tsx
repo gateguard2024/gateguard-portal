@@ -176,15 +176,15 @@ export function TodoBoard() {
                 <div className="space-y-2 border-t px-3 py-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                   <div className="flex flex-wrap gap-2">
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Priority
-                      <select defaultValue={t.priority} onChange={e => void patch(t.id, { priority: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
+                      <select value={t.priority} onChange={e => void patch(t.id, { priority: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
                         <option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option>
                       </select>
                     </label>
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Due
-                      <input type="date" defaultValue={t.due_date ?? ''} onChange={e => void patch(t.id, { due_date: e.target.value || null })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }} />
+                      <input type="date" value={t.due_date ?? ''} onChange={e => void patch(t.id, { due_date: e.target.value || null })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }} />
                     </label>
                     <label className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Status
-                      <select defaultValue={t.status} onChange={e => void patch(t.id, { status: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
+                      <select value={t.status} onChange={e => void patch(t.id, { status: e.target.value })} className="ml-1 rounded-lg px-2 py-1 text-[11px]" style={{ background: '#0f1a26', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
                         <option value="open">Open</option><option value="in_progress">In progress</option><option value="done">Done</option>
                       </select>
                     </label>

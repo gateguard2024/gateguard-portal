@@ -37,7 +37,7 @@ async function canMutate(table: string, id: string, user: { id: string; org_id?:
   if (!cols) return false
   const { data } = await supabase.from(table).select(cols.join(', ')).eq('id', id).maybeSingle()
   if (!data) return false
-  const row = data as Record<string, unknown>
+  const row = data as unknown as Record<string, unknown>
   return cols.some(c => {
     const v = row[c]
     if (!v) return false
