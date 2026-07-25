@@ -103,14 +103,29 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   }
 
   const FIELD_TO_BODY: Record<string, string> = { lead_type: 'lead_type', units: 'unit_count', entry_points: 'entry_points', cameras: 'cameras', mrr: 'mrr', pcr: 'pcr' }
+  // Quick calc: MRR = Units × $10 + Cams × $100
+  const mrrCalc = (r: { units: number | null; cameras: number | null }) => (r.units != null || r.cameras != null) ? (r.units ?? 0) * 10 + (r.cameras ?? 0) * 100 : null
   async function saveCell() {
     if (!edit) return
-    setSavingCell(true)
+    const { id, field, value } = edit
+    setEdit(null); setSavingCell(true)
+    const numify = (v: string, dec = false) => { const n = dec ? parseFloat(v) : parseInt(v, 10); return isNaN(n) ? null : n }
+    const cur = (dash.analysis ?? []).find(r => r.id === id)
+    const next: AnalysisRow = { ...(cur ?? { id, name: '', lead_type: null, units: null, entry_points: null, cameras: null, mrr: null, pcr: null }) }
+    if (field === 'lead_type') next.lead_type = value || null
+    else if (field === 'mrr') next.mrr = numify(value, true)
+    else if (field === 'pcr') next.pcr = numify(value, true)
+    else if (field === 'units') next.units = numify(value)
+    else if (field === 'entry_points') next.entry_points = numify(value)
+    else if (field === 'cameras') next.cameras = numify(value)
+    // auto-fill MRR from the quick calc when units or cams change
+    if (field === 'units' || field === 'cameras') next.mrr = mrrCalc(next)
+    // optimistic in-place update — no full reload, no page flicker
+    setDash(prev => ({ ...prev, analysis: (prev.analysis ?? []).map(r => r.id === id ? next : r) }))
     try {
-      const bodyKey = FIELD_TO_BODY[edit.field]
-      await fetch(`/api/nexus/opps/lead-window/${edit.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', [bodyKey]: edit.value }) })
-      setEdit(null)
-      await loadDash()
+      const payload: Record<string, unknown> = { action: 'update_details', [FIELD_TO_BODY[field]]: value }
+      if ((field === 'units' || field === 'cameras') && next.mrr != null) payload.mrr = String(next.mrr)
+      await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     } finally { setSavingCell(false) }
   }
 
@@ -210,7 +225,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
                       {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(field => {
                         const editing = edit && edit.id === row.id && edit.field === field
                         const raw = row[field]
-                        const display = field === 'mrr' || field === 'pcr' ? money(raw as number | null) : (raw ?? '—')
+                        const display = field === 'mrr' ? money(row.mrr ?? mrrCalc(row)) : field === 'pcr' ? money(raw as number | null) : (raw ?? '—')
                         return (
                           <td key={field} className="py-2" onClick={() => { if (!editing) setEdit({ id: row.id, field, value: raw == null ? '' : String(raw) }) }}>
                             {editing ? (
