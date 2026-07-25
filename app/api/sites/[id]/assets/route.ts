@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardSite } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +9,8 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 // GET /api/sites/[id]/assets — list assets for a site
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardSite(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('site_assets')
     .select(`
@@ -27,6 +29,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 // POST /api/sites/[id]/assets — add an installed asset to this site
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardSite(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const {
     product_id, product_name, product_sku, product_category,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardSite } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,7 +8,8 @@ const supabase = createClient(
 )
 
 // GET /api/sites/[id]/requests — list all requests for a specific site
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardSite(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('wo_requests')
     .select('*')
@@ -19,7 +21,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 // PATCH /api/sites/[id]/requests — update a request (convert to WO, close, etc.)
-export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+  const { params } = ctx
+  if (!(await guardSite(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { request_id, status, converted_wo_id } = body
 
@@ -33,6 +37,7 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
     .from('wo_requests')
     .update(update)
     .eq('id', request_id)
+    .eq('site_id', params.id)
     .select()
     .single()
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardOrg } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,7 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { id } = params
 
   const [orgRes, sitesRes, childrenRes] = await Promise.all([
@@ -85,6 +87,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { data, error } = await supabase
     .from('organizations')
