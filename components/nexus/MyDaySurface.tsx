@@ -98,8 +98,8 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 p-5 text-left backdrop-blur-2xl transition-all duration-200 hover:-translate-y-1 hover:border-white/20 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
-      style={{ background: 'rgba(15,23,42,0.66)', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}
+      className={`group relative flex flex-col overflow-hidden rounded-3xl border border-slate-700/60 p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-cyan-500/50 disabled:opacity-60 ${fill ? 'h-full min-h-[150px]' : 'min-h-[184px]'}`}
+      style={{ background: '#131a26', boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
     >
       {/* Specular top highlight + ambient accent glow (guide) */}
       <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, rgba(${color},0.55), transparent)` }} />
@@ -136,7 +136,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
     </div>
   )
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl border border-white/10 p-5 backdrop-blur-2xl" style={{ background: 'rgba(15,23,42,0.70)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+    <div className="relative flex flex-col overflow-hidden rounded-3xl border border-slate-700/60 p-5" style={{ background: '#131a26', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
       <div className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent)' }} />
       <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full" style={{ background: 'rgba(6,182,212,0.10)', filter: 'blur(48px)' }} />
 
@@ -373,8 +373,15 @@ export function MyDaySurface() {
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))', border: '1px solid rgba(45,212,191,0.14)', boxShadow: '0 20px 60px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
-        <div className="mb-4 text-center"><h2 className="text-lg font-semibold leading-tight sm:text-xl" style={{ color: 'rgba(255,255,255,0.96)', textShadow: '0 0 18px rgba(0,124,255,0.20)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.66)', fontWeight: 400 }}>what are we working on today?</span></h2></div>
+      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, #18202d, #111722)', border: '1px solid rgba(148,163,184,0.26)', boxShadow: '0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(148,163,184,0.9)', fontWeight: 400 }}>what are we working on today?</span></h2>
+          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: 'rgba(6,78,59,0.45)', border: '1px solid rgba(16,185,129,0.45)', color: '#34d399', fontFamily: 'var(--font-mono, ui-monospace)' }}>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#34d399' }} />
+            Live Connection
+          </span>
+        </div>
         <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
           <div className="flex flex-col gap-3">
             <MyDayCardButton card={cards[0]} fill onClick={() => openCard(cards[0])} />
