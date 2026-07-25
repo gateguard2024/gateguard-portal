@@ -60,6 +60,16 @@ export async function GET(req: NextRequest) {
     if (!byName.error) for (const w of byName.data ?? []) merged[w.id] = w
   }
 
+  // Jobs where this tech is on the CREW (multi-tech / onsite support) rather than
+  // the primary assignee — e.g. a Corporate support tech joined to a dealer-owned
+  // job. Without this, crew-only jobs never appear in the tech's My Jobs list.
+  const crew = await db.from('work_order_crew').select('work_order_id').eq('technician_id', techId)
+  const crewWoIds = [...new Set((crew.data ?? []).map((c: { work_order_id?: string }) => c.work_order_id).filter(Boolean))] as string[]
+  if (crewWoIds.length) {
+    const byCrew = await db.from('work_orders').select(SEL).in('id', crewWoIds).order('scheduled_date', { ascending: true })
+    if (!byCrew.error) for (const w of byCrew.data ?? []) merged[w.id] = w
+  }
+
   const list = Object.values(merged)
   if (queryErr && list.length === 0) return NextResponse.json({ error: queryErr }, { status: 500 })
 

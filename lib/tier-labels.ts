@@ -7,11 +7,11 @@
 export const TIER_LABELS: Record<string, string> = {
   corporate:          'GateGuard Corporate',
   master_agent:       'Master Agent',
-  master_dealer:      'MSO — Master System Operator',
+  master_dealer:      'Master System Operator',
   full_dealer:        'Dealer',
-  service_dealer:     'Service Partner',
-  install_contractor: 'Installation Partner',
-  sales_partner:      'Sales Partner',
+  service_dealer:     'Servicing Partner',
+  install_contractor: 'Installing Partner',
+  sales_partner:      'Channel Sales Partner',
   client:             'Client',
 }
 
@@ -20,9 +20,9 @@ export const TIER_SHORT: Record<string, string> = {
   master_agent:       'Master Agent',
   master_dealer:      'MSO',
   full_dealer:        'Dealer',
-  service_dealer:     'Service Partner',
-  install_contractor: 'Install Partner',
-  sales_partner:      'Sales Partner',
+  service_dealer:     'Servicing Partner',
+  install_contractor: 'Installing Partner',
+  sales_partner:      'Channel Sales Partner',
   client:             'Client',
 }
 

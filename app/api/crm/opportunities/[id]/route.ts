@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, isInScope } from '@/lib/org-scope'
+import { resolveOrgScope, isInScope, getProfileId } from '@/lib/org-scope'
 import { normalizeStage } from '@/lib/pipeline'
 import { kickoffProvisioning } from '@/lib/provisioning'
 
@@ -17,8 +17,15 @@ async function oppInScope(id: string): Promise<boolean> {
   const user = await getCurrentUser()
   const scope = await resolveOrgScope(user)
   if (scope.all) return true
-  const { data } = await supabase.from('opportunities').select('dealer_org_id').eq('id', id).maybeSingle()
-  return isInScope(scope, (data as { dealer_org_id?: string | null } | null)?.dealer_org_id)
+  const { data } = await supabase.from('opportunities').select('dealer_org_id, rep_id').eq('id', id).maybeSingle()
+  const row = data as { dealer_org_id?: string | null; rep_id?: string | null } | null
+  if (!row) return false
+  // Assigned rep may open the deal even if it lives in another org (cross-org sell).
+  if (row.rep_id) {
+    const profileId = await getProfileId(user.id)
+    if (profileId && row.rep_id === profileId) return true
+  }
+  return isInScope(scope, row.dealer_org_id)
 }
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {

@@ -25,7 +25,9 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (!scope.all && scope.ids.length > 0) {
-      query = query.or(`org_id.is.null,org_id.in.(${scope.ids.join(',')})`)
+      // org's leads + legacy null-org leads + any lead ASSIGNED to me, even if it
+      // lives in another org (e.g. a Channel Sales Partner given a corporate lead).
+      query = query.or(`org_id.is.null,org_id.in.(${scope.ids.join(',')}),assigned_to_user_id.eq.${user.id}`)
     }
 
     const { data, error } = await query

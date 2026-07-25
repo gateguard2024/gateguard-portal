@@ -126,29 +126,29 @@ const TIERS: {
   color: string; bg: string; border: string; who: string; flagship?: boolean
 }[] = [
   {
-    id: 'full_dealer', label: 'Full Dealership', sublabel: 'Can self-perform any role',
+    id: 'full_dealer', label: 'Dealer', sublabel: 'Can self-perform any role',
     icon: Shield, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-300',
     who: 'The flagship tier. Can sell, install, and service. Sets commission templates for their network.', flagship: true,
   },
   {
-    id: 'service_dealer', label: 'Service Dealer', sublabel: 'Day-to-day property service',
+    id: 'service_dealer', label: 'Servicing Partner', sublabel: 'Day-to-day property service',
     icon: Wrench, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-300',
     who: 'Primary ongoing relationship with properties. Handles all work orders and maintenance.',
   },
   {
-    id: 'install_contractor', label: 'Installing Contractor', sublabel: 'Installs only — no recurring',
+    id: 'install_contractor', label: 'Installing Partner', sublabel: 'Installs only — no recurring',
     icon: ClipboardList, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-300',
     who: 'Handles the initial install and commissioning. Paid from one-time setup fees only.',
   },
   {
-    id: 'sales_partner', label: 'Sales Partner', sublabel: 'Sells only, lifetime commission',
+    id: 'sales_partner', label: 'Channel Sales Partner', sublabel: 'Sells only, lifetime commission',
     icon: TrendingUp, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-300',
     who: 'Brings in new properties. Earns lifetime recurring sales commission on every unit they close.',
   },
   {
-    id: 'master_dealer', label: 'MSO — Master System Operator', sublabel: 'Dealer group account owner',
+    id: 'master_dealer', label: 'Master System Operator', sublabel: 'Owns dealers below — under a Master Agent',
     icon: Layers, color: 'text-brand-400', bg: 'bg-brand-50', border: 'border-brand-300',
-    who: 'The billing entity for a portfolio of properties. Sets commission templates.',
+    who: 'Operates a portfolio and owns Dealers beneath it. Sits under a Master Agent. Sets commission templates.',
   },
   {
     id: 'master_agent', label: 'Master Agent', sublabel: 'Recruits & oversees dealers',

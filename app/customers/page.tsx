@@ -52,9 +52,9 @@ const TIER_CONFIG: Record<OrgTier, { label: string; cls: string; icon: string }>
   master_agent:       { label: "Master Agent", cls: "tier-mso",       icon: "⭐" },
   master_dealer:      { label: "MSO",          cls: "tier-mso",       icon: "🌐" },
   full_dealer:        { label: "Dealer",        cls: "tier-dealer",    icon: "🔧" },
-  service_dealer:     { label: "Svc Partner",  cls: "tier-partner",   icon: "🛠️" },
-  install_contractor: { label: "Installer",    cls: "tier-partner",   icon: "🔩" },
-  sales_partner:      { label: "Sales Partner",cls: "tier-partner",   icon: "🤝" },
+  service_dealer:     { label: "Servicing Partner", cls: "tier-partner",   icon: "🛠️" },
+  install_contractor: { label: "Installing Partner", cls: "tier-partner",   icon: "🔩" },
+  sales_partner:      { label: "Channel Sales Partner", cls: "tier-partner",   icon: "🤝" },
   client:             { label: "Client",        cls: "tier-client",    icon: "🏘️" },
 };
 

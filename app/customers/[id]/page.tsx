@@ -97,9 +97,9 @@ const TIER_CONFIG: Record<string, { label: string; cls: string; icon: string }> 
   master_agent:       { label: "Master Agent", cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "⭐" },
   master_dealer:      { label: "MSO",          cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "🌐" },
   full_dealer:        { label: "Dealer",        cls: "bg-sky-50 text-sky-700 border border-sky-200",                 icon: "🔧" },
-  service_dealer:     { label: "Svc Partner",  cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🛠️" },
-  install_contractor: { label: "Installer",    cls: "bg-teal-50 text-teal-700 border border-teal-200",              icon: "🔩" },
-  sales_partner:      { label: "Sales Partner",cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🤝" },
+  service_dealer:     { label: "Servicing Partner", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🛠️" },
+  install_contractor: { label: "Installing Partner", cls: "bg-teal-50 text-teal-700 border border-teal-200",              icon: "🔩" },
+  sales_partner:      { label: "Channel Sales Partner", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🤝" },
   client:             { label: "Client",        cls: "bg-amber-50 text-amber-700 border border-amber-200",           icon: "🏘️" },
 };
 
