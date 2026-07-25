@@ -148,7 +148,7 @@ const formatTime = (iso?: string | null, allDay?: boolean) => {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
 const INITIAL_DATE = new Date();
-export default function CalendarViews() {
+export default function CalendarViews({ onChange }: { onChange?: () => void } = {}) {
   const [currentDate, setCurrentDate] = useState(INITIAL_DATE);
   const [view, setView] = useState<'Month' | 'Week' | 'Day' | 'List'>('Month');
   const [scope, setScope] = useState<'me' | 'team'>('me');
@@ -163,6 +163,8 @@ export default function CalendarViews() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
+  const [inlineEdit, setInlineEdit] = useState(false);
+  const [ef, setEf] = useState<{ title: string; date: string; time: string; location: string }>({ title: '', date: '', time: '', location: '' });
 
   // Which events can be edited/deleted inline. Records (work orders, PM, Google) open in their own screens.
   const EDITABLE_TYPES = new Set(['nexus_event', 'todo', 'tracker_task', 'crm_activity']);
@@ -444,47 +446,69 @@ export default function CalendarViews() {
   const renderEventPopover = () => {
     if (!selectedEvent) return null;
     const cat = CATEGORIES[selectedEvent.category];
+    const editable = isEditable(selectedEvent);
+    const inp = { color: 'rgba(234,241,248,0.92)', background: '#0f1a26', border: '1px solid rgba(150,180,210,0.28)' } as React.CSSProperties;
+    const startEdit = () => {
+      const d = new Date(selectedEvent.start); const pad = (n: number) => String(n).padStart(2, '0');
+      setEf({ title: selectedEvent.title, date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: selectedEvent.all_day ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`, location: selectedEvent.location ?? '' });
+      setInlineEdit(true);
+    };
+    const saveInline = async () => {
+      const startIso = ef.date ? new Date(`${ef.date}T${ef.time || '09:00'}:00`).toISOString() : selectedEvent.start;
+      const ok = await saveEdit(selectedEvent, { title: ef.title.trim() || selectedEvent.title, start: startIso, all_day: !ef.time });
+      if (ok) {
+        setSelectedEvent(prev => (prev ? { ...prev, title: ef.title.trim() || prev.title, start: startIso, all_day: !ef.time, location: ef.location || null } : prev));
+        setInlineEdit(false);
+        onChange?.();
+      }
+    };
+    const close = () => { setSelectedEvent(null); setInlineEdit(false); };
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={close}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex justify-between items-start">
-              <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
-                {cat.label}
-              </div>
+              <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>{cat.label}</div>
               <div className="flex items-center gap-1">
-                {isEditable(selectedEvent) && (
-                  <button onClick={() => { setEditingEvent(selectedEvent); setIsAddModalOpen(true); setSelectedEvent(null); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Edit event"><Pencil size={16} /></button>
-                )}
-                {isEditable(selectedEvent) && (
-                  <button onClick={async () => { const ev = selectedEvent; setSelectedEvent(null); await deleteEvent(ev); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Delete event"><Trash2 size={16} /></button>
-                )}
-                <button onClick={() => setSelectedEvent(null)} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Close"><X size={18} /></button>
+                {editable && !inlineEdit && (<button onClick={startEdit} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Edit event"><Pencil size={16} /></button>)}
+                {editable && (<button onClick={async () => { const ev = selectedEvent; close(); await deleteEvent(ev); onChange?.(); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Delete event"><Trash2 size={16} /></button>)}
+                <button onClick={close} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Close"><X size={18} /></button>
               </div>
             </div>
 
-            <h3 className="text-xl font-semibold leading-tight" style={textPrimary}>{selectedEvent.title}</h3>
-
-            <div className="flex flex-col gap-2.5 text-sm" style={textSecondary}>
-              <div className="flex items-center gap-2">
-                <Clock size={16} />
-                <span>
-                  {new Date(selectedEvent.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {' • '}
-                  {formatTime(selectedEvent.start, selectedEvent.all_day)}
-                  {selectedEvent.end && ` - ${formatTime(selectedEvent.end)}`}
-                </span>
-              </div>
-              {selectedEvent.location && (
-                <div className="flex items-center gap-2">
-                  <MapPin size={16} />
-                  <span>{selectedEvent.location}</span>
+            {inlineEdit ? (
+              <div className="flex flex-col gap-3">
+                <input value={ef.title} onChange={e => setEf(f => ({ ...f, title: e.target.value }))} placeholder="Event title" className="w-full bg-transparent border-b border-white/15 outline-none px-1 py-1.5 text-xl font-semibold placeholder:text-white/30" style={textPrimary} />
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="date" value={ef.date} onChange={e => setEf(f => ({ ...f, date: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
+                  <input type="time" value={ef.time} onChange={e => setEf(f => ({ ...f, time: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
                 </div>
-              )}
-            </div>
+                <input value={ef.location} onChange={e => setEf(f => ({ ...f, location: e.target.value }))} placeholder="Add location" className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setInlineEdit(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
+                  <button onClick={saveInline} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: '#3f7fb8', color: 'white' }}>Save</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-xl font-semibold leading-tight" style={textPrimary}>{selectedEvent.title}</h3>
+                <div className="flex flex-col gap-2.5 text-sm" style={textSecondary}>
+                  <div className="flex items-center gap-2">
+                    <Clock size={16} />
+                    <span>
+                      {new Date(selectedEvent.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' • '}
+                      {formatTime(selectedEvent.start, selectedEvent.all_day)}
+                      {selectedEvent.end && ` - ${formatTime(selectedEvent.end)}`}
+                    </span>
+                  </div>
+                  {selectedEvent.location && (<div className="flex items-center gap-2"><MapPin size={16} /><span>{selectedEvent.location}</span></div>)}
+                </div>
+              </>
+            )}
           </div>
 
-          {selectedEvent.href && (
+          {!inlineEdit && selectedEvent.href && (
             <div className="p-4 border-t flex gap-3" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
               <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>Open</a>
             </div>
@@ -517,6 +541,7 @@ export default function CalendarViews() {
       });
       setEvents([...events, newEvt]);
       setIsAddModalOpen(false);
+      onChange?.();
     };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
