@@ -69,7 +69,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, lead_type, entry_points, cameras, mrr, pcr, visited_at')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
@@ -417,6 +417,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       fieldsMap.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
     }
 
+    // Lead sizing (Lead Analysis) — carries to the opportunity on convert.
+    const asInt = (v: unknown) => { const n = parseInt(clean(v), 10); return isNaN(n) ? undefined : n }
+    const asNum = (v: unknown) => { const n = parseFloat(clean(v)); return isNaN(n) ? undefined : n }
+    const leadType = clean(body.lead_type); if (leadType) fieldsMap.lead_type = leadType
+    const epv = asInt(body.entry_points); if (epv !== undefined) fieldsMap.entry_points = epv
+    const camv = asInt(body.cameras);     if (camv !== undefined) fieldsMap.cameras = camv
+    const mrrv = asNum(body.mrr);         if (mrrv !== undefined) fieldsMap.mrr = mrrv
+    const pcrv = asNum(body.pcr);         if (pcrv !== undefined) fieldsMap.pcr = pcrv
+
     if (Object.keys(fieldsMap).length === 0) {
       return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
     }
@@ -593,6 +602,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       site_contact_phone:  L.phone ?? null,
       site_contact_email:  L.email ?? null,
       units:               L.unit_count ?? null,
+      vehicle_gates:       L.entry_points ?? null,
+      new_cameras:         L.cameras ?? null,
+      est_mrr:             L.mrr ?? null,
       property_type:       L.property_type ?? null,
       interests:           L.interests ?? null,
       next_step:           optionalNextStep || 'Schedule discovery call',
