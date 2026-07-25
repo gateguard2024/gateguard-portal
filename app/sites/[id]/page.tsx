@@ -333,7 +333,7 @@ export default function SiteDetailPage() {
     if (!idEdit) return
     setIdSaving(true)
     try {
-      const res = await fetch(`/api/sites/${siteId}/assets/${idEdit.id}`, {
+      const res = await fetch(`/api/sites/${id}/assets/${idEdit.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serial_number: idEdit.serial.trim(), mac_address: idEdit.mac.trim() }),
       })
