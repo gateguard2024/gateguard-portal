@@ -326,6 +326,23 @@ export default function SiteDetailPage() {
 
   const [site, setSite]             = useState<Site | null>(null)
   const [assets, setAssets]         = useState<Asset[]>([])
+  // Fleet-health backfill: inline-edit MAC (UniFi match) + Serial/ESN (Eagle Eye match).
+  const [idEdit, setIdEdit] = useState<{ id: string; serial: string; mac: string } | null>(null)
+  const [idSaving, setIdSaving] = useState(false)
+  async function saveAssetIds() {
+    if (!idEdit) return
+    setIdSaving(true)
+    try {
+      const res = await fetch(`/api/sites/${siteId}/assets/${idEdit.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serial_number: idEdit.serial.trim(), mac_address: idEdit.mac.trim() }),
+      })
+      if (res.ok) {
+        setAssets(prev => prev.map(a => a.id === idEdit.id ? { ...a, serial_number: idEdit.serial.trim() || null, mac_address: idEdit.mac.trim() || null } : a))
+        setIdEdit(null)
+      }
+    } finally { setIdSaving(false) }
+  }
   const [events, setEvents]         = useState<SiteEvent[]>([])
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [requests, setRequests]     = useState<WORequest[]>([])
@@ -861,7 +878,7 @@ export default function SiteDetailPage() {
                       <tr className="border-b border-slate-100">
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Device</th>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Location</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Serial</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Serial / MAC</th>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">IP</th>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Status</th>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Installed</th>
@@ -878,7 +895,26 @@ export default function SiteDetailPage() {
                               {asset.product_category && <div className="text-xs text-slate-400">{asset.product_category}</div>}
                             </td>
                             <td className="px-4 py-3 text-slate-600">{asset.location_note}</td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-500">{asset.serial_number ?? '—'}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                              {idEdit?.id === asset.id ? (
+                                <div className="flex flex-col gap-1">
+                                  <input value={idEdit.serial} onChange={e => setIdEdit({ ...idEdit, serial: e.target.value })} placeholder="Serial / ESN" className="w-32 border border-slate-300 rounded px-1.5 py-1 text-xs" />
+                                  <input value={idEdit.mac} onChange={e => setIdEdit({ ...idEdit, mac: e.target.value })} placeholder="MAC address" className="w-32 border border-slate-300 rounded px-1.5 py-1 text-xs" />
+                                  <div className="flex gap-1">
+                                    <button type="button" disabled={idSaving} onClick={saveAssetIds} className="px-2 py-0.5 rounded bg-brand-600 text-white text-[11px] disabled:opacity-40">{idSaving ? '…' : 'Save'}</button>
+                                    <button type="button" onClick={() => setIdEdit(null)} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">Cancel</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start gap-1.5">
+                                  <div>
+                                    <div>{asset.serial_number ?? '—'}</div>
+                                    <div className={asset.mac_address ? 'text-slate-400' : 'text-amber-500'}>{asset.mac_address ?? 'no MAC'}</div>
+                                  </div>
+                                  <button type="button" onClick={() => setIdEdit({ id: asset.id, serial: asset.serial_number ?? '', mac: asset.mac_address ?? '' })} className="text-brand-500 hover:text-brand-700" title="Backfill Serial / MAC for fleet health">✎</button>
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-3 font-mono text-xs text-slate-500">{asset.ip_address ?? '—'}</td>
                             <td className="px-4 py-3">
                               <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.color}`}>
