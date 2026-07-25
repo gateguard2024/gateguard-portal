@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar, X, Clock, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, X, Clock, MapPin, Pencil, Trash2 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ChevronDown } = require('lucide-react') as any;
 import { NEXUS_BG } from '@/components/nexus/NexusBackdrop';
@@ -15,6 +15,7 @@ type CalEvent = {
   category: CalCategory;
   location?: string | null;
   href?: string | null;
+  type?: string;
 };
 // Map the API's event `type` → calendar category.
 const TYPE_TO_CAT: Record<string, CalCategory> = {
@@ -49,6 +50,7 @@ const loadEvents = async (startISO: string, _endISO: string, scope: 'me' | 'team
           category: ev.category ?? TYPE_TO_CAT[ev.type] ?? 'todos',
           location: ev.location ?? null,
           href: ev.href ?? null,
+          type: ev.type ?? undefined,
         };
       });
     }
@@ -160,6 +162,44 @@ export default function CalendarViews() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
+
+  // Which events can be edited/deleted inline. Records (work orders, PM, Google) open in their own screens.
+  const EDITABLE_TYPES = new Set(['nexus_event', 'todo', 'tracker_task', 'crm_activity']);
+  const isEditable = (e: CalEvent) => !e.id.startsWith('lead-act-') && (!e.type || EDITABLE_TYPES.has(e.type));
+
+  const saveEdit = async (evt: CalEvent, patch: { title: string; start: string; all_day: boolean }): Promise<boolean> => {
+    const t = evt.type ?? 'nexus_event';
+    try {
+      let ok = false;
+      if (t === 'todo' || t === 'tracker_task') {
+        const due = patch.start ? String(patch.start).split('T')[0] : null;
+        ok = (await fetch(`/api/todos/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, due_date: due }) })).ok;
+      } else if (t === 'crm_activity') {
+        ok = (await fetch(`/api/crm/activities/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: patch.title, due_at: patch.start }) })).ok;
+      } else {
+        ok = (await fetch(`/api/calendar/events/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, start: patch.start, all_day: patch.all_day }) })).ok;
+      }
+      if (!ok) return false;
+      setEvents(prev => prev.map(e => (e.id === evt.id ? { ...e, title: patch.title, start: patch.start, all_day: patch.all_day } : e)));
+      return true;
+    } catch { return false; }
+  };
+
+  const deleteEvent = async (evt: CalEvent): Promise<boolean> => {
+    const t = evt.type ?? 'nexus_event';
+    let url: string | null = null;
+    if (t === 'todo' || t === 'tracker_task') url = `/api/todos/${evt.id}`;
+    else if (t === 'crm_activity') url = `/api/crm/activities/${evt.id}`;
+    else if (t === 'nexus_event') url = `/api/calendar/events/${evt.id}`;
+    if (!url) return false;
+    try {
+      const r = await fetch(url, { method: 'DELETE' });
+      if (!r.ok) return false;
+      setEvents(prev => prev.filter(e => e.id !== evt.id));
+      return true;
+    } catch { return false; }
+  };
 
   // Sync calendar — pull/push Google Calendar via the existing sync endpoint.
   async function handleSyncCalendar() {
@@ -412,7 +452,15 @@ export default function CalendarViews() {
               <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
                 {cat.label}
               </div>
-              <button onClick={() => setSelectedEvent(null)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
+              <div className="flex items-center gap-1">
+                {isEditable(selectedEvent) && (
+                  <button onClick={() => { setEditingEvent(selectedEvent); setIsAddModalOpen(true); setSelectedEvent(null); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Edit event"><Pencil size={16} /></button>
+                )}
+                {isEditable(selectedEvent) && (
+                  <button onClick={async () => { const ev = selectedEvent; setSelectedEvent(null); await deleteEvent(ev); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Delete event"><Trash2 size={16} /></button>
+                )}
+                <button onClick={() => setSelectedEvent(null)} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Close"><X size={18} /></button>
+              </div>
             </div>
 
             <h3 className="text-xl font-semibold leading-tight" style={textPrimary}>{selectedEvent.title}</h3>
@@ -453,8 +501,15 @@ export default function CalendarViews() {
       const dateVal = (form.elements.namedItem('dateStr') as HTMLInputElement)?.value;
       const timeVal = (form.elements.namedItem('timeStr') as HTMLInputElement)?.value;
       const startIso = dateVal ? new Date(`${dateVal}T${timeVal || '09:00'}:00`).toISOString() : new Date().toISOString();
+      const titleVal = (form.elements.namedItem('titleStr') as HTMLInputElement).value;
+      if (editingEvent) {
+        await saveEdit(editingEvent, { title: titleVal, start: startIso, all_day: !timeVal });
+        setEditingEvent(null);
+        setIsAddModalOpen(false);
+        return;
+      }
       const newEvt = await createEvent({
-        title: (form.elements.namedItem('titleStr') as HTMLInputElement).value,
+        title: titleVal,
         start: startIso,
         all_day: !timeVal,
         category: (form.elements.namedItem('category') as HTMLInputElement)?.value as CalCategory,
@@ -467,31 +522,31 @@ export default function CalendarViews() {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
         <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-            <h3 className="text-lg font-medium" style={textPrimary}>Add Event</h3>
-            <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
+            <h3 className="text-lg font-medium" style={textPrimary}>{editingEvent ? 'Edit Event' : 'Add Event'}</h3>
+            <button onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
           </div>
 
           <form onSubmit={handleSave} className="p-5 flex flex-col gap-4 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div>
-              <input name="titleStr" type="text" placeholder="Event title" required className="w-full bg-transparent border-b border-white/10 outline-none px-2 py-2 text-lg placeholder:text-white/30" style={textPrimary} />
+              <input name="titleStr" type="text" placeholder="Event title" defaultValue={editingEvent?.title ?? ''} required className="w-full bg-transparent border-b border-white/10 outline-none px-2 py-2 text-lg placeholder:text-white/30" style={textPrimary} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <input name="dateStr" type="date" required className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
-              <input name="timeStr" type="time" className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
+              <input name="dateStr" type="date" defaultValue={editingEvent ? String(editingEvent.start).split('T')[0] : ''} required className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
+              <input name="timeStr" type="time" defaultValue={editingEvent && !editingEvent.all_day ? (String(editingEvent.start).split('T')[1]?.slice(0,5) ?? '') : ''} className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
             </div>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => (
                 <label key={cat} className="flex items-center gap-2 text-sm p-2 rounded-xl cursor-pointer hover:bg-white/5 border border-transparent has-[:checked]:border-white/20">
-                  <input type="radio" name="category" value={cat} defaultChecked={cat === 'jobs'} className="hidden" />
+                  <input type="radio" name="category" value={cat} defaultChecked={cat === (editingEvent?.category ?? 'jobs')} className="hidden" />
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CATEGORIES[cat].color }} />
                   <span style={textPrimary}>{CATEGORIES[cat].label}</span>
                 </label>
               ))}
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
-              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>Save Event</button>
+              <button type="button" onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
+              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>{editingEvent ? 'Save changes' : 'Save Event'}</button>
             </div>
           </form>
         </div>
