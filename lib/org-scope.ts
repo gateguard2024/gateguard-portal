@@ -250,3 +250,18 @@ export function applyAssignedScope<T>(
   }
   return (query as any).eq(cfg.column, value) as T
 }
+
+/**
+ * Site ids a user has EXPLICIT membership on (site_members). Powers the
+ * "property owner / site manager sees only their sites" rule — including the
+ * many-to-many case where one login (clerk_user_id) manages sites across
+ * several different owning orgs. Returns [] for corporate/system.
+ */
+export async function getMemberSiteIds(clerkUserId: string): Promise<string[]> {
+  if (!clerkUserId || clerkUserId === 'system') return []
+  const { data } = await getSupabase()
+    .from('site_members')
+    .select('site_id')
+    .eq('clerk_user_id', clerkUserId)
+  return (data ?? []).map((r: { site_id: string }) => r.site_id)
+}

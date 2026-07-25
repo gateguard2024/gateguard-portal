@@ -13,6 +13,7 @@ import {
 const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
 import { QuickActions } from "@/components/shared/QuickActions";
 import CustomerEmailsCard from "@/components/crm/CustomerEmailsCard";
+import { TIER_SHORT } from '@/lib/tier-labels'
 
 type OrgTier =
   | "corporate" | "master_agent" | "master_dealer"
@@ -93,14 +94,14 @@ interface OrgDetail {
 }
 
 const TIER_CONFIG: Record<string, { label: string; cls: string; icon: string }> = {
-  corporate:          { label: "Corporate",    cls: "bg-brand-400/10 text-brand-400 border border-brand-400/20",    icon: "🏢" },
-  master_agent:       { label: "Master Agent", cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "⭐" },
-  master_dealer:      { label: "MSO",          cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "🌐" },
-  full_dealer:        { label: "Dealer",        cls: "bg-sky-50 text-sky-700 border border-sky-200",                 icon: "🔧" },
-  service_dealer:     { label: "Servicing Partner", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🛠️" },
-  install_contractor: { label: "Installing Partner", cls: "bg-teal-50 text-teal-700 border border-teal-200",              icon: "🔩" },
-  sales_partner:      { label: "Channel Sales Partner", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🤝" },
-  client:             { label: "Client",        cls: "bg-amber-50 text-amber-700 border border-amber-200",           icon: "🏘️" },
+  corporate:          { label: TIER_SHORT.corporate,    cls: "bg-brand-400/10 text-brand-400 border border-brand-400/20",    icon: "🏢" },
+  master_agent:       { label: TIER_SHORT.master_agent, cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "⭐" },
+  master_dealer:      { label: TIER_SHORT.master_dealer,          cls: "bg-violet-50 text-violet-700 border border-violet-200",         icon: "🌐" },
+  full_dealer:        { label: TIER_SHORT.full_dealer,        cls: "bg-sky-50 text-sky-700 border border-sky-200",                 icon: "🔧" },
+  service_dealer:     { label: TIER_SHORT.service_dealer, cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🛠️" },
+  install_contractor: { label: TIER_SHORT.install_contractor, cls: "bg-teal-50 text-teal-700 border border-teal-200",              icon: "🔩" },
+  sales_partner:      { label: TIER_SHORT.sales_partner, cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",     icon: "🤝" },
+  client:             { label: TIER_SHORT.client,        cls: "bg-amber-50 text-amber-700 border border-amber-200",           icon: "🏘️" },
 };
 
 const WO_STATUS_COLOR: Record<string, string> = {

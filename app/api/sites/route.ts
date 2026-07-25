@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, hasOrgContext } from '@/lib/org-scope'
+import { resolveOrgScope, hasOrgContext, getMemberSiteIds } from '@/lib/org-scope'
 import { stripForList } from '@/lib/sensitive-fields'
 
 const supabase = createClient(
@@ -36,8 +36,23 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  // ── Org isolation ──────────────────────────────────────────────────
-  query = applyOrgScope(query, scope, 'site')
+  // ── Org isolation + property-user site membership ──────────────────
+  // Corporate: everything. Dealers & above: their subtree via the 3 dealer FKs.
+  // Property owners / site managers (client tier): ONLY the sites they are a
+  // member of (site_members) — supports one login managing many sites across
+  // different owning orgs.
+  if (!scope.all) {
+    const memberSiteIds = await getMemberSiteIds(user.id)
+    const parts: string[] = []
+    if (scope.ids.length > 0) {
+      const idList = scope.ids.join(',')
+      parts.push(`master_dealer_id.in.(${idList})`, `install_dealer_id.in.(${idList})`, `service_dealer_id.in.(${idList})`)
+    }
+    if (memberSiteIds.length > 0) parts.push(`id.in.(${memberSiteIds.join(',')})`)
+    query = parts.length
+      ? query.or(parts.join(','))
+      : query.eq('id', '00000000-0000-0000-0000-000000000000') // no scope + no memberships → nothing
+  }
 
   if (status) query = query.eq('status', status)
   if (state)  query = query.eq('state', state)

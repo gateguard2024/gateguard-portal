@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { NDA_TEMPLATE } from '@/lib/nda-template'
 import { AGREEMENT_TEMPLATE } from '@/lib/agreement-template'
+import { TIER_SHORT } from '@/lib/tier-labels'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DollarSign, Hammer, UserCheck, UserPlus, ShieldCheck, Eye, EyeOff } = require('lucide-react') as any
 
@@ -299,12 +300,12 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 interface OrgOption { id: string; name: string; org_tier: string; tier_label: string | null; is_active: boolean }
 
 const TIER_CFG_WIZARD: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  master_agent:       { label: 'Master Agent',  icon: Star,          color: 'text-violet-700', bg: 'bg-violet-100' },
-  master_dealer:      { label: 'MSO',            icon: Layers,        color: 'text-brand-400',  bg: 'bg-brand-50'   },
-  full_dealer:        { label: 'Full Dealer',   icon: Shield,        color: 'text-indigo-700', bg: 'bg-indigo-100' },
-  service_dealer:     { label: 'Service',       icon: Wrench,        color: 'text-emerald-700',bg: 'bg-emerald-100'},
+  master_agent:       { label: TIER_SHORT.master_agent,  icon: Star,          color: 'text-violet-700', bg: 'bg-violet-100' },
+  master_dealer:      { label: TIER_SHORT.master_dealer,            icon: Layers,        color: 'text-brand-400',  bg: 'bg-brand-50'   },
+  full_dealer:        { label: TIER_SHORT.full_dealer,   icon: Shield,        color: 'text-indigo-700', bg: 'bg-indigo-100' },
+  service_dealer:     { label: TIER_SHORT.service_dealer,       icon: Wrench,        color: 'text-emerald-700',bg: 'bg-emerald-100'},
   install_contractor: { label: 'Install',       icon: ClipboardList, color: 'text-amber-700',  bg: 'bg-amber-100'  },
-  sales_partner:      { label: 'Sales Partner', icon: TrendingUp,    color: 'text-sky-700',    bg: 'bg-sky-100'    },
+  sales_partner:      { label: TIER_SHORT.sales_partner, icon: TrendingUp,    color: 'text-sky-700',    bg: 'bg-sky-100'    },
 }
 
 function OrgSearchPicker({ value, displayName, onChange, onClear, placeholder, tiers }: {

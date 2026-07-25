@@ -109,3 +109,23 @@ Sweep EVERY list + detail + mutate endpoint to confirm it scopes by the hierarch
   4. Confirm client + sales_partner + all 6 partner tiers resolve to correct scope.
   5. Flag any endpoint with no scoping (fail-open) as a security bug.
 Deliverable: an audit report listing each endpoint, its scoping status, and gaps to fix.
+
+## Property owners / site managers — sites-only, multi-site (BUILT: data + scoping)
+Property users (org_tier `client`) log in and see ONLY their site(s). A management group
+may run many sites across DIFFERENT owning orgs, so ONE login can hold many memberships.
+Mechanism = a many-to-many membership table (not org-based, which can't span owners).
+
+- **Migration 163** `site_members` (site_id, clerk_user_id, email, role owner|manager|viewer,
+  org_id optional group, is_primary = property main contact who can invite others). UNIQUE(site_id, user).
+- **Scope helper** `getMemberSiteIds(clerkUserId)` in lib/org-scope.ts.
+- **Sites list** (`/api/sites` GET): non-corporate now sees dealer-subtree sites OR sites they're a
+  member of; a client with only memberships sees exactly those. Fail-closed if neither.
+- **Site detail** (`/api/sites/[id]` GET): allows a member to open their site (PATCH left dealer-only).
+
+### NEXT (property users — UI + invite)
+- Invite flow: property main contact gets a login (site_members.is_primary=true) and can invite
+  other managers/viewers to their property/portfolio (writes site_members rows). Reuses sendClerkInvite.
+- "Assign sites" UI to grant a login N sites (the multi-site management-group case).
+- Scope the customer-facing surfaces (invoices/proposals/work orders for their sites) by getMemberSiteIds.
+- Ties into RESIDENT_APP_PLAN.md + East Ponce Village first instance.
+- Run migration 163 on beta + prod.

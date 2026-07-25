@@ -8,6 +8,7 @@ import {
   TrendingUp, ClipboardList, Layers, ChevronRight,
   CheckCircle2, Clock, Shield, Mail, Phone,
 } from 'lucide-react'
+import { TIER_LABELS, TIER_SHORT } from '@/lib/tier-labels'
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface PartnerOrg {
@@ -42,12 +43,12 @@ interface PartnerDoc {
 /* ─── Tier config ────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; tabLabel: string }> = {
-  master_agent:       { label: 'Master Agent',                    icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  tabLabel: 'Master Agent'      },
-  master_dealer:      { label: 'MSO — Master System Operator',    icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    tabLabel: 'MSO'               },
-  full_dealer:        { label: 'System Operator (Full Dealership)',icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  tabLabel: 'System Operator'   },
-  service_dealer:     { label: 'Servicing Partner',               icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', tabLabel: 'Servicing Partner' },
-  install_contractor: { label: 'Installation Partner',            icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   tabLabel: 'Install Partner'   },
-  sales_partner:      { label: 'Sales Partner',                   icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     tabLabel: 'Sales Partner'     },
+  master_agent:       { label: TIER_LABELS.master_agent,                    icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  tabLabel: TIER_SHORT.master_agent      },
+  master_dealer:      { label: TIER_LABELS.master_dealer,    icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    tabLabel: TIER_SHORT.master_dealer               },
+  full_dealer:        { label: TIER_LABELS.full_dealer,icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  tabLabel: TIER_SHORT.full_dealer   },
+  service_dealer:     { label: TIER_LABELS.service_dealer,               icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', tabLabel: TIER_SHORT.service_dealer },
+  install_contractor: { label: TIER_LABELS.install_contractor,            icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   tabLabel: TIER_SHORT.install_contractor   },
+  sales_partner:      { label: TIER_LABELS.sales_partner,                   icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     tabLabel: TIER_SHORT.sales_partner     },
 }
 
 const PARTNER_TIERS = Object.keys(TIER_CONFIG) as Array<keyof typeof TIER_CONFIG>

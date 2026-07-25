@@ -7,6 +7,7 @@ import { Clock, Star, Info, Loader2, RefreshCw, Users, ChevronDown, ChevronUp } 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Award, PhoneCall, TrendingUp: TrendingUpIcon, TrendingDown: TrendingDownIcon, LayoutGrid, List } = require("lucide-react") as any;
 import { useUser } from "@clerk/nextjs";
+import { TIER_SHORT } from '@/lib/tier-labels'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,13 +154,13 @@ function RankBadge({ rank }: { rank: number }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    corporate:       { label: "Corporate",  cls: "bg-brand-400/10 text-brand-400" },
-    master_dealer:   { label: "MSO",        cls: "bg-violet-400/10 text-violet-400" },
-    full_dealer:     { label: "Dealer",     cls: "bg-sky-400/10 text-sky-400" },
-    service_dealer:  { label: "Service",    cls: "bg-emerald-400/10 text-emerald-400" },
-    install_contractor: { label: "Install", cls: "bg-teal-400/10 text-teal-400" },
-    sales_partner:   { label: "Sales",      cls: "bg-amber-400/10 text-amber-400" },
-    client:          { label: "Client",     cls: "bg-orange-400/10 text-orange-400" },
+    corporate:       { label: TIER_SHORT.corporate,  cls: "bg-brand-400/10 text-brand-400" },
+    master_dealer:   { label: TIER_SHORT.master_dealer,        cls: "bg-violet-400/10 text-violet-400" },
+    full_dealer:     { label: TIER_SHORT.full_dealer,     cls: "bg-sky-400/10 text-sky-400" },
+    service_dealer:  { label: TIER_SHORT.service_dealer,    cls: "bg-emerald-400/10 text-emerald-400" },
+    install_contractor: { label: TIER_SHORT.install_contractor, cls: "bg-teal-400/10 text-teal-400" },
+    sales_partner:   { label: TIER_SHORT.sales_partner,      cls: "bg-amber-400/10 text-amber-400" },
+    client:          { label: TIER_SHORT.client,     cls: "bg-orange-400/10 text-orange-400" },
   };
   const t = map[tier] ?? { label: tier, cls: "bg-muted text-muted-foreground" };
   return (

@@ -20,9 +20,9 @@ export const TIER_SHORT: Record<string, string> = {
   master_agent:       'Master Agent',
   master_dealer:      'MSO',
   full_dealer:        'Dealer',
-  service_dealer:     'Servicing Partner',
-  install_contractor: 'Installing Partner',
-  sales_partner:      'Channel Sales Partner',
+  service_dealer:     'Servicing',
+  install_contractor: 'Installing',
+  sales_partner:      'Channel Sales',
   client:             'Client',
 }
 
