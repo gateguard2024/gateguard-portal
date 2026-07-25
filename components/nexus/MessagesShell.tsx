@@ -388,7 +388,7 @@ export default function MessagesShell() {
   const textPrimary = { color: 'rgba(255,255,255,0.9)' };
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
   const textFaint = { color: 'rgba(255,255,255,0.34)' };
-  const brandBlue = '#6B7EFF';
+  const brandBlue = '#5FB8E0';
   if (showSetup) {
     return (
       <div className="w-full h-[78dvh] overflow-y-auto rounded-2xl p-4" style={{ ...textPrimary, ...glassPanel }}>
@@ -428,7 +428,7 @@ export default function MessagesShell() {
           </div>
           <div className="flex items-center gap-1.5">
             {FILTERS.map(filter => (
-              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(99,102,241,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(99,102,241,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#c7d2fe' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
+              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(95,184,224,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(95,184,224,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#c7d2fe' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
             ))}
           </div>
           {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
@@ -451,7 +451,7 @@ export default function MessagesShell() {
                   const badge = conv.linked_type ? RECORD_BADGE[conv.linked_type] : null;
                   const indent = conv.unread ? 16 : 0;
                   return (
-                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(99,102,241,0.10)' : 'transparent', borderLeft: sel ? '2px solid #6366f1' : '2px solid transparent' }}>
+                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(95,184,224,0.10)' : 'transparent', borderLeft: sel ? '2px solid #6366f1' : '2px solid transparent' }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#6366f1' }} />}
@@ -542,7 +542,7 @@ export default function MessagesShell() {
               })}
             </div>
             <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="flex flex-col overflow-hidden rounded-2xl border border-cyan-500/25" style={{ background: 'rgba(15,23,42,0.9)' }}>
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-[#5FB8E0]/30" style={{ background: '#1e2a3a' }}>
                 <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center gap-4">
                     <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}>↩ Reply</button>
@@ -603,7 +603,7 @@ export default function MessagesShell() {
                 <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#18181b', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
               )}
               {linkOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#161620', border: '1px solid rgba(99,102,241,0.3)' }}>
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#161620', border: '1px solid rgba(95,184,224,0.3)' }}>
                   <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search…" className="w-full rounded-lg px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
                   <div className="max-h-56 overflow-y-auto flex flex-col gap-1 hide-scrollbar">
                     {linkResults.map(r => (
@@ -650,7 +650,7 @@ export default function MessagesShell() {
       {/* New opportunity from email — center popup to name it + add the basics */}
       {oppModal && (
         <div onClick={() => !oppBusy && setOppModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#0c1530,#070c1c)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.32)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ fontSize: 17, margin: 0 }}>New opportunity</h2>
               <button onClick={() => setOppModal(null)} aria-label="Close" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: 'white', borderRadius: 9, width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>×</button>

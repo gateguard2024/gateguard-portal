@@ -524,8 +524,10 @@ export function MyDaySurface() {
         </div>
       </DetailShell>}
 
-      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => setActivePanel(null)}>
+      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <MessagesShell />
+        </div>
       </DetailShell>}
 
       <AddEventModal open={addEventOpen} onClose={() => setAddEventOpen(false)} onSaved={loadSummary} />
