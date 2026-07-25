@@ -23,6 +23,7 @@ type OpsData = {
   response: { avgResponseHours: number | null; avgResolveDays: number | null; sampleSize: number }
   requests: { open: number; items: Array<{ id: string; title: string; site: string | null; priority: string; ageHours: number | null }> }
   schedule: { todayCount: number; items: Array<{ id: string; title: string; site: string | null; tech: string | null; priority: string; status: string }> }
+  openWorkOrders: { open: number; items: Array<{ id: string; wo: string | null; title: string; site: string | null; tech: string | null; priority: string; status: string; scheduled: string | null }> }
   pm: { overdue: number; dueSoon: number; onTrack: number }
   serviceLoad: { visits90d: number; devices: number; ratio: number }
 }
@@ -172,6 +173,29 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
 
           {/* ===== COL 2 · SERVICE PERFORMANCE ===== */}
           <div className="flex flex-col gap-3">
+
+            {/* Open Work Orders — the full open queue */}
+            <Tile>
+              <CardHead title="Open Work Orders" right={
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.35)', color: '#9FD8EC' }}>{d?.openWorkOrders.open ?? 0} open</span>
+                  <button type="button" onClick={() => onOpenTab('Work Orders')} className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>View all →</button>
+                </div>
+              } />
+              <div className="flex flex-col gap-1.5" style={{ maxHeight: 152, overflowY: 'auto' }}>
+                {(d?.openWorkOrders.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#7f96ab' }}>{loading ? 'Loading…' : 'No open work orders.'}</div>}
+                {(d?.openWorkOrders.items ?? []).map(w => (
+                  <button key={w.id} type="button" onClick={() => onOpenJob?.(w.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                    <span className="min-w-0 flex-1 truncate text-[12px]" style={{ color: '#e7eff7' }}>{w.wo ? `#${w.wo} · ` : ''}{w.title}{w.site ? ` · ${w.site}` : ''}</span>
+                    <span className="ml-2 flex shrink-0 items-center gap-2">
+                      <span className="whitespace-nowrap text-[10px] capitalize" style={{ color: '#98abbd' }}>{String(w.status).replace(/_/g, ' ')}</span>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: priorityColor(w.priority) }} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Tile>
+
             <div className="grid grid-cols-2 gap-3">
               <Dial label="Avg Response" value={d?.response.avgResponseHours != null ? String(d.response.avgResponseHours) : '—'} unit={d?.response.avgResponseHours != null ? 'h' : ''} pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0.02} color="#5FB8E0" note="request → on-site · REAL" />
               <Dial label="Avg Resolve" value={d?.response.avgResolveDays != null ? String(d.response.avgResolveDays) : '—'} unit={d?.response.avgResolveDays != null ? 'd' : ''} pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0.02} color="#7ee0a8" note="open → completed · REAL" />

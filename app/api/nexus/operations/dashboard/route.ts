@@ -45,6 +45,7 @@ const EMPTY = {
   response: { avgResponseHours: null as number | null, avgResolveDays: null as number | null, sampleSize: 0 },
   requests: { open: 0, items: [] as unknown[] },
   schedule: { todayCount: 0, items: [] as unknown[] },
+  openWorkOrders: { open: 0, items: [] as unknown[] },
   pm: { overdue: 0, dueSoon: 0, onTrack: 0 },
   serviceLoad: { visits90d: 0, devices: 0, ratio: 0 },
 }
@@ -138,6 +139,30 @@ export async function GET() {
   const visits90d = woRows.filter((w) => w.created_at && Date.parse(w.created_at as string) >= Date.now() - 90 * 864e5).length
   const ratio = devicesTotal ? Math.round((visits90d / devicesTotal) * 100) / 100 : 0
 
+  // ---- Open work orders (ALL open, org-scoped — not date-limited) ----
+  const openItems: unknown[] = []
+  {
+    let oq = supabase
+      .from('work_orders')
+      .select('id, wo_number, title, site_id, priority, status, assignee_name, scheduled_date, created_at')
+      .not('status', 'in', '(completed,cancelled,canceled,closed,done)')
+      .order('created_at', { ascending: false })
+      .limit(24)
+    oq = applyOrgScope(oq, scope)
+    const { data: ows } = await oq
+    for (const w of ows ?? []) {
+      openItems.push({ id: w.id, wo: w.wo_number ?? null, title: w.title ?? 'Work order', site: siteName.get(w.site_id as string) ?? null, tech: w.assignee_name ?? null, priority: w.priority ?? 'normal', status: w.status ?? 'open', scheduled: w.scheduled_date ?? null })
+    }
+  }
+  let openWoCount = openItems.length
+  {
+    let cq = supabase.from('work_orders').select('id', { count: 'exact', head: true })
+      .not('status', 'in', '(completed,cancelled,canceled,closed,done)')
+    cq = applyOrgScope(cq, scope)
+    const { count } = await cq
+    if (typeof count === 'number') openWoCount = count
+  }
+
   // ---- Open requests (by scoped sites) ----
   const requestItems: unknown[] = []
   {
@@ -191,6 +216,7 @@ export async function GET() {
     response: { avgResponseHours, avgResolveDays, sampleSize: respN },
     requests: { open: openReqCount, items: requestItems },
     schedule: { todayCount: scheduleItems.length, items: scheduleItems },
+    openWorkOrders: { open: openWoCount, items: openItems },
     pm: { overdue, dueSoon, onTrack },
     serviceLoad: { visits90d, devices: devicesTotal, ratio },
   })
