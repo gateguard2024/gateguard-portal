@@ -130,7 +130,7 @@ const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): 
 // --- Theme & Styles ---
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const glassBg = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
+const glassBg = { backgroundColor: '#26374a', border: '1px solid rgba(150,180,210,0.2)' };
 const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
   jobs: { label: 'Jobs', color: '#34D399' },
   sales: { label: 'Sales', color: '#22D3EE' },
@@ -248,16 +248,16 @@ export default function CalendarViews() {
                 onClick={() => setSelectedDate(date)}
                 className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
                   isSelected
-                    ? 'border-[#00c8ff] bg-[#007cff]/20 shadow-[0_0_18px_rgba(0,124,255,0.3)]'
+                    ? 'border-[#5FB8E0] bg-[#2f7fb8]/20 shadow-[0_0_18px_rgba(95,184,224,0.3)]'
                     : isToday
-                    ? 'border-[#00c8ff]/60 bg-white/10'
+                    ? 'border-[#5FB8E0]/60 bg-white/10'
                     : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-cyan-400 px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-400'}`}>{date.getDate()}</span>
                   {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-cyan-400">Today</span>}
-                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#00c8ff', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 6px rgba(34,211,238,0.8)' }} />}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.slice(0, 2).map(e => {
@@ -293,7 +293,7 @@ export default function CalendarViews() {
                 <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
                 </span>
-                <span className={`text-sm w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#6B7EFF] text-white font-bold' : ''}`} style={!isToday ? textPrimary : {}}>
+                <span className={`text-sm w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#3f7fb8] text-white font-bold' : ''}`} style={!isToday ? textPrimary : {}}>
                   {day.getDate()}
                 </span>
               </div>
@@ -374,7 +374,7 @@ export default function CalendarViews() {
           return (
             <div key={dateStr} className="mb-8">
               <div className="text-sm font-semibold mb-3 flex items-center gap-2" style={textPrimary}>
-                {isToday && <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-[#6B7EFF] text-white">Today</span>}
+                {isToday && <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-[#3f7fb8] text-white">Today</span>}
                 {d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
               </div>
               <div className="flex flex-col gap-2">
@@ -406,7 +406,7 @@ export default function CalendarViews() {
     const cat = CATEGORIES[selectedEvent.category];
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: 'rgba(30,30,30,0.9)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex justify-between items-start">
               <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
@@ -438,7 +438,7 @@ export default function CalendarViews() {
 
           {selectedEvent.href && (
             <div className="p-4 border-t flex gap-3" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-              <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#6B7EFF', color: 'white' }}>Open</a>
+              <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>Open</a>
             </div>
           )}
         </div>
@@ -465,7 +465,7 @@ export default function CalendarViews() {
     };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
             <h3 className="text-lg font-medium" style={textPrimary}>Add Event</h3>
             <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
@@ -491,7 +491,7 @@ export default function CalendarViews() {
             </div>
             <div className="flex justify-end gap-3 mt-4">
               <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
-              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#6B7EFF', color: 'white' }}>Save Event</button>
+              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>Save Event</button>
             </div>
           </form>
         </div>
@@ -528,7 +528,7 @@ export default function CalendarViews() {
             );
           })}
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#00c8ff]/45 bg-[#007cff]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,124,255,0.2)] transition-all hover:bg-[#007cff]/40">
+        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#5FB8E0]/45 bg-[#2f7fb8]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(95,184,224,0.2)] transition-all hover:bg-[#2f7fb8]/40">
           <Plus size={14} /> Add to {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </button>
       </div>
@@ -545,7 +545,7 @@ export default function CalendarViews() {
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-400">
           {(['Month', 'Week', 'Day', 'List'] as const).map(mode => (
-            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#00c8ff]/45 bg-[#007cff]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
+            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#5FB8E0]/45 bg-[#2f7fb8]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
           ))}
         </div>
         <div className="flex items-center gap-2">
@@ -555,7 +555,7 @@ export default function CalendarViews() {
             <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronRight size={16} /></button>
           </div>
           <span className="min-w-[128px] text-center text-lg font-bold text-slate-100">{monthLabel}</span>
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#00c8ff]/45 bg-[#007cff]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,124,255,0.25)] transition-all hover:bg-[#007cff]/40"><Plus size={14} /> Add Event</button>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#5FB8E0]/45 bg-[#2f7fb8]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(95,184,224,0.25)] transition-all hover:bg-[#2f7fb8]/40"><Plus size={14} /> Add Event</button>
         </div>
       </div>
 
