@@ -131,7 +131,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
     )
   }
   if (work !== null) {
-    return <WorkExistingLead initialQuery={work} onBack={() => setWork(null)} onOpen={openLead} />
+    return <WorkExistingLead initialQuery={work} onBack={() => setWork(null)} onOpen={(id) => { setWork(null); void openLead(id) }} />
   }
 
   const k = dash.kpis ?? { newLeadIds: 0, leadsVisited: 0, leadsCount: 0, conversionPct: 0 }
@@ -281,7 +281,7 @@ function FollowUpColumn({ title, items, loading, onOpen }: { title: string; item
   )
 }
 
-// "Work Existing Lead" — search + open-leads list, opens the Lead window.
+// "Work Existing Lead" — one popup: search box + a dropdown of leads → opens the Lead window.
 function WorkExistingLead({ initialQuery, onBack, onOpen }: { initialQuery: string; onBack: () => void; onOpen: (id: string) => void }) {
   const [q, setQ] = useState(initialQuery)
   const [rows, setRows] = useState<WbLead[]>([])
@@ -298,63 +298,71 @@ function WorkExistingLead({ initialQuery, onBack, onOpen }: { initialQuery: stri
   useEffect(() => { void load(initialQuery) }, [load, initialQuery])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 91, overflowY: 'auto', background: NEXUS_BG }}>
-      <NexusBackdropLayers variant="page" />
-      <div style={{ position: 'relative' }} className="mx-auto max-w-4xl p-4 pb-24">
-        <NexusGlassBackButton label="Back to Leads Hub" onClick={onBack} />
-        <div className="mt-3 rounded-[2rem] p-5" style={FRAME_STYLE}>
-          <h2 className="mb-3 text-xl font-semibold" style={{ color: '#152535' }}>Work Existing Lead</h2>
-          <div className="mb-4 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)' }}>
-            <span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span>
-            <input autoFocus value={q} onChange={e => { setQ(e.target.value); void load(e.target.value) }} placeholder="Search by name, company, location, email…" className="w-full bg-transparent text-[13px] outline-none placeholder:text-white/35" style={{ color: 'rgba(255,255,255,0.9)' }} />
-          </div>
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onBack}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#9FD8EC' }}>Work Existing Lead</div>
+        <h3 className="mb-3 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Pick a lead to work</h3>
+        <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>
+          <span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span>
+          <input autoFocus value={q} onChange={e => { setQ(e.target.value); void load(e.target.value) }} placeholder="Search or pick a lead…" className="w-full bg-transparent text-[13px] outline-none placeholder:text-white/35" style={{ color: 'rgba(255,255,255,0.92)' }} />
+        </div>
+        <div className="overflow-y-auto rounded-xl" style={{ maxHeight: 300, border: '1px solid rgba(140,170,200,0.18)' }}>
           {loading ? (
-            <div className="py-10 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading…</div>
+            <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading…</div>
           ) : rows.length === 0 ? (
-            <div className="rounded-2xl px-4 py-10 text-center text-xs" style={{ background: TILE, border: '1px solid rgba(140,170,200,0.2)', color: 'rgba(255,255,255,0.5)' }}>No leads found.</div>
-          ) : (
-            <div className="space-y-2">
-              {rows.map(l => (
-                <button key={l.id} type="button" onClick={() => onOpen(l.id)} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all hover:-translate-y-0.5" style={TILE_STYLE}>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: '#2f7fb8', color: '#eaf6ff' }}>{initials(l.contact_name ?? l.company_name)}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] font-semibold" style={{ color: '#eaf2fb' }}>{l.company_name || l.contact_name || 'Unnamed lead'}</div>
-                    <div className="truncate text-[11px]" style={{ color: '#98abbd' }}>{[l.contact_name, l.location, l.stage].filter(Boolean).join(' · ') || '—'}</div>
-                  </div>
-                  <span className="shrink-0 text-[10px]" style={{ color: '#7d93a8' }}>{relTime(l.updated_at)}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>No leads found.</div>
+          ) : rows.map(l => (
+            <button key={l.id} type="button" onClick={() => onOpen(l.id)} className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/5" style={{ borderColor: 'rgba(140,170,200,0.1)' }}>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: '#2f7fb8', color: '#eaf6ff' }}>{initials(l.contact_name ?? l.company_name)}</div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold" style={{ color: '#eaf2fb' }}>{l.company_name || l.contact_name || 'Unnamed lead'}</div>
+                <div className="truncate text-[10px]" style={{ color: '#98abbd' }}>{[l.contact_name, l.location, l.stage].filter(Boolean).join(' · ') || '—'}</div>
+              </div>
+              <span className="shrink-0 text-[10px]" style={{ color: '#7d93a8' }}>{relTime(l.updated_at)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={onBack} className="rounded-xl px-4 py-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
         </div>
       </div>
     </div>
   )
 }
 
-// New Lead modal → POST /api/crm/leads
+// New Lead modal → POST /api/crm/leads (existing leads table)
 function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
-  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', location: '', source: 'phone' })
+  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', location: '', source: 'aria', lead_type: 'MDU', units: '', entry_points: '', cameras: '' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (key: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF(p => ({ ...p, [key]: e.target.value }))
+  const SOURCES: [string, string][] = [['aria', 'ARIA research'], ['outbound', 'Cold call / field'], ['company', 'Company supplied'], ['referral', 'Referral / walk-in'], ['phone', 'Phone'], ['website', 'Website']]
   async function save() {
     if (!f.name.trim()) { setErr('A contact or property name is required.'); return }
     setBusy(true); setErr(null)
     try {
-      const res = await fetch('/api/crm/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, company: f.company, email: f.email, phone: f.phone, city: f.location, source: f.source }) })
+      const res = await fetch('/api/crm/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, company: f.company, email: f.email, phone: f.phone, city: f.location, source: f.source, lead_type: f.lead_type, units: f.units, entry_points: f.entry_points, cameras: f.cameras }) })
       const d = await res.json().catch(() => ({}))
       if (!res.ok || !d?.id) throw new Error(d?.error || 'Could not create the lead.')
       onCreated(d.id)
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not create the lead.'); setBusy(false) }
   }
   const input = 'w-full rounded-xl px-3 py-2 text-sm outline-none'
-  const inStyle = { background: '#0f1a26', border: '1px solid rgba(140,170,200,0.25)', color: 'rgba(255,255,255,0.9)' } as const
+  const inStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-3xl p-5" style={{ background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.32)', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
+      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#9FD8EC' }}>New Lead</div>
         <h3 className="mb-4 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Add a lead</h3>
+
+        <div className="mb-1.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Where did it come from?</div>
+        <div className="mb-3 grid grid-cols-2 gap-1.5">
+          {SOURCES.map(([val, label]) => {
+            const on = f.source === val
+            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', color: '#c3d3e2' }}>{label}</button>
+          })}
+        </div>
+
         <div className="space-y-2.5">
           <input className={input} style={inStyle} placeholder="Property or contact name *" value={f.name} onChange={set('name')} />
           <input className={input} style={inStyle} placeholder="Company / management co." value={f.company} onChange={set('company')} />
@@ -363,14 +371,27 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             <input className={input} style={inStyle} placeholder="Phone" value={f.phone} onChange={set('phone')} />
           </div>
           <input className={input} style={inStyle} placeholder="City / location" value={f.location} onChange={set('location')} />
-          <select className={input} style={inStyle} value={f.source} onChange={set('source')}>
-            <option value="phone">Phone</option><option value="walk_in">Walk-in</option><option value="website">Website</option><option value="referral">Referral</option><option value="aria">ARIA research</option><option value="outbound">Cold call / field</option>
-          </select>
         </div>
+
+        <div className="mb-2 mt-3.5 flex items-center gap-2">
+          <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Quick sizing</div>
+          <div className="h-px flex-1" style={{ background: 'rgba(140,170,200,0.18)' }} />
+          <div className="text-[9px]" style={{ color: '#7d93a8' }}>optional · carries to the deal</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <select className={input} style={inStyle} value={f.lead_type} onChange={set('lead_type')}>{['MDU', 'SFH', 'Commercial', 'Mixed-Use', 'Gated', 'HOA'].map(t => <option key={t} value={t}>{t}</option>)}</select>
+          <input className={input} style={inStyle} inputMode="numeric" placeholder="Units" value={f.units} onChange={set('units')} />
+          <input className={input} style={inStyle} inputMode="numeric" placeholder="Entry points" value={f.entry_points} onChange={set('entry_points')} />
+          <input className={input} style={inStyle} inputMode="numeric" placeholder="Cameras" value={f.cameras} onChange={set('cameras')} />
+        </div>
+
         {err && <div className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', color: '#fca5a5' }}>{err}</div>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
-          <button type="button" onClick={() => void save()} disabled={busy} className="rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40" style={{ background: 'linear-gradient(180deg,#3f7fb8,#2f6d94)', border: '1px solid rgba(150,200,230,0.4)', color: '#eaf6ff' }}>{busy ? 'Saving…' : 'Create lead'}</button>
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-[10px]" style={{ color: '#7d93a8' }}>Saves to your leads database</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
+            <button type="button" onClick={() => void save()} disabled={busy} className="rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40" style={{ background: 'linear-gradient(180deg,#3f7fb8,#2f6d94)', border: '1px solid rgba(150,200,230,0.4)', color: '#eaf6ff' }}>{busy ? 'Saving…' : 'Create lead'}</button>
+          </div>
         </div>
       </div>
     </div>

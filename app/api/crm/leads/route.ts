@@ -80,29 +80,37 @@ export async function POST(req: NextRequest) {
       name, email, phone, property_name,
       source, city, state, property_type,
       contact_title, units, notes, company,
+      lead_type, entry_points, cameras,
     } = body
 
     if (!name?.trim()) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
     }
 
+    // Base row → the existing `leads` table. Optional quick-sizing keys are
+    // only attached when provided so the insert never references a column a
+    // given environment may not have yet.
+    const row: Record<string, unknown> = {
+      org_id:        user.org_id ?? null,
+      contact_name:  name.trim(),
+      company_name:  company?.trim() ?? null,
+      email:         email?.trim() ?? null,
+      phone:         phone?.trim() ?? null,
+      property_name: property_name?.trim() ?? company?.trim() ?? null,
+      city:          city?.trim() ?? null,
+      state:         state?.trim() ?? null,
+      property_type: property_type ?? 'Multifamily',
+      contact_title: contact_title?.trim() ?? null,
+      unit_count:    units ? parseInt(units, 10) : null,
+      notes:         notes?.trim() ?? null,
+    }
+    if (lead_type) row.lead_type = String(lead_type)
+    const ep = parseInt(entry_points, 10); if (!isNaN(ep)) row.entry_points = ep
+    const cam = parseInt(cameras, 10); if (!isNaN(cam)) row.cameras = cam
+
     const { data, error } = await supabase
       .from('leads')
-      .insert({
-        org_id:        user.org_id ?? null,
-        contact_name:  name.trim(),
-        company_name:  company?.trim() ?? null,
-        email:         email?.trim() ?? null,
-        phone:         phone?.trim() ?? null,
-        property_name: property_name?.trim() ?? company?.trim() ?? null,
-        source:        source ?? 'manual',
-        city:          city?.trim() ?? null,
-        state:         state?.trim() ?? null,
-        property_type: property_type ?? 'Multifamily',
-        contact_title: contact_title?.trim() ?? null,
-        unit_count:    units ? parseInt(units, 10) : null,
-        notes:         notes?.trim() ?? null,
-      })
+      .insert(row)
       .select()
       .single()
 
