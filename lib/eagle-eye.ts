@@ -88,7 +88,7 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
   return { token: t.access_token, baseHost }
 }
 
-export interface EagleEyeCamera { id: string; name: string; tags: string[] }
+export interface EagleEyeCamera { id: string; name: string; tags: string[]; esn: string | null; online: boolean | null }
 
 /** Grab a single preview JPEG frame for a camera (server-side, so the token
  * never reaches the browser). Returns null if unavailable. */
@@ -161,5 +161,17 @@ export async function listEagleEyeCameras(token: string, baseHost: string): Prom
   const d = await res.json()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = (d.results ?? d.data ?? []) as any[]
-  return rows.map(c => ({ id: String(c.id ?? c.esn ?? ''), name: c.name ?? 'Camera', tags: Array.isArray(c.tags) ? c.tags.map((t: unknown) => String(t)) : [] }))
+  const eenOnline = (c: any): boolean | null => {
+    const st = c.status
+    if (typeof c.isOnline === 'boolean') return c.isOnline
+    if (st == null) return null
+    if (typeof st === 'string') return /online|streaming/i.test(st) && !/offline/i.test(st)
+    if (typeof st === 'object') {
+      const cs = st.connectionStatus ?? st.connection ?? st.cameraOnline ?? st.state
+      if (typeof cs === 'boolean') return cs
+      if (typeof cs === 'string') return /online|streaming/i.test(cs) && !/offline/i.test(cs)
+    }
+    return null
+  }
+  return rows.map(c => ({ id: String(c.id ?? c.esn ?? ''), esn: c.esn ? String(c.esn) : (c.id ? String(c.id) : null), name: c.name ?? 'Camera', tags: Array.isArray(c.tags) ? c.tags.map((t: unknown) => String(t)) : [], online: eenOnline(c) }))
 }

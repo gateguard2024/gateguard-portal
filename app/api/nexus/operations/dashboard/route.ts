@@ -75,15 +75,24 @@ export async function GET() {
 
   // ---- Fleet: site_assets (counts + install-status health) ----
   const cat = { gate: 0, camera: 0, reader: 0, intercom: 0, network: 0 }
+  const onlineLive = { gate: 0, camera: 0, reader: 0, intercom: 0, network: 0 }
   const health = { online: 0, attention: 0, offline: 0 }
+  const LIVE_MS = 48 * 36e5   // a device counts as "live online" only if polled within 48h
+  let liveSeen = 0
   {
     const { data: assets } = await supabase
       .from('site_assets')
-      .select('product_category, product_name, status')
+      .select('product_category, product_name, status, last_seen_at')
       .in('site_id', siteIds)
     for (const a of assets ?? []) {
-      cat[categoryOf(a.product_category as string | null, a.product_name as string | null)]++
+      const c = categoryOf(a.product_category as string | null, a.product_name as string | null)
+      cat[c]++
       health[healthOf(a.status as string | null)]++
+      const seen = a.last_seen_at ? Date.parse(a.last_seen_at as string) : NaN
+      if (!Number.isNaN(seen) && Date.now() - seen < LIVE_MS) {
+        liveSeen++
+        if (a.status === 'active') onlineLive[c]++
+      }
     }
   }
   const devicesTotal = cat.gate + cat.camera + cat.reader + cat.intercom + cat.network
@@ -175,8 +184,9 @@ export async function GET() {
       gates: cat.gate, cameras: cat.camera, readers: cat.reader, intercoms: cat.intercom, network: cat.network,
       devicesTotal, doors, panelsLive, panelsTotal,
       sitesActive, sitesTotal: siteRows.length, units,
+      camerasOnline: onlineLive.camera, networkOnline: onlineLive.network, readersOnline: onlineLive.reader, intercomsOnline: onlineLive.intercom,
       health,
-      onlineTrackingLive: false, // Phase 2 flips this once the UniFi/Eagle-Eye rollup writes live status
+      onlineTrackingLive: liveSeen > 0, // true once the nightly rollup has written live status
     },
     response: { avgResponseHours, avgResolveDays, sampleSize: respN },
     requests: { open: openReqCount, items: requestItems },

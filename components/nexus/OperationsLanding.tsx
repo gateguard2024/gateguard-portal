@@ -19,7 +19,7 @@ const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
 type FleetHealth = { online: number; attention: number; offline: number }
 type OpsData = {
-  fleet: { gates: number; cameras: number; readers: number; intercoms: number; network: number; devicesTotal: number; doors: number; panelsLive: number; panelsTotal: number; sitesActive: number; sitesTotal: number; units: number; health: FleetHealth; onlineTrackingLive: boolean }
+  fleet: { gates: number; cameras: number; readers: number; intercoms: number; network: number; devicesTotal: number; doors: number; panelsLive: number; panelsTotal: number; sitesActive: number; sitesTotal: number; units: number; health: FleetHealth; onlineTrackingLive: boolean; camerasOnline?: number; networkOnline?: number }
   response: { avgResponseHours: number | null; avgResolveDays: number | null; sampleSize: number }
   requests: { open: number; items: Array<{ id: string; title: string; site: string | null; priority: string; ageHours: number | null }> }
   schedule: { todayCount: number; items: Array<{ id: string; title: string; site: string | null; tech: string | null; priority: string; status: string }> }
@@ -94,6 +94,13 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
   }, [])
 
   const f = d?.fleet
+  const live = !!f?.onlineTrackingLive
+  const [refreshing, setRefreshing] = useState(false)
+  async function refreshFleet() {
+    setRefreshing(true)
+    try { await fetch('/api/nexus/operations/fleet-refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }) } catch { /* ignore */ }
+    setTimeout(() => setRefreshing(false), 2500)
+  }
   const health = f?.health ?? { online: 0, attention: 0, offline: 0 }
   const hTotal = health.online + health.attention + health.offline || 1
   const seg = (v: number) => (v / hTotal) * 100
@@ -117,6 +124,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#7ee0a8', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#7ee0a8'}` }} />{loading ? 'Loading…' : 'Live'}
             </span>
+            <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
             <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Work Order</button>
           </div>
         </div>
@@ -150,12 +158,12 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
                   <div><span style={{ color: '#f2637e' }}>●</span> Offline · {health.offline}</div>
                 </div>
               </div>
-              <div className="mt-2 border-t pt-1.5 text-[9px]" style={{ borderColor: 'rgba(140,170,200,0.14)', color: '#7f96ab' }}>Status from last service · live device monitoring arrives Phase 2</div>
+              <div className="mt-2 border-t pt-1.5 text-[9px]" style={{ borderColor: 'rgba(140,170,200,0.14)', color: '#7f96ab' }}>{live ? 'Cameras & network report live · gates show last-service status' : 'Status from last service · live monitoring turns on after first fleet sync'}</div>
             </Tile>
 
             <div className="grid grid-cols-2 gap-3">
               <Kpi glyph="⛩" value={loading ? '–' : (f?.gates ?? 0)} label="Gates" sub={`across ${f?.sitesTotal ?? 0} sites`} onClick={() => onOpenTab('Locations')} />
-              <Kpi glyph="◉" value={loading ? '–' : (f?.cameras ?? 0)} label="Cameras" sub="online: Phase 2" onClick={() => onOpenTab('Locations')} />
+              <Kpi glyph="◉" value={loading ? '–' : (f?.cameras ?? 0)} label="Cameras" sub={live ? `${f?.camerasOnline ?? 0} online · live` : 'online tracking soon'} onClick={() => onOpenTab('Locations')} />
               <Kpi glyph="▤" value={loading ? '–' : (f?.doors ?? 0)} label="Doors / Panels" sub={`${f?.panelsLive ?? 0} panels live`} onClick={() => onOpenTab('Locations')} />
               <Kpi glyph="⌂" value={loading ? '–' : (f?.sitesActive ?? 0)} label="Active Sites" sub={`${(f?.units ?? 0).toLocaleString()} units`} onClick={() => onOpenTab('Locations')} />
             </div>
