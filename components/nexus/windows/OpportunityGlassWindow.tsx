@@ -25,11 +25,11 @@ function val(v: unknown, fallback = 'Not added yet') {
 
 function Section({ title, children, count }: { title: string; children: React.ReactNode; count?: number }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</div>
         {typeof count === 'number' && count > 0 && (
-          <div className="rounded-full px-2 py-1 text-[10px]" style={{ background: 'rgba(107,126,255,0.12)', color: 'rgba(165,180,255,0.9)' }}>{count}</div>
+          <div className="rounded-full px-2 py-1 text-[10px]" style={{ background: 'rgba(95,184,224,0.12)', color: '#9FD8EC' }}>{count}</div>
         )}
       </div>
       {children}
@@ -43,7 +43,7 @@ function Empty({ text }: { text: string }) {
 
 function MiniRow({ title, subtitle, meta }: { title: string; subtitle?: string; meta?: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.16)', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>{title}</div>
         {meta && <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)', whiteSpace: 'nowrap' }}>{meta}</div>}
@@ -60,7 +60,7 @@ function ListBlock({ records, emptyText, render }: { records?: AnyRecord[]; empt
 
 function MiniStat({ label, value: v }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.16)', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.34)' }}>{label}</div>
       <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{v}</div>
     </div>
@@ -185,15 +185,15 @@ export function OpportunityGlassWindow({
     ? '#fbbf24'
     : '#a5b4ff'
 
-  const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(107,126,255,0.24)', color: 'rgba(255,255,255,0.92)' } as const
+  const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' } as const
 
   return (
     <div className="space-y-4">
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
-            <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(107,126,255,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
-              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(107,126,255,0.18)' }}>
+            <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(95,184,224,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(95,184,224,0.18)' }}>
                 <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(190,200,255,0.9)' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
               </div>
@@ -216,9 +216,9 @@ export function OpportunityGlassWindow({
                   <textarea value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Notes" rows={3} className="rounded-xl px-3 py-2 text-sm outline-none resize-none sm:col-span-2" style={editInput} />
                 </div>
               </div>
-              <div className="sticky bottom-0 flex justify-end gap-2 p-4" style={{ background: 'linear-gradient(0deg, rgba(8,14,28,0.98), rgba(8,14,28,0.90))', borderTop: '1px solid rgba(107,126,255,0.18)' }}>
+              <div className="sticky bottom-0 flex justify-end gap-2 p-4" style={{ background: 'linear-gradient(0deg, rgba(8,14,28,0.98), rgba(8,14,28,0.90))', borderTop: '1px solid rgba(95,184,224,0.18)' }}>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-                <button type="button" disabled={savingEdit} onClick={saveEdit} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+                <button type="button" disabled={savingEdit} onClick={saveEdit} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
               </div>
             </div>
           </div>
@@ -226,7 +226,7 @@ export function OpportunityGlassWindow({
       )}
 
       {/* ── Header ── */}
-      <div className="rounded-[2rem] p-5" style={{ background: 'linear-gradient(145deg, rgba(251,191,36,0.12), rgba(255,255,255,0.035))', border: '1px solid rgba(251,191,36,0.2)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#1e2a3a)', border: '1px solid rgba(95,184,224,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <button
@@ -237,7 +237,7 @@ export function OpportunityGlassWindow({
             >
               ← Back to workbench
             </button>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(251,191,36,0.8)' }}>Opportunity</div>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
             <h3 className="mt-2 text-2xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>
               {val(opp.name, 'Untitled Opportunity')}
             </h3>
@@ -276,7 +276,7 @@ export function OpportunityGlassWindow({
 
           <Section title="People">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(107,126,255,0.14)', border: '1px solid rgba(107,126,255,0.3)', color: '#c7d0ff' }}>Edit details</button>
+              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#c7d0ff' }}>Edit details</button>
             </div>
             {show('site_contact_name') ? (
               <MiniRow
@@ -381,7 +381,7 @@ export function OpportunityGlassWindow({
                     onClick={() => handleAction(action.action)}
                     disabled={busy !== null}
                     className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                    style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.16)', color: 'rgba(255,255,255,0.86)' }}
+                    style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.86)' }}
                   >
                     <div className="text-xs font-semibold">{busy === action.action ? 'Working…' : action.title}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>{action.subtitle}</div>

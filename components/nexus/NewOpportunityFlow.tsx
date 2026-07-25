@@ -278,19 +278,19 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
               {picking && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Searching…</div>}
               <div className="space-y-2">
                 {source === 'lead' && leadList.map(l => (
-                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.property_name || l.name || 'Lead'}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{[l.name, l.location, l.units ? `${l.units} units` : null].filter(Boolean).join(' · ') || 'Lead'}</div>
                   </button>
                 ))}
-                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}>No leads match. Try a different name.</div>}
+                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.18)', color: 'rgba(255,255,255,0.45)' }}>No leads match. Try a different name.</div>}
                 {source === 'customer' && results.map(r => (
-                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{r.title}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{r.subtitle}</div>
                   </button>
                 ))}
-                {source === 'customer' && query.trim().length < 2 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}>Type at least 2 characters to search.</div>}
+                {source === 'customer' && query.trim().length < 2 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.18)', color: 'rgba(255,255,255,0.45)' }}>Type at least 2 characters to search.</div>}
               </div>
             </div>
           )}
@@ -299,7 +299,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
             <div className="space-y-3">
               {selected && (
                 <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.28)' }}>
-                  <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(125,229,255,0.9)' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: '#9FD8EC' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.label}</div>
                   <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{selected.sublabel}</div>
                 </div>
@@ -332,7 +332,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
             if (step === 'form') { setStep(source === 'blank' ? 'source' : 'pick'); return }
             if (step === 'pick') { setStep('source'); return }
             onClose()
-          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
+          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.7)' }}>
             {result ? 'Close' : step === 'source' ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (

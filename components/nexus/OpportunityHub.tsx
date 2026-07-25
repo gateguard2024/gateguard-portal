@@ -218,7 +218,7 @@ function FollowUpColumn({ title, items, loading, onOpen }: { title: string; item
         <div className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#9FD8EC' }}>{title}</div>
         <span className="text-[10px]" style={{ color: '#7d93a8' }}>{items.length}</span>
       </div>
-      <div className="space-y-1.5 overflow-y-auto pr-1" style={{ maxHeight: 168 }}>
+      <div className="space-y-1.5 overflow-y-auto pr-1" style={{ maxHeight: 104 }}>
         {loading ? (
           <div className="py-4 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading…</div>
         ) : items.length === 0 ? (

@@ -16,7 +16,7 @@ type Smart = 'none' | 'lock' | 'full'
 type Cell = 'none' | 'relay' | 'full'
 type GgNet = 'double' | 'min2'
 
-const card = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '14px 16px' } as const
+const card = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 16, padding: '14px 16px', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' } as const
 const tagS = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55 } as const
 
 function Slider({ label, hint, value, min, max, step, onChange }: { label: string; hint?: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
@@ -24,9 +24,9 @@ function Slider({ label, hint, value, min, max, step, onChange }: { label: strin
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
         <span style={{ color: 'rgba(255,255,255,0.82)' }}>{label}{hint ? <span style={{ ...tagS, marginLeft: 6 }}>{hint}</span> : null}</span>
-        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: '#6B7EFF' }}>{value}</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, color: '#5FB8E0' }}>{value}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} style={{ width: '100%', accentColor: '#6B7EFF' }} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} style={{ width: '100%', accentColor: '#5FB8E0' }} />
     </div>
   )
 }
@@ -36,7 +36,7 @@ function Seg<T extends string>({ options, value, onChange }: { options: { v: T; 
     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
       {options.map(o => (
         <button key={o.v} type="button" onClick={() => onChange(o.v)}
-          style={{ flex: 1, minWidth: 54, padding: '6px', borderRadius: 9, fontSize: 11, fontWeight: 600, cursor: 'pointer', ...(value === o.v ? { background: '#6B7EFF', border: '1px solid #6B7EFF', color: '#fff' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.6)' }) }}>{o.label}</button>
+          style={{ flex: 1, minWidth: 54, padding: '6px', borderRadius: 9, fontSize: 11, fontWeight: 600, cursor: 'pointer', ...(value === o.v ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#fff' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.6)' }) }}>{o.label}</button>
       ))}
     </div>
   )
@@ -117,13 +117,13 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
   const empty = !!calc.empty
   const u = calc.livingUnits ?? 0
   const scale = calc.scale ?? 1
-  const pill = { display: 'inline-block', fontSize: 11, fontWeight: 800, color: '#6B7EFF', background: 'rgba(107,126,255,.14)', borderRadius: 8, padding: '1px 7px', marginLeft: 6 } as const
+  const pill = { display: 'inline-block', fontSize: 11, fontWeight: 800, color: '#5FB8E0', background: 'rgba(95,184,224,.14)', borderRadius: 8, padding: '1px 7px', marginLeft: 6 } as const
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
-        <button type="button" onClick={() => setTab('monthly')} className="rounded-full px-3.5 py-1.5" style={tab === 'monthly' ? { background: 'rgba(107,126,255,0.25)', border: '1px solid rgba(107,126,255,0.5)', color: '#c7d0ff' } : { color: 'rgba(255,255,255,0.6)' }}>Monthly recurring</button>
-        <button type="button" onClick={() => setTab('install')} className="rounded-full px-3.5 py-1.5" style={tab === 'install' ? { background: 'rgba(107,126,255,0.25)', border: '1px solid rgba(107,126,255,0.5)', color: '#c7d0ff' } : { color: 'rgba(255,255,255,0.6)' }}>One-time install</button>
+      <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.2)', width: 'fit-content' }}>
+        <button type="button" onClick={() => setTab('monthly')} className="rounded-full px-3.5 py-1.5" style={tab === 'monthly' ? { background: 'rgba(95,184,224,0.25)', border: '1px solid rgba(95,184,224,0.5)', color: '#9FD8EC' } : { color: 'rgba(255,255,255,0.6)' }}>Monthly recurring</button>
+        <button type="button" onClick={() => setTab('install')} className="rounded-full px-3.5 py-1.5" style={tab === 'install' ? { background: 'rgba(95,184,224,0.25)', border: '1px solid rgba(95,184,224,0.5)', color: '#9FD8EC' } : { color: 'rgba(255,255,255,0.6)' }}>One-time install</button>
       </div>
 
       {tab === 'install' ? (
@@ -148,16 +148,16 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
             <div style={{ marginBottom: 10 }}><div style={{ ...tagS, marginBottom: 5 }}>Cellular</div>
               <Seg<Cell> options={[{ v: 'none', label: 'None' }, { v: 'relay', label: 'Relay $6' }, { v: 'full', label: 'Full $60' }]} value={cellular} onChange={setCellular} /></div>
             <label className="flex cursor-pointer items-center gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.72)', marginTop: 4 }}>
-              <input type="checkbox" checked={dealerMaintains} onChange={e => setDealerMaintains(e.target.checked)} style={{ accentColor: '#6B7EFF', width: 16, height: 16 }} /> Dealer maintains entry points
+              <input type="checkbox" checked={dealerMaintains} onChange={e => setDealerMaintains(e.target.checked)} style={{ accentColor: '#5FB8E0', width: 16, height: 16 }} /> Dealer maintains entry points
             </label>
             {naturalBand !== 'dealer' && (
-              <div className="mt-3 flex items-center gap-1 rounded-full p-1 text-[11px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
+              <div className="mt-3 flex items-center gap-1 rounded-full p-1 text-[11px] font-semibold" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.2)', width: 'fit-content' }}>
                 {(naturalBand === 'corporate' ? ['corporate', 'distributor', 'dealer'] : ['distributor', 'dealer']).map(b => (
                   <button key={b} type="button" onClick={() => setPreview(b === naturalBand ? '' : (b as 'corporate' | 'distributor' | 'dealer'))} className="rounded-full px-3 py-1" style={band === b ? { background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.5)', color: '#9FD8EC' } : { color: 'rgba(255,255,255,0.6)' }}>{b === 'corporate' ? 'Corporate' : b === 'distributor' ? 'Distributor' : 'Dealer'}</button>
                 ))}
               </div>
             )}
-            <div style={{ ...card, marginTop: 10, textAlign: 'center', background: 'rgba(107,126,255,.1)', borderColor: 'rgba(107,126,255,.35)' }}>
+            <div style={{ ...card, marginTop: 10, textAlign: 'center', background: 'rgba(95,184,224,.1)', borderColor: 'rgba(95,184,224,.35)' }}>
               <div style={tagS}>Customer bill / month</div>
               <div style={{ fontSize: 26, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{empty ? '—' : usd0(calc.customerMonthly ?? 0)}</div>
               <div style={{ fontSize: 12, opacity: .75 }}>{empty ? '' : usd0(calc.perUnit ?? 0) + ' / unit'}</div>
