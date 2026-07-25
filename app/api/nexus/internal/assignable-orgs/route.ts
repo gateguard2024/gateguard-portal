@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 import { normalizeRole } from '@/lib/permissions'
+import { TIER_LABELS } from '@/lib/tier-labels'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,17 +21,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const TIER_LABELS: Record<string, string> = {
-  corporate: 'Corporate',
-  master_agent: 'Master Agent',
-  master_dealer: 'Master Dealer',
-  full_dealer: 'Full Dealer',
-  service_dealer: 'Service Dealer',
-  install_contractor: 'Install Contractor',
-  sales_partner: 'Sales Partner',
-  client: 'Client',
-}
 
 export async function GET() {
   try {
