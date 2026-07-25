@@ -8,7 +8,7 @@ const { Wifi, UserCheck, MessageSquare, ShieldCheck, Building2, CheckCircle2, Ph
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = Record<string, any>
-const BG = '#0A1020', CARD = '#0F1830', LINE = '#1E2A45', TILE = '#111B30', TXT = '#F8FAFC', MUT = '#94A3B8', BRAND = '#6B7EFF', CYAN = '#7DE5FF', GREEN = '#6EE7B7', AMBER = '#FBBF24', RED = '#FCA5A5'
+const BG = '#10161F', CARD = '#1A2532', LINE = '#22303F', TILE = '#1E2A3A', TXT = '#F8FAFC', MUT = '#94A3B8', BRAND = '#5FB8E0', CYAN = '#5FB8E0', GREEN = '#7EE0A8', AMBER = '#FBBF24', RED = '#FCA5A5'
 
 const STAGES = ['prospect', 'researching', 'contacted', 'meeting', 'proposal', 'won', 'lost'] as const
 
@@ -92,7 +92,7 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
   if (hasOwner) dmScore += 2
   if (hasEmail) dmScore += 1
   const dmColor = dmScore >= 7 ? GREEN : dmScore >= 4 ? AMBER : RED
-  const chip = (ok: boolean, label: string) => <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: ok ? 'rgba(52,211,153,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${ok ? 'rgba(52,211,153,0.4)' : LINE}`, color: ok ? GREEN : MUT }}>{ok ? '✓' : '–'} {label}</span>
+  const chip = (ok: boolean, label: string) => <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: ok ? 'rgba(126,224,168,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${ok ? 'rgba(126,224,168,0.4)' : LINE}`, color: ok ? GREEN : MUT }}>{ok ? '✓' : '–'} {label}</span>
 
   // Confirmed value, else an inferred guess shown with a confidence %, else "No data found".
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,14 +110,14 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
   return (
     <div style={{ background: BG, border: `1px solid ${LINE}`, borderRadius: 20, overflow: 'hidden', color: TXT, fontFamily: 'inherit' }}>
       {/* Header */}
-      <div style={{ padding: '20px 22px', borderBottom: `1px solid ${LINE}`, background: '#0C1426' }}>
+      <div style={{ padding: '20px 22px', borderBottom: `1px solid ${LINE}`, background: '#141E29' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: BRAND }}>ARIA case file</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 24, fontWeight: 500 }}>{val(p.name, 'Unnamed property')}</div>
             <div style={{ fontSize: 13, color: MUT, marginTop: 2 }}>{[p.address, p.city, p.state].filter(Boolean).join(', ') || 'No address found'}</div>
           </div>
-          {prospect?.freshness_score != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: GREEN, background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 999, padding: '5px 11px' }}><CheckCircle2 size={13} /> Saved</span>}
+          {prospect?.freshness_score != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: GREEN, background: 'rgba(126,224,168,0.12)', border: '1px solid rgba(126,224,168,0.3)', borderRadius: 999, padding: '5px 11px' }}><CheckCircle2 size={13} /> Saved</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10, marginTop: 16 }}>
           <Tile label="Units" value={val(p.units)} />
@@ -129,8 +129,8 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
 
       {/* What to say first */}
       {hook && (
-        <div style={{ margin: '16px 22px 0', background: 'linear-gradient(90deg, rgba(107,126,255,0.16), rgba(107,126,255,0.04))', border: '1px solid rgba(107,126,255,0.3)', borderRadius: 14, padding: '14px 16px' }}>
-          <div style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: '#C7D0FF' }}>What to say first</div>
+        <div style={{ margin: '16px 22px 0', background: 'linear-gradient(90deg, rgba(95,184,224,0.16), rgba(95,184,224,0.04))', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 14, padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: '#9FD8EC' }}>What to say first</div>
           <div style={{ fontSize: 15, marginTop: 5, lineHeight: 1.5 }}>{hook}</div>
         </div>
       )}
@@ -148,9 +148,9 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
           <div style={{ fontSize: 14 }}>{val(dm.name, 'No contact found')} {dm.title && <span style={{ color: MUT }}>· {dm.title}</span>}</div>
           <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>{chip(hasPhone, 'phone')}{chip(hasPM, 'onsite')}{chip(hasSenior, 'mgmt')}{chip(hasOwner, 'owner')}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            {dm.phone && <a href={`tel:${dm.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#C7D0FF', textDecoration: 'none' }}><Phone size={13} /> Call</a>}
-            {dm.email && <a href={`mailto:${dm.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#C7D0FF', textDecoration: 'none' }}><Mail size={13} /> Email</a>}
-            {dm.linkedin_slug && <a href={`https://linkedin.com/in/${dm.linkedin_slug}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#C7D0FF', textDecoration: 'none' }}><Linkedin size={13} /> LinkedIn</a>}
+            {dm.phone && <a href={`tel:${dm.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#9FD8EC', textDecoration: 'none' }}><Phone size={13} /> Call</a>}
+            {dm.email && <a href={`mailto:${dm.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#9FD8EC', textDecoration: 'none' }}><Mail size={13} /> Email</a>}
+            {dm.linkedin_slug && <a href={`https://linkedin.com/in/${dm.linkedin_slug}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#9FD8EC', textDecoration: 'none' }}><Linkedin size={13} /> LinkedIn</a>}
           </div>
         </Card>
 
@@ -185,7 +185,7 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes for the team…" rows={3} style={{ width: '100%', boxSizing: 'border-box', marginTop: 8, background: TILE, border: `1px solid ${LINE}`, color: TXT, borderRadius: 10, padding: 10, fontSize: 13, resize: 'vertical' }} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={save} disabled={saving || !onSaveSales} style={{ fontSize: 12, fontWeight: 600, padding: '8px 14px', borderRadius: 10, border: 0, cursor: 'pointer', background: BRAND, color: BG, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{saving ? <Loader2 size={13} /> : null} Save</button>
-            {onImport && <button onClick={onImport} disabled={busy} style={{ fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(52,211,153,0.16)', border: '1px solid rgba(52,211,153,0.4)', color: GREEN, display: 'inline-flex', alignItems: 'center', gap: 6 }}><UserPlus size={13} /> Import to CRM</button>}
+            {onImport && <button onClick={onImport} disabled={busy} style={{ fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(126,224,168,0.16)', border: '1px solid rgba(126,224,168,0.4)', color: GREEN, display: 'inline-flex', alignItems: 'center', gap: 6 }}><UserPlus size={13} /> Import to CRM</button>}
             {onReResearch && <button onClick={onReResearch} disabled={busy} style={{ fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: TILE, border: `1px solid ${LINE}`, color: MUT, display: 'inline-flex', alignItems: 'center', gap: 6 }}><RefreshCw size={13} /> Re-research</button>}
             {savedMsg && <span style={{ fontSize: 12, color: GREEN }}>{savedMsg}</span>}
           </div>
@@ -194,7 +194,7 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
 
       {/* Full detail — professor-depth on demand, same dark glass */}
       <div style={{ padding: '0 22px 4px' }}>
-        <button onClick={() => setShowDetail(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: CARD, border: `1px dashed ${showDetail ? 'rgba(107,126,255,0.5)' : '#2A3A5C'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', color: TXT, textAlign: 'left' }}>
+        <button onClick={() => setShowDetail(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: CARD, border: `1px dashed ${showDetail ? 'rgba(95,184,224,0.5)' : '#2B3C52'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', color: TXT, textAlign: 'left' }}>
           <span><span style={{ fontSize: 13, fontWeight: 500 }}>Full detail</span><span style={{ display: 'block', fontSize: 11, color: MUT, marginTop: 1 }}>Owner chain, connectivity, full tech stack, every source.</span></span>
           <span style={{ fontSize: 18, color: MUT, transform: showDetail ? 'rotate(180deg)' : 'none' }}>⌄</span>
         </button>

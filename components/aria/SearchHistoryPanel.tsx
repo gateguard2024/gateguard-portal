@@ -60,10 +60,10 @@ export function SearchHistoryPanel({ onPick, onResearch }: {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-1 pb-3 mb-1 border-b border-white/10">
-        <Clock size={13} className="text-[#6B7EFF]" />
+        <Clock size={13} className="text-[#5FB8E0]" />
         <span className="text-[11px] font-bold uppercase tracking-widest text-slate-300">Recent searches</span>
         <span className="text-[10px] font-semibold text-slate-500">{items.length}</span>
-        <button onClick={load} className="ml-auto text-slate-500 hover:text-[#6B7EFF] transition-colors" aria-label="Refresh">
+        <button onClick={load} className="ml-auto text-slate-500 hover:text-[#5FB8E0] transition-colors" aria-label="Refresh">
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -83,13 +83,13 @@ export function SearchHistoryPanel({ onPick, onResearch }: {
         {items.map(it => (
           <div
             key={it.id}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-1 hover:bg-[#131B2E] border border-transparent hover:border-white/10 transition-all group"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-1 hover:bg-[#1E2A3A] border border-transparent hover:border-white/10 transition-all group"
           >
-            <span className="shrink-0 w-8 h-8 rounded-full bg-[#0F1830] border border-white/10 flex items-center justify-center">
-              <Search size={13} className="text-slate-400 group-hover:text-[#6B7EFF]" />
+            <span className="shrink-0 w-8 h-8 rounded-full bg-[#1A2532] border border-white/10 flex items-center justify-center">
+              <Search size={13} className="text-slate-400 group-hover:text-[#5FB8E0]" />
             </span>
             <button onClick={() => onPick(it.query)} className="min-w-0 flex-1 text-left" title="Open what we already found">
-              <span className="block text-[13px] font-semibold text-slate-100 truncate group-hover:text-[#6B7EFF]">{pretty(it.query)}</span>
+              <span className="block text-[13px] font-semibold text-slate-100 truncate group-hover:text-[#5FB8E0]">{pretty(it.query)}</span>
               <span className="block text-[11px] text-slate-500">
                 {ago(it.created_at)}
                 {!!it.imported_count && it.imported_count > 0 && <span className="text-emerald-400 font-semibold"> · {it.imported_count} lead{it.imported_count > 1 ? 's' : ''}</span>}
@@ -99,7 +99,7 @@ export function SearchHistoryPanel({ onPick, onResearch }: {
                 Eye  = view what we already saved (instant, free).
                 ↻    = search again for fresh data (costs a search). */}
             <button onClick={() => onPick(it.query)} title="View saved results (instant, no new search)"
-              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#6B7EFF]/25 border border-white/10">
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#5FB8E0]/25 border border-white/10">
               <Eye size={14} />
             </button>
             <button onClick={() => onResearch?.(it.query)} title="Search again for fresh data"
