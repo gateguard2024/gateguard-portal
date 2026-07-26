@@ -130,16 +130,22 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
       <div className="mx-auto w-full max-w-5xl xl:max-w-none rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
 
         {/* Header */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Operations</div>
             <h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Command Center</h2>
           </div>
+          {/* Centered Operations Hub entry — dark grey steel, slightly larger */}
+          <button type="button" onClick={() => onOpenTab('Dashboard')}
+            className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl px-6 py-2.5 text-[13.5px] font-semibold transition-transform hover:-translate-y-[calc(50%+2px)] lg:inline-flex lg:items-center lg:gap-2"
+            style={{ background: 'linear-gradient(180deg,#3a4552,#2a333d)', border: '1px solid rgba(150,168,190,0.28)', color: '#e4ebf2', boxShadow: '0 8px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+            ⊞ Operations Hub →
+          </button>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#7ee0a8', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#7ee0a8'}` }} />{loading ? 'Loading…' : 'Live'}
             </span>
-            <button type="button" onClick={() => onOpenTab('Dashboard')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#2f7fb8', border: '1px solid rgba(95,184,224,0.4)', color: 'white' }}>⊞ Operations Hub →</button>
+            <button type="button" onClick={() => onOpenTab('Dashboard')} className="rounded-xl px-3 py-2 text-[12px] font-semibold lg:hidden" style={{ background: 'linear-gradient(180deg,#3a4552,#2a333d)', border: '1px solid rgba(150,168,190,0.28)', color: '#e4ebf2' }}>⊞ Hub</button>
             <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
             <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Work Order</button>
           </div>
