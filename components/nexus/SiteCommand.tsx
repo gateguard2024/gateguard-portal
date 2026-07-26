@@ -14,6 +14,7 @@ import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteActivity } from '@/components/nexus/SiteActivity';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
+import { SiteAccessControl } from '@/components/nexus/SiteAccessControl';
 
 const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
@@ -48,12 +49,12 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
   const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
 
   const tools: { label: string; icon: string; color: string; onClick: () => void }[] = [
-    { label: 'Unlock door', icon: '🔓', color: '#7ee0a8', onClick: () => jump('sec-doors') },
-    { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => jump('sec-relays') },
+    { label: 'Unlock door', icon: '🔓', color: '#7ee0a8', onClick: () => jump('sec-access') },
+    { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => jump('sec-access') },
     { label: 'Cameras', icon: '📹', color: '#9FD8EC', onClick: () => jump('sec-cameras') },
-    { label: 'Access & passes', icon: '🔑', color: '#fbbf24', onClick: () => jump('sec-doors') },
+    { label: 'Access & passes', icon: '🔑', color: '#fbbf24', onClick: () => jump('sec-access') },
     { label: 'Report a fault', icon: '⚠', color: '#f2637e', onClick: () => jump('sec-faults') },
-    { label: 'Activity log', icon: '📜', color: '#8FD3EC', onClick: () => jump('sec-activity') },
+    { label: 'Activity log', icon: '📜', color: '#8FD3EC', onClick: () => jump('sec-access') },
   ];
 
   return (
@@ -98,6 +99,9 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
           ))}
         </div>
       </div>
+
+      {/* Live access & control — gate reset, door unlock, passes, door activity */}
+      <div id="sec-access"><SiteAccessControl siteId={siteId} /></div>
 
       {/* Faults & uptime (built) */}
       <div id="sec-faults"><SiteIncidents siteId={siteId} /></div>

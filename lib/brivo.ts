@@ -432,6 +432,16 @@ export async function resendBrivoMobilePass(token: string, apiKey: string, userI
   return { revoked: passes.length }
 }
 
+/** Revoke ALL mobile-pass credentials for a user (turns off their pass) without
+ * issuing a new one. Returns how many were revoked. */
+export async function revokeBrivoMobilePass(token: string, apiKey: string, userId: string): Promise<{ revoked: number }> {
+  const creds = await listBrivoUserCredentials(token, apiKey, userId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const passes = creds.filter((c: any) => /mobile|bmp|pass/i.test(`${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`))
+  for (const p of passes) { try { await deleteBrivoCredential(token, apiKey, String(p.id)) } catch { /* continue */ } }
+  return { revoked: passes.length }
+}
+
 /** List the Brivo groups for a site (used for the Add-User access picker). */
 export async function listBrivoGroups(
   token: string,

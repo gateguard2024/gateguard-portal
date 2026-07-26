@@ -24,21 +24,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (body.confirm !== true) return NextResponse.json({ error: 'Toggling a relay needs confirmation.' }, { status: 400 })
 
   const channel = Number(body.channel) || 0
-  const on = body.on === true
+  const name = String(body.name ?? 'Relay')
+  // Pulse mode: momentary "gate reset" — turn on, Shelly auto-flips off after N sec.
+  const pulseSec = Number(body.pulse) > 0 ? Math.min(60, Number(body.pulse)) : 0
+  const on = pulseSec ? true : body.on === true
   try {
-    await controlSiteShellyRelay(siteId, params.id, channel, on)
-    const name = String(body.name ?? 'Relay')
+    await controlSiteShellyRelay(siteId, params.id, channel, on, pulseSec || undefined)
+    const label = pulseSec ? `Pulse (${pulseSec}s)` : (on ? 'ON' : 'OFF')
     try {
       await supabase.from('site_events').insert({
-        site_id: siteId, event_type: 'relay_toggle', event_source: 'shelly',
-        title: `Relay ${on ? 'ON' : 'OFF'}: ${name}`,
-        description: `${name} turned ${on ? 'on' : 'off'} by ${user.name} via Nexus`,
-        summary: `${name} ${on ? 'on' : 'off'} by ${user.name}`,
+        site_id: siteId, event_type: pulseSec ? 'gate_pulse' : 'relay_toggle', event_source: 'shelly',
+        title: `${pulseSec ? 'Gate pulse' : `Relay ${on ? 'ON' : 'OFF'}`}: ${name}`,
+        description: `${name} ${pulseSec ? `pulsed ${pulseSec}s` : `turned ${on ? 'on' : 'off'}`} by ${user.name} via Nexus`,
+        summary: `${name} ${label} by ${user.name}`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: { device_id: params.id, channel, on, by_user_id: user.id, by_name: user.name } as any,
+        metadata: { device_id: params.id, channel, on, pulse: pulseSec || null, by_user_id: user.id, by_name: user.name } as any,
       })
     } catch { /* audit best-effort */ }
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, pulsed: !!pulseSec })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Relay control failed' }, { status: 502 })
   }
