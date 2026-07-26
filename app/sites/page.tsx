@@ -41,17 +41,17 @@ function getSiteHealth(openWoCount: number, offlineAssetCount: number): HealthLe
 }
 
 const HEALTH_CONFIG: Record<HealthLevel, { label: string; color: string; dot: string }> = {
-  healthy:  { label: 'Healthy',  color: 'bg-green-100 text-green-700',  dot: 'text-green-500'  },
-  at_risk:  { label: 'At Risk',  color: 'bg-amber-100 text-amber-700',  dot: 'text-amber-500'  },
-  critical: { label: 'Critical', color: 'bg-red-100 text-red-700',      dot: 'text-red-500'    },
+  healthy:  { label: 'Healthy',  color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300',  dot: 'text-emerald-300'  },
+  at_risk:  { label: 'At Risk',  color: 'bg-[rgba(251,191,36,0.15)] text-amber-300',  dot: 'text-amber-300'  },
+  critical: { label: 'Critical', color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',      dot: 'text-[#fb7185]'    },
 }
 
 /* ─── status helpers ─────────────────────────────────── */
 const STATUS_CONFIG = {
-  active:   { label: 'Active',   color: 'bg-emerald-100 text-emerald-700',  dot: 'bg-emerald-500' },
-  inactive: { label: 'Inactive', color: 'bg-slate-100 text-slate-600',      dot: 'bg-slate-400'   },
-  prospect: { label: 'Prospect', color: 'bg-blue-100 text-blue-700',        dot: 'bg-blue-500'    },
-  churned:  { label: 'Churned',  color: 'bg-red-100 text-red-700',          dot: 'bg-red-500'     },
+  active:   { label: 'Active',   color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300',  dot: 'bg-emerald-500' },
+  inactive: { label: 'Inactive', color: 'bg-[#22303f] text-[#aebfce]',      dot: 'bg-slate-400'   },
+  prospect: { label: 'Prospect', color: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',        dot: 'bg-[#2f7fb8]'    },
+  churned:  { label: 'Churned',  color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',          dot: 'bg-red-500'     },
 }
 
 /* ─── New Site slide-over ────────────────────────────── */
@@ -118,29 +118,29 @@ function NewSiteSlideOver({
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
+          <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-3 text-sm">{error}</div>
         )}
 
         {/* Property name */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Property Name *</label>
+          <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Property Name *</label>
           <input
             type="text"
             value={form.name}
             onChange={e => set('name', e.target.value)}
             placeholder="Stonegate Townhomes"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
           />
         </div>
 
         {/* Type + Units */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Property Type</label>
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Property Type</label>
             <select
               value={form.property_type}
               onChange={e => set('property_type', e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             >
               <option>Multifamily</option>
               <option>HOA</option>
@@ -150,73 +150,73 @@ function NewSiteSlideOver({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Units</label>
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Units</label>
             <input
               type="number"
               value={form.units}
               onChange={e => set('units', e.target.value)}
               placeholder="186"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
           </div>
         </div>
 
         {/* Address */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Street Address</label>
+          <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Street Address</label>
           <input
             type="text"
             value={form.address}
             onChange={e => set('address', e.target.value)}
             placeholder="1400 Stonegate Dr"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
           />
         </div>
 
         <div className="grid grid-cols-6 gap-3">
           <div className="col-span-3">
-            <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">City</label>
             <input
               type="text"
               value={form.city}
               onChange={e => set('city', e.target.value)}
               placeholder="Alpharetta"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
           </div>
           <div className="col-span-1">
-            <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">State</label>
             <input
               type="text"
               value={form.state}
               onChange={e => set('state', e.target.value)}
               placeholder="GA"
               maxLength={2}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">ZIP</label>
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">ZIP</label>
             <input
               type="text"
               value={form.zip}
               onChange={e => set('zip', e.target.value)}
               placeholder="30022"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
           </div>
         </div>
 
         {/* PM */}
-        <div className="border-t border-slate-100 pt-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Property Manager</p>
+        <div className="border-t border-[#2a3a4d] pt-4">
+          <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Property Manager</p>
           <div className="space-y-3">
             <input
               type="text"
               value={form.pm_name}
               onChange={e => set('pm_name', e.target.value)}
               placeholder="Name"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -224,36 +224,36 @@ function NewSiteSlideOver({
                 value={form.pm_email}
                 onChange={e => set('pm_email', e.target.value)}
                 placeholder="Email"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
               />
               <input
                 type="tel"
                 value={form.pm_phone}
                 onChange={e => set('pm_phone', e.target.value)}
                 placeholder="Phone"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
               />
             </div>
           </div>
         </div>
 
         {/* Access */}
-        <div className="border-t border-slate-100 pt-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Site Access</p>
+        <div className="border-t border-[#2a3a4d] pt-4">
+          <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Site Access</p>
           <div className="space-y-3">
             <input
               type="text"
               value={form.gate_code}
               onChange={e => set('gate_code', e.target.value)}
               placeholder="Gate code (e.g. #4521)"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
             <textarea
               value={form.access_notes}
               onChange={e => set('access_notes', e.target.value)}
               placeholder="Access notes for techs (e.g. check in at leasing office)"
               rows={2}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
             />
           </div>
         </div>
@@ -272,21 +272,33 @@ function StatCard({
     <button
       onClick={onClick}
       className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-        active ? 'border-brand-400 bg-brand-50 shadow-sm' : 'border-slate-200 bg-white hover:border-brand-200 hover:bg-slate-50'
+        active ? 'border-[#5FB8E0] bg-[#3f7fb8] shadow-sm' : 'border-[#33465b] bg-[#1e2a3a] hover:border-[#5FB8E0] hover:bg-[#22303f]'
       }`}
     >
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
         <Icon size={18} />
       </div>
       <div>
-        <div className="text-2xl font-bold text-slate-900 leading-none">{value}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{label}</div>
+        <div className="text-2xl font-bold text-[#eaf2fb] leading-none">{value}</div>
+        <div className="text-xs text-[#98abbd] mt-0.5">{label}</div>
       </div>
     </button>
   )
 }
 
 /* ─── Main page ──────────────────────────────────────── */
+// Steel palette scoped to this page — dark steel behind the white PortalShell bg.
+const STEEL_SCOPE = {
+  '--background': '212 33% 13%', '--foreground': '210 30% 92%',
+  '--card': '213 31% 17%', '--card-foreground': '210 30% 92%',
+  '--popover': '213 31% 15%', '--popover-foreground': '210 30% 92%',
+  '--muted': '211 26% 24%', '--muted-foreground': '208 16% 66%',
+  '--accent': '212 28% 27%', '--accent-foreground': '210 30% 92%',
+  '--secondary': '212 26% 24%', '--secondary-foreground': '210 30% 92%',
+  '--border': '210 19% 31%', '--input': '210 19% 29%', '--ring': '199 58% 62%',
+  background: 'linear-gradient(180deg,#16202c,#111a24)', minHeight: '100%',
+} as unknown as React.CSSProperties
+
 export default function SitesPage() {
   const router = useRouter()
   const [sites, setSites]           = useState<Site[]>([])
@@ -325,10 +337,10 @@ export default function SitesPage() {
   }
 
   const eventIcon = (type: string) => {
-    if (type === 'device_offline')       return <AlertTriangle size={12} className="text-amber-500" />
-    if (type === 'work_order_completed') return <CheckCircle2 size={12} className="text-emerald-500" />
-    if (type === 'install')              return <Wrench size={12} className="text-brand-400" />
-    return <Clock size={12} className="text-slate-400" />
+    if (type === 'device_offline')       return <AlertTriangle size={12} className="text-amber-300" />
+    if (type === 'work_order_completed') return <CheckCircle2 size={12} className="text-emerald-300" />
+    if (type === 'install')              return <Wrench size={12} className="text-[#5FB8E0]" />
+    return <Clock size={12} className="text-[#8598aa]" />
   }
 
   // ─── Table columns ──────────────────────────────────────────────────────────
@@ -339,9 +351,9 @@ export default function SitesPage() {
       sortable: true,
       render: (_, row) => (
         <div>
-          <div className="font-semibold text-slate-900">{row.name}</div>
+          <div className="font-semibold text-[#eaf2fb]">{row.name}</div>
           {row.pm_name && (
-            <div className="text-xs text-slate-400 mt-0.5">PM: {row.pm_name}</div>
+            <div className="text-xs text-[#8598aa] mt-0.5">PM: {row.pm_name}</div>
           )}
         </div>
       ),
@@ -350,12 +362,12 @@ export default function SitesPage() {
       key: 'city',
       label: 'Location',
       render: (_, row) => row.city && row.state ? (
-        <div className="flex items-center gap-1 text-slate-600">
-          <MapPin size={12} className="text-slate-400 shrink-0" />
+        <div className="flex items-center gap-1 text-[#aebfce]">
+          <MapPin size={12} className="text-[#8598aa] shrink-0" />
           {row.city}, {row.state}
         </div>
       ) : (
-        <span className="text-slate-300">—</span>
+        <span className="text-[#aebfce]">—</span>
       ),
     },
     {
@@ -391,8 +403,8 @@ export default function SitesPage() {
       align: 'right',
       sortable: true,
       render: (_, row) => row.units
-        ? <span className="text-slate-600">{row.units.toLocaleString()}</span>
-        : <span className="text-slate-300">—</span>,
+        ? <span className="text-[#aebfce]">{row.units.toLocaleString()}</span>
+        : <span className="text-[#aebfce]">—</span>,
     },
     {
       key: 'asset_count',
@@ -400,7 +412,7 @@ export default function SitesPage() {
       align: 'right',
       sortable: true,
       render: (_, row) => (
-        <span className={`text-sm font-semibold ${row.asset_count > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+        <span className={`text-sm font-semibold ${row.asset_count > 0 ? 'text-[#eaf2fb]' : 'text-[#aebfce]'}`}>
           {row.asset_count > 0 ? row.asset_count : '—'}
         </span>
       ),
@@ -412,12 +424,12 @@ export default function SitesPage() {
         <div className="flex items-start gap-1.5 max-w-[200px]">
           <span className="mt-0.5">{eventIcon(row.latest_event.event_type)}</span>
           <div>
-            <p className="text-xs text-slate-600 line-clamp-1">{row.latest_event.summary}</p>
-            <p className="text-xs text-slate-400">{formatDate(row.latest_event.created_at)}</p>
+            <p className="text-xs text-[#aebfce] line-clamp-1">{row.latest_event.summary}</p>
+            <p className="text-xs text-[#8598aa]">{formatDate(row.latest_event.created_at)}</p>
           </div>
         </div>
       ) : (
-        <span className="text-xs text-slate-300">No events</span>
+        <span className="text-xs text-[#aebfce]">No events</span>
       ),
     },
     {
@@ -425,25 +437,26 @@ export default function SitesPage() {
       label: 'Added',
       sortable: true,
       render: (_, row) => (
-        <span className="text-xs text-slate-400">{formatDate(row.created_at)}</span>
+        <span className="text-xs text-[#8598aa]">{formatDate(row.created_at)}</span>
       ),
     },
   ]
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="min-h-full" style={STEEL_SCOPE}>
+      <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Building2 size={24} className="text-brand-400" />
+          <h1 className="text-2xl font-bold text-[#eaf2fb] flex items-center gap-2">
+            <Building2 size={24} className="text-[#5FB8E0]" />
             Properties
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">All installed sites — equipment, service history, and dealer attribution</p>
+          <p className="text-sm text-[#98abbd] mt-0.5">All installed sites — equipment, service history, and dealer attribution</p>
         </div>
         <button
           onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+          className="flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
         >
           <Plus size={16} />
           Add Property
@@ -452,21 +465,21 @@ export default function SitesPage() {
 
       {/* Stat bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Active"   value={counts.active}   icon={CheckCircle2}  color="bg-emerald-100 text-emerald-600" active={filterStatus === 'active'}   onClick={() => setFilter(f => f === 'active'   ? null : 'active')}   />
-        <StatCard label="Prospect" value={counts.prospect} icon={Clock}         color="bg-blue-100 text-blue-600"       active={filterStatus === 'prospect'} onClick={() => setFilter(f => f === 'prospect' ? null : 'prospect')} />
-        <StatCard label="Inactive" value={counts.inactive} icon={XCircle}       color="bg-slate-100 text-slate-500"    active={filterStatus === 'inactive'} onClick={() => setFilter(f => f === 'inactive' ? null : 'inactive')} />
-        <StatCard label="Churned"  value={counts.churned}  icon={AlertTriangle}  color="bg-red-100 text-red-500"        active={filterStatus === 'churned'}  onClick={() => setFilter(f => f === 'churned'  ? null : 'churned')}  />
+        <StatCard label="Active"   value={counts.active}   icon={CheckCircle2}  color="bg-[rgba(126,224,168,0.15)] text-emerald-300" active={filterStatus === 'active'}   onClick={() => setFilter(f => f === 'active'   ? null : 'active')}   />
+        <StatCard label="Prospect" value={counts.prospect} icon={Clock}         color="bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]"       active={filterStatus === 'prospect'} onClick={() => setFilter(f => f === 'prospect' ? null : 'prospect')} />
+        <StatCard label="Inactive" value={counts.inactive} icon={XCircle}       color="bg-[#22303f] text-[#98abbd]"    active={filterStatus === 'inactive'} onClick={() => setFilter(f => f === 'inactive' ? null : 'inactive')} />
+        <StatCard label="Churned"  value={counts.churned}  icon={AlertTriangle}  color="bg-[rgba(239,68,68,0.18)] text-[#fb7185]"        active={filterStatus === 'churned'}  onClick={() => setFilter(f => f === 'churned'  ? null : 'churned')}  />
       </div>
 
       {/* Search */}
       <div className="relative mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8598aa]" />
         <input
           type="text"
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search by name, address, or city…"
-          className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+          className="w-full pl-9 pr-4 py-2.5 border border-[#3a4a5c] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] bg-[#1e2a3a]"
         />
       </div>
 
@@ -490,6 +503,7 @@ export default function SitesPage() {
 
       {/* New site panel */}
       <NewSiteSlideOver open={showNew} onClose={() => setShowNew(false)} onSaved={handleSaved} />
+    </div>
     </div>
   )
 }

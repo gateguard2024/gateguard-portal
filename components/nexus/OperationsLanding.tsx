@@ -176,7 +176,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
                 </svg>
                 <div className="text-[11px] leading-[1.7]" style={{ color: '#c3d3e2' }}>
                   <div><span style={{ color: '#7ee0a8' }}>●</span> Online · {health.online}</div>
-                  <div><span style={{ color: '#fbbf24' }}>●</span> Attention · {health.attention}</div>
+                  <div><span style={{ color: '#fbbf24' }}>●</span> Attn · {health.attention}</div>
                   <div><span style={{ color: '#f2637e' }}>●</span> Offline · {health.offline}</div>
                 </div>
               </div>

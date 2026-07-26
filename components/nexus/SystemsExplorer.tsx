@@ -44,7 +44,7 @@ export function SystemsExplorer() {
           <ArrowLeft size={15} /> All locations
         </button>
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Systems</div>
+          <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#5FB8E0' }}>Systems</div>
           <h1 style={{ margin: '4px 0 0', fontSize: 24, color: 'white' }}>{openSite.name || 'Site'}</h1>
           {(openSite.address || openSite.city) && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{[openSite.address, openSite.city, openSite.state].filter(Boolean).join(', ')}</div>}
         </div>
@@ -53,13 +53,13 @@ export function SystemsExplorer() {
     );
   }
 
-  const card = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 14, cursor: 'pointer', textAlign: 'left' as const, color: 'white' };
+  const card = { background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 16, padding: 14, cursor: 'pointer', textAlign: 'left' as const, color: 'white' };
 
   return (
     <div style={{ width: '100%', maxWidth: 1100, margin: '0 auto', padding: '8px 4px 140px' }}>
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Systems</div>
-        <h1 style={{ margin: '4px 0 2px', fontSize: 26, color: 'white', display: 'flex', alignItems: 'center', gap: 10 }}><Shield size={22} color="#7DE5FF" /> Site Systems</h1>
+        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#5FB8E0' }}>Systems</div>
+        <h1 style={{ margin: '4px 0 2px', fontSize: 26, color: 'white', display: 'flex', alignItems: 'center', gap: 10 }}><Shield size={22} color="#5FB8E0" /> Site Systems</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', margin: 0 }}>Pick a location to watch its cameras, unlock doors, and manage every system.</p>
       </div>
 
@@ -74,7 +74,7 @@ export function SystemsExplorer() {
             {shown.map(s => (
               <button key={s.id} onClick={() => setOpenSite(s)} style={card}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <MapPin size={15} color="#7DE5FF" />
+                  <MapPin size={15} color="#5FB8E0" />
                   <span style={{ fontSize: 14.5, fontWeight: 600 }}>{s.name || 'Unnamed site'}</span>
                 </div>
                 {(s.address || s.city) && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>{[s.address, s.city, s.state].filter(Boolean).join(', ')}</div>}

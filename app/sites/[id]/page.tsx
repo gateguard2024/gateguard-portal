@@ -142,28 +142,28 @@ function AddAssetSlideOver({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-lg bg-white shadow-2xl flex flex-col h-full overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Add Installed Equipment</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+      <div className="w-full max-w-lg bg-[#1e2a3a] shadow-2xl flex flex-col h-full overflow-y-auto">
+        <div className="sticky top-0 bg-[#1e2a3a] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-[#eaf2fb]">Add Installed Equipment</h2>
+          <button onClick={onClose} className="text-[#8598aa] hover:text-[#c3d3e2] text-2xl leading-none">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-4">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-3 text-sm">{error}</div>}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Product Name *</label>
-            <input value={form.product_name} onChange={e => set('product_name', e.target.value)} placeholder="DoorKing 6050" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Product Name *</label>
+            <input value={form.product_name} onChange={e => set('product_name', e.target.value)} placeholder="DoorKing 6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">SKU / Model</label>
-              <input value={form.product_sku} onChange={e => set('product_sku', e.target.value)} placeholder="DK-6050" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <label className="block text-sm font-medium text-[#c3d3e2] mb-1">SKU / Model</label>
+              <input value={form.product_sku} onChange={e => set('product_sku', e.target.value)} placeholder="DK-6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-              <select value={form.product_category} onChange={e => set('product_category', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+              <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Category</label>
+              <select value={form.product_category} onChange={e => set('product_category', e.target.value)} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]">
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
@@ -171,38 +171,38 @@ function AddAssetSlideOver({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-              <input value={form.location_note} onChange={e => set('location_note', e.target.value)} placeholder="Main Gate" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Location</label>
+              <input value={form.location_note} onChange={e => set('location_note', e.target.value)} placeholder="Main Gate" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Zone (optional)</label>
-              <input value={form.location_zone} onChange={e => set('location_zone', e.target.value)} placeholder="North Entry" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Zone (optional)</label>
+              <input value={form.location_zone} onChange={e => set('location_zone', e.target.value)} placeholder="North Entry" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
             </div>
           </div>
 
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Hardware IDs</p>
+          <div className="border-t border-[#2a3a4d] pt-4">
+            <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Hardware IDs</p>
             <div className="space-y-3">
-              <input value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="Serial number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <input value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="Serial number" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
               <div className="grid grid-cols-2 gap-3">
-                <input value={form.mac_address} onChange={e => set('mac_address', e.target.value)} placeholder="MAC address" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                <input value={form.ip_address} onChange={e => set('ip_address', e.target.value)} placeholder="IP address" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                <input value={form.mac_address} onChange={e => set('mac_address', e.target.value)} placeholder="MAC address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+                <input value={form.ip_address} onChange={e => set('ip_address', e.target.value)} placeholder="IP address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
               </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Install Record</p>
+          <div className="border-t border-[#2a3a4d] pt-4">
+            <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Install Record</p>
             <div className="space-y-3">
-              <input value={form.installed_by} onChange={e => set('installed_by', e.target.value)} placeholder="Installed by (tech name)" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              <textarea value={form.install_notes} onChange={e => set('install_notes', e.target.value)} placeholder="Install notes" rows={2} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none" />
+              <input value={form.installed_by} onChange={e => set('installed_by', e.target.value)} placeholder="Installed by (tech name)" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+              <textarea value={form.install_notes} onChange={e => set('install_notes', e.target.value)} placeholder="Install notes" rows={2} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none" />
             </div>
           </div>
         </form>
 
-        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
-          <button onClick={handleSubmit} disabled={saving} className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50">
+        <div className="sticky bottom-0 bg-[#1e2a3a] border-t border-[#33465b] px-6 py-4 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-[#3a4a5c] rounded-lg hover:bg-[#22303f]">Cancel</button>
+          <button onClick={handleSubmit} disabled={saving} className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50">
             {saving ? 'Saving…' : 'Add Equipment'}
           </button>
         </div>
@@ -213,31 +213,31 @@ function AddAssetSlideOver({
 
 /* ─── Helpers ────────────────────────────────────────── */
 const ASSET_STATUS: Record<string, { label: string; color: string; dot: string }> = {
-  active:   { label: 'Online',   color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  offline:  { label: 'Offline',  color: 'bg-red-100 text-red-700',         dot: 'bg-red-500'     },
-  degraded: { label: 'Degraded', color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-500'   },
-  replaced: { label: 'Replaced', color: 'bg-slate-100 text-slate-500',     dot: 'bg-slate-400'   },
+  active:   { label: 'Online',   color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300', dot: 'bg-emerald-500' },
+  offline:  { label: 'Offline',  color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',         dot: 'bg-red-500'     },
+  degraded: { label: 'Degraded', color: 'bg-[rgba(251,191,36,0.15)] text-amber-300',     dot: 'bg-amber-500'   },
+  replaced: { label: 'Replaced', color: 'bg-[#22303f] text-[#98abbd]',     dot: 'bg-slate-400'   },
 }
 
 const WO_STATUS: Record<string, string> = {
-  open:        'bg-blue-100 text-blue-700',
+  open:        'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',
   scheduled:   'bg-violet-100 text-violet-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  completed:   'bg-emerald-100 text-emerald-700',
-  cancelled:   'bg-slate-100 text-slate-500',
+  in_progress: 'bg-[rgba(251,191,36,0.15)] text-amber-300',
+  completed:   'bg-[rgba(126,224,168,0.15)] text-emerald-300',
+  cancelled:   'bg-[#22303f] text-[#98abbd]',
 }
 
 const PRIORITY: Record<string, string> = {
-  critical: 'text-red-600',
-  high:     'text-amber-600',
-  normal:   'text-slate-500',
-  low:      'text-slate-400',
+  critical: 'text-[#fca5a5]',
+  high:     'text-amber-300',
+  normal:   'text-[#98abbd]',
+  low:      'text-[#8598aa]',
 }
 
 const SEVERITY_ICON: Record<string, JSX.Element> = {
-  critical: <AlertTriangle size={14} className="text-red-500" />,
-  warning:  <AlertTriangle size={14} className="text-amber-500" />,
-  info:     <Activity size={14} className="text-brand-400" />,
+  critical: <AlertTriangle size={14} className="text-[#fb7185]" />,
+  warning:  <AlertTriangle size={14} className="text-amber-300" />,
+  info:     <Activity size={14} className="text-[#5FB8E0]" />,
 }
 
 function formatDate(iso: string | null) {
@@ -319,6 +319,18 @@ interface RMARecord {
   notes?: string | null
   asset_name?: string
 }
+
+// Steel palette scoped to this page — dark steel behind the white PortalShell bg.
+const STEEL_SCOPE = {
+  '--background': '212 33% 13%', '--foreground': '210 30% 92%',
+  '--card': '213 31% 17%', '--card-foreground': '210 30% 92%',
+  '--popover': '213 31% 15%', '--popover-foreground': '210 30% 92%',
+  '--muted': '211 26% 24%', '--muted-foreground': '208 16% 66%',
+  '--accent': '212 28% 27%', '--accent-foreground': '210 30% 92%',
+  '--secondary': '212 26% 24%', '--secondary-foreground': '210 30% 92%',
+  '--border': '210 19% 31%', '--input': '210 19% 29%', '--ring': '199 58% 62%',
+  background: 'linear-gradient(180deg,#16202c,#111a24)', minHeight: '100%',
+} as unknown as React.CSSProperties
 
 export default function SiteDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -571,7 +583,7 @@ export default function SiteDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-2 border-[#5FB8E0] border-t-transparent rounded-full" />
       </div>
     )
   }
@@ -601,9 +613,10 @@ export default function SiteDetailPage() {
   ]
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="min-h-full" style={STEEL_SCOPE}>
+      <div className="max-w-6xl mx-auto p-6">
       {/* Back */}
-      <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-brand-400 mb-4 transition-colors">
+      <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-[#98abbd] hover:text-[#5FB8E0] mb-4 transition-colors">
         <ChevronLeft size={16} /> Back to Properties
       </Link>
 
@@ -611,13 +624,13 @@ export default function SiteDetailPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-slate-900">{site.name}</h1>
+            <h1 className="text-2xl font-bold text-[#eaf2fb]">{site.name}</h1>
             {/* Status badge */}
             <select
               value={site.status}
               disabled={statusUpdating}
               onChange={e => handleStatusChange(e.target.value)}
-              className="text-xs border border-slate-200 rounded-full px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+              className="text-xs border border-[#33465b] rounded-full px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] bg-[#1e2a3a]"
             >
               <option value="active">Active</option>
               <option value="prospect">Prospect</option>
@@ -626,7 +639,7 @@ export default function SiteDetailPage() {
             </select>
           </div>
           {(site.city || site.address) && (
-            <p className="text-sm text-slate-500 flex items-center gap-1.5">
+            <p className="text-sm text-[#98abbd] flex items-center gap-1.5">
               <MapPin size={14} />
               {[site.address, site.city, site.state, site.zip].filter(Boolean).join(', ')}
             </p>
@@ -647,21 +660,21 @@ export default function SiteDetailPage() {
         {/* KPI pills */}
         <div className="flex items-center gap-3 text-sm">
           {site.units && (
-            <div className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-full">
+            <div className="px-3 py-1.5 bg-[#22303f] text-[#aebfce] rounded-full">
               {site.units.toLocaleString()} units
             </div>
           )}
-          <div className={`px-3 py-1.5 rounded-full font-medium ${activeAssets > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+          <div className={`px-3 py-1.5 rounded-full font-medium ${activeAssets > 0 ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300' : 'bg-[#22303f] text-[#98abbd]'}`}>
             {activeAssets} device{activeAssets !== 1 ? 's' : ''} online
           </div>
           {offlineAssets > 0 && (
-            <div className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full font-medium flex items-center gap-1.5">
+            <div className="px-3 py-1.5 bg-[rgba(239,68,68,0.18)] text-[#fca5a5] rounded-full font-medium flex items-center gap-1.5">
               <WifiOff size={12} /> {offlineAssets} offline
             </div>
           )}
           <button
             onClick={() => setShowAddAsset(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
           >
             <Plus size={15} /> Add Equipment
           </button>
@@ -676,9 +689,9 @@ export default function SiteDetailPage() {
           fieldKey="org_id"
           orgLink={linkedOrgs.org_id}
           onAssign={setAssigningField}
-          color="text-amber-600"
+          color="text-amber-300"
           bgColor="bg-amber-50"
-          borderColor="border-amber-200"
+          borderColor="border-[rgba(251,191,36,0.35)]"
         />
         <AssignmentCard
           role="MSO"
@@ -686,7 +699,7 @@ export default function SiteDetailPage() {
           fieldKey="master_dealer_id"
           orgLink={linkedOrgs.master_dealer_id}
           onAssign={setAssigningField}
-          color="text-violet-600"
+          color="text-violet-300"
           bgColor="bg-violet-50"
           borderColor="border-violet-200"
         />
@@ -696,8 +709,8 @@ export default function SiteDetailPage() {
           fieldKey="install_dealer_id"
           orgLink={linkedOrgs.install_dealer_id}
           onAssign={setAssigningField}
-          color="text-blue-600"
-          bgColor="bg-blue-50"
+          color="text-[#9FD8EC]"
+          bgColor="bg-[#22303f]"
           borderColor="border-blue-200"
         />
         <AssignmentCard
@@ -706,9 +719,9 @@ export default function SiteDetailPage() {
           fieldKey="service_dealer_id"
           orgLink={linkedOrgs.service_dealer_id}
           onAssign={setAssigningField}
-          color="text-brand-400"
-          bgColor="bg-brand-50"
-          borderColor="border-brand-200"
+          color="text-[#5FB8E0]"
+          bgColor="bg-[#3f7fb8]"
+          borderColor="border-[#5FB8E0]"
           primary
         />
       </div>
@@ -733,21 +746,21 @@ export default function SiteDetailPage() {
       />
 
       {/* ── Tabs ────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-slate-200 mb-6">
+      <div className="flex gap-1 border-b border-[#33465b] mb-6">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px ${
               tab === t.id
-                ? 'border-brand-400 text-brand-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-[#5FB8E0] text-[#5FB8E0]'
+                : 'border-transparent text-[#98abbd] hover:text-[#c3d3e2]'
             }`}
           >
             <t.icon size={15} />
             {t.label}
             {t.count !== undefined && t.count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-brand-100 text-brand-400' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-[#3f7fb8] text-[#5FB8E0]' : 'bg-[#22303f] text-[#98abbd]'}`}>
                 {t.count}
               </span>
             )}
@@ -764,9 +777,9 @@ export default function SiteDetailPage() {
       {tab === 'overview' && (
         <div className="grid grid-cols-2 gap-6">
           {/* Property info */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Building2 size={16} className="text-slate-400" /> Property Info
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
+              <Building2 size={16} className="text-[#8598aa]" /> Property Info
             </h3>
             <dl className="space-y-3 text-sm">
               <InfoRow label="Type"     value={site.property_type} />
@@ -775,7 +788,7 @@ export default function SiteDetailPage() {
               <InfoRow label="Added"    value={formatDate(site.created_at)} />
               {site.crm_opp_id && (
                 <InfoRow label="CRM Opp" value={
-                  <Link href={`/crm/opportunities/${site.crm_opp_id}`} className="text-brand-400 hover:underline">
+                  <Link href={`/crm/opportunities/${site.crm_opp_id}`} className="text-[#5FB8E0] hover:underline">
                     View opportunity →
                   </Link>
                 } />
@@ -784,36 +797,36 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Contacts */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Mail size={16} className="text-slate-400" /> Contacts
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
+              <Mail size={16} className="text-[#8598aa]" /> Contacts
             </h3>
             <div className="space-y-4 text-sm">
               {site.pm_name && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Property Manager</p>
-                  <p className="font-medium text-slate-900">{site.pm_name}</p>
-                  {site.pm_email && <a href={`mailto:${site.pm_email}`} className="text-brand-400 hover:underline block">{site.pm_email}</a>}
-                  {site.pm_phone && <p className="text-slate-500">{site.pm_phone}</p>}
+                  <p className="text-xs font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Property Manager</p>
+                  <p className="font-medium text-[#eaf2fb]">{site.pm_name}</p>
+                  {site.pm_email && <a href={`mailto:${site.pm_email}`} className="text-[#5FB8E0] hover:underline block">{site.pm_email}</a>}
+                  {site.pm_phone && <p className="text-[#98abbd]">{site.pm_phone}</p>}
                 </div>
               )}
               {site.primary_contact_name && site.primary_contact_name !== site.pm_name && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Primary Contact</p>
-                  <p className="font-medium text-slate-900">{site.primary_contact_name}</p>
-                  {site.primary_contact_email && <a href={`mailto:${site.primary_contact_email}`} className="text-brand-400 hover:underline block">{site.primary_contact_email}</a>}
+                  <p className="text-xs font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Primary Contact</p>
+                  <p className="font-medium text-[#eaf2fb]">{site.primary_contact_name}</p>
+                  {site.primary_contact_email && <a href={`mailto:${site.primary_contact_email}`} className="text-[#5FB8E0] hover:underline block">{site.primary_contact_email}</a>}
                 </div>
               )}
               {!site.pm_name && !site.primary_contact_name && (
-                <p className="text-slate-400">No contacts added</p>
+                <p className="text-[#8598aa]">No contacts added</p>
               )}
             </div>
           </div>
 
           {/* Access info */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <Key size={16} className="text-slate-400" /> Site Access (Tech Info)
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
+              <Key size={16} className="text-[#8598aa]" /> Site Access (Tech Info)
             </h3>
             <dl className="space-y-3 text-sm">
               <InfoRow label="Gate Code"    value={site.gate_code} monospace />
@@ -823,22 +836,22 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Notes */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <FileText size={16} className="text-slate-400" /> Notes
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
+              <FileText size={16} className="text-[#8598aa]" /> Notes
             </h3>
             {site.notes ? (
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">{site.notes}</p>
+              <p className="text-sm text-[#aebfce] whitespace-pre-wrap">{site.notes}</p>
             ) : (
-              <p className="text-sm text-slate-400">No notes</p>
+              <p className="text-sm text-[#8598aa]">No notes</p>
             )}
           </div>
 
           {/* Map — full width spanning both columns */}
           {(site.address || site.city) && (
-            <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                <MapPin size={16} className="text-slate-400" /> Location
+            <div className="col-span-2 bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+              <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
+                <MapPin size={16} className="text-[#8598aa]" /> Location
               </h3>
               <SiteMapEmbed
                 address={[site.address, site.city, site.state, site.zip].filter(Boolean).join(', ')}
@@ -852,13 +865,13 @@ export default function SiteDetailPage() {
       {tab === 'assets' && (
         <div className="space-y-3">
           {assets.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <Package size={40} className="mb-3 opacity-30" />
               <p className="font-medium">No equipment documented</p>
               <p className="text-sm mt-1">Add the devices installed at this property</p>
               <button
                 onClick={() => setShowAddAsset(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
               >
                 <Plus size={15} /> Add Equipment
               </button>
@@ -867,64 +880,64 @@ export default function SiteDetailPage() {
             <>
               {/* Group by zone */}
               {groupByZone(assets).map(({ zone, items }) => (
-                <div key={zone} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div key={zone} className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
                   {zone && (
-                    <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{zone}</span>
+                    <div className="px-4 py-2.5 bg-[#1a2532] border-b border-[#33465b]">
+                      <span className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider">{zone}</span>
                     </div>
                   )}
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-100">
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Device</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Location</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Serial / MAC</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">IP</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Status</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Installed</th>
+                      <tr className="border-b border-[#2a3a4d]">
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">Device</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">Location</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">Serial / MAC</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">IP</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">Status</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd]">Installed</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody className="divide-y divide-[#22303f]">
                       {items.map(asset => {
                         const cfg = ASSET_STATUS[asset.status] ?? ASSET_STATUS.active
                         return (
-                          <tr key={asset.id} className="hover:bg-slate-50">
+                          <tr key={asset.id} className="hover:bg-[#22303f]">
                             <td className="px-4 py-3">
-                              <div className="font-medium text-slate-900">{asset.product_name}</div>
-                              {asset.product_sku && <div className="text-xs text-slate-400 font-mono">{asset.product_sku}</div>}
-                              {asset.product_category && <div className="text-xs text-slate-400">{asset.product_category}</div>}
+                              <div className="font-medium text-[#eaf2fb]">{asset.product_name}</div>
+                              {asset.product_sku && <div className="text-xs text-[#8598aa] font-mono">{asset.product_sku}</div>}
+                              {asset.product_category && <div className="text-xs text-[#8598aa]">{asset.product_category}</div>}
                             </td>
-                            <td className="px-4 py-3 text-slate-600">{asset.location_note}</td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                            <td className="px-4 py-3 text-[#aebfce]">{asset.location_note}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-[#98abbd]">
                               {idEdit?.id === asset.id ? (
                                 <div className="flex flex-col gap-1">
-                                  <input value={idEdit.serial} onChange={e => setIdEdit({ ...idEdit, serial: e.target.value })} placeholder="Serial / ESN" className="w-32 border border-slate-300 rounded px-1.5 py-1 text-xs" />
-                                  <input value={idEdit.mac} onChange={e => setIdEdit({ ...idEdit, mac: e.target.value })} placeholder="MAC address" className="w-32 border border-slate-300 rounded px-1.5 py-1 text-xs" />
+                                  <input value={idEdit.serial} onChange={e => setIdEdit({ ...idEdit, serial: e.target.value })} placeholder="Serial / ESN" className="w-32 border border-[#3a4a5c] rounded px-1.5 py-1 text-xs" />
+                                  <input value={idEdit.mac} onChange={e => setIdEdit({ ...idEdit, mac: e.target.value })} placeholder="MAC address" className="w-32 border border-[#3a4a5c] rounded px-1.5 py-1 text-xs" />
                                   <div className="flex gap-1">
-                                    <button type="button" disabled={idSaving} onClick={saveAssetIds} className="px-2 py-0.5 rounded bg-brand-600 text-white text-[11px] disabled:opacity-40">{idSaving ? '…' : 'Save'}</button>
-                                    <button type="button" onClick={() => setIdEdit(null)} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">Cancel</button>
+                                    <button type="button" disabled={idSaving} onClick={saveAssetIds} className="px-2 py-0.5 rounded bg-[#2f7fb8] text-white text-[11px] disabled:opacity-40">{idSaving ? '…' : 'Save'}</button>
+                                    <button type="button" onClick={() => setIdEdit(null)} className="px-2 py-0.5 rounded bg-[#22303f] text-[#aebfce] text-[11px]">Cancel</button>
                                   </div>
                                 </div>
                               ) : (
                                 <div className="flex items-start gap-1.5">
                                   <div>
                                     <div>{asset.serial_number ?? '—'}</div>
-                                    <div className={asset.mac_address ? 'text-slate-400' : 'text-amber-500'}>{asset.mac_address ?? 'no MAC'}</div>
+                                    <div className={asset.mac_address ? 'text-[#8598aa]' : 'text-amber-300'}>{asset.mac_address ?? 'no MAC'}</div>
                                   </div>
-                                  <button type="button" onClick={() => setIdEdit({ id: asset.id, serial: asset.serial_number ?? '', mac: asset.mac_address ?? '' })} className="text-brand-500 hover:text-brand-700" title="Backfill Serial / MAC for fleet health">✎</button>
+                                  <button type="button" onClick={() => setIdEdit({ id: asset.id, serial: asset.serial_number ?? '', mac: asset.mac_address ?? '' })} className="text-[#5FB8E0] hover:text-[#5FB8E0]" title="Backfill Serial / MAC for fleet health">✎</button>
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-500">{asset.ip_address ?? '—'}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-[#98abbd]">{asset.ip_address ?? '—'}</td>
                             <td className="px-4 py-3">
                               <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.color}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                                 {cfg.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-xs text-slate-500">
+                            <td className="px-4 py-3 text-xs text-[#98abbd]">
                               {formatDate(asset.installed_at)}
-                              {asset.installed_by && <div className="text-slate-400">{asset.installed_by}</div>}
+                              {asset.installed_by && <div className="text-[#8598aa]">{asset.installed_by}</div>}
                             </td>
                           </tr>
                         )
@@ -940,26 +953,26 @@ export default function SiteDetailPage() {
 
       {/* ── Tab: Events ──────────────────────────────────────────────── */}
       {tab === 'events' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
           {events.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <Activity size={40} className="mb-3 opacity-30" />
               <p className="font-medium">No events yet</p>
               <p className="text-sm mt-1">Events are logged automatically as activity occurs</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[#2a3a4d]">
               {events.map(ev => (
-                <div key={ev.id} className="flex items-start gap-3 px-5 py-4 hover:bg-slate-50">
+                <div key={ev.id} className="flex items-start gap-3 px-5 py-4 hover:bg-[#22303f]">
                   <div className="mt-0.5">{SEVERITY_ICON[ev.severity] ?? SEVERITY_ICON.info}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{ev.event_type.replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-slate-400">via {ev.event_source}</span>
+                      <span className="text-xs font-semibold text-[#98abbd] uppercase tracking-wide">{ev.event_type.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-[#8598aa]">via {ev.event_source}</span>
                     </div>
-                    {ev.summary && <p className="text-sm text-slate-700 mt-0.5">{ev.summary}</p>}
+                    {ev.summary && <p className="text-sm text-[#c3d3e2] mt-0.5">{ev.summary}</p>}
                   </div>
-                  <div className="text-xs text-slate-400 shrink-0">{formatDateTime(ev.created_at)}</div>
+                  <div className="text-xs text-[#8598aa] shrink-0">{formatDateTime(ev.created_at)}</div>
                 </div>
               ))}
             </div>
@@ -969,19 +982,19 @@ export default function SiteDetailPage() {
 
       {/* ── Tab: Work Orders ─────────────────────────────────────────── */}
       {tab === 'work_orders' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
           {/* Header with Create button */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
-            <h3 className="text-sm font-semibold text-slate-700">Work Orders</h3>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#33465b] bg-[#1a2532]">
+            <h3 className="text-sm font-semibold text-[#c3d3e2]">Work Orders</h3>
             <Link
               href={`/maintenance?new=1&site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-400 text-white text-xs font-medium rounded-lg hover:bg-brand-500 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3f7fb8] text-white text-xs font-medium rounded-lg hover:bg-[#2f7fb8] transition-colors"
             >
               <Plus size={12} /> New Work Order
             </Link>
           </div>
           {workOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <ClipboardList size={40} className="mb-3 opacity-30" />
               <p className="font-medium">No work orders for this site</p>
               <p className="text-sm mt-1 opacity-70">Click "New Work Order" above to create one</p>
@@ -989,34 +1002,34 @@ export default function SiteDetailPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">WO #</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Title</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Priority</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Assigned</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Scheduled</th>
+                <tr className="border-b border-[#33465b] bg-[#1a2532]">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">WO #</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">Title</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">Priority</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">Assigned</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#aebfce]">Scheduled</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[#2a3a4d]">
                 {workOrders.map(wo => (
                   <tr
                     key={wo.id}
                     onClick={() => router.push(`/maintenance/${wo.id}`)}
-                    className="hover:bg-slate-50 cursor-pointer"
+                    className="hover:bg-[#22303f] cursor-pointer"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-brand-400 font-semibold">{wo.wo_number}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{wo.title}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#5FB8E0] font-semibold">{wo.wo_number}</td>
+                    <td className="px-4 py-3 font-medium text-[#eaf2fb]">{wo.title}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${WO_STATUS[wo.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${WO_STATUS[wo.status] ?? 'bg-[#22303f] text-[#98abbd]'}`}>
                         {wo.status.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className={`px-4 py-3 text-xs font-semibold capitalize ${PRIORITY[wo.priority] ?? 'text-slate-500'}`}>
+                    <td className={`px-4 py-3 text-xs font-semibold capitalize ${PRIORITY[wo.priority] ?? 'text-[#98abbd]'}`}>
                       {wo.priority}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{wo.assignee_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(wo.scheduled_date)}</td>
+                    <td className="px-4 py-3 text-[#aebfce]">{wo.assignee_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#98abbd] text-xs">{formatDate(wo.scheduled_date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1029,23 +1042,23 @@ export default function SiteDetailPage() {
       {tab === 'requests' && (
         <div className="space-y-4">
           {/* Header with share link */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800 mb-0.5">Property Request Portal</h3>
-              <p className="text-xs text-slate-500">Share this link with your property manager so they can submit maintenance requests directly.</p>
+              <h3 className="text-sm font-semibold text-[#dbe6f0] mb-0.5">Property Request Portal</h3>
+              <p className="text-xs text-[#98abbd]">Share this link with your property manager so they can submit maintenance requests directly.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <a
                 href={`/request/${id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#33465b] rounded-lg hover:bg-[#22303f] text-[#aebfce] transition-colors"
               >
                 <ExternalLink size={12} /> Preview
               </a>
               <button
                 onClick={copyRequestLink}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-brand-400 text-white hover:bg-brand-500'}`}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-[#3f7fb8] text-white hover:bg-[#2f7fb8]'}`}
               >
                 <Copy size={12} />
                 {copySuccess ? 'Copied!' : 'Copy Link'}
@@ -1054,9 +1067,9 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Requests table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
             {requests.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <div className="flex flex-col items-center justify-center py-16 text-[#8598aa]">
                 <Inbox size={36} className="mb-3 opacity-30" />
                 <p className="font-medium text-sm">No requests yet</p>
                 <p className="text-xs mt-1">Share the request portal link with your property manager to get started</p>
@@ -1064,35 +1077,35 @@ export default function SiteDetailPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Request</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Area</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Priority</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Contact</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Submitted</th>
+                  <tr className="border-b border-[#33465b] bg-[#1a2532]">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Request</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Area</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Priority</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Contact</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Submitted</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#2a3a4d]">
                   {requests.map(req => {
-                    const priBg: Record<string, string> = { urgent: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', normal: 'bg-blue-100 text-blue-700', low: 'bg-slate-100 text-slate-500' }
-                    const stBg:  Record<string, string> = { new: 'bg-yellow-100 text-yellow-700', acknowledged: 'bg-blue-100 text-blue-700', converted: 'bg-emerald-100 text-emerald-700', closed: 'bg-slate-100 text-slate-500' }
+                    const priBg: Record<string, string> = { urgent: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]', high: 'bg-orange-100 text-orange-700', normal: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]', low: 'bg-[#22303f] text-[#98abbd]' }
+                    const stBg:  Record<string, string> = { new: 'bg-yellow-100 text-yellow-700', acknowledged: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]', converted: 'bg-[rgba(126,224,168,0.15)] text-emerald-300', closed: 'bg-[#22303f] text-[#98abbd]' }
                     const age = Math.floor((Date.now() - new Date(req.created_at).getTime()) / 86400000)
                     return (
-                      <tr key={req.id} className="hover:bg-slate-50">
+                      <tr key={req.id} className="hover:bg-[#22303f]">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900">{req.title}</div>
-                          {req.description && <div className="text-xs text-slate-400 truncate max-w-[220px] mt-0.5">{req.description}</div>}
+                          <div className="font-medium text-[#eaf2fb]">{req.title}</div>
+                          {req.description && <div className="text-xs text-[#8598aa] truncate max-w-[220px] mt-0.5">{req.description}</div>}
                         </td>
-                        <td className="px-4 py-3 text-slate-500 text-xs">{req.area ?? '—'}</td>
+                        <td className="px-4 py-3 text-[#98abbd] text-xs">{req.area ?? '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${priBg[req.priority_requested] ?? priBg.normal}`}>
                             {req.priority_requested}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
-                          {req.contact_name && <div className="font-medium text-slate-700">{req.contact_name}</div>}
+                        <td className="px-4 py-3 text-xs text-[#98abbd]">
+                          {req.contact_name && <div className="font-medium text-[#c3d3e2]">{req.contact_name}</div>}
                           {req.contact_email && <div>{req.contact_email}</div>}
                           {req.contact_phone && <div>{req.contact_phone}</div>}
                           {!req.contact_name && !req.contact_email && !req.contact_phone && '—'}
@@ -1102,7 +1115,7 @@ export default function SiteDetailPage() {
                             {req.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
+                        <td className="px-4 py-3 text-xs text-[#8598aa]">
                           {age === 0 ? 'Today' : age === 1 ? 'Yesterday' : `${age}d ago`}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -1110,13 +1123,13 @@ export default function SiteDetailPage() {
                             <button
                               onClick={() => handleConvertRequest(req)}
                               disabled={convertingId === req.id}
-                              className="text-xs font-medium text-brand-400 hover:text-brand-500 disabled:opacity-50 whitespace-nowrap"
+                              className="text-xs font-medium text-[#5FB8E0] hover:text-[#5FB8E0] disabled:opacity-50 whitespace-nowrap"
                             >
                               {convertingId === req.id ? 'Creating…' : '+ Create WO'}
                             </button>
                           )}
                           {req.status === 'converted' && req.converted_wo_id && (
-                            <a href={`/maintenance/${req.converted_wo_id}`} className="text-xs font-medium text-emerald-600 hover:underline">
+                            <a href={`/maintenance/${req.converted_wo_id}`} className="text-xs font-medium text-emerald-300 hover:underline">
                               View WO →
                             </a>
                           )}
@@ -1137,12 +1150,12 @@ export default function SiteDetailPage() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">Preventive Maintenance Schedules</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Recurring PM tasks — work orders are auto-created when due</p>
+              <h3 className="text-sm font-semibold text-[#dbe6f0]">Preventive Maintenance Schedules</h3>
+              <p className="text-xs text-[#98abbd] mt-0.5">Recurring PM tasks — work orders are auto-created when due</p>
             </div>
             <button
               onClick={() => { setShowPMForm(true); setPMError(null) }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
             >
               <Plus size={15} /> Add PM Schedule
             </button>
@@ -1150,43 +1163,43 @@ export default function SiteDetailPage() {
 
           {/* Add form */}
           {showPMForm && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-sm font-semibold text-slate-800">New PM Schedule</h4>
-                <button onClick={() => setShowPMForm(false)} className="text-slate-400 hover:text-slate-600">
+                <h4 className="text-sm font-semibold text-[#dbe6f0]">New PM Schedule</h4>
+                <button onClick={() => setShowPMForm(false)} className="text-[#8598aa] hover:text-[#c3d3e2]">
                   <X size={16} />
                 </button>
               </div>
               <form onSubmit={handleAddPMSchedule} className="space-y-3">
                 {pmError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2.5 text-sm">{pmError}</div>
+                  <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-2.5 text-sm">{pmError}</div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Title *</label>
+                  <label className="block text-xs font-medium text-[#aebfce] mb-1">Title *</label>
                   <input
                     value={pmForm.title}
                     onChange={e => setPMForm(p => ({ ...p, title: e.target.value }))}
                     placeholder="e.g. Gate lubrication"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                  <label className="block text-xs font-medium text-[#aebfce] mb-1">Description</label>
                   <textarea
                     value={pmForm.description}
                     onChange={e => setPMForm(p => ({ ...p, description: e.target.value }))}
                     placeholder="Optional checklist or instructions"
                     rows={2}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Interval</label>
+                    <label className="block text-xs font-medium text-[#aebfce] mb-1">Interval</label>
                     <select
                       value={pmForm.interval_days}
                       onChange={e => setPMForm(p => ({ ...p, interval_days: e.target.value }))}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
                     >
                       <option value="30">Every 30 days</option>
                       <option value="60">Every 60 days</option>
@@ -1196,12 +1209,12 @@ export default function SiteDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">First Due Date *</label>
+                    <label className="block text-xs font-medium text-[#aebfce] mb-1">First Due Date *</label>
                     <input
                       type="date"
                       value={pmForm.next_due_at}
                       onChange={e => setPMForm(p => ({ ...p, next_due_at: e.target.value }))}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
                     />
                   </div>
                 </div>
@@ -1209,14 +1222,14 @@ export default function SiteDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowPMForm(false)}
-                    className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                    className="px-4 py-2 text-sm border border-[#3a4a5c] rounded-lg hover:bg-[#22303f]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={pmSaving}
-                    className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50"
+                    className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50"
                   >
                     {pmSaving ? 'Saving…' : 'Add Schedule'}
                   </button>
@@ -1227,40 +1240,40 @@ export default function SiteDetailPage() {
 
           {/* Schedules list */}
           {pmSchedules.length === 0 && !showPMForm ? (
-            <div className="bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <RefreshCw size={40} className="mb-3 opacity-30" />
               <p className="font-medium text-sm">No PM schedules yet</p>
               <p className="text-xs mt-1">Add recurring maintenance tasks — work orders are created automatically</p>
               <button
                 onClick={() => setShowPMForm(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
               >
                 <Plus size={15} /> Add PM Schedule
               </button>
             </div>
           ) : pmSchedules.length > 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Task</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Interval</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Next Due</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Last Run</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Active</th>
+                  <tr className="border-b border-[#33465b] bg-[#1a2532]">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Task</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Interval</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Next Due</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Last Run</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#98abbd]">Active</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#2a3a4d]">
                   {pmSchedules.map(s => {
                     const due     = new Date(s.next_due_at)
                     const now     = new Date()
                     const daysOut = Math.floor((due.getTime() - now.getTime()) / 86400000)
                     const dueCls  = daysOut < 0
-                      ? 'text-red-600 font-semibold'
+                      ? 'text-[#fca5a5] font-semibold'
                       : daysOut <= 7
-                        ? 'text-amber-600 font-semibold'
-                        : 'text-emerald-600'
+                        ? 'text-amber-300 font-semibold'
+                        : 'text-emerald-300'
                     const dueLabel = daysOut < 0
                       ? `${Math.abs(daysOut)}d overdue`
                       : daysOut === 0
@@ -1269,13 +1282,13 @@ export default function SiteDetailPage() {
                           ? 'Tomorrow'
                           : formatDate(s.next_due_at)
                     return (
-                      <tr key={s.id} className={`hover:bg-slate-50 ${!s.is_active ? 'opacity-50' : ''}`}>
+                      <tr key={s.id} className={`hover:bg-[#22303f] ${!s.is_active ? 'opacity-50' : ''}`}>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900">{s.title}</div>
-                          {s.description && <div className="text-xs text-slate-400 truncate max-w-[220px] mt-0.5">{s.description}</div>}
+                          <div className="font-medium text-[#eaf2fb]">{s.title}</div>
+                          {s.description && <div className="text-xs text-[#8598aa] truncate max-w-[220px] mt-0.5">{s.description}</div>}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-[#22303f] text-[#aebfce]">
                             <RotateCcw size={11} />
                             Every {s.interval_days}d
                           </span>
@@ -1283,7 +1296,7 @@ export default function SiteDetailPage() {
                         <td className={`px-4 py-3 text-sm ${dueCls}`}>
                           {dueLabel}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
+                        <td className="px-4 py-3 text-xs text-[#8598aa]">
                           {s.last_generated_at ? formatDate(s.last_generated_at) : '—'}
                         </td>
                         <td className="px-4 py-3">
@@ -1291,16 +1304,16 @@ export default function SiteDetailPage() {
                             onClick={() => handleTogglePM(s)}
                             disabled={togglingPM === s.id}
                             title={s.is_active ? 'Deactivate' : 'Activate'}
-                            className={`w-10 h-5 rounded-full relative transition-colors focus:outline-none disabled:opacity-50 ${s.is_active ? 'bg-brand-400' : 'bg-slate-300'}`}
+                            className={`w-10 h-5 rounded-full relative transition-colors focus:outline-none disabled:opacity-50 ${s.is_active ? 'bg-[#3f7fb8]' : 'bg-slate-300'}`}
                           >
-                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${s.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-[#1e2a3a] rounded-full shadow transition-transform ${s.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
                           </button>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => handleDeletePM(s.id)}
                             disabled={deletingPM === s.id}
-                            className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                            className="text-[#aebfce] hover:text-[#fb7185] transition-colors disabled:opacity-50"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -1320,58 +1333,58 @@ export default function SiteDetailPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">Linked Opportunities</h3>
-              <p className="text-xs text-slate-400 mt-0.5">All CRM opportunities tied to this property</p>
+              <h3 className="text-sm font-semibold text-[#dbe6f0]">Linked Opportunities</h3>
+              <p className="text-xs text-[#8598aa] mt-0.5">All CRM opportunities tied to this property</p>
             </div>
             <Link
               href={`/crm/opportunities`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#5FB8E0] hover:underline"
             >
               <ExternalLink size={12} /> View CRM
             </Link>
           </div>
           {siteOpps.length === 0 ? (
-            <div className="text-center py-12 text-sm text-slate-400">
-              <FileText size={24} className="mx-auto mb-2 text-slate-300" />
+            <div className="text-center py-12 text-sm text-[#8598aa]">
+              <FileText size={24} className="mx-auto mb-2 text-[#aebfce]" />
               No opportunities linked to this property yet.<br />
               When a won opportunity creates this property, it appears here.
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-100">
+                <thead className="bg-[#1a2532] border-b border-[#2a3a4d]">
                   <tr>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Opportunity</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Stage</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Value</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Close Date</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Opportunity</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Type</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Stage</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Value</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Close Date</th>
                     <th />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-[#22303f]">
                   {siteOpps.map(opp => (
-                    <tr key={opp.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={opp.id} className="hover:bg-[#22303f] transition-colors">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-slate-900">{opp.name}</p>
-                        <p className="text-xs text-slate-400">{opp.account_name}</p>
+                        <p className="font-medium text-[#eaf2fb]">{opp.name}</p>
+                        <p className="text-xs text-[#8598aa]">{opp.account_name}</p>
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-block text-xs font-medium bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full capitalize">
                           {opp.opp_type?.replace(/_/g, ' ') ?? 'Property'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 capitalize text-slate-600">{opp.stage?.replace(/_/g, ' ')}</td>
-                      <td className="px-4 py-3 text-slate-700 font-medium">
+                      <td className="px-4 py-3 capitalize text-[#aebfce]">{opp.stage?.replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-3 text-[#c3d3e2] font-medium">
                         {opp.amount ? `$${opp.amount.toLocaleString()}` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">
+                      <td className="px-4 py-3 text-[#98abbd] text-xs">
                         {opp.close_date ? new Date(opp.close_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/crm/opportunities/${opp.id}`}
-                          className="text-xs text-[#6B7EFF] hover:underline flex items-center gap-1 justify-end"
+                          className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 justify-end"
                         >
                           <ExternalLink size={11} /> View
                         </Link>
@@ -1389,74 +1402,74 @@ export default function SiteDetailPage() {
         <div className='space-y-4'>
           <div className='flex items-center justify-between'>
             <div>
-              <h3 className='text-sm font-semibold text-slate-800'>Quotes</h3>
-              <p className='text-xs text-slate-400 mt-0.5'>All quotes for this property</p>
+              <h3 className='text-sm font-semibold text-[#dbe6f0]'>Quotes</h3>
+              <p className='text-xs text-[#8598aa] mt-0.5'>All quotes for this property</p>
             </div>
             <Link
               href={`/quotes/new?site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
-              className='inline-flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:underline'
+              className='inline-flex items-center gap-1.5 text-xs font-medium text-[#5FB8E0] hover:underline'
             >
               <Plus size={12} /> New Quote
             </Link>
           </div>
           {!quotesLoaded ? (
-            <div className='flex items-center gap-2 py-4 text-slate-400'>
+            <div className='flex items-center gap-2 py-4 text-[#8598aa]'>
               <RefreshCw size={14} className='animate-spin' />
               <span className='text-sm'>Loading…</span>
             </div>
           ) : siteQuotes.length === 0 ? (
-            <div className='text-center py-12 text-sm text-slate-400'>
-              <FileText size={24} className='mx-auto mb-2 text-slate-300' />
+            <div className='text-center py-12 text-sm text-[#8598aa]'>
+              <FileText size={24} className='mx-auto mb-2 text-[#aebfce]' />
               No quotes for this property yet.
             </div>
           ) : (
-            <div className='bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden'>
+            <div className='bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden'>
               <table className='w-full text-sm'>
-                <thead className='bg-slate-50 border-b border-slate-100'>
+                <thead className='bg-[#1a2532] border-b border-[#2a3a4d]'>
                   <tr>
-                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Quote #</th>
-                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Property</th>
-                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Setup</th>
-                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>MRR</th>
-                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Status</th>
-                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Date</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>Quote #</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>Property</th>
+                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>Setup</th>
+                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>MRR</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>Status</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider'>Date</th>
                     <th />
                   </tr>
                 </thead>
-                <tbody className='divide-y divide-slate-50'>
+                <tbody className='divide-y divide-[#22303f]'>
                   {siteQuotes.map(q => (
-                    <tr key={q.id} className='hover:bg-slate-50 transition-colors'>
+                    <tr key={q.id} className='hover:bg-[#22303f] transition-colors'>
                       <td className='px-4 py-3'>
-                        <span className='font-mono text-xs text-[#6B7EFF]'>{q.quote_number}</span>
+                        <span className='font-mono text-xs text-[#5FB8E0]'>{q.quote_number}</span>
                       </td>
                       <td className='px-4 py-3'>
-                        <span className='text-slate-800'>{q.property_name ?? site?.name ?? '—'}</span>
-                        {q.units ? <span className='text-xs text-slate-400 ml-1'>({q.units} units)</span> : null}
+                        <span className='text-[#dbe6f0]'>{q.property_name ?? site?.name ?? '—'}</span>
+                        {q.units ? <span className='text-xs text-[#8598aa] ml-1'>({q.units} units)</span> : null}
                       </td>
-                      <td className='px-4 py-3 text-right font-medium text-slate-700'>
+                      <td className='px-4 py-3 text-right font-medium text-[#c3d3e2]'>
                         ${q.total_one_time.toLocaleString()}
                       </td>
                       <td className='px-4 py-3 text-right'>
-                        <span className='text-violet-600 font-medium'>${q.total_mrr.toLocaleString()}</span>
-                        <span className='text-xs text-slate-400'>/mo</span>
+                        <span className='text-violet-300 font-medium'>${q.total_mrr.toLocaleString()}</span>
+                        <span className='text-xs text-[#8598aa]'>/mo</span>
                       </td>
                       <td className='px-4 py-3'>
                         <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full capitalize
-                          ${q.status === 'accepted' ? 'bg-emerald-100 text-emerald-700'
-                          : q.status === 'sent' || q.status === 'viewed' ? 'bg-blue-100 text-blue-700'
-                          : q.status === 'declined' ? 'bg-red-100 text-red-700'
-                          : 'bg-slate-100 text-slate-500'}`}
+                          ${q.status === 'accepted' ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300'
+                          : q.status === 'sent' || q.status === 'viewed' ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]'
+                          : q.status === 'declined' ? 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]'
+                          : 'bg-[#22303f] text-[#98abbd]'}`}
                         >
                           {q.status}
                         </span>
                       </td>
-                      <td className='px-4 py-3 text-xs text-slate-400'>
+                      <td className='px-4 py-3 text-xs text-[#8598aa]'>
                         {new Date(q.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
                       <td className='px-4 py-3 text-right'>
                         <Link
                           href={`/quotes/${q.id}`}
-                          className='text-xs text-[#6B7EFF] hover:underline flex items-center gap-1 justify-end'
+                          className='text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 justify-end'
                         >
                           <ExternalLink size={11} /> View
                         </Link>
@@ -1491,7 +1504,7 @@ export default function SiteDetailPage() {
             if (expiringSoon.length === 0) return null
             return (
               <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-[#dbe6f0] mb-3 flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
                   Expiring Within 90 Days ({expiringSoon.length})
                 </h3>
@@ -1501,14 +1514,14 @@ export default function SiteDetailPage() {
                     const exp = new Date(wa.warranty_expires_at! + 'T00:00:00')
                     const days = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
                     return (
-                      <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <p className="font-medium text-slate-800 text-sm">{a.product_name}</p>
-                        {a.product_sku && <p className="text-xs text-slate-400">{a.product_sku}</p>}
-                        <p className="text-xs text-amber-700 mt-2 font-semibold">
+                      <div key={a.id} className="bg-amber-50 border border-[rgba(251,191,36,0.35)] rounded-xl p-4">
+                        <p className="font-medium text-[#dbe6f0] text-sm">{a.product_name}</p>
+                        {a.product_sku && <p className="text-xs text-[#8598aa]">{a.product_sku}</p>}
+                        <p className="text-xs text-amber-300 mt-2 font-semibold">
                           Expires in {days} day{days !== 1 ? 's' : ''}
                         </p>
                         {wa.warranty_provider && (
-                          <p className="text-xs text-slate-500 mt-0.5">{wa.warranty_provider}</p>
+                          <p className="text-xs text-[#98abbd] mt-0.5">{wa.warranty_provider}</p>
                         )}
                       </div>
                     )
@@ -1520,43 +1533,43 @@ export default function SiteDetailPage() {
 
           {/* All Assets warranty grid */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 mb-3">All Equipment — Warranty Status</h3>
+            <h3 className="text-sm font-semibold text-[#dbe6f0] mb-3">All Equipment — Warranty Status</h3>
             {assets.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 text-sm">No equipment on this site yet.</div>
+              <div className="text-center py-10 text-[#8598aa] text-sm">No equipment on this site yet.</div>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="bg-[#1e2a3a] border border-[#33465b] rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-100">
+                  <thead className="bg-[#1a2532] border-b border-[#2a3a4d]">
                     <tr>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Asset</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Serial #</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Warranty Expires</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Provider</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">RMA Status</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Asset</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Serial #</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Warranty Expires</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">Provider</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-[#98abbd] uppercase tracking-wider">RMA Status</th>
                       <th className="px-4 py-2.5" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-[#22303f]">
                     {(assets as AssetWithWarranty[]).map(a => {
                       const rmaStatus = a.rma_status ?? 'none'
                       return (
-                        <tr key={a.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={a.id} className="hover:bg-[#22303f] transition-colors">
                           <td className="px-4 py-3">
-                            <p className="font-medium text-slate-800">{a.product_name}</p>
-                            {a.product_category && <p className="text-xs text-slate-400">{a.product_category}</p>}
+                            <p className="font-medium text-[#dbe6f0]">{a.product_name}</p>
+                            {a.product_category && <p className="text-xs text-[#8598aa]">{a.product_category}</p>}
                           </td>
-                          <td className="px-4 py-3 text-xs font-mono text-slate-500">{a.serial_number ?? '—'}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">
+                          <td className="px-4 py-3 text-xs font-mono text-[#98abbd]">{a.serial_number ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs text-[#aebfce]">
                             {a.warranty_expires_at ? formatDate(a.warranty_expires_at) : '—'}
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{a.warranty_provider ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs text-[#98abbd]">{a.warranty_provider ?? '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize
-                              ${rmaStatus === 'pending'  ? 'bg-amber-100 text-amber-700' :
-                                rmaStatus === 'shipped'  ? 'bg-blue-100 text-blue-700' :
+                              ${rmaStatus === 'pending'  ? 'bg-[rgba(251,191,36,0.15)] text-amber-300' :
+                                rmaStatus === 'shipped'  ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' :
                                 rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
-                                rmaStatus === 'resolved' ? 'bg-emerald-100 text-emerald-700' :
-                                'bg-slate-100 text-slate-400'}`}
+                                rmaStatus === 'resolved' ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300' :
+                                'bg-[#22303f] text-[#8598aa]'}`}
                             >
                               {rmaStatus === 'none' ? 'No RMA' : rmaStatus}
                             </span>
@@ -1580,7 +1593,7 @@ export default function SiteDetailPage() {
                                   })
                                   setRmaSlideOpen(true)
                                 }}
-                                className="text-xs text-brand-400 hover:text-brand-500 font-medium"
+                                className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] font-medium"
                               >
                                 Update
                               </button>
@@ -1601,38 +1614,38 @@ export default function SiteDetailPage() {
               a.rma_status && !['none', 'resolved', 'denied'].includes(a.rma_status)
             )
             if (activeRMAs.length === 0) return (
-              <div className="text-center py-8 text-slate-400">
-                <Shield size={24} className="mx-auto mb-2 text-slate-300" />
+              <div className="text-center py-8 text-[#8598aa]">
+                <Shield size={24} className="mx-auto mb-2 text-[#aebfce]" />
                 <p className="text-sm">No active RMAs</p>
                 <p className="text-xs mt-1">RMA records appear here when equipment status is set to pending, shipped, or received</p>
               </div>
             )
             return (
               <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Active RMAs ({activeRMAs.length})</h3>
+                <h3 className="text-sm font-semibold text-[#dbe6f0] mb-3">Active RMAs ({activeRMAs.length})</h3>
                 <div className="space-y-3">
                   {activeRMAs.map(a => {
                     const rmaStatus = a.rma_status ?? 'pending'
                     return (
-                      <div key={a.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                      <div key={a.id} className="bg-[#1e2a3a] border border-[#33465b] rounded-xl p-4 flex items-start justify-between gap-4">
                         <div>
-                          <p className="font-medium text-slate-800 text-sm">{a.product_name}</p>
+                          <p className="font-medium text-[#dbe6f0] text-sm">{a.product_name}</p>
                           {a.rma_ticket_number && (
-                            <p className="text-xs font-mono text-slate-400 mt-0.5">Ticket: {a.rma_ticket_number}</p>
+                            <p className="text-xs font-mono text-[#8598aa] mt-0.5">Ticket: {a.rma_ticket_number}</p>
                           )}
                           {a.rma_initiated_at && (
-                            <p className="text-xs text-slate-400 mt-0.5">Initiated: {formatDate(a.rma_initiated_at)}</p>
+                            <p className="text-xs text-[#8598aa] mt-0.5">Initiated: {formatDate(a.rma_initiated_at)}</p>
                           )}
                           {a.rma_notes && (
-                            <p className="text-xs text-slate-500 mt-1">{a.rma_notes}</p>
+                            <p className="text-xs text-[#98abbd] mt-1">{a.rma_notes}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize
-                            ${rmaStatus === 'pending'  ? 'bg-amber-100 text-amber-700' :
-                              rmaStatus === 'shipped'  ? 'bg-blue-100 text-blue-700' :
+                            ${rmaStatus === 'pending'  ? 'bg-[rgba(251,191,36,0.15)] text-amber-300' :
+                              rmaStatus === 'shipped'  ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' :
                               rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
-                              'bg-slate-100 text-slate-400'}`}
+                              'bg-[#22303f] text-[#8598aa]'}`}
                           >
                             {rmaStatus}
                           </span>
@@ -1653,7 +1666,7 @@ export default function SiteDetailPage() {
                               })
                               setRmaSlideOpen(true)
                             }}
-                            className="text-xs font-medium text-brand-400 hover:text-brand-500 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
+                            className="text-xs font-medium text-[#5FB8E0] hover:text-[#5FB8E0] border border-[#5FB8E0] px-3 py-1.5 rounded-lg hover:bg-[#3f7fb8] transition-colors"
                           >
                             Update
                           </button>
@@ -1677,23 +1690,23 @@ export default function SiteDetailPage() {
       {rmaSlideOpen && editRma && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40" onClick={() => setRmaSlideOpen(false)} />
-          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col h-full">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+          <div className="w-full max-w-md bg-[#1e2a3a] shadow-2xl flex flex-col h-full">
+            <div className="sticky top-0 bg-[#1e2a3a] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Update RMA</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{editRma.asset_name}</p>
+                <h2 className="text-base font-semibold text-[#eaf2fb]">Update RMA</h2>
+                <p className="text-xs text-[#8598aa] mt-0.5">{editRma.asset_name}</p>
               </div>
-              <button onClick={() => setRmaSlideOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setRmaSlideOpen(false)} className="text-[#8598aa] hover:text-[#c3d3e2]">
                 <X size={20} />
               </button>
             </div>
             <div className="flex-1 p-6 space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                <label className="block text-xs font-medium text-[#aebfce] mb-1">Status</label>
                 <select
                   value={rmaForm.status}
                   onChange={e => setRmaForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
                 >
                   <option value="pending">Pending</option>
                   <option value="shipped">Shipped</option>
@@ -1703,29 +1716,29 @@ export default function SiteDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Number</label>
+                <label className="block text-xs font-medium text-[#aebfce] mb-1">Ticket Number</label>
                 <input
                   value={rmaForm.ticket_number}
                   onChange={e => setRmaForm(f => ({ ...f, ticket_number: e.target.value }))}
                   placeholder="RMA-12345"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-[#aebfce] mb-1">Notes</label>
                 <textarea
                   value={rmaForm.notes}
                   onChange={e => setRmaForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="RMA notes, tracking number, resolution details…"
                   rows={4}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
                 />
               </div>
             </div>
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex gap-3 justify-end">
+            <div className="sticky bottom-0 bg-[#1e2a3a] border-t border-[#33465b] px-6 py-4 flex gap-3 justify-end">
               <button
                 onClick={() => setRmaSlideOpen(false)}
-                className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-sm border border-[#3a4a5c] rounded-lg hover:bg-[#22303f]"
               >
                 Cancel
               </button>
@@ -1757,7 +1770,7 @@ export default function SiteDetailPage() {
                     setRmaSlideOpen(false)
                   } finally { setRmaSaving(false) }
                 }}
-                className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50"
+                className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50"
               >
                 {rmaSaving ? 'Saving…' : 'Save Changes'}
               </button>
@@ -1776,6 +1789,7 @@ export default function SiteDetailPage() {
           setTab('assets')
         }}
       />
+    </div>
     </div>
   )
 }
@@ -1817,49 +1831,49 @@ function OrgPickerModal({ open, onClose, onSelect, tierFilter, title }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+      <div className="relative bg-[#1e2a3a] rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-[#33465b] flex items-center justify-between">
+          <h3 className="font-semibold text-[#eaf2fb]">{title}</h3>
+          <button onClick={onClose} className="text-[#8598aa] hover:text-[#c3d3e2]"><X size={18} /></button>
         </div>
-        <div className="px-4 py-3 border-b border-slate-100">
+        <div className="px-4 py-3 border-b border-[#2a3a4d]">
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8598aa]" />
             <input
               autoFocus
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="Search by name..."
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-4 py-2 border border-[#33465b] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {searching && <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Searching…</div>}
+          {searching && <div className="flex items-center justify-center py-8 text-[#8598aa] text-sm">Searching…</div>}
           {!searching && q && results.length === 0 && (
-            <div className="py-8 text-center text-slate-400 text-sm">No results for &ldquo;{q}&rdquo;</div>
+            <div className="py-8 text-center text-[#8598aa] text-sm">No results for &ldquo;{q}&rdquo;</div>
           )}
           {!searching && !q && (
-            <div className="py-6 text-center text-slate-400 text-sm">Type to search organizations</div>
+            <div className="py-6 text-center text-[#8598aa] text-sm">Type to search organizations</div>
           )}
           {results.map(org => (
             <button
               key={org.id}
               onClick={() => { onSelect(org); onClose() }}
-              className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0"
+              className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#22303f] text-left border-b border-[#2a3a4d] last:border-0"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">{org.name}</p>
-                {org.org_tier && <p className="text-xs text-slate-400 capitalize">{org.org_tier.replace(/_/g, ' ')}</p>}
+                <p className="text-sm font-medium text-[#eaf2fb] truncate">{org.name}</p>
+                {org.org_tier && <p className="text-xs text-[#8598aa] capitalize">{org.org_tier.replace(/_/g, ' ')}</p>}
               </div>
-              <span className="text-xs text-brand-400 font-medium shrink-0">Select →</span>
+              <span className="text-xs text-[#5FB8E0] font-medium shrink-0">Select →</span>
             </button>
           ))}
         </div>
-        <div className="px-5 py-3 border-t border-slate-100">
+        <div className="px-5 py-3 border-t border-[#2a3a4d]">
           <button
             onClick={() => { onSelect(null); onClose() }}
-            className="text-sm text-slate-400 hover:text-red-500"
+            className="text-sm text-[#8598aa] hover:text-[#fb7185]"
           >
             Remove assignment
           </button>
@@ -1888,17 +1902,17 @@ function AssignmentCard({
       <div className="flex items-center justify-between mb-2">
         <span className={`text-xs font-bold uppercase tracking-widest ${color}`}>{role}</span>
         {primary && (
-          <span className="text-xs bg-white/70 border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full">Primary</span>
+          <span className="text-xs bg-[#1e2a3a]/70 border border-[#33465b] text-[#98abbd] px-2 py-0.5 rounded-full">Primary</span>
         )}
       </div>
-      <p className="text-xs text-slate-500 mb-3">{label}</p>
+      <p className="text-xs text-[#98abbd] mb-3">{label}</p>
       {orgLink ? (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-slate-800 truncate">{orgLink.name}</span>
+          <span className="text-sm font-medium text-[#dbe6f0] truncate">{orgLink.name}</span>
           <div className="flex items-center gap-2 shrink-0">
             <Link href={`/customers/${orgLink.id}`} className={`text-xs font-medium ${color} hover:underline`}>View</Link>
-            <span className="text-slate-300">·</span>
-            <button onClick={() => onAssign(fieldKey)} className="text-xs text-slate-400 hover:text-slate-600">Transfer</button>
+            <span className="text-[#aebfce]">·</span>
+            <button onClick={() => onAssign(fieldKey)} className="text-xs text-[#8598aa] hover:text-[#c3d3e2]">Transfer</button>
           </div>
         </div>
       ) : (
@@ -1917,9 +1931,9 @@ function AssignmentCard({
 function InfoRow({ label, value, monospace }: { label: string; value: React.ReactNode; monospace?: boolean }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-28 shrink-0 text-slate-400">{label}</dt>
-      <dd className={`text-slate-700 ${monospace ? 'font-mono' : ''}`}>
-        {value ?? <span className="text-slate-300">—</span>}
+      <dt className="w-28 shrink-0 text-[#8598aa]">{label}</dt>
+      <dd className={`text-[#c3d3e2] ${monospace ? 'font-mono' : ''}`}>
+        {value ?? <span className="text-[#aebfce]">—</span>}
       </dd>
     </div>
   )
@@ -1982,7 +1996,7 @@ function SiteMapEmbed({ address }: { address: string }) {
         zoom:      15,
       })
 
-      new mapboxgl.Marker({ color: '#6B7EFF' })
+      new mapboxgl.Marker({ color: '#5FB8E0' })
         .setLngLat(coords)
         .addTo(map)
     }
@@ -1997,8 +2011,8 @@ function SiteMapEmbed({ address }: { address: string }) {
 
   if (!token) {
     return (
-      <div className="h-[280px] rounded-xl border border-border bg-slate-50 flex flex-col items-center justify-center text-slate-400 text-sm gap-1">
-        <MapPin size={24} className="text-slate-300" />
+      <div className="h-[280px] rounded-xl border border-border bg-[#1a2532] flex flex-col items-center justify-center text-[#8598aa] text-sm gap-1">
+        <MapPin size={24} className="text-[#aebfce]" />
         <span>Map unavailable — set NEXT_PUBLIC_MAPBOX_TOKEN</span>
       </div>
     )

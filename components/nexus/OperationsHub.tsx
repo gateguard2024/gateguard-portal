@@ -24,6 +24,7 @@ const { Printer, X, Truck, MapPin, CheckCircle2, Star, FileText, Mail, RotateCcw
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
+import CalendarViews from "@/components/nexus/CalendarViews";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
@@ -161,15 +162,14 @@ function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; on
     </div>
   </div>;
 }
-const TABS = ["Dashboard", "Work Orders", "Schedule", "Analytics", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
+const TABS = ["Dashboard", "Work Orders", "Schedule", "Analytics", "Requests", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
-  Schedule: "Drag jobs onto a tech & day",
+  Schedule: "What's scheduled — jobs, PMs & to-dos",
   Analytics: "Utilization + first-time-fix",
   Requests: "Incoming requests → turn into jobs",
-  Calendar: "What's scheduled, by day",
   Locations: "Your sites — tap to edit details",
   Techs: "Add techs + set their app code",
   Parts: "Inventory + stock levels",
@@ -234,10 +234,9 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} createError={woError} />}
-    {page === "Schedule" && <DispatchBoard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
+    {page === "Schedule" && <CalendarViews />}
     {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
-    {page === "Calendar" && <CalendarView onOpenWO={setOpenId} jobs={jobs} />}
     {page === "Locations" && <Locations />}
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
