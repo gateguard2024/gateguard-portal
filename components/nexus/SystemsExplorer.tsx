@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, MapPin, Shield } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
-import { SiteSystems } from '@/components/nexus/SiteSystems';
+import { SiteCommand } from '@/components/nexus/SiteCommand';
 // Vercel lucide cache quirk — load via require()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft } = require('lucide-react') as any;
@@ -56,7 +56,7 @@ export function SystemsExplorer() {
             <h1 style={{ margin: '4px 0 0', fontSize: 24, fontWeight: 600, color: '#152535' }}>{openSite.name || 'Site'}</h1>
             {(openSite.address || openSite.city) && <div style={{ fontSize: 13, color: '#37485c' }}>{[openSite.address, openSite.city, openSite.state].filter(Boolean).join(', ')}</div>}
           </div>
-          <SiteSystems siteId={openSite.id} isCorporate={isCorporate} headerTheme="light" />
+          <SiteCommand siteId={openSite.id} isCorporate={isCorporate} />
         </div>
       </section>
     );
