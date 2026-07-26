@@ -197,13 +197,19 @@ function SignModal({ doc, onClose, onSent }: { doc: Any; onClose: () => void; on
   const [signUrl, setSignUrl] = useState<string | null>(null);
   const [err, setErr] = useState('');
 
-  async function send() {
+  async function send(provider: 'builtin' | 'adobe') {
     if (!email.trim()) return;
     setBusy(true); setErr('');
     try {
-      const j = await fetch('/api/adobe-sign/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id, signer_email: email.trim(), signer_name: name.trim() || undefined }) }).then(r => r.json());
-      if (j.error) throw new Error(j.error);
-      if (j.signing_url) setSignUrl(j.signing_url); else onSent(`Sent “${doc.name}” to ${email} for signature`);
+      if (provider === 'adobe') {
+        const j = await fetch('/api/adobe-sign/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id, signer_email: email.trim(), signer_name: name.trim() || undefined }) }).then(r => r.json());
+        if (j.error) throw new Error(j.error);
+        if (j.signing_url) setSignUrl(j.signing_url); else onSent(`Sent “${doc.name}” to ${email} via Acrobat Sign`);
+      } else {
+        const j = await fetch('/api/signatures/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_type: doc.category || 'document', document_url: doc.file_url || null, signer_name: name.trim() || email.trim(), signer_email: email.trim() }) }).then(r => r.json());
+        if (j.error) throw new Error(j.error);
+        onSent(`Sent “${doc.name}” to ${email} — signing link emailed`);
+      }
     } catch (e) { setErr(e instanceof Error ? e.message : 'Send failed'); } finally { setBusy(false); }
   }
 
@@ -224,10 +230,11 @@ function SignModal({ doc, onClose, onSent }: { doc: Any; onClose: () => void; on
               <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Signer email" style={INPUT} />
               {err && <div style={{ fontSize: 12, color: '#f2637e' }}>{err}</div>}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-              <button onClick={send} disabled={busy || !email.trim()} style={{ ...GO, padding: '8px 16px', opacity: busy || !email.trim() ? 0.4 : 1 }}>{busy ? 'Sending…' : 'Send via Acrobat Sign'}</button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              <button onClick={() => send('adobe')} disabled={busy || !email.trim()} style={{ ...ICE, padding: '8px 14px', opacity: busy || !email.trim() ? 0.4 : 1 }}>{busy ? '…' : 'Acrobat Sign'}</button>
+              <button onClick={() => send('builtin')} disabled={busy || !email.trim()} style={{ ...GO, padding: '8px 16px', opacity: busy || !email.trim() ? 0.4 : 1 }}>{busy ? 'Sending…' : 'Send for signature'}</button>
             </div>
-            <div style={{ fontSize: 9.5, color: '#6f8397', marginTop: 8 }}>Uses Adobe Acrobat Sign. If embedded signing is available on your plan, it opens here; otherwise Adobe emails the signer.</div>
+            <div style={{ fontSize: 9.5, color: '#6f8397', marginTop: 8 }}>“Send for signature” emails a secure signing link (built-in). “Acrobat Sign” uses Adobe once your plan/keys are set — otherwise it will report it isn’t configured.</div>
           </>
         )}
       </div>
