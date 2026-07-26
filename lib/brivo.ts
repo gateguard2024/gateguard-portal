@@ -260,9 +260,15 @@ export async function listBrivoUsers(
   let offset = 0
   const pageSize = 100
 
+  // NOTE: Brivo's `/users` endpoint rejects the `site eq "X"` filter with a
+  // 400 "Invalid filter format" (users belong to a site via GROUPS, not a
+  // direct site field). So we page ALL account users, then narrow client-side
+  // to the site's groups when we can determine them (mirrors the doors pattern).
+  const siteGroupIds = await listBrivoSiteGroupIds(token, apiKey, brivoSiteId).catch(() => [] as string[])
+  const siteGroupSet = new Set(siteGroupIds)
+
   while (true) {
     const data = await brivoGet(token, apiKey, '/users', {
-      filter:   `site eq "${brivoSiteId}"`,
       pageSize: String(pageSize),
       offset:   String(offset),
     })
@@ -271,6 +277,11 @@ export async function listBrivoUsers(
     if (page.length === 0) break
 
     for (const u of page) {
+      // Narrow to this site's groups when we could resolve them; otherwise keep all.
+      if (siteGroupSet.size > 0) {
+        const gids: string[] = (u.groupIds ?? []).map((g: any) => String(g))
+        if (!gids.some(g => siteGroupSet.has(g))) continue
+      }
       // Extract phone from custom fields (Brivo stores phone as a custom field)
       const phone = u.customFields?.find((f: any) =>
         f.fieldName?.toLowerCase().includes('phone') ||
@@ -454,12 +465,40 @@ export async function revokeBrivoMobilePass(token: string, apiKey: string, userI
   return { revoked: passes.length }
 }
 
+/** Raw group rows for a site — pages ALL groups then narrows client-side by any
+ * site field present (Brivo's `/groups` endpoint rejects the `site eq "X"` filter
+ * with a 400 "Invalid filter format", same as /users). */
+async function listBrivoSiteGroupsRaw(token: string, apiKey: string, brivoSiteId: string): Promise<any[]> {
+  const out: any[] = []
+  let offset = 0
+  const pageSize = 100
+  while (true) {
+    const data = await brivoGet(token, apiKey, '/groups', { pageSize: String(pageSize), offset: String(offset) })
+    const page: any[] = data.data ?? []
+    out.push(...page)
+    if (page.length < pageSize) break
+    offset += pageSize
+    if (offset > 5000) break
+  }
+  if (brivoSiteId) {
+    const narrowed = out.filter(g => String(g.siteId ?? g.site?.id ?? g.site ?? '') === String(brivoSiteId))
+    if (narrowed.length > 0) return narrowed  // only narrow if the field actually matched
+  }
+  return out
+}
+
+/** Group ids for a site — used to narrow the (unfilterable) user list. */
+export async function listBrivoSiteGroupIds(token: string, apiKey: string, brivoSiteId: string): Promise<string[]> {
+  const groups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId)
+  return groups.map(g => String(g.id))
+}
+
 /** List the Brivo groups for a site (used for the Add-User access picker). */
 export async function listBrivoGroups(
   token: string,
   apiKey: string,
   brivoSiteId: string,
 ): Promise<{ id: string; name: string }[]> {
-  const data = await brivoGet(token, apiKey, '/groups', { filter: `site eq "${brivoSiteId}"`, pageSize: '100' })
-  return (data.data ?? []).map((g: any) => ({ id: String(g.id), name: g.name ?? 'Group' }))
+  const groups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId)
+  return groups.map((g: any) => ({ id: String(g.id), name: g.name ?? 'Group' }))
 }
