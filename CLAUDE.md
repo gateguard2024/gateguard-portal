@@ -11,6 +11,7 @@
 1. **Update PE Investor One-Sheet** at `/Users/russelfeldman/Desktop/Claude/GateGuard_PE_Investor_OneSheet.md` — check Traction section for new CRM numbers.
 2. **EOS Language** — Rocks (quarterly), Scorecard (weekly), Issues (IDS), To-Dos, L10 (Fridays 6am with Nicole Gagliardi).
 3. **Git push rule** — after every push: `git push origin main` then `git push origin main:beta`
+4. **🔒 Systems "Setup & keys" is CORPORATE-ONLY.** The Site Systems credential vault (Brivo / Eagle Eye / UniFi / Shelly keys + connect/OAuth) may only be viewed, set, tested, or deleted by users in the **Gate Guard Corporate** org (`user.isCorporate` = `org_tier === 'corporate'`). Enforced server-side in `app/api/sites/[id]/integrations` (`canManageSite`), `app/api/eagle-eye/connect` + `/callback`, `app/api/unifi/cloud/sites`. UI gate: the ⚙ Setup & keys button + `SiteConnections` render only when `isCorporate`. **Never loosen this** — dealers/techs may *operate* systems (`canOperate`) but never see or edit the keys. Any new system-credential endpoint MUST start with `if (!user.isCorporate) return 403`.
 
 ---
 
