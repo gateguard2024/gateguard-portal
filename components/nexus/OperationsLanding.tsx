@@ -76,6 +76,19 @@ function Dial({ label, value, unit, pct, color, note }: { label: string; value: 
   )
 }
 
+// Bare semicircle gauge (no card) — for the compact Service Performance tile.
+function Gauge({ pct, color, label }: { pct: number; color: string; label: string }) {
+  const p = Math.max(0, Math.min(1, pct))
+  const end = { x: 60 - 48 * Math.cos(Math.PI * p), y: 60 - 48 * Math.sin(Math.PI * p) }
+  return (
+    <svg width="76" height="42" viewBox="0 0 120 66" className="mx-auto">
+      <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="#12202c" strokeWidth="10" strokeLinecap="round" />
+      {p > 0.001 && <path d={`M12 60 A48 48 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />}
+      <text x="60" y="53" textAnchor="middle" fontSize="27" fill="#eaf2fb" fontWeight="800">{label}</text>
+    </svg>
+  )
+}
+
 export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: string) => void; onOpenJob?: (id: string) => void }) {
   const [d, setD] = useState<OpsData | null>(null)
   const [an, setAn] = useState<Analytics | null>(null)
@@ -196,34 +209,43 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
               </div>
             </Tile>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Dial label="Avg Response" value={d?.response.avgResponseHours != null ? String(d.response.avgResponseHours) : '—'} unit={d?.response.avgResponseHours != null ? 'h' : ''} pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0.02} color="#5FB8E0" note="request → on-site · REAL" />
-              <Dial label="Avg Resolve" value={d?.response.avgResolveDays != null ? String(d.response.avgResolveDays) : '—'} unit={d?.response.avgResolveDays != null ? 'd' : ''} pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0.02} color="#7ee0a8" note="open → completed · REAL" />
-            </div>
-
+            {/* Service performance — response, resolve, load in one compact tile */}
             <Tile>
-              <CardHead title="Today's Schedule" right={<button type="button" onClick={() => onOpenTab('Calendar')} className="text-[10px] font-semibold" style={{ color: '#8FD3EC' }}>Calendar →</button>} />
-              <div className="flex flex-col gap-1.5" style={{ maxHeight: 132, overflowY: 'auto' }}>
-                {(d?.schedule.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#7f96ab' }}>{loading ? 'Loading…' : 'No jobs scheduled today.'}</div>}
-                {(d?.schedule.items ?? []).map(j => (
-                  <button key={j.id} type="button" onClick={() => onOpenJob?.(j.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
-                    <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{j.title}{j.site ? ` · ${j.site}` : ''}</span>
-                    <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(j.priority) }}>{j.tech ?? j.status}</span>
-                  </button>
-                ))}
+              <CardHead title="Service Performance" right={<span className="text-[10px]" style={{ color: '#98abbd' }}>REAL · rolling</span>} />
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                  <Gauge pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0} color="#5FB8E0" label={d?.response.avgResponseHours != null ? `${d.response.avgResponseHours}h` : '—'} />
+                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Avg Response</div>
+                  <div className="text-[8px]" style={{ color: '#7f96ab' }}>to on-site</div>
+                </div>
+                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                  <Gauge pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0} color="#7ee0a8" label={d?.response.avgResolveDays != null ? `${d.response.avgResolveDays}d` : '—'} />
+                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Avg Resolve</div>
+                  <div className="text-[8px]" style={{ color: '#7f96ab' }}>to close</div>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl px-2 py-2 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                  <div className="text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : (d?.serviceLoad.ratio ?? 0)}</div>
+                  <div className="mt-1 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Load / device</div>
+                  <div className="text-[8px]" style={{ color: '#7f96ab' }}>{d?.serviceLoad.visits90d ?? 0} visits · 90d</div>
+                </div>
               </div>
             </Tile>
 
+            {/* Today's schedule — slim (thin when empty) */}
             <Tile>
-              <CardHead title="Service Load / Device" right={<span className="text-[10px]" style={{ color: '#98abbd' }}>90 days</span>} />
-              <div className="mb-1.5 flex items-baseline gap-2">
-                <span className="text-[26px] font-extrabold" style={{ color: '#eaf2fb' }}>{loading ? '–' : (d?.serviceLoad.ratio ?? 0)}</span>
-                <span className="text-[11px]" style={{ color: '#98abbd' }}>visits / device · {d?.serviceLoad.visits90d ?? 0} visits on {d?.serviceLoad.devices ?? 0} devices</span>
-              </div>
-              <div style={{ height: 7, borderRadius: 4, background: '#12202c', overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min(100, (d?.serviceLoad.ratio ?? 0) * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#3f7fb8,#5FB8E0)' }} />
-              </div>
-              <div className="mt-1.5 text-[9px]" style={{ color: '#7f96ab' }}>Rising ratio = a site burning abnormal truck-rolls ↑</div>
+              <CardHead title="Today's Schedule" right={<button type="button" onClick={() => onOpenTab('Calendar')} className="text-[10px] font-semibold" style={{ color: '#8FD3EC' }}>Calendar →</button>} />
+              {(d?.schedule.items ?? []).length === 0 ? (
+                <div className="py-1.5 text-center text-[11px]" style={{ color: '#7f96ab' }}>{loading ? 'Loading…' : 'Nothing scheduled today.'}</div>
+              ) : (
+                <div className="flex flex-col gap-1.5" style={{ maxHeight: 120, overflowY: 'auto' }}>
+                  {(d?.schedule.items ?? []).map(j => (
+                    <button key={j.id} type="button" onClick={() => onOpenJob?.(j.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                      <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{j.title}{j.site ? ` · ${j.site}` : ''}</span>
+                      <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(j.priority) }}>{j.tech ?? j.status}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </Tile>
           </div>
 
@@ -231,15 +253,18 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
           <div className="flex flex-col gap-3">
             <Tile>
               <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(242,99,126,0.16)', border: '1px solid rgba(242,99,126,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
-              <div className="flex flex-col gap-1.5" style={{ maxHeight: 124, overflowY: 'auto' }}>
-                {(d?.requests.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#7f96ab' }}>{loading ? 'Loading…' : 'No open requests.'}</div>}
-                {(d?.requests.items ?? []).map(r => (
-                  <button key={r.id} type="button" onClick={() => onOpenTab('Requests')} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
-                    <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{r.title}{r.site ? ` · ${r.site}` : ''}</span>
-                    <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(r.priority) }}>{ageLabel(r.ageHours)}</span>
-                  </button>
-                ))}
-              </div>
+              {(d?.requests.items ?? []).length === 0 ? (
+                <div className="py-1.5 text-center text-[11px]" style={{ color: '#7f96ab' }}>{loading ? 'Loading…' : 'No open requests.'}</div>
+              ) : (
+                <div className="flex flex-col gap-1.5" style={{ maxHeight: 124, overflowY: 'auto' }}>
+                  {(d?.requests.items ?? []).map(r => (
+                    <button key={r.id} type="button" onClick={() => onOpenTab('Requests')} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                      <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{r.title}{r.site ? ` · ${r.site}` : ''}</span>
+                      <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(r.priority) }}>{ageLabel(r.ageHours)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </Tile>
 
             <Tile onClick={() => onOpenTab('PM')}>
