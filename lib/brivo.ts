@@ -415,7 +415,7 @@ export async function deleteBrivoCredential(token: string, apiKey: string, crede
 
 /** Resend a Brivo Mobile Pass: revoke existing mobile-pass credentials for the
  * user, then issue + assign a fresh one (Brivo emails the new invite). */
-export async function resendBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null): Promise<{ revoked: number }> {
+export async function resendBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null, dates?: { from?: string | null; to?: string | null }): Promise<{ revoked: number }> {
   const creds = await listBrivoUserCredentials(token, apiKey, userId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const passes = creds.filter((c: any) => /mobile|bmp|pass/i.test(`${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`))
@@ -428,8 +428,20 @@ export async function resendBrivoMobilePass(token: string, apiKey: string, userI
     referenceId: email ?? `user-${userId}`,
   })
   const credId = String(created.id ?? created.referenceId ?? '')
-  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  if (credId) {
+    // Assign to the user, optionally time-boxed (effective from/to — used for guests).
+    const assign: Record<string, unknown> = {}
+    if (dates?.from) assign.effectiveFrom = dates.from
+    if (dates?.to) assign.effectiveTo = dates.to
+    try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, assign) } catch { /* assignment best-effort */ }
+  }
   return { revoked: passes.length }
+}
+
+/** Assign a Brivo user to a group (how Brivo grants site access). */
+export async function assignBrivoUserToGroup(token: string, apiKey: string, groupId: string, userId: string): Promise<{ success: true }> {
+  await brivoPut(token, apiKey, `/groups/${groupId}/users/${userId}`, {})
+  return { success: true }
 }
 
 /** Revoke ALL mobile-pass credentials for a user (turns off their pass) without

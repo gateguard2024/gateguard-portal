@@ -106,20 +106,50 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
       {/* Faults & uptime (built) */}
       <div id="sec-faults"><SiteIncidents siteId={siteId} /></div>
 
-      {/* Widgets — reused as-is, with anchors for the quick tools. */}
-      <div id="sec-cameras"><SiteSecurity siteId={siteId} /></div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
-        <div id="sec-doors"><SiteDoors siteId={siteId} /></div>
-        <div id="sec-activity"><SiteActivity siteId={siteId} /></div>
+      {/* Widgets — reused as-is, each under a defining section header. */}
+      <div id="sec-cameras">
+        <SectionHead icon="📹" title="Cameras" desc="Live security — Eagle Eye" />
+        <SiteSecurity siteId={siteId} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
-        <div id="sec-network"><SiteNetwork siteId={siteId} /></div>
-        <div id="sec-relays"><SiteRelays siteId={siteId} /></div>
+        <div id="sec-doors">
+          <SectionHead icon="🚪" title="Doors" desc="Access points — Brivo" />
+          <SiteDoors siteId={siteId} />
+        </div>
+        <div id="sec-activity">
+          <SectionHead icon="📜" title="Activity" desc="Recent access events" />
+          <SiteActivity siteId={siteId} />
+        </div>
       </div>
 
-      <div id="sec-panels"><SitePanels siteId={siteId} isCorporate={isCorporate} /></div>
+      {/* Network — UniFi. Own defining section per request. */}
+      <div id="sec-network">
+        <SectionHead icon="📡" title="Network" desc="Internet, clients & gear health — UniFi" accent="#5FB8E0" />
+        <SiteNetwork siteId={siteId} />
+      </div>
+
+      <div id="sec-relays">
+        <SectionHead icon="⚡" title="Relays & power" desc="Gate relays & smart switches — Shelly" />
+        <SiteRelays siteId={siteId} />
+      </div>
+
+      <div id="sec-panels">
+        <SectionHead icon="🎛" title="Controllers & doors" desc="Panels, door programming & provisioning" />
+        <SitePanels siteId={siteId} isCorporate={isCorporate} />
+      </div>
+    </div>
+  );
+}
+
+function SectionHead({ icon, title, desc, accent = '#9FD8EC' }: { icon: string; title: string; desc: string; accent?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 10, background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderLeft: `3px solid ${accent}`, borderRadius: 12 }}>
+      <span style={{ fontSize: 16 }} aria-hidden>{icon}</span>
+      <div>
+        <div style={{ color: '#eaf2fb', fontSize: 13, fontWeight: 700, letterSpacing: '0.01em' }}>{title}</div>
+        <div style={{ color: '#98abbd', fontSize: 10.5 }}>{desc}</div>
+      </div>
     </div>
   );
 }

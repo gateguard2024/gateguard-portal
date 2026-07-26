@@ -1,19 +1,16 @@
 /**
- * POST /api/brivo/users/[id]/resend-pass  { site_id|org_id, email?, name? }
- * Resend a resident's Brivo Mobile Pass (revoke old + issue new) — so a dealer
- * fixes "I didn't get my pass" without logging into Brivo. 'door_users' capability.
- * [id] = Brivo user id.
+ * POST /api/brivo/users/[id]/group  { site_id|org_id, group_id, name?, group_name? }
+ * Assign a Brivo user to a group (grants site access). 'door_users'.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { canOperate } from '@/lib/system-access'
 import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
-import { getOrgBrivoToken, getSiteBrivoToken, resendBrivoMobilePass } from '@/lib/brivo'
+import { getOrgBrivoToken, getSiteBrivoToken, assignBrivoUserToGroup } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -22,6 +19,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json().catch(() => ({}))
     const siteId = String(body.site_id ?? '')
     const orgId = String(body.org_id ?? '')
+    const groupId = String(body.group_id ?? '')
+    if (!groupId) return NextResponse.json({ error: 'group_id is required' }, { status: 400 })
 
     let token: string, apiKey: string
     if (siteId) {
@@ -37,22 +36,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'site_id or org_id is required' }, { status: 400 })
     }
 
-    const result = await resendBrivoMobilePass(token, apiKey, params.id, body.email ? String(body.email) : null, { from: body.effectiveFrom ?? null, to: body.effectiveTo ?? null })
+    await assignBrivoUserToGroup(token, apiKey, groupId, params.id)
 
     if (siteId) {
       try {
         await supabase.from('site_events').insert({
-          site_id: siteId, event_type: 'pass_resend', event_source: 'brivo',
-          title: `Mobile pass resent: ${body.name ?? 'resident'}`,
-          description: `${user.name} resent a Brivo Mobile Pass (revoked ${result.revoked} old) via Nexus`,
-          summary: `Pass resent by ${user.name}`,
+          site_id: siteId, event_type: 'user_group_assign', event_source: 'brivo',
+          title: `Group assigned: ${body.name ?? 'user'} → ${body.group_name ?? 'group'}`,
+          description: `${user.name} added a Brivo user to a group via Nexus`,
+          summary: `Group assigned by ${user.name}`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          metadata: { brivo_user_id: params.id, by_name: user.name } as any,
+          metadata: { brivo_user_id: params.id, group_id: groupId, by_name: user.name } as any,
         })
       } catch { /* audit best-effort */ }
     }
-    return NextResponse.json({ ok: true, revoked: result.revoked })
+    return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Resend pass failed' }, { status: 502 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Group assign failed' }, { status: 502 })
   }
 }
