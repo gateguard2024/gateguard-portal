@@ -197,7 +197,7 @@ const PRIORITY_CFG: Record<WOPriority, { bg: string; text: string; label: string
 }
 
 const STATUS_CFG: Record<WOStatus, { label: string; bg: string; text: string; dot: string }> = {
-  open:        { label: 'Open',        bg: 'bg-blue-500/10',    text: 'text-blue-400',    dot: 'bg-blue-400'    },
+  open:        { label: 'Open',        bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]',    dot: 'bg-[#3f7fb8]'    },
   scheduled:   { label: 'Scheduled',   bg: 'bg-violet-500/10',  text: 'text-violet-400',  dot: 'bg-violet-400'  },
   in_route:    { label: 'En Route',    bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
   on_site:     { label: 'On Site',     bg: 'bg-orange-500/10',  text: 'text-orange-400',  dot: 'bg-orange-400'  },
@@ -225,7 +225,7 @@ const PRIORITIES: { value: WOPriority; label: string }[] = [
 
 // Compact category colors used in Details tab checklist overview
 const CATEGORY_COLORS: Record<string, string> = {
-  task:         'bg-blue-500/10 text-blue-400',
+  task:         'bg-[#2f7fb8]/10 text-[#5FB8E0]',
   safety:       'bg-red-500/10 text-red-400',
   inspection:   'bg-violet-500/10 text-violet-400',
   verification: 'bg-emerald-500/10 text-emerald-400',
@@ -1414,7 +1414,7 @@ export default function WorkOrderDetailPage() {
                       className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <Calendar size={15} className="text-blue-400" />
+                        <Calendar size={15} className="text-[#5FB8E0]" />
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Schedule →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
@@ -1447,7 +1447,7 @@ export default function WorkOrderDetailPage() {
                       className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <MessageSquare size={15} className="text-sky-400" />
+                        <MessageSquare size={15} className="text-[#9FD8EC]" />
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Comments →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">{comments.length}</p>
@@ -1940,7 +1940,7 @@ export default function WorkOrderDetailPage() {
                           {partsUsed.map(p => {
                             const np = normPart(p)
                             const actionColors: Record<string, string> = {
-                              used:      'bg-blue-500/10 text-blue-400',
+                              used:      'bg-[#2f7fb8]/10 text-[#5FB8E0]',
                               installed: 'bg-emerald-500/10 text-emerald-400',
                               returned:  'bg-amber-500/10 text-amber-400',
                               warranty:  'bg-violet-500/10 text-violet-400',
@@ -1966,7 +1966,7 @@ export default function WorkOrderDetailPage() {
                                         disabled={markingUsed === p.id}
                                         className={cn(
                                           'opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] font-semibold transition-all',
-                                          'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 disabled:opacity-40'
+                                          'bg-[#2f7fb8]/10 text-[#5FB8E0] hover:bg-[#2f7fb8]/20 disabled:opacity-40'
                                         )}
                                       >
                                         {markingUsed === p.id ? '…' : 'Mark Used'}
@@ -2248,7 +2248,7 @@ export default function WorkOrderDetailPage() {
                                   <td className="px-5 py-3">
                                     <span className={cn(
                                       'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium',
-                                      c.source === 'manual'      ? 'bg-blue-500/10 text-blue-400' :
+                                      c.source === 'manual'      ? 'bg-[#2f7fb8]/10 text-[#5FB8E0]' :
                                       c.source === 'time_entry'  ? 'bg-amber-500/10 text-amber-400' :
                                       c.source === 'parts_used'  ? 'bg-emerald-500/10 text-emerald-400' :
                                       'bg-muted text-muted-foreground'
@@ -2680,7 +2680,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
   const available = techs.filter(t => !assignedIds.has(t.id))
 
   const ROLE_COLORS: Record<string, string> = {
-    lead:       'bg-blue-100 text-blue-700',
+    lead:       'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',
     owner:      'bg-violet-100 text-violet-700',
     supervisor: 'bg-amber-100 text-amber-700',
     crew:       'bg-muted text-muted-foreground',
@@ -2876,7 +2876,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
 
   const PHASE_STATUS_CFG: Record<string, { label: string; color: string }> = {
     pending:     { label: 'Pending',     color: 'bg-muted text-slate-500' },
-    in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
+    in_progress: { label: 'In Progress', color: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' },
     complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700' },
     skipped:     { label: 'Skipped',     color: 'bg-amber-100 text-amber-600' },
   }
@@ -3069,7 +3069,7 @@ interface FTTabProps {
 }
 
 const CATEGORY_CFG: Record<string, { label: string; bg: string; text: string }> = {
-  task:         { label: 'Task',         bg: 'bg-blue-500/10',    text: 'text-blue-400'    },
+  task:         { label: 'Task',         bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]'    },
   safety:       { label: 'Safety',       bg: 'bg-red-500/10',     text: 'text-red-400'     },
   inspection:   { label: 'Inspect',      bg: 'bg-violet-500/10',  text: 'text-violet-400'  },
   verification: { label: 'Verify',       bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
@@ -3598,7 +3598,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                         setEquipForm(f => ({ ...f, name: p.name, sku: p.sku ?? '', make: p.brand ?? f.make, product_id: p.id, image_url: p.image_url ?? null }))
                         setEqCatalogQuery(p.name); setEqShowCatalog(false)
                       }}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2.5"
+                      className="w-full text-left px-3 py-2 hover:bg-[#22303f] transition-colors flex items-center gap-2.5"
                     >
                       {p.image_url
                         ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-card border border-border shrink-0" />
@@ -3805,7 +3805,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
   const OUTCOME_CFG: Record<string, { label: string; color: string }> = {
     reached:            { label: 'Reached',           color: 'bg-emerald-500/10 text-emerald-400' },
     no_answer:          { label: 'No Answer',          color: 'bg-slate-500/10 text-slate-400'     },
-    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-blue-500/10 text-blue-400'       },
+    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-[#2f7fb8]/10 text-[#5FB8E0]'       },
     wrong_number:       { label: 'Wrong Number',       color: 'bg-red-500/10 text-red-400'         },
     callback_requested: { label: 'Callback Requested', color: 'bg-amber-500/10 text-amber-400'     },
   }
