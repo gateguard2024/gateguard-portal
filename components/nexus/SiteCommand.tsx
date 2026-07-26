@@ -15,6 +15,8 @@ import { SiteActivity } from '@/components/nexus/SiteActivity';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SiteAccessControl } from '@/components/nexus/SiteAccessControl';
+import { SiteCameraEvents } from '@/components/nexus/SiteCameraEvents';
+import { SiteNetworkDevices } from '@/components/nexus/SiteNetworkDevices';
 
 const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
@@ -110,6 +112,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
       <div id="sec-cameras">
         <SectionHead icon="📹" title="Cameras" desc="Live security — Eagle Eye" />
         <SiteSecurity siteId={siteId} />
+        <SiteCameraEvents siteId={siteId} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
@@ -127,6 +130,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
       <div id="sec-network">
         <SectionHead icon="📡" title="Network" desc="Internet, clients & gear health — UniFi" accent="#5FB8E0" />
         <SiteNetwork siteId={siteId} />
+        <SiteNetworkDevices siteId={siteId} />
       </div>
 
       <div id="sec-relays">

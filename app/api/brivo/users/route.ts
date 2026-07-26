@@ -34,6 +34,14 @@ export async function GET(req: NextRequest) {
   try {
     const ctx = await resolveBrivo(req)
     if (!ctx) return NextResponse.json({ error: 'That site is outside your access (or has no Brivo login set).' }, { status: 403 })
+    // The user + group lists are SCOPED by the property's Brivo Site ID. Doors don't
+    // need it, so a site can show doors but no users when the Site ID wasn't saved.
+    if (!ctx.brivoSiteId) {
+      return NextResponse.json({
+        users: [], groups: [], needs_site_id: true,
+        error: 'This property is connected to Brivo, but its Brivo Site ID isn’t saved — so residents/admins can’t be listed (doors don’t need it, which is why you see doors but not users). Open Setup & keys and reconnect Brivo, or set the Site ID.',
+      })
+    }
     const users = await listBrivoUsers(ctx.token, ctx.apiKey, ctx.brivoSiteId)
     const groups = req.nextUrl.searchParams.get('groups')
       ? await listBrivoGroups(ctx.token, ctx.apiKey, ctx.brivoSiteId).catch(() => [])

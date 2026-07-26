@@ -43,9 +43,15 @@ export function SiteAccessControl({ siteId }: { siteId: string }) {
   // Brivo users + groups fetched once, shared by Users + Guests.
   const [brivo, setBrivo] = useState<{ users: Any[]; groups: Any[] } | null>(null);
   const [brivoErr, setBrivoErr] = useState(false);
+  const [brivoMsg, setBrivoMsg] = useState<string>('');
   const loadBrivo = useCallback(() => {
+    setBrivoMsg('');
     fetch(`/api/brivo/users?site_id=${siteId}&groups=1`, { cache: 'no-store' }).then(r => r.json())
-      .then(j => { if (Array.isArray(j.users)) setBrivo({ users: j.users, groups: j.groups ?? [] }); else { setBrivo({ users: [], groups: [] }); setBrivoErr(true); } })
+      .then(j => {
+        if (j?.error) setBrivoMsg(String(j.error));
+        if (Array.isArray(j.users)) setBrivo({ users: j.users, groups: j.groups ?? [] });
+        else { setBrivo({ users: [], groups: [] }); setBrivoErr(true); }
+      })
       .catch(() => { setBrivo({ users: [], groups: [] }); setBrivoErr(true); });
   }, [siteId]);
   useEffect(() => { if ((tab === 'users' || tab === 'guests') && !brivo) loadBrivo(); }, [tab, brivo, loadBrivo]);
@@ -70,7 +76,7 @@ export function SiteAccessControl({ siteId }: { siteId: string }) {
 
       {tab === 'gate' && <GateRelays siteId={siteId} notify={notify} />}
       {tab === 'doors' && <Doors siteId={siteId} notify={notify} />}
-      {tab === 'users' && <Users siteId={siteId} data={brivo} err={brivoErr} reload={loadBrivo} notify={notify} onActivity={(n) => { setEventUser(n); setTab('events'); }} />}
+      {tab === 'users' && <Users siteId={siteId} data={brivo} err={brivoErr} msg={brivoMsg} reload={loadBrivo} notify={notify} onActivity={(n) => { setEventUser(n); setTab('events'); }} />}
       {tab === 'guests' && <Guests siteId={siteId} groups={brivo?.groups ?? []} err={brivoErr} notify={notify} onIssued={loadBrivo} />}
       {tab === 'events' && <Activity siteId={siteId} userFilter={eventUser} setUserFilter={setEventUser} />}
     </div>
@@ -143,7 +149,7 @@ function Doors({ siteId, notify }: { siteId: string; notify: (m: string, ok?: bo
 
 function name(u: Any) { return (u.name ?? `${u.firstName ?? ''} ${u.lastName ?? ''}`).trim() || u.email || 'User'; }
 
-function Users({ siteId, data, err, reload, notify, onActivity }: { siteId: string; data: { users: Any[]; groups: Any[] } | null; err: boolean; reload: () => void; notify: (m: string, ok?: boolean) => void; onActivity: (n: string) => void }) {
+function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId: string; data: { users: Any[]; groups: Any[] } | null; err: boolean; msg?: string; reload: () => void; notify: (m: string, ok?: boolean) => void; onActivity: (n: string) => void }) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -177,6 +183,12 @@ function Users({ siteId, data, err, reload, notify, onActivity }: { siteId: stri
 
   if (err && !data?.users.length) return <NotConnected what="Brivo access control" />;
   if (data == null) return <Loader />;
+  if (msg && data.users.length === 0) return (
+    <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 12, padding: '12px 14px', lineHeight: 1.5 }}>
+      <div style={{ fontWeight: 700, color: '#f6d68a', marginBottom: 4 }}>Residents &amp; admins can’t be listed yet</div>
+      {msg}
+    </div>
+  );
   const groups: Any[] = data.groups ?? [];
   const shown = (q ? data.users.filter(u => `${name(u)} ${u.email ?? ''} ${u.unitNumber ?? ''}`.toLowerCase().includes(q.toLowerCase())) : data.users).slice(0, 80);
 
