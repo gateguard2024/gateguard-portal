@@ -32,6 +32,15 @@ async function resolveBrivo(req: NextRequest, body?: Record<string, unknown>) {
 // GET /api/brivo/users?site_id=<site>|org_id=<org>&groups=1
 export async function GET(req: NextRequest) {
   try {
+    // Specific reasons for the common per-site path (doors use a DIFFERENT
+    // capability, so a login can see doors but lack door-user permission).
+    const siteId = req.nextUrl.searchParams.get('site_id') ?? ''
+    if (siteId) {
+      const user = await getCurrentUser()
+      const site = await getAllowedVaultBrivoSite(user, siteId)
+      if (!site) return NextResponse.json({ error: 'This property has no Brivo login set, or it’s outside your access.' }, { status: 403 })
+      if (!(await canOperate(user, siteId, 'door_users'))) return NextResponse.json({ error: 'Your login can unlock doors here but doesn’t have the “Door users (add/remove)” permission. A corporate/dealer admin can enable it so residents & admins load.' }, { status: 403 })
+    }
     const ctx = await resolveBrivo(req)
     if (!ctx) return NextResponse.json({ error: 'That site is outside your access (or has no Brivo login set).' }, { status: 403 })
     // The user + group lists are SCOPED by the property's Brivo Site ID. Doors don't

@@ -181,7 +181,6 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
     } catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
   }
 
-  if (err && !data?.users.length) return <NotConnected what="Brivo access control" />;
   if (data == null) return <Loader />;
   if (msg && data.users.length === 0) return (
     <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 12, padding: '12px 14px', lineHeight: 1.5 }}>
@@ -189,6 +188,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
       {msg}
     </div>
   );
+  if (err && !data.users.length) return <NotConnected what="Brivo access control" />;
   const groups: Any[] = data.groups ?? [];
   const shown = (q ? data.users.filter(u => `${name(u)} ${u.email ?? ''} ${u.unitNumber ?? ''}`.toLowerCase().includes(q.toLowerCase())) : data.users).slice(0, 80);
 
