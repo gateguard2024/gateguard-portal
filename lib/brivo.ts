@@ -477,6 +477,45 @@ export async function assignBrivoUserToGroup(token: string, apiKey: string, grou
   return { success: true }
 }
 
+/** Fetch a single Brivo user's raw object. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getBrivoUser(token: string, apiKey: string, userId: string): Promise<any> {
+  return brivoGet(token, apiKey, `/users/${userId}`)
+}
+
+/** Update a Brivo user's name / email / phone. Fetch-merge-PUT so other fields
+ * are preserved. Email/phone are stored as arrays — we set the primary entry. */
+export async function updateBrivoUser(token: string, apiKey: string, userId: string, changes: { firstName?: string; lastName?: string; email?: string | null; phone?: string | null }): Promise<{ success: true }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cur: any = await getBrivoUser(token, apiKey, userId).catch(() => ({}))
+  const body: Record<string, unknown> = {
+    firstName: changes.firstName ?? cur.firstName,
+    lastName:  changes.lastName ?? cur.lastName,
+  }
+  if (changes.email !== undefined) body.emails = changes.email ? [{ address: changes.email, email: true }] : []
+  if (changes.phone !== undefined) body.phoneNumbers = changes.phone ? [{ number: changes.phone }] : []
+  await brivoPut(token, apiKey, `/users/${userId}`, body)
+  return { success: true }
+}
+
+/** Map a user's credentials to a compact, UI-friendly shape. */
+export async function getBrivoUserCredentialSummary(token: string, apiKey: string, userId: string): Promise<Array<{ id: string; label: string; type: string; isPass: boolean; active: boolean; effectiveFrom: string | null; effectiveTo: string | null }>> {
+  const creds = await listBrivoUserCredentials(token, apiKey, userId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (creds as any[]).map(c => {
+    const fmt = `${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`
+    return {
+      id: String(c.id),
+      label: c.credentialFormat?.name ?? c.type ?? c.referenceId ?? 'Credential',
+      type: String(c.type ?? c.credentialFormat?.name ?? 'credential'),
+      isPass: /mobile|bmp|pass/i.test(fmt),
+      active: c.suspended !== true && c.disabled !== true,
+      effectiveFrom: c.effectiveFrom ?? c.effective ?? null,
+      effectiveTo: c.expiration ?? c.effectiveTo ?? null,
+    }
+  })
+}
+
 /** Revoke ALL mobile-pass credentials for a user (turns off their pass) without
  * issuing a new one. Returns how many were revoked. */
 export async function revokeBrivoMobilePass(token: string, apiKey: string, userId: string): Promise<{ revoked: number }> {

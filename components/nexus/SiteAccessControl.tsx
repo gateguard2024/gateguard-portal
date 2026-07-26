@@ -7,6 +7,7 @@
 // calls an EXISTING scoped route; each section degrades gracefully if a vendor
 // isn't connected. Physical actions confirm first and are audited server-side.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useUser } from '@clerk/nextjs';
 
 const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
@@ -153,6 +154,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [cardUser, setCardUser] = useState<string | null>(null);
   const [nu, setNu] = useState({ firstName: '', lastName: '', email: '', unit: '', groupId: '' });
 
   async function act(u: Any, action: 'resend-pass' | 'revoke-pass' | 'suspend', extra?: Any) {
@@ -222,7 +224,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
           {shown.map(u => (
             <div key={u.id} style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: '#eaf2fb', fontSize: 12.5, fontWeight: 600 }}>{name(u)} {u.active === false && <span style={{ color: '#f2637e', fontSize: 9.5, fontWeight: 700 }}>· SUSPENDED</span>}</div>
+                <button onClick={() => setCardUser(String(u.id))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, textDecoration: 'underline', textDecorationColor: 'rgba(95,184,224,0.4)' }}>{name(u)}</button>{u.active === false && <span style={{ color: '#f2637e', fontSize: 9.5, fontWeight: 700 }}> · SUSPENDED</span>}
                 <div style={{ color: '#98abbd', fontSize: 10.5 }}>{u.email ?? 'no email'}{u.phone ? ` · ${u.phone}` : ''}{u.unitNumber ? ` · Unit ${u.unitNumber}` : ''}{(u.groupNames?.length ? ` · ${u.groupNames.slice(0, 2).join(', ')}` : '')}</div>
               </div>
               <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(u, g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '5px 6px', fontSize: 11 }} title="Assign to group">
@@ -238,9 +240,121 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
         </div>
       )}
       <div style={{ fontSize: 9.5, color: '#6f8397', marginTop: 8 }}>Send/resend issues a fresh Brivo Mobile Pass invite. Revoke turns the pass off. Suspend blocks all access.</div>
+      {cardUser && <UserCard siteId={siteId} userId={cardUser} listUser={data.users.find(u => String(u.id) === cardUser)} groups={groups} onClose={() => setCardUser(null)} onChanged={reload} notify={notify} onActivity={onActivity} />}
     </div>
   );
 }
+
+// Full user card — view + (admin) edit name/email/phone, groups, credentials, activity.
+function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify, onActivity }: { siteId: string; userId: string; listUser?: Any; groups: Any[]; onClose: () => void; onChanged: () => void; notify: (m: string, ok?: boolean) => void; onActivity: (n: string) => void }) {
+  const { user } = useUser();
+  const meta = (user?.publicMetadata as Any) ?? {};
+  const canManage = meta.org_tier === 'corporate' || meta.role === 'admin' || meta.role === 'supervisor';
+  const [detail, setDetail] = useState<{ user: Any; credentials: Any[]; activity: Any[] } | null>(null);
+  const [form, setForm] = useState({ firstName: listUser?.firstName ?? '', lastName: listUser?.lastName ?? '', email: listUser?.email ?? '', phone: listUser?.phone ?? '' });
+  const [busy, setBusy] = useState('');
+
+  useEffect(() => {
+    fetch(`/api/brivo/users/${userId}?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json())
+      .then(j => { if (j.user) { setDetail(j); setForm({ firstName: j.user.firstName ?? '', lastName: j.user.lastName ?? '', email: j.user.emails?.[0]?.address ?? listUser?.email ?? '', phone: j.user.phoneNumbers?.[0]?.number ?? listUser?.phone ?? '' }); } })
+      .catch(() => {});
+  }, [userId, siteId, listUser]);
+
+  async function save() {
+    setBusy('save');
+    try {
+      const r = await fetch(`/api/brivo/users/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site_id: siteId, ...form }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Save failed');
+      notify('User saved'); onChanged();
+    } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', false); } finally { setBusy(''); }
+  }
+  async function cred(action: 'resend-pass' | 'revoke-pass') {
+    setBusy(action);
+    try { await post(`/api/brivo/users/${userId}/${action}`, { site_id: siteId, email: form.email || null, name: `${form.firstName} ${form.lastName}`.trim() }); notify(action === 'resend-pass' ? 'Pass sent' : 'Pass revoked'); const j = await fetch(`/api/brivo/users/${userId}?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()); setDetail(j); }
+    catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
+  }
+  async function assignGroup(groupId: string, groupName: string) {
+    if (!groupId) return; setBusy('group');
+    try { await post(`/api/brivo/users/${userId}/group`, { site_id: siteId, group_id: groupId, group_name: groupName, name: `${form.firstName} ${form.lastName}`.trim() }); notify(`Added to ${groupName}`); onChanged(); }
+    catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
+  }
+
+  const roStyle = { ...INPUT, opacity: canManage ? 1 : 0.7 } as const;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 540, maxHeight: '90dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRadius: 22, padding: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#5FB8E0' }}>Resident / admin</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb' }}>{form.firstName} {form.lastName}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#98abbd', fontSize: 12.5, cursor: 'pointer' }}>Close</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div><Lbl>First name</Lbl><input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} readOnly={!canManage} style={roStyle} /></div>
+          <div><Lbl>Last name</Lbl><input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} readOnly={!canManage} style={roStyle} /></div>
+          <div><Lbl>Email</Lbl><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} readOnly={!canManage} style={roStyle} /></div>
+          <div><Lbl>Phone</Lbl><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} readOnly={!canManage} style={roStyle} /></div>
+        </div>
+        {canManage && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}><button onClick={save} disabled={busy === 'save'} style={{ ...GO, opacity: busy === 'save' ? 0.5 : 1 }}>{busy === 'save' ? 'Saving…' : 'Save changes'}</button></div>}
+
+        {/* Groups */}
+        <div style={{ ...TILE, marginBottom: 8 }}>
+          <Lbl>Groups (access)</Lbl>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {(listUser?.groupNames ?? []).length ? listUser!.groupNames.map((g: string, i: number) => <span key={i} style={{ fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 999, padding: '3px 9px' }}>{g}</span>) : <span style={{ fontSize: 11, color: '#7f96ab' }}>No groups</span>}
+          </div>
+          {canManage && (
+            <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '6px 7px', marginTop: 8 }}>
+              <option value="" style={{ background: '#111a24' }}>+ Add to group…</option>
+              {groups.map(g => <option key={g.id} value={g.id} style={{ background: '#111a24' }}>{g.name}</option>)}
+            </select>
+          )}
+        </div>
+
+        {/* Credentials */}
+        <div style={{ ...TILE, marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Lbl>Credentials</Lbl>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => cred('resend-pass')} disabled={!!busy} style={{ ...ICE, opacity: busy ? 0.5 : 1 }}>Send / resend pass</button>
+              <button onClick={() => cred('revoke-pass')} disabled={!!busy} style={{ ...WARN, opacity: busy ? 0.5 : 1 }}>Revoke</button>
+            </div>
+          </div>
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {detail == null ? <span style={{ fontSize: 11, color: '#7f96ab' }}>Loading…</span>
+              : detail.credentials.length === 0 ? <span style={{ fontSize: 11, color: '#7f96ab' }}>No credentials issued.</span>
+              : detail.credentials.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f2637e' }} />
+                  <span style={{ color: '#e2ebf4' }}>{c.label}{c.isPass ? ' · Mobile Pass' : ''}</span>
+                  <span style={{ color: '#7f96ab', marginLeft: 'auto' }}>{c.active ? 'active' : 'inactive'}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Activity */}
+        <div style={TILE}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Lbl>Recent activity</Lbl>
+            <button onClick={() => { onActivity(`${form.firstName} ${form.lastName}`.trim()); onClose(); }} style={ICE}>Full log →</button>
+          </div>
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {detail == null ? <span style={{ fontSize: 11, color: '#7f96ab' }}>Loading…</span>
+              : detail.activity.length === 0 ? <span style={{ fontSize: 11, color: '#7f96ab' }}>No recent activity for this user.</span>
+              : detail.activity.slice(0, 12).map((e: Any, i: number) => (
+                <div key={i} style={{ fontSize: 11, color: '#c3d3e2' }}>{e.summary ?? e.eventDescription ?? 'Access event'}{e.occurred ? ` · ${new Date(e.occurred).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</div>
+              ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Lbl({ children }: { children: React.ReactNode }) { return <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7f96ab' }}>{children}</div>; }
 
 function Guests({ siteId, groups, err, notify, onIssued }: { siteId: string; groups: Any[]; err: boolean; notify: (m: string, ok?: boolean) => void; onIssued: () => void }) {
   const [g, setG] = useState({ firstName: '', lastName: '', email: '', from: '', to: '', groupId: '' });

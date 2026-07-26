@@ -3,13 +3,14 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MoneyDocsDocumentsBoard } from '@/components/nexus/MoneyDocsDocumentsBoard'
+import { DocumentLibrary } from '@/components/nexus/DocumentLibrary'
 import InvoicesBoard from '@/components/nexus/InvoicesBoard'
 import { MoneyDocsRenewalsBoard } from '@/components/nexus/MoneyDocsRenewalsBoard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 
-type Panel = 'invoices' | 'renewals' | 'documents' | 'compliance' | null
+type Panel = 'invoices' | 'renewals' | 'documents' | 'compliance' | 'library' | null
 
 type Card = {
   id: Exclude<Panel, null>
@@ -74,6 +75,7 @@ export function MoneyDocsSurfaceNext() {
     { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#00C8FF', glyph: 'quote' },
     { id: 'renewals', title: 'Renewals', subtitle: 'Find contracts, agreements, and services that are coming due.', hex: '#FBBF24', glyph: 'activity', badge: 'Dates' },
     { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#007CFF', glyph: 'todo', badge: 'Sign' },
+    { id: 'library', title: 'Document Library', subtitle: 'Browse the shared document database, upload, and send for e-signature.', hex: '#34D399', glyph: 'research', badge: 'Docs' },
     { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#8B5CF6', glyph: 'priority', badge: 'Review' },
   ]
   return (
@@ -86,6 +88,7 @@ export function MoneyDocsSurfaceNext() {
       {activePanel === 'invoices' && <Shell title="Invoices" subtitle="Money that is due, past due, recently paid, or needs follow-up." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Billing" onClick={() => router.push('/billing')} /><ActionButton label="Open Revenue" onClick={() => router.push('/revenue')} muted /></>}><InvoicesBoard /></Shell>}
       {activePanel === 'renewals' && <Shell title="Renewals" subtitle="Contracts, agreements, subscriptions, and services that are coming due." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted /></>}><MoneyDocsRenewalsBoard /></Shell>}
       {activePanel === 'documents' && <Shell title="Documents to Sign" subtitle="Paperwork that needs signature, review, or customer approval." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Documents" onClick={() => router.push('/documents')} /><ActionButton label="Open Agreements" onClick={() => router.push('/dealer-agreements')} muted /></>}><MoneyDocsDocumentsBoard /></Shell>}
+      {activePanel === 'library' && <DocumentLibrary />}
       {activePanel === 'compliance' && <Shell title="Compliance" subtitle="Missing, expired, or required paperwork that needs review." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Compliance" onClick={() => router.push('/compliance')} /><ActionButton label="Open Vendor Compliance" onClick={() => router.push('/vendor-compliance')} muted /></>}><Placeholder copy="The first compliance API is in place. The UI board will be added in a smaller follow-up patch after this build is green." /></Shell>}
     </section>
   )
