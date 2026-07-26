@@ -94,7 +94,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     finally { setLoadingSites(false); }
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (

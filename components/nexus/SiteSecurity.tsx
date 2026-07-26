@@ -139,7 +139,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
     setMsg(r?.ok ? `Unlocked "${d.name}" ✓ — logged.` : (r?.error || "Couldn't unlock."));
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   const bumpTick = React.useCallback(() => setTick(n => n + 1), []);
 
   return (

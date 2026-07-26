@@ -39,7 +39,7 @@ export function SiteRelays({ siteId }: { siteId: string }) {
     else setMsg(res?.error || "Couldn't switch the relay.");
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   // Dealer-facing: if there are no relays to show, hide the whole card (no empty clutter).
   // Corporate still sees it so they can connect/set up.
   if (!loading && relays.length === 0 && !isCorporate) return null;

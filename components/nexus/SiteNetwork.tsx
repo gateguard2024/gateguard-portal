@@ -55,14 +55,14 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   const round = (n: number) => n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
   const tiles = [
     i.download_mbps != null && { label: "Download", value: round(i.download_mbps), unit: "Mbps", accent: "#7ee0a8" },
-    i.upload_mbps != null && { label: "Upload", value: round(i.upload_mbps), unit: "Mbps", accent: "#60a5fa" },
+    i.upload_mbps != null && { label: "Upload", value: round(i.upload_mbps), unit: "Mbps", accent: "#5FB8E0" },
     i.latency_ms != null && { label: "Latency", value: Math.round(i.latency_ms), unit: "ms", accent: "#a78bfa" },
     i.packet_loss_pct != null && { label: "Pkt Loss", value: round(i.packet_loss_pct), unit: "%", accent: i.packet_loss_pct > 1 ? "#f87171" : "#7ee0a8" },
     i.uptime_pct != null && { label: "Uptime", value: round(i.uptime_pct), unit: "%", accent: "#7ee0a8" },
     { label: "Clients", value: cl.total ?? 0, unit: "", accent: "#5FB8E0" },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ].filter(Boolean) as any[];
-  const mix = [{ k: "WiFi", v: cl.wifi ?? 0, c: "#5FB8E0" }, { k: "Wired", v: cl.wired ?? 0, c: "#60a5fa" }, { k: "Guest", v: cl.guest ?? 0, c: "#fbbf24" }];
+  const mix = [{ k: "WiFi", v: cl.wifi ?? 0, c: "#5FB8E0" }, { k: "Wired", v: cl.wired ?? 0, c: "#5FB8E0" }, { k: "Guest", v: cl.guest ?? 0, c: "#fbbf24" }];
   const mixTotal = mix.reduce((a, b) => a + b.v, 0) || 1;
   const onlinePct = hl.total ? Math.round((hl.online / hl.total) * 100) : 0;
   const consoleLine = [cns.model, cns.version ? `v${cns.version}` : null, upt(cns.uptime_s) ? `up ${upt(cns.uptime_s)}` : null].filter(Boolean);
