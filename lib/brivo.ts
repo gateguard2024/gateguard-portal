@@ -277,11 +277,6 @@ export async function listBrivoUsers(
     if (page.length === 0) break
 
     for (const u of page) {
-      // Narrow to this site's groups when we could resolve them; otherwise keep all.
-      if (siteGroupSet.size > 0) {
-        const gids: string[] = (u.groupIds ?? []).map((g: any) => String(g))
-        if (!gids.some(g => siteGroupSet.has(g))) continue
-      }
       // Extract phone from custom fields (Brivo stores phone as a custom field)
       const phone = u.customFields?.find((f: any) =>
         f.fieldName?.toLowerCase().includes('phone') ||
@@ -303,7 +298,7 @@ export async function listBrivoUsers(
         phone:      phone   || null,
         unitNumber: unitNumber || u.externalId || null,
         active:     u.suspended !== true,
-        groupIds:   u.groupIds ?? [],
+        groupIds:   (u.groupIds ?? []).map((g: any) => String(g)),
       })
     }
 
@@ -311,6 +306,13 @@ export async function listBrivoUsers(
     offset += pageSize
   }
 
+  // Narrow to this site's groups — but ONLY if that leaves results. If the /users
+  // payload carries no matching groupIds (Brivo doesn't always expand them), fall
+  // back to the full account list rather than showing nothing. (Doors do the same.)
+  if (siteGroupSet.size > 0) {
+    const scoped = users.filter(u => (u.groupIds ?? []).some(g => siteGroupSet.has(String(g))))
+    if (scoped.length > 0) return scoped
+  }
   return users
 }
 
