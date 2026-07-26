@@ -56,7 +56,7 @@ export function EventsSurface() {
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [tplOpen, setTplOpen] = useState(false)
-  const [detail, setDetail] = useState<Detail | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   const emptyForm = { title: '', event_type: 'lunch_learn', event_date: '', property_name: '', site_id: '', aria_property_id: '', template_id: '', budget: '' }
   const [form, setForm] = useState(emptyForm)
@@ -125,9 +125,7 @@ export function EventsSurface() {
     } catch { /* ignore */ } finally { setBusy(false) }
   }
 
-  async function openDetail(id: string) {
-    try { const d = await fetch(`/api/events/${id}`).then(r => r.json()); if (d.event) setDetail(d) } catch { /* ignore */ }
-  }
+  const openDetail = (id: string) => setOpenId(id)
 
   const filteredSites = useMemo(() => {
     const q = propQuery.trim().toLowerCase()
@@ -305,24 +303,102 @@ export function EventsSurface() {
       {/* Template manager */}
       {tplOpen && <TemplateManager templates={templates} onClose={() => setTplOpen(false)} onChanged={loadTemplates} />}
 
-      {/* Detail modal */}
-      {detail && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setDetail(null)}>
-          <div className="max-h-[86dvh] w-full max-w-2xl overflow-y-auto rounded-3xl p-5" style={MODAL_STYLE} onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#5FB8E0' }}>{TYPE_LABEL[detail.event.event_type] ?? detail.event.event_type}</div>
-                <div className="text-lg font-extrabold" style={{ color: '#eaf2fb' }}>{detail.event.title}</div>
-                <div className="text-xs" style={{ color: '#98abbd' }}>{detail.event.property_name || 'No property'} · {fmtDate(detail.event.event_date)}{detail.event.budget != null ? ` · ${money(detail.event.budget)}` : ''}</div>
+      {/* Detail modal — fully editable */}
+      {openId && <EventDetail eventId={openId} onClose={() => setOpenId(null)} onChanged={load} />}
+    </section>
+  )
+}
+
+// ---- Editable event workspace ----
+const STATUS_OPTIONS: { id: string; label: string }[] = [
+  { id: 'planning', label: 'Planning' }, { id: 'promoting', label: 'Promoting' },
+  { id: 'confirmed', label: 'Confirmed' }, { id: 'held', label: 'Held' },
+  { id: 'follow_up', label: 'Follow-up' }, { id: 'complete', label: 'Complete' },
+  { id: 'cancelled', label: 'Cancelled' },
+]
+const CHECK_NEXT: Record<string, string> = { open: 'done', done: 'open' }
+const SUPPLY_CYCLE: Record<string, string> = { needed: 'ordered', ordered: 'received', received: 'needed' }
+const CAMPAIGN_CYCLE: Record<string, string> = { draft: 'scheduled', scheduled: 'sent', sent: 'draft' }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose: () => void; onChanged: () => void }) {
+  const [d, setD] = useState<Detail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const reload = useCallback(async () => {
+    try { const j = await fetch(`/api/events/${eventId}`, { cache: 'no-store' }).then(r => r.json()); if (j.event) setD(j) } catch { /* ignore */ } finally { setLoading(false) }
+  }, [eventId])
+  useEffect(() => { void reload() }, [reload])
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function patchEvent(patch: Record<string, any>) {
+    if (!d) return
+    setD({ ...d, event: { ...d.event, ...patch } }) // optimistic
+    setSaving(true)
+    try { await fetch(`/api/events/${eventId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }); onChanged() } catch { /* ignore */ } finally { setSaving(false) }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function addItem(kind: string, fields: Record<string, any>) {
+    await fetch(`/api/events/${eventId}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, ...fields }) })
+    await reload()
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function patchItem(kind: string, itemId: string, fields: Record<string, any>) {
+    await fetch(`/api/events/${eventId}/items`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, item_id: itemId, ...fields }) })
+    await reload()
+  }
+  async function delItem(kind: string, itemId: string) {
+    await fetch(`/api/events/${eventId}/items?kind=${kind}&item_id=${itemId}`, { method: 'DELETE' })
+    await reload()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="max-h-[88dvh] w-full max-w-2xl overflow-y-auto rounded-3xl p-5" style={MODAL_STYLE} onClick={e => e.stopPropagation()}>
+        {loading || !d ? (
+          <div className="py-16 text-center text-sm" style={{ color: '#98abbd' }}>Loading event…</div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#5FB8E0' }}>{TYPE_LABEL[d.event.event_type] ?? d.event.event_type}</div>
+                <input value={d.event.title} onChange={e => setD({ ...d, event: { ...d.event, title: e.target.value } })} onBlur={e => patchEvent({ title: e.target.value.trim() || d.event.title })}
+                  className="w-full bg-transparent text-lg font-extrabold outline-none" style={{ color: '#eaf2fb' }} />
               </div>
-              <button onClick={() => setDetail(null)} className="rounded-full px-2 py-1 text-xs" style={{ color: '#98abbd' }}>Close</button>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px]" style={{ color: saving ? '#9FD8EC' : '#6f8397' }}>{saving ? 'Saving…' : 'Saved'}</span>
+                <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#98abbd' }}>Close</button>
+              </div>
             </div>
-            {/* stepper */}
+
+            {/* Editable meta row */}
+            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Field label="Status">
+                <select value={d.event.status} onChange={e => patchEvent({ status: e.target.value })} className="w-full rounded-lg px-2 py-1.5 text-[12px] outline-none" style={INPUT_STYLE}>
+                  {STATUS_OPTIONS.map(o => <option key={o.id} value={o.id} className="bg-neutral-900">{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Date">
+                <input type="date" value={d.event.event_date ?? ''} onChange={e => patchEvent({ event_date: e.target.value || null })} className="w-full rounded-lg px-2 py-1.5 text-[12px] outline-none" style={INPUT_STYLE} />
+              </Field>
+              <Field label="Budget">
+                <input value={d.event.budget != null ? String(d.event.budget) : ''} inputMode="decimal" placeholder="—"
+                  onChange={e => setD({ ...d, event: { ...d.event, budget: e.target.value === '' ? null : Number(e.target.value.replace(/[^\d.]/g, '')) } })}
+                  onBlur={e => patchEvent({ budget: e.target.value === '' ? null : Number(e.target.value.replace(/[^\d.]/g, '')) })}
+                  className="w-full rounded-lg px-2 py-1.5 text-[12px] outline-none" style={INPUT_STYLE} />
+              </Field>
+              <Field label="Property">
+                <input value={d.event.property_name ?? ''} placeholder="—" onChange={e => setD({ ...d, event: { ...d.event, property_name: e.target.value } })} onBlur={e => patchEvent({ property_name: e.target.value || null })} className="w-full rounded-lg px-2 py-1.5 text-[12px] outline-none" style={INPUT_STYLE} />
+              </Field>
+            </div>
+
+            {/* stepper reflects status */}
             <div className="relative my-4">
               <div className="absolute left-2 right-2 top-2.5 h-0.5" style={{ background: 'rgba(140,170,200,0.18)' }} />
               <div className="relative flex justify-between">
                 {STAGES.map((st, i) => {
-                  const cur = STATUS_STAGE[detail.event.status] ?? 0
+                  const cur = STATUS_STAGE[d.event.status] ?? 0
                   const done = i <= cur
                   return (
                     <div key={st} className="flex w-[12.5%] flex-col items-center gap-1">
@@ -333,17 +409,84 @@ export function EventsSurface() {
                 })}
               </div>
             </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <DetailList title="Pre-event checklist" empty="No checklist yet" items={detail.checklist.map(c => ({ main: c.title, sub: `${c.category ?? ''}${c.due_date ? ' · ' + fmtDate(c.due_date) : ''}` }))} />
-              <DetailList title="Email campaign" empty="No campaign steps" items={detail.campaign.map(c => ({ main: (c.step || '').replace(/_/g, ' '), sub: `${c.status ?? ''}${c.send_at ? ' · ' + fmtDate(c.send_at) : ''}` }))} />
-              <DetailList title="Supplies & materials" empty="No supplies" items={detail.supplies.map(s => ({ main: s.item, sub: `${s.status ?? ''}${s.vendor ? ' · ' + s.vendor : ''}` }))} />
-              <DetailList title="Guests" empty="No guests yet" items={detail.guests.map(g => ({ main: g.name || g.email || 'Guest', sub: g.rsvp ?? '' }))} />
+              {/* Checklist */}
+              <EditSection title="Pre-event checklist" addPlaceholder="Add a task…" onAdd={t => addItem('checklist', { title: t })}>
+                {d.checklist.length === 0 ? <Empty2 /> : d.checklist.map(c => (
+                  <ItemRow key={c.id} done={c.status === 'done'} onToggle={() => patchItem('checklist', c.id, { status: CHECK_NEXT[c.status] ?? 'done' })} onDelete={() => delItem('checklist', c.id)}
+                    main={c.title} sub={`${c.category ?? ''}${c.due_date ? ' · ' + fmtDate(c.due_date) : ''}`} />
+                ))}
+              </EditSection>
+              {/* Campaign */}
+              <EditSection title="Email campaign" addPlaceholder="Add a step…" onAdd={t => addItem('campaign', { step: t })}>
+                {d.campaign.length === 0 ? <Empty2 /> : d.campaign.map(c => (
+                  <ItemRow key={c.id} pill={c.status} pillNext={() => patchItem('campaign', c.id, { status: CAMPAIGN_CYCLE[c.status] ?? 'scheduled' })} onDelete={() => delItem('campaign', c.id)}
+                    main={(c.step || '').replace(/_/g, ' ')} sub={c.send_at ? fmtDate(c.send_at) : ''} />
+                ))}
+              </EditSection>
+              {/* Supplies */}
+              <EditSection title="Supplies & materials" addPlaceholder="Add supply…" onAdd={t => addItem('supply', { item: t })}>
+                {d.supplies.length === 0 ? <Empty2 /> : d.supplies.map(s => (
+                  <ItemRow key={s.id} pill={s.status} pillNext={() => patchItem('supply', s.id, { status: SUPPLY_CYCLE[s.status] ?? 'ordered' })} onDelete={() => delItem('supply', s.id)}
+                    main={s.item} sub={s.vendor ?? ''} />
+                ))}
+              </EditSection>
+              {/* Guests */}
+              <EditSection title="Guests" addPlaceholder="Add guest…" onAdd={t => addItem('guest', { name: t })}>
+                {d.guests.length === 0 ? <Empty2 /> : d.guests.map(g => (
+                  <ItemRow key={g.id} pill={g.rsvp} onDelete={() => delItem('guest', g.id)} main={g.name || g.email || 'Guest'} sub={g.email && g.name ? g.email : ''} />
+                ))}
+              </EditSection>
             </div>
-            <div className="mt-3 text-[10px]" style={{ color: '#6f8397' }}>Actions (check off tasks, send campaign steps, RSVP → lead) come in the next build stage.</div>
-          </div>
-        </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 text-[9px] uppercase tracking-[0.08em]" style={{ color: '#7f96ab' }}>{label}</div>
+      {children}
+    </div>
+  )
+}
+function Empty2() { return <div className="text-[11px]" style={{ color: '#6f8397' }}>Nothing yet — add below.</div> }
+
+function EditSection({ title, addPlaceholder, onAdd, children }: { title: string; addPlaceholder: string; onAdd: (text: string) => void | Promise<void>; children: React.ReactNode }) {
+  const [text, setText] = useState('')
+  const submit = () => { const t = text.trim(); if (!t) return; setText(''); void onAdd(t) }
+  return (
+    <div className="rounded-2xl p-3" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
+      <div className="mb-2 text-[11px] font-bold" style={{ color: '#9FD8EC' }}>{title}</div>
+      <div className="flex flex-col gap-1.5">{children}</div>
+      <div className="mt-2 flex items-center gap-1.5">
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }} placeholder={addPlaceholder}
+          className="flex-1 rounded-lg px-2 py-1.5 text-[12px] outline-none" style={{ background: '#0f1a24', border: '1px solid rgba(140,170,200,0.18)', color: '#eaf2fb' }} />
+        <button onClick={submit} className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold" style={{ background: '#26374a', border: '1px solid rgba(95,184,224,0.3)', color: '#cfe0f0' }}>+</button>
+      </div>
+    </div>
+  )
+}
+
+function ItemRow({ main, sub, done, onToggle, pill, pillNext, onDelete }: { main: string; sub?: string; done?: boolean; onToggle?: () => void; pill?: string; pillNext?: () => void; onDelete?: () => void }) {
+  return (
+    <div className="group flex items-center gap-2">
+      {onToggle && (
+        <button onClick={onToggle} className="flex h-4 w-4 shrink-0 items-center justify-center rounded" style={{ background: done ? '#2f7fb8' : 'transparent', border: `1px solid ${done ? '#5FB8E0' : 'rgba(140,170,200,0.4)'}`, color: '#eaf2fb', fontSize: 10 }}>{done ? '✓' : ''}</button>
       )}
-    </section>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12px] capitalize" style={{ color: done ? '#7f96ab' : '#e2ebf4', textDecoration: done ? 'line-through' : 'none' }}>{main}</div>
+        {sub && <div className="truncate text-[10px] capitalize" style={{ color: '#7f96ab' }}>{sub}</div>}
+      </div>
+      {pill && (
+        <button onClick={pillNext} disabled={!pillNext} className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', border: '1px solid rgba(95,184,224,0.3)', color: '#bfe6ff' }}>{pill}</button>
+      )}
+      {onDelete && <button onClick={onDelete} className="shrink-0 px-1 text-[13px] opacity-0 transition-opacity group-hover:opacity-100" style={{ color: '#f2637e' }} aria-label="Delete">×</button>}
+    </div>
   )
 }
 
@@ -354,24 +497,6 @@ function Kpi({ glyph, value, label, sub }: { glyph: string; value: string | numb
       <div className="mt-0.5 text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
       <div className="mt-0.5 text-[10px]" style={{ color: '#98abbd' }}>{label}</div>
       {sub && <div className="mt-1 text-[9px]" style={{ color: '#7f96ab' }}>{sub}</div>}
-    </div>
-  )
-}
-
-function DetailList({ title, items, empty }: { title: string; items: { main: string; sub: string }[]; empty: string }) {
-  return (
-    <div className="rounded-2xl p-3" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
-      <div className="mb-2 text-[11px] font-bold" style={{ color: '#9FD8EC' }}>{title}</div>
-      {items.length === 0 ? <div className="text-[11px]" style={{ color: '#6f8397' }}>{empty}</div> : (
-        <div className="flex flex-col gap-1.5">
-          {items.map((it, i) => (
-            <div key={i} className="text-[12px]">
-              <span className="capitalize" style={{ color: '#e2ebf4' }}>{it.main}</span>
-              {it.sub && <span className="text-[10px] capitalize" style={{ color: '#7f96ab' }}> · {it.sub}</span>}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

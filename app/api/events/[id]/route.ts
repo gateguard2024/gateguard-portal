@@ -36,6 +36,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  // Scope guard — non-corporate may only edit events in their own org.
+  const { data: existing } = await supabase.from('property_events').select('org_id').eq('id', params.id).maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+  if (!user.isCorporate && existing.org_id && existing.org_id !== user.org_id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   const allowed = ['title','event_type','status','event_date','start_time','end_time','venue','goal','expected_attendance','actual_attendance','budget','actual_cost','outcome_notes','property_name','site_id','host_user_id','host_name']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patch: any = {}
