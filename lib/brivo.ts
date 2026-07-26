@@ -245,6 +245,23 @@ export interface BrivoUser {
   unitNumber:  string | null
   active:      boolean
   groupIds:    string[]
+  groupNames:  string[]
+}
+
+// Brivo returns contact info as arrays in varied shapes — pull the primary value.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function brivoEmail(u: any): string | null {
+  if (u.email) return String(u.email)
+  const arr = u.emails ?? u.emailAddresses ?? []
+  for (const e of arr) { const v = typeof e === 'string' ? e : (e?.address ?? e?.email ?? e?.value); if (v) return String(v) }
+  return null
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function brivoPhone(u: any): string | null {
+  const arr = u.phoneNumbers ?? u.phones ?? []
+  for (const p of arr) { const v = typeof p === 'string' ? p : (p?.number ?? p?.phoneNumber ?? p?.value); if (v) return String(v) }
+  const cf = u.customFields?.find((f: any) => /phone|mobile|cell/i.test(f.fieldName ?? ''))?.value
+  return cf ? String(cf) : null
 }
 
 /**
@@ -264,8 +281,9 @@ export async function listBrivoUsers(
   // 400 "Invalid filter format" (users belong to a site via GROUPS, not a
   // direct site field). So we page ALL account users, then narrow client-side
   // to the site's groups when we can determine them (mirrors the doors pattern).
-  const siteGroupIds = await listBrivoSiteGroupIds(token, apiKey, brivoSiteId).catch(() => [] as string[])
-  const siteGroupSet = new Set(siteGroupIds)
+  const siteGroups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId).catch(() => [] as any[])
+  const siteGroupSet = new Set(siteGroups.map((g: any) => String(g.id)))
+  const groupNameById = new Map<string, string>(siteGroups.map((g: any) => [String(g.id), String(g.name ?? 'Group')]))
 
   while (true) {
     const data = await brivoGet(token, apiKey, '/users', {
@@ -290,15 +308,17 @@ export async function listBrivoUsers(
       const unitMatch  = unitGroup?.match(/(\d+[A-Za-z]*)/)
       const unitNumber = unitMatch ? unitMatch[1] : null
 
+      const gids = (u.groupIds ?? []).map((g: any) => String(g))
       users.push({
         id:         String(u.id),
         firstName:  u.firstName?.trim() ?? '',
         lastName:   u.lastName?.trim()  ?? '',
-        email:      u.email || null,
-        phone:      phone   || null,
+        email:      brivoEmail(u),
+        phone:      brivoPhone(u) || phone || null,
         unitNumber: unitNumber || u.externalId || null,
         active:     u.suspended !== true,
-        groupIds:   (u.groupIds ?? []).map((g: any) => String(g)),
+        groupIds:   gids,
+        groupNames: gids.map((id: string) => groupNameById.get(id)).filter(Boolean) as string[],
       })
     }
 

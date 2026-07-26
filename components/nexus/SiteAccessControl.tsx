@@ -190,7 +190,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
   );
   if (err && !data.users.length) return <NotConnected what="Brivo access control" />;
   const groups: Any[] = data.groups ?? [];
-  const shown = (q ? data.users.filter(u => `${name(u)} ${u.email ?? ''} ${u.unitNumber ?? ''}`.toLowerCase().includes(q.toLowerCase())) : data.users).slice(0, 80);
+  const shown = (q ? data.users.filter(u => `${name(u)} ${u.email ?? ''} ${u.phone ?? ''} ${u.unitNumber ?? ''} ${(u.groupNames ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase())) : data.users).slice(0, 80);
 
   return (
     <div>
@@ -223,7 +223,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
             <div key={u.id} style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ color: '#eaf2fb', fontSize: 12.5, fontWeight: 600 }}>{name(u)} {u.active === false && <span style={{ color: '#f2637e', fontSize: 9.5, fontWeight: 700 }}>· SUSPENDED</span>}</div>
-                <div style={{ color: '#98abbd', fontSize: 10.5 }}>{u.email ?? 'no email'}{u.unitNumber ? ` · Unit ${u.unitNumber}` : ''}</div>
+                <div style={{ color: '#98abbd', fontSize: 10.5 }}>{u.email ?? 'no email'}{u.phone ? ` · ${u.phone}` : ''}{u.unitNumber ? ` · Unit ${u.unitNumber}` : ''}{(u.groupNames?.length ? ` · ${u.groupNames.slice(0, 2).join(', ')}` : '')}</div>
               </div>
               <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(u, g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '5px 6px', fontSize: 11 }} title="Assign to group">
                 <option value="" style={{ background: '#111a24' }}>+ Group</option>
