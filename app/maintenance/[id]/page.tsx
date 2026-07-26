@@ -296,8 +296,8 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <div className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all',
                   isPast   && 'bg-emerald-500 border-emerald-500 text-white',
-                  isActive && !isPast && 'bg-[#6B7EFF] border-[#6B7EFF] text-white shadow-md shadow-[#6B7EFF]/30',
-                  isFuture && !isActive && 'bg-white border-slate-200 text-slate-300',
+                  isActive && !isPast && 'bg-[#5FB8E0] border-[#5FB8E0] text-white shadow-md shadow-[#5FB8E0]/30',
+                  isFuture && !isActive && 'bg-card border-border text-foreground',
                 )}>
                   {isPast ? (
                     <Check size={14} strokeWidth={2.5} />
@@ -308,7 +308,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <span className={cn(
                   'text-[10px] font-medium whitespace-nowrap',
                   isPast   && 'text-emerald-600',
-                  isActive && !isPast && 'text-[#6B7EFF]',
+                  isActive && !isPast && 'text-[#5FB8E0]',
                   isFuture && !isActive && 'text-slate-400',
                 )}>
                   {step.label}
@@ -319,7 +319,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
               {i < TIMELINE_STEPS.length - 1 && (
                 <div className={cn(
                   'flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all',
-                  stepIndex > i ? 'bg-emerald-400' : 'bg-slate-100',
+                  stepIndex > i ? 'bg-emerald-400' : 'bg-muted',
                 )} />
               )}
             </div>
@@ -502,6 +502,30 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
+
+// Steel palette scoped to this page: overrides the shadcn CSS-variable tokens
+// (background / card / muted / accent / border / foreground) with dark steel
+// values, so every `bg-card` / `border-border` / `text-foreground` etc. on the
+// page flips to the tactical-steel theme with correct contrast — no per-class edits.
+const STEEL_SCOPE = {
+  '--background': '212 33% 13%',
+  '--foreground': '210 30% 92%',
+  '--card': '213 31% 17%',
+  '--card-foreground': '210 30% 92%',
+  '--popover': '213 31% 15%',
+  '--popover-foreground': '210 30% 92%',
+  '--muted': '211 26% 24%',
+  '--muted-foreground': '208 16% 66%',
+  '--accent': '212 28% 27%',
+  '--accent-foreground': '210 30% 92%',
+  '--secondary': '212 26% 24%',
+  '--secondary-foreground': '210 30% 92%',
+  '--border': '210 19% 31%',
+  '--input': '210 19% 29%',
+  '--ring': '199 58% 62%',
+  background: 'linear-gradient(180deg,#16202c,#111a24)',
+  minHeight: '100%',
+} as unknown as React.CSSProperties
 
 export default function WorkOrderDetailPage() {
   const params = useParams()
@@ -1068,7 +1092,7 @@ export default function WorkOrderDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col min-h-full">
+      <div className="flex flex-col min-h-full" style={STEEL_SCOPE}>
         <TopBar title="Work Order" subtitle="Loading…" />
         <div className="flex items-center justify-center flex-1 text-muted-foreground text-sm">
           <RefreshCw size={16} className="animate-spin mr-2" /> Loading work order…
@@ -1103,7 +1127,7 @@ export default function WorkOrderDetailPage() {
   }, 0)
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-full" style={STEEL_SCOPE}>
       <TopBar
         title={wo.wo_number}
         subtitle={wo.title}
@@ -2659,7 +2683,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
     lead:       'bg-blue-100 text-blue-700',
     owner:      'bg-violet-100 text-violet-700',
     supervisor: 'bg-amber-100 text-amber-700',
-    crew:       'bg-slate-100 text-slate-600',
+    crew:       'bg-muted text-muted-foreground',
   }
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading crew…</div>
@@ -2673,7 +2697,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
         >
           <Plus size={13} /> Add Crew
         </button>
@@ -2681,10 +2705,10 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
 
       {/* Add crew form */}
       {adding && (
-        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+        <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">Add crew member</p>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             value={selectedTechId}
             onChange={e => setSelectedTechId(e.target.value)}
           >
@@ -2694,7 +2718,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
             ))}
           </select>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             value={selectedRole}
             onChange={e => setSelectedRole(e.target.value)}
           >
@@ -2705,7 +2729,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
           </select>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add to Job'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2719,13 +2743,13 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         <div className="border border-dashed border-border rounded-xl p-8 text-center">
           <Users size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No crew assigned yet</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline mt-1">Add first crew member →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline mt-1">Add first crew member →</button>
         </div>
       ) : (
         <div className="space-y-2">
           {crew.map(member => (
-            <div key={member.id} className="flex items-center gap-3 bg-white border border-border rounded-xl px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-[#6B7EFF] text-white text-xs font-bold flex items-center justify-center shrink-0">
+            <div key={member.id} className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-[#5FB8E0] text-white text-xs font-bold flex items-center justify-center shrink-0">
                 {member.technician.initials}
               </div>
               <div className="flex-1 min-w-0">
@@ -2851,7 +2875,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
   }
 
   const PHASE_STATUS_CFG: Record<string, { label: string; color: string }> = {
-    pending:     { label: 'Pending',     color: 'bg-slate-100 text-slate-500' },
+    pending:     { label: 'Pending',     color: 'bg-muted text-slate-500' },
     in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
     complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700' },
     skipped:     { label: 'Skipped',     color: 'bg-amber-100 text-amber-600' },
@@ -2872,17 +2896,17 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
         >
           <Plus size={13} /> Add Phase
         </button>
       </div>
 
       {adding && (
-        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+        <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">New phase / day</p>
           <input
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             placeholder={'Name — e.g. "Day 1 – Rough-in" or "Phase 2 – Commissioning"'}
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -2892,7 +2916,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                 value={form.scheduled_date}
                 onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
               />
@@ -2901,14 +2925,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date (optional)</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                 value={form.end_date}
                 onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
               />
             </div>
           </div>
           <textarea
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
             rows={2}
             placeholder="Notes for this phase (optional)"
             value={form.notes}
@@ -2916,7 +2940,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add Phase'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2931,7 +2955,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           <Calendar size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground font-medium">No phases defined</p>
           <p className="text-xs text-muted-foreground mt-1 mb-3">Add phases to split this job across multiple days or stages</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline">Add first phase →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline">Add first phase →</button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -2939,12 +2963,12 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
             const cfg = PHASE_STATUS_CFG[phase.status] ?? PHASE_STATUS_CFG.pending
             const isEditing = editingPhaseId === phase.id
             return (
-              <div key={phase.id} className="bg-white border border-border rounded-xl overflow-hidden">
+              <div key={phase.id} className="bg-card border border-border rounded-xl overflow-hidden">
                 {isEditing ? (
                   <div className="px-4 py-3 space-y-3">
                     <p className="text-xs font-semibold text-foreground">Edit phase {idx + 1}</p>
                     <input
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                       placeholder="Phase name"
                       value={editPhaseForm.name}
                       onChange={e => setEditPhaseForm(f => ({ ...f, name: e.target.value }))}
@@ -2954,7 +2978,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                           value={editPhaseForm.scheduled_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))}
                         />
@@ -2963,14 +2987,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                           value={editPhaseForm.end_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, end_date: e.target.value }))}
                         />
                       </div>
                     </div>
                     <textarea
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
                       rows={2}
                       placeholder="Notes (optional)"
                       value={editPhaseForm.notes}
@@ -2978,7 +3002,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     />
                     {editError && <p className="text-xs text-red-500">{editError}</p>}
                     <div className="flex gap-2">
-                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
                         {editSaving ? 'Saving…' : 'Save Changes'}
                       </button>
                       <button onClick={cancelEdit} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2988,7 +3012,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                   </div>
                 ) : (
                   <div className="px-4 py-3 flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-muted text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {idx + 1}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -3010,7 +3034,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     </button>
                     <button
                       onClick={() => startEdit(phase)}
-                      className="text-muted-foreground hover:text-[#6B7EFF] transition-colors mt-0.5 shrink-0"
+                      className="text-muted-foreground hover:text-[#5FB8E0] transition-colors mt-0.5 shrink-0"
                       title="Edit phase"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3453,7 +3477,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 </div>
 
                 {item.image_url && (
-                  <img src={item.image_url} alt="" className="w-9 h-9 object-contain rounded bg-white border border-border shrink-0" />
+                  <img src={item.image_url} alt="" className="w-9 h-9 object-contain rounded bg-card border border-border shrink-0" />
                 )}
 
                 <div className="flex-1 min-w-0">
@@ -3566,7 +3590,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 className={inp}
               />
               {eqShowCatalog && eqCatalog.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
                   {eqCatalog.map(p => (
                     <button
                       key={p.id}
@@ -3577,9 +3601,9 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                       className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2.5"
                     >
                       {p.image_url
-                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-white border border-gray-100 shrink-0" />
-                        : <span className="w-7 h-7 rounded bg-gray-100 border border-gray-100 shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
-                      <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 truncate">{p.name}</span>
+                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-card border border-border shrink-0" />
+                        : <span className="w-7 h-7 rounded bg-muted border border-border shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
+                      <span className="flex-1 min-w-0 text-xs font-medium text-foreground truncate">{p.name}</span>
                       {p.sku && <span className="text-[10px] font-mono text-gray-400 shrink-0">{p.sku}</span>}
                     </button>
                   ))}
@@ -3588,7 +3612,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
             </div>
             {equipForm.image_url && (
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <img src={equipForm.image_url} alt="" className="w-8 h-8 object-contain rounded bg-white border border-border" />
+                <img src={equipForm.image_url} alt="" className="w-8 h-8 object-contain rounded bg-card border border-border" />
                 Linked to catalog product
               </div>
             )}
