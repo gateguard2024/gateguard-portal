@@ -33,7 +33,7 @@ export function ProvisioningQueue() {
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{[it.location, it.dealer_name].filter(Boolean).join(' · ') || '—'}</div>
               {it.doors.length > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{it.doors.length} door{it.doors.length === 1 ? '' : 's'}: {it.doors.join(', ')}</div>}
             </div>
-            <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', color: it.dealer_confirmed ? '#6ee7b7' : '#fbbf24' }}>{it.dealer_confirmed ? 'Doors confirmed ✓' : 'Awaiting dealer'}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', color: it.dealer_confirmed ? '#7EE0A8' : '#fbbf24' }}>{it.dealer_confirmed ? 'Doors confirmed ✓' : 'Awaiting dealer'}</span>
           </div>
         </button>
       ))}

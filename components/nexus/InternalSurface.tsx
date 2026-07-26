@@ -8,11 +8,16 @@ import { IntegrationsConsole } from '@/components/nexus/IntegrationsConsole'
 import { ProvisioningQueue } from '@/components/nexus/ProvisioningQueue'
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
-import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
-import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
-import { NexusActionCard } from '@/components/nexus/NexusActionCard'
+import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { PricingConsoleBody } from '@/components/admin/PricingConsoleBody'
 import { CostSheetBody } from '@/components/admin/CostSheetBody'
+import { AdminReportConsole } from '@/components/nexus/AdminReportConsole'
+
+// ---- Console tokens (identical to Operations / Sales / My Day steel) ----
+const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
+const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
+const TILE_STYLE = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
 type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'playbooks' | 'training' | null
 
@@ -20,42 +25,46 @@ type InternalCard = {
   id: Exclude<InternalPanel, null>
   title: string
   subtitle: string
-  hex: string
+  accent: string
   glyph: NexusGlyphKind
   badge?: string
 }
 
-function rgb(hex: string): string {
-  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '139,92,246'
-}
-
-function InternalCardButton({ card, onClick }: { card: InternalCard; onClick: () => void }) {
+function SteelCard({ card, onClick }: { card: InternalCard; onClick: () => void }) {
   return (
-    <NexusActionCard
-      title={card.title}
-      subtitle={card.subtitle}
-      hex={card.hex}
-      glyph={card.glyph}
-      badge={card.badge}
+    <button
+      type="button"
       onClick={onClick}
-    />
+      className="group relative flex min-h-[168px] flex-col overflow-hidden rounded-2xl p-4 text-left transition-transform duration-200 hover:-translate-y-1"
+      style={TILE_STYLE}
+    >
+      {card.badge && (
+        <div className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(20,32,44,0.6)', border: `1px solid ${card.accent}55`, color: card.accent }}>{card.badge}</div>
+      )}
+      <NexusGlyphTile kind={card.glyph} color={card.accent} />
+      <div className="text-[15px] font-bold leading-tight" style={{ color: '#eaf2fb' }}>{card.title}</div>
+      <div className="mt-1.5 text-[12px] leading-relaxed" style={{ color: '#98abbd' }}>{card.subtitle}</div>
+      <div className="mt-auto pt-3" style={{ borderTop: '1px solid rgba(140,170,200,0.16)' }}>
+        <div className="flex items-center gap-1.5 pt-2.5 text-[12.5px] font-semibold" style={{ color: card.accent }}>
+          <span>Open</span>
+          <span className="transition-transform duration-200 ease-out group-hover:translate-x-1" aria-hidden="true">→</span>
+        </div>
+      </div>
+    </button>
   )
 }
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
   const displayLabel = muted ? `${label} — Coming Soon` : label
-
   return (
     <button
       type="button"
-      // Muted = "Coming Soon": no destination yet, so it must not navigate anywhere.
       onClick={muted ? undefined : onClick}
       disabled={muted}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+      className="w-full rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
       style={muted
-        ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(139,92,246,0.05))', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.55)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }
-        : { background: 'linear-gradient(135deg, rgba(139,92,246,0.22), rgba(0,200,255,0.08))', border: '1px solid rgba(139,92,246,0.26)', color: '#ddd6fe', boxShadow: '0 0 18px rgba(139,92,246,0.12)' }}
+        ? { background: '#1a2532', border: '1px solid rgba(140,170,200,0.16)', color: '#6f8397' }
+        : { background: '#26374a', border: '1px solid rgba(95,184,224,0.32)', color: '#cfe0f0' }}
       aria-label={displayLabel}
       title={muted ? 'Coming soon' : displayLabel}
     >
@@ -66,25 +75,20 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
 
 function InternalDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
+    <div className="fixed inset-0 z-[90] overflow-hidden bg-black/70 px-4 py-4 backdrop-blur-sm sm:py-6">
       <div
         className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-6xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[1fr_260px]"
-        style={{
-          background: 'radial-gradient(circle at 18% 0%, rgba(139,92,246,0.15), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))',
-          border: '1px solid rgba(139,92,246,0.20)',
-          boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(139,92,246,0.11), inset 0 1px 0 rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(28px)',
-        }}
+        style={FRAME_STYLE}
       >
-        <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-          <NexusGlassBackButton label="Back to Internal" onClick={onClose} />
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(196,181,253,0.86)' }}>Internal</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(139,92,246,0.18)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
+        <div className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.2)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          <button type="button" onClick={onClose} className="mb-3 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>← Back to Internal</button>
+          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#5FB8E0' }}>Internal</div>
+          <h2 className="mt-1 text-2xl font-semibold" style={{ color: '#eaf2fb' }}>{title}</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#98abbd' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.68), rgba(3,9,22,0.52))', border: '1px solid rgba(139,92,246,0.15)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
+        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          <div className="text-sm font-semibold" style={{ color: '#eaf2fb' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
       </div>
@@ -94,9 +98,9 @@ function InternalDetailShell({ title, subtitle, onClose, children, actions }: { 
 
 function InternalInfoPanel({ copy }: { copy: string }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(139,92,246,0.16)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Internal board</div>
-      <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{copy}</p>
+    <div className="rounded-2xl p-4" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)' }}>
+      <div className="text-sm font-semibold" style={{ color: '#eaf2fb' }}>Internal board</div>
+      <p className="mt-2 text-xs leading-relaxed" style={{ color: '#98abbd' }}>{copy}</p>
     </div>
   )
 }
@@ -110,44 +114,41 @@ export function InternalSurface() {
   const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === 'corporate'
 
   const cards: InternalCard[] = [
-    { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', hex: '#00C8FF', glyph: 'activity', badge: 'Build' },
-    { id: 'dealer-onboarding', title: 'Dealer Onboarding', subtitle: 'Track NDA, agreements, compliance, approval, and live dealer status.', hex: '#FBBF24', glyph: 'priority', badge: 'Corporate' },
-    { id: 'users-features', title: 'Users & Features', subtitle: 'Manage platform users, roles, feature access, and settings.', hex: '#8B5CF6', glyph: 'pipeline', badge: 'Admin' },
-    { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', hex: '#00C8FF', glyph: 'job-open', badge: 'Corporate' },
-    { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', hex: '#34D399', glyph: 'priority', badge: 'Corporate' },
-    { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', hex: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
-    ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', hex: '#F87171', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
-    { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', hex: '#007CFF', glyph: 'research' },
-    { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', hex: '#34D399', glyph: 'todo' },
+    { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', accent: '#5FB8E0', glyph: 'activity', badge: 'Build' },
+    { id: 'dealer-onboarding', title: 'Dealer Onboarding', subtitle: 'Track NDA, agreements, compliance, approval, and live dealer status.', accent: '#FBBF24', glyph: 'priority', badge: 'Corporate' },
+    { id: 'users-features', title: 'Users & Features', subtitle: 'Manage platform users, roles, feature access, and settings.', accent: '#9FD8EC', glyph: 'pipeline', badge: 'Admin' },
+    { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', accent: '#5FB8E0', glyph: 'job-open', badge: 'Corporate' },
+    { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', accent: '#7EE0A8', glyph: 'priority', badge: 'Corporate' },
+    { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', accent: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
+    ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', accent: '#F2637E', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
+    { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', accent: '#8FD3EC', glyph: 'research' },
+    { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', accent: '#7EE0A8', glyph: 'todo' },
   ]
 
   return (
-    <section className="mt-9 w-full max-w-5xl">
-      <div
-        className="rounded-[2rem] p-5 sm:p-6"
-        style={{
-          background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.15), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))',
-          border: '1px solid rgba(139,92,246,0.18)',
-          boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(26px)',
-        }}
-      >
+    <section className="mt-9 w-full max-w-5xl xl:max-w-none px-1">
+      <div className="rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(196,181,253,0.86)' }}>Internal</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(139,92,246,0.18)' }}>What internal work are we managing?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Internal</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: '#152535' }}>What internal work are we managing?</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#37485c' }}>
               Product tracking, platform settings, playbooks, dealer onboarding, and team training live here.
             </p>
           </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(139,92,246,0.14)', color: 'rgba(221,214,254,0.96)', border: '1px solid rgba(139,92,246,0.28)', boxShadow: '0 0 18px rgba(139,92,246,0.10)' }}>Admin OS</div>
+          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(20,32,44,0.5)', color: '#9FD8EC', border: '1px solid rgba(95,184,224,0.4)' }}>Admin OS</div>
         </div>
 
+        {/* Command-center report band — real rollup of leads / opportunities / jobs
+            + operations, scoped to the admin's whole hierarchy. */}
+        <AdminReportConsole onOpenTab={(tab) => window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: tab }))} />
+
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#2f4a63' }}>Admin tools</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {cards.map(card => <InternalCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
+          {cards.map(card => <SteelCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
         </div>
 
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+        <div className="mt-5 text-[11px]" style={{ color: '#37485c' }}>
           Internal stays simple: track product work, onboard dealers, manage users and features, find playbooks, or train the team.
         </div>
       </div>

@@ -14,7 +14,7 @@ const VENDOR_LABEL: Record<string, string> = { brivo: "Brivo", eagle_eye: "Eagle
 
 function chipColor(v?: VStatus) {
   if (!v || !v.configured) return { bg: "rgba(100,116,139,0.15)", bd: "rgba(100,116,139,0.4)", fg: "#94a3b8", txt: "—" };
-  if (v.status === "verified") return { bg: "rgba(52,211,153,0.16)", bd: "rgba(52,211,153,0.45)", fg: "#6ee7b7", txt: "✓" };
+  if (v.status === "verified") return { bg: "rgba(126,224,168,0.16)", bd: "rgba(126,224,168,0.45)", fg: "#7EE0A8", txt: "✓" };
   if (v.status === "error") return { bg: "rgba(248,113,113,0.14)", bd: "rgba(248,113,113,0.4)", fg: "#fca5a5", txt: "!" };
   return { bg: "rgba(251,191,36,0.14)", bd: "rgba(251,191,36,0.4)", fg: "#fde68a", txt: "•" };
 }
@@ -35,7 +35,7 @@ export function IntegrationsConsole() {
   }, [filter, q]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
 
-  const pill = (active: boolean) => ({ fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "6px 12px", cursor: "pointer", background: active ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,0.05)", border: `1px solid ${active ? "rgba(0,200,255,0.45)" : "rgba(255,255,255,0.12)"}`, color: active ? "#7DE5FF" : "rgba(255,255,255,0.6)" });
+  const pill = (active: boolean) => ({ fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "6px 12px", cursor: "pointer", background: active ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,0.05)", border: `1px solid ${active ? "rgba(95,184,224,0.45)" : "rgba(255,255,255,0.12)"}`, color: active ? "#9FD8EC" : "rgba(255,255,255,0.6)" });
 
   return (
     <div className="space-y-4">

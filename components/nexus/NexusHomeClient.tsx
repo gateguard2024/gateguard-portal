@@ -164,6 +164,15 @@ export default function NexusHomeClient() {
   }, [isAdmin])
 
   useEffect(() => {
+    function navigate(e: Event) {
+      const tab = (e as CustomEvent<string>).detail as NexusTabId | undefined
+      if (tab && NAV_ITEMS.some(n => n.id === tab)) { setActiveTab(tab); setNavNonce(n => n + 1) }
+    }
+    window.addEventListener('nexus:navigate', navigate)
+    return () => window.removeEventListener('nexus:navigate', navigate)
+  }, [])
+
+  useEffect(() => {
     try {
       const l = localStorage.getItem('gg_nexus_rail_open_left')
       const r = localStorage.getItem('gg_nexus_actions_open')

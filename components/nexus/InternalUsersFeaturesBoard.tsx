@@ -13,7 +13,7 @@ type OrgRow = { id: string; name: string; tier: string | null; status: string; e
 type Counts = { users: number; techs: number; corporate: number; dealers: number; clients: number; unclassified: number }
 
 const TAB_LABEL: Record<Tab, string> = { people: 'Platform Users', techs: 'Field Techs', orgs: 'Organizations' }
-const TAB_COLOR: Record<Tab, string> = { people: '#00C8FF', techs: '#34D399', orgs: '#8B5CF6' }
+const TAB_COLOR: Record<Tab, string> = { people: '#5FB8E0', techs: '#7EE0A8', orgs: '#5FB8E0' }
 
 function Pill({ text, color }: { text: string; color: string }) {
   return <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ background: `${color}1f`, border: `1px solid ${color}44`, color }}>{text}</span>
@@ -111,8 +111,8 @@ export function InternalUsersFeaturesBoard() {
   // orgs missing a proper org_tier can be spotted and fixed.
   const orgGroups: [string, OrgCategory, string][] = [
     ['Corporate', 'corporate', '#FBBF24'],
-    ['Dealers & Partners', 'dealer', '#8B5CF6'],
-    ['Clients', 'client', '#00C8FF'],
+    ['Dealers & Partners', 'dealer', '#5FB8E0'],
+    ['Clients', 'client', '#5FB8E0'],
     ['Unclassified — needs a tier', 'unclassified', '#F87171'],
   ]
 
@@ -121,13 +121,13 @@ export function InternalUsersFeaturesBoard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add a person, then tap a platform user to set role &amp; access.</div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={activateCorporate} disabled={activating} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.4)', color: 'rgba(125,229,255,0.96)' }} title="GateGuard staff only — sets your account to corporate admin (org_tier=corporate, role=admin). Idempotent.">
+          <button type="button" onClick={activateCorporate} disabled={activating} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.4)', color: 'rgba(159,216,236,0.96)' }} title="GateGuard staff only — sets your account to corporate admin (org_tier=corporate, role=admin). Idempotent.">
             {activating ? 'Activating…' : 'Activate corporate access'}
           </button>
           <button type="button" onClick={syncLogins} disabled={syncing} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>
             {syncing ? 'Syncing…' : 'Sync logins'}
           </button>
-          <button type="button" onClick={() => setShowAdd(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>+ Add Person</button>
+          <button type="button" onClick={() => setShowAdd(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #5FB8E0, #2f7fb8)', color: 'white' }}>+ Add Person</button>
         </div>
       </div>
 
@@ -182,7 +182,7 @@ export function InternalUsersFeaturesBoard() {
                       <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{t.email ?? 'No email'}{t.org_name ? ` · ${t.org_name}` : ''}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Pill text={t.employment_type} color="#34D399" />
+                      <Pill text={t.employment_type} color="#7EE0A8" />
                       <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{t.access === 'portal' ? (t.linked ? 'Login linked' : 'Invite sent') : t.access === 'field_code' ? 'Field code' : 'No login'}</span>
                     </div>
                   </div>

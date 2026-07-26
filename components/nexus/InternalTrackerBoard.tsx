@@ -31,8 +31,8 @@ function label(bucket: Bucket) {
 function color(bucket: Bucket) {
   if (bucket === 'blocked') return '#F87171'
   if (bucket === 'bugs') return '#FBBF24'
-  if (bucket === 'today') return '#00C8FF'
-  return '#8B5CF6'
+  if (bucket === 'today') return '#5FB8E0'
+  return '#5FB8E0'
 }
 
 export function InternalTrackerBoard() {
@@ -104,8 +104,8 @@ export function InternalTrackerBoard() {
       </div>
 
       {selected && (
-        <div className="rounded-3xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)' }}>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#ddd6fe' }}>Selected Tracker Item</div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#cfe0f0' }}>Selected Tracker Item</div>
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selected.title}</div>
           {selected.body && <div className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{selected.body}</div>}
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
