@@ -56,7 +56,7 @@ export function SiteActivity({ siteId }: { siteId: string }) {
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#7DE5FF" /> Activity</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#5FB8E0" /> Activity</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
         : events.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{brivoNote ?? "No activity yet. Door unlocks, installs, and alerts will show here."}</div>
         : <div style={{ display: "grid", gap: 2 }}>

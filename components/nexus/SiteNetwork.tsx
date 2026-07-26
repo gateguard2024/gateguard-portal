@@ -47,22 +47,22 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   if (loading) return <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Loading network…</div>;
   // Dealer-facing: nothing connected → show nothing (no confusing empty state).
   if (!ov) return isCorporate
-    ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(0,200,255,0.07)", border: "1px solid rgba(0,200,255,0.18)", borderRadius: 10, padding: "10px 12px" }}>UniFi isn&apos;t connected for this site yet. Add the Cloud API key in Connections above (Setup), then pick the site.</div>
+    ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(95,184,224,0.07)", border: "1px solid rgba(95,184,224,0.18)", borderRadius: 10, padding: "10px 12px" }}>UniFi isn&apos;t connected for this site yet. Add the Cloud API key in Connections above (Setup), then pick the site.</div>
     : null;
 
   const i = ov.internet || {}; const cns = ov.console || {}; const cl = ov.clients || {}; const hl = ov.health || {};
-  const color = i.status === "up" ? "#34d399" : i.status === "down" ? "#f87171" : "#fbbf24";
+  const color = i.status === "up" ? "#7ee0a8" : i.status === "down" ? "#f87171" : "#fbbf24";
   const round = (n: number) => n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
   const tiles = [
-    i.download_mbps != null && { label: "Download", value: round(i.download_mbps), unit: "Mbps", accent: "#34d399" },
+    i.download_mbps != null && { label: "Download", value: round(i.download_mbps), unit: "Mbps", accent: "#7ee0a8" },
     i.upload_mbps != null && { label: "Upload", value: round(i.upload_mbps), unit: "Mbps", accent: "#60a5fa" },
     i.latency_ms != null && { label: "Latency", value: Math.round(i.latency_ms), unit: "ms", accent: "#a78bfa" },
-    i.packet_loss_pct != null && { label: "Pkt Loss", value: round(i.packet_loss_pct), unit: "%", accent: i.packet_loss_pct > 1 ? "#f87171" : "#34d399" },
-    i.uptime_pct != null && { label: "Uptime", value: round(i.uptime_pct), unit: "%", accent: "#34d399" },
-    { label: "Clients", value: cl.total ?? 0, unit: "", accent: "#7DE5FF" },
+    i.packet_loss_pct != null && { label: "Pkt Loss", value: round(i.packet_loss_pct), unit: "%", accent: i.packet_loss_pct > 1 ? "#f87171" : "#7ee0a8" },
+    i.uptime_pct != null && { label: "Uptime", value: round(i.uptime_pct), unit: "%", accent: "#7ee0a8" },
+    { label: "Clients", value: cl.total ?? 0, unit: "", accent: "#5FB8E0" },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ].filter(Boolean) as any[];
-  const mix = [{ k: "WiFi", v: cl.wifi ?? 0, c: "#7DE5FF" }, { k: "Wired", v: cl.wired ?? 0, c: "#60a5fa" }, { k: "Guest", v: cl.guest ?? 0, c: "#fbbf24" }];
+  const mix = [{ k: "WiFi", v: cl.wifi ?? 0, c: "#5FB8E0" }, { k: "Wired", v: cl.wired ?? 0, c: "#60a5fa" }, { k: "Guest", v: cl.guest ?? 0, c: "#fbbf24" }];
   const mixTotal = mix.reduce((a, b) => a + b.v, 0) || 1;
   const onlinePct = hl.total ? Math.round((hl.online / hl.total) * 100) : 0;
   const consoleLine = [cns.model, cns.version ? `v${cns.version}` : null, upt(cns.uptime_s) ? `up ${upt(cns.uptime_s)}` : null].filter(Boolean);
@@ -107,7 +107,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 11 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: 7 }}><span>Gear health</span><span style={{ color: hl.offline ? "#fca5a5" : "#6ee7b7" }}>{hl.online ?? 0}/{hl.total ?? 0}</span></div>
           <div style={{ height: 8, borderRadius: 5, overflow: "hidden", background: "rgba(255,255,255,0.05)" }}>
-            <div style={{ width: `${onlinePct}%`, height: "100%", background: onlinePct === 100 ? "#34d399" : "#fbbf24" }} />
+            <div style={{ width: `${onlinePct}%`, height: "100%", background: onlinePct === 100 ? "#7ee0a8" : "#fbbf24" }} />
           </div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 7 }}>{onlinePct}% of devices online{hl.offline ? ` · ${hl.offline} offline` : ""}</div>
         </div>
@@ -120,7 +120,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {ov.devices.slice(0, 12).map((d: any, n: number) => (
             <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, padding: "5px 10px", background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8 }}>
-              <span style={{ color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: d.online ? "#34d399" : "#f87171", flexShrink: 0 }} />{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
+              <span style={{ color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: d.online ? "#7ee0a8" : "#f87171", flexShrink: 0 }} />{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
               <span style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, fontSize: 10.5, color: "rgba(255,255,255,0.4)" }}>
                 {[d.ip, d.clients != null ? `${d.clients} clients` : null, upt(d.uptime_s) ? `up ${upt(d.uptime_s)}` : null].filter(Boolean).map((x: string, k: number) => <span key={k}>{x}</span>)}
               </span>

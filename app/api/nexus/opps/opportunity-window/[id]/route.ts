@@ -315,7 +315,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // returned 500 on every call with no drift-retry to save it.
     const { data, error: tErr } = await supabase.from('todos').insert({
       org_id: (opp as Record<string, unknown>).dealer_org_id,
-      created_by: profileId,
+      created_by: user.id,
       title,
       body: [clean(body.notes), dueDate ? `Due: ${dueDate}` : null].filter(Boolean).join('\n') || null,
       status: 'open',

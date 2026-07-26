@@ -1574,16 +1574,12 @@ export default function DispatchPage() {
       mapRef.current = map;
 
       map.on('load', () => {
-        // Add tech markers — use real GPS if available, else demo coords
-        const demoFallback: [number, number][] = [
-          [-87.6298, 41.8781], [-104.9903, 39.7392], [-118.2437, 34.0522],
-          [-73.9857, 40.7484], [-95.3698, 29.7604],
-        ];
-        techs.forEach((tech, idx) => {
+        // Add tech markers — REAL GPS only. Techs with no fleet_locations entry
+        // get no marker (never a fabricated position).
+        techs.forEach((tech) => {
           const gpsEntry = fleetLocations.find(f => f.tech_id === tech.id);
-          const coords: [number, number] = gpsEntry
-            ? [gpsEntry.lng, gpsEntry.lat]
-            : (demoFallback[idx % 5] ?? [-98.5795, 39.8283]);
+          if (!gpsEntry) return;
+          const coords: [number, number] = [gpsEntry.lng, gpsEntry.lat];
           const dotColor = tech.status === 'Available' ? '#10b981'
             : tech.status === 'On Site'   ? '#3b82f6'
             : tech.status === 'Driving'   ? '#f59e0b'

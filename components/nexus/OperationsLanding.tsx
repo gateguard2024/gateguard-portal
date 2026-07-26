@@ -139,6 +139,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#7ee0a8', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#7ee0a8'}` }} />{loading ? 'Loading…' : 'Live'}
             </span>
+            <button type="button" onClick={() => onOpenTab('Dashboard')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#2f7fb8', border: '1px solid rgba(95,184,224,0.4)', color: 'white' }}>⊞ Operations Hub →</button>
             <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
             <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Work Order</button>
           </div>

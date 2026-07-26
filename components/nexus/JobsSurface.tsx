@@ -61,7 +61,7 @@ const JOBS_LABELS: Record<JobsFocus, string> = {
 }
 
 const JOB_CARDS: JobCard[] = [
-  { focus: 'openJobs', title: 'Operations Hub', subtitle: 'Dashboard, jobs board, parts, sites, techs — everything in one place.', hex: '#00C8FF', glyph: 'job-open', actionLabel: 'Open →', opsTab: 'Dashboard' },
+  { focus: 'openJobs', title: 'Operations Hub', subtitle: 'Dashboard, jobs board, parts, sites, techs — everything in one place.', hex: '#5FB8E0', glyph: 'job-open', actionLabel: 'Open →', opsTab: 'Dashboard' },
   { focus: 'openJobs', title: 'Work Orders', subtitle: 'Create, assign, schedule, and track every job.', hex: '#007CFF', glyph: 'job-alert', actionLabel: 'Open →', badgeKey: 'openJobs', badgeLabel: 'Active', opsTab: 'Work Orders' },
   { focus: 'needsAttention', title: 'Requests', subtitle: 'Incoming requests from sites — turn them into jobs.', hex: '#FBBF24', glyph: 'job-alert', actionLabel: 'Open →', opsTab: 'Requests' },
   { focus: 'scheduledToday', title: 'Jobs Calendar', subtitle: 'What’s scheduled, by day, week, or month.', hex: '#5FB8E0', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'scheduledToday', badgeLabel: 'Today', opsTab: 'Calendar' },
@@ -69,7 +69,7 @@ const JOB_CARDS: JobCard[] = [
 
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '52,211,153'
+  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '95,184,224'
 }
 
 async function loadJobsWorkbench(query?: string): Promise<JobsWorkbenchData> {

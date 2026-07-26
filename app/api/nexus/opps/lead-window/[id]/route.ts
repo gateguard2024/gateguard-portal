@@ -523,8 +523,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const assigneeId = clean(body.assignee_id)
     const assigneeName = clean(body.assignee_name)
     if (!assigneeId) return NextResponse.json({ success: false, message: 'Choose someone to assign this lead to.' }, { status: 400 })
+    // assigneeId is a Clerk user id. assigned_to_user_id holds the Clerk id;
+    // assigned_to holds profiles(id). Resolve the profile so both scoping paths
+    // ("assigned to me" by Clerk id AND by profile id) find the lead.
+    const { data: aprof } = await supabase.from('profiles').select('id').eq('clerk_user_id', assigneeId).maybeSingle()
+    const assigneeProfileId = (aprof as { id?: string } | null)?.id ?? null
     const { error } = await supabase.from('leads').update({
-      assigned_to: assigneeId,
+      assigned_to: assigneeProfileId,
       assigned_to_user_id: assigneeId,
       assigned_to_name: assigneeName || null,
       updated_at: new Date().toISOString(),

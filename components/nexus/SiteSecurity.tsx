@@ -69,7 +69,7 @@ function DoorTile({ door, cam, siteId, tick, busy, onUnlock, events, setClip, no
       </div>
       <div style={{ display: "flex", gap: 6, padding: 8 }}>
         <button onClick={() => onUnlock(door)} disabled={busy === door.id} style={{ flex: 1, fontSize: 12, fontWeight: 600, background: "rgba(251,191,36,0.16)", border: "1px solid rgba(251,191,36,0.45)", color: "#fde68a", borderRadius: 9, padding: "7px 0", cursor: "pointer", opacity: busy === door.id ? 0.5 : 1 }}>{busy === door.id ? "…" : "Unlock"}</button>
-        {camId && <button onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.14)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer" }}>Live recording</button>}
+        {camId && <button onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.14)", border: "1px solid rgba(95,184,224,0.4)", color: "#5FB8E0", borderRadius: 9, padding: "7px 12px", cursor: "pointer" }}>Live recording</button>}
       </div>
       {camId && (() => {
         const recent = events.filter(e => e.metadata?.door_id === door.id).slice(0, 3);
@@ -79,7 +79,7 @@ function DoorTile({ door, cam, siteId, tick, busy, onUnlock, events, setClip, no
             {recent.map((e, i) => (
               <button key={i} onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(new Date(e.created_at).getTime() - 8000).toISOString() })} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 11, padding: "3px 0", cursor: "pointer" }}>
                 <span>🔓 unlocked {new Date(e.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-                <span style={{ color: "#7DE5FF" }}>▶ clip</span>
+                <span style={{ color: "#5FB8E0" }}>▶ clip</span>
               </button>
             ))}
           </div>
@@ -144,7 +144,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Shield size={17} color="#7DE5FF" /> Site Security</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Shield size={17} color="#5FB8E0" /> Site Security</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Watch each door, unlock, and pull recent footage — all here, no Eagle Eye needed.</div>
 
       {/* All cameras — 9-up grid, paginated. Shows everything Eagle Eye sees at this site. */}
@@ -194,7 +194,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
                 ? "Eagle Eye isn’t connected for this site yet. Enter the client ID/secret in the 🔑 Setup tab, then click “Connect Eagle Eye →” and approve."
                 : `Connected, but couldn’t load cameras: ${camErr}`}
             </div>
-            <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ marginTop: 9, fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 9, padding: "7px 14px", cursor: "pointer" }}>Connect Eagle Eye →</button>
+            <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ marginTop: 9, fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 9, padding: "7px 14px", cursor: "pointer" }}>Connect Eagle Eye →</button>
           </div>
         );
       })()}
@@ -207,7 +207,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
 
       {clip && (
         <div onClick={() => setClip(null)} style={{ position: "fixed", inset: 0, zIndex: 140, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", background: "#0a1426", border: "1px solid rgba(0,200,255,0.3)", borderRadius: 16, padding: 14 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", background: "#0a1426", border: "1px solid rgba(95,184,224,0.3)", borderRadius: 16, padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <b style={{ color: "#fff", fontSize: 14 }}>{clip.name} — recent recording</b>
               <button onClick={() => setClip(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 18, cursor: "pointer" }}>✕</button>

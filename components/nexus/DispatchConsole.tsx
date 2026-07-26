@@ -81,7 +81,7 @@ const loadDispatch = async (): Promise<{ jobs: Job[]; techs: Tech[] }> => {
   } catch {
     /* fall through to preview */
   }
-  return mockDispatch();
+  return { jobs: [], techs: [] };
 };
 const mockDispatch = async (): Promise<{ jobs: Job[]; techs: Tech[] }> => {
   const today = new Date();
@@ -110,9 +110,9 @@ const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px so
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
 const textFaint = { color: 'rgba(255,255,255,0.34)' };
-const brandBlue = '#6B7EFF';
-const brandCyan = '#00C8FF';
-const colorEmerald = '#34D399';
+const brandBlue = '#5FB8E0';
+const brandCyan = '#9FD8EC';
+const colorEmerald = '#7EE0A8';
 const colorAmber = '#FBBF24';
 const colorViolet = '#8B5CF6';
 const colorRed = '#F87171';

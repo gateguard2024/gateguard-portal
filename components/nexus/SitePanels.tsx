@@ -11,7 +11,7 @@ type Panel = { id: string; model: string | null; serial: string | null; pending_
 
 const doorNames = (doors: unknown[]): string[] => (Array.isArray(doors) ? doors : []).map((d: unknown) => typeof d === "string" ? d : (d as { name?: string })?.name).filter(Boolean) as string[];
 
-const STATUS = (s: string) => s === "live" ? { t: "Live", c: "#34d399" } : s === "programmed" ? { t: "Programmed", c: "#7DE5FF" } : s === "replace_pending" ? { t: "Replace pending", c: "#fbbf24" } : { t: "Requested", c: "#94a3b8" };
+const STATUS = (s: string) => s === "live" ? { t: "Live", c: "#7ee0a8" } : s === "programmed" ? { t: "Programmed", c: "#5FB8E0" } : s === "replace_pending" ? { t: "Replace pending", c: "#fbbf24" } : { t: "Requested", c: "#94a3b8" };
 
 export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporate: boolean }) {
   const [panels, setPanels] = useState<Panel[]>([]);
@@ -76,7 +76,7 @@ export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporat
       {isCorporate && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Corporate programs serials + door names. Dealers/techs scan replacement serials.</div>
-          <button onClick={() => setShowAdd(s => !s)} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF" }}>{showAdd ? "Cancel" : "+ Add controller"}</button>
+          <button onClick={() => setShowAdd(s => !s)} style={{ ...btn, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0" }}>{showAdd ? "Cancel" : "+ Add controller"}</button>
         </div>
       )}
       {isCorporate && showAdd && (
@@ -84,7 +84,7 @@ export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporat
           <input placeholder="Model (e.g. 2-door controller)" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} style={input} />
           <input placeholder="Serial number" value={form.serial} onChange={e => setForm({ ...form, serial: e.target.value })} style={input} />
           <input placeholder="Door names (comma-separated: Front Gate, Pool, Lobby)" value={form.doors} onChange={e => setForm({ ...form, doors: e.target.value })} style={input} />
-          <button onClick={addPanel} disabled={busy === "add"} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", opacity: busy === "add" ? 0.5 : 1 }}>{busy === "add" ? "Adding…" : "Add controller"}</button>
+          <button onClick={addPanel} disabled={busy === "add"} style={{ ...btn, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", opacity: busy === "add" ? 0.5 : 1 }}>{busy === "add" ? "Adding…" : "Add controller"}</button>
         </div>
       )}
       {panels.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>No controllers logged yet.{isCorporate ? "" : " Corporate adds these during setup."}</div>
@@ -104,28 +104,28 @@ export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporat
 
             {/* Win → kickoff: a new "requested" panel waiting for the dealer to confirm the door list. */}
             {p.source === "kickoff" && p.status === "requested" && !p.dealer_confirmed && (
-              <div style={{ marginTop: 9, background: "rgba(0,200,255,0.08)", border: "1px solid rgba(0,200,255,0.25)", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11.5, color: "#7DE5FF", fontWeight: 600 }}>🎉 Deal won — check the door list</div>
+              <div style={{ marginTop: 9, background: "rgba(95,184,224,0.08)", border: "1px solid rgba(95,184,224,0.25)", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 11.5, color: "#5FB8E0", fontWeight: 600 }}>🎉 Deal won — check the door list</div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 3 }}>We pre-filled these doors from the survey. Fix anything that&apos;s wrong, then confirm. Gate Guard programs the controller after you confirm.</div>
                 {editDoors === p.id ? (
                   <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
                     <input value={doorDraft} onChange={e => setDoorDraft(e.target.value)} placeholder="Door names (comma-separated)" style={input} />
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => saveDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF" }}>{busy === p.id ? "Saving…" : "Save doors"}</button>
+                      <button onClick={() => saveDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0" }}>{busy === p.id ? "Saving…" : "Save doors"}</button>
                       <button onClick={() => setEditDoors(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.65)" }}>Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     <button onClick={() => { setEditDoors(p.id); setDoorDraft(doorNames(p.doors).join(", ")); }} style={{ ...btn, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.78)" }}>Edit door list</button>
-                    <button onClick={() => confirmDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.45)", color: "#6ee7b7" }}>{busy === p.id ? "…" : "Confirm door list ✓"}</button>
+                    <button onClick={() => confirmDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.45)", color: "#6ee7b7" }}>{busy === p.id ? "…" : "Confirm door list ✓"}</button>
                   </div>
                 )}
               </div>
             )}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
               {p.serial && p.status !== "replace_pending" && <button onClick={() => requestReplace(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.4)", color: "#fde68a", opacity: busy === p.id ? 0.5 : 1 }}>{busy === p.id ? "…" : "Replace controller"}</button>}
-              {isCorporate && p.status === "replace_pending" && <button onClick={() => confirmSwap(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.45)", color: "#6ee7b7" }}>Confirm swap in Brivo</button>}
+              {isCorporate && p.status === "replace_pending" && <button onClick={() => confirmSwap(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.45)", color: "#6ee7b7" }}>Confirm swap in Brivo</button>}
             </div>
           </div>
         ); })}
