@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -53,6 +55,17 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Require auth, and only let a caller see a tech in their own org (pings are GPS).
+  const user = await getCurrentUser()
+  if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await resolveOrgScope(user)
+  if (!scope.all) {
+    const { data: tech } = await supabase.from('technicians').select('org_id').eq('id', params.id).maybeSingle()
+    if (!tech || (tech.org_id && !scope.ids.includes(tech.org_id as string))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
