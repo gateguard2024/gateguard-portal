@@ -1878,6 +1878,24 @@ function EditorInner() {
     setTimeout(() => setSaveMsg(null), 3500);
   };
 
+  // Promote this plan to the next design stage (Floor Plan → System Design →
+  // As-Built) as a NEW linked plan that copies the current layout.
+  const promoteStage = async () => {
+    if (!planId) { setSaveMsg("Save the plan first"); return; }
+    const cur = normStage(planStatus);
+    const to: Stage = cur === "floor_plan" ? "system_design" : "as_built";
+    if (!window.confirm(`Create the ${STAGE_LABEL[to]} stage from this plan? It copies the current layout into a new linked plan you can edit.`)) return;
+    setSaveMsg("Creating next stage…");
+    try {
+      const res = await fetch(`/api/design/plans/${planId}/promote`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to_stage: to }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setSaveMsg(json.error || "Promote failed"); return; }
+      window.location.href = `/design/floor-plans?plan=${json.plan.id}`;
+    } catch { setSaveMsg("Network error"); }
+  };
+
   // Export snapshot with a guaranteed white background (so the layout dot grid,
   // which lives on the wrapper not the canvas, never appears in exports/prints).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2552,6 +2570,16 @@ function EditorInner() {
             {DRAWING_TYPES.map((t) => <option key={t} value={t}>{STAGE_LABEL[t]}</option>)}
           </select>
         </div>
+        {normStage(planStatus) !== "as_built" && (
+          <button
+            onClick={promoteStage}
+            className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+            style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
+            title="Create the next design stage from this plan"
+          >
+            Promote → {STAGE_LABEL[normStage(planStatus) === "floor_plan" ? "system_design" : "as_built"]}
+          </button>
+        )}
         <button
           onClick={() => setShowBgModal(true)}
           className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5"

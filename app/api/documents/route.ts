@@ -51,7 +51,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   const body = await req.json()
-  const { name, category, file_url, storage_path, file_size_kb, uploaded_by, expires_at, site_id, description, is_template } = body
+  const { name, category, file_url, storage_path, file_size_kb, uploaded_by, expires_at, site_id, opportunity_id, description, is_template } = body
 
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
@@ -69,8 +69,9 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('org_documents')
     .insert({
-      org_id:       user.isCorporate ? (body.org_id ?? user.org_id ?? null) : (user.org_id ?? null),
-      site_id:      site_id ?? null,
+      org_id:         user.isCorporate ? (body.org_id ?? user.org_id ?? null) : (user.org_id ?? null),
+      site_id:        site_id ?? null,
+      opportunity_id: opportunity_id ?? null,
       name,
       description:  description ?? null,
       category:     category ?? 'other',

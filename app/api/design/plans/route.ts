@@ -35,11 +35,13 @@ export async function GET(req: NextRequest) {
   let query = db
     .from('floor_plans')
     .select(`
-      id, name, level, org_id, site_id, status, file_url, file_type, created_at, updated_at,
+      id, name, level, org_id, site_id, status, file_url, file_type, design_group_id, version, created_at, updated_at,
       floor_plan_devices(id, device_type)
     `)
     .order('updated_at', { ascending: false })
 
+  const groupId = new URL(req.url).searchParams.get('design_group')
+  if (groupId) query = query.eq('design_group_id', groupId)
   if (siteId) query = query.eq('site_id', siteId)
   if (!scope.all && scope.ids.length > 0) query = query.in('org_id', scope.ids)
 
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const { site_id, name, level, status, file_type } = body
+  const { site_id, name, level, status, file_type, design_group_id, version } = body
 
   const db = serviceDb()
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
@@ -86,12 +88,20 @@ export async function POST(req: NextRequest) {
       site_id: site_id ?? null,
       status: status ?? 'floor_plan',
       file_type: file_type ?? 'blank',
+      design_group_id: design_group_id ?? null,
+      version: version ?? 1,
       created_by: user.id,
     })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // A standalone new plan is its own design set — point the group at itself.
+  if (data && !data.design_group_id) {
+    await db.from('floor_plans').update({ design_group_id: data.id }).eq('id', data.id)
+    data.design_group_id = data.id
+  }
 
   return NextResponse.json({ plan: data }, { status: 201 })
 }

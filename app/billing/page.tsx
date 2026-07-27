@@ -352,6 +352,25 @@ export default function BillingPage() {
     setNewLineItems(p => [...p, { service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true }])
   }
 
+  // QuickBooks-style catalog picker — add a line item straight from the product catalog.
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [catalogQ, setCatalogQ] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [catalogItems, setCatalogItems] = useState<any[]>([])
+  async function loadCatalog(q: string) {
+    try {
+      const j = await fetch(`/api/products?limit=30&q=${encodeURIComponent(q)}`, { cache: 'no-store' }).then(r => r.json())
+      setCatalogItems(Array.isArray(j.products) ? j.products : (Array.isArray(j) ? j : []))
+    } catch { setCatalogItems([]) }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function addProductLine(p: any) {
+    const price = p.unit_price ?? p.price ?? p.sell_price ?? p.list_price ?? p.cost ?? 0
+    const label = p.name ?? p.description ?? p.sku ?? 'Product'
+    setNewLineItems(prev => [...prev, { service_type: SERVICE_TYPES[0]?.value ?? 'video_monitoring', description: p.sku ? `${label} (${p.sku})` : label, qty: '1', unit_price: String(price), is_recurring: false }])
+    setCatalogOpen(false); setCatalogQ('')
+  }
+
   function updateLineItem(idx: number, field: keyof NewLineItem, value: string | boolean) {
     setNewLineItems(prev => {
       const next = [...prev]
@@ -1006,13 +1025,50 @@ export default function BillingPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-muted-foreground">Line Items</label>
-              <button
-                onClick={addLineItem}
-                className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
-              >
-                <Plus size={12} /> Add Line Item
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { const next = !catalogOpen; setCatalogOpen(next); if (next) void loadCatalog('') }}
+                  className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
+                >
+                  <Plus size={12} /> Add from Catalog
+                </button>
+                <button
+                  onClick={addLineItem}
+                  className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
+                >
+                  <Plus size={12} /> Add Line Item
+                </button>
+              </div>
             </div>
+
+            {catalogOpen && (
+              <div className="mb-2 rounded-lg border border-border bg-background p-2">
+                <input
+                  autoFocus
+                  value={catalogQ}
+                  onChange={e => { setCatalogQ(e.target.value); void loadCatalog(e.target.value) }}
+                  placeholder="Search the product catalog…"
+                  className="w-full h-8 px-2 mb-2 text-xs bg-muted/30 border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                />
+                <div className="max-h-52 overflow-y-auto space-y-1">
+                  {catalogItems.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground px-1 py-2">No matching products. Keep typing, or use “Add Line Item” for a custom row.</p>
+                  ) : catalogItems.map((p, i) => {
+                    const price = p.unit_price ?? p.price ?? p.sell_price ?? p.list_price ?? p.cost ?? 0
+                    return (
+                      <button key={p.id ?? i} onClick={() => addProductLine(p)}
+                        className="w-full flex items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted/50 transition-colors">
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium text-foreground">{p.name ?? p.description ?? 'Product'}</span>
+                          {p.sku && <span className="text-muted-foreground"> · {p.sku}</span>}
+                        </span>
+                        <span className="shrink-0 font-semibold text-foreground">{fmt(Number(price) || 0)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {newLineItems.length === 0 && (
               <div className="border border-dashed border-border rounded-lg py-6 text-center">

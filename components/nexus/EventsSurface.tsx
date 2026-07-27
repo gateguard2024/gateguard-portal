@@ -352,6 +352,16 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
     await fetch(`/api/events/${eventId}/items?kind=${kind}&item_id=${itemId}`, { method: 'DELETE' })
     await reload()
   }
+  async function deleteEvent() {
+    if (!d) return
+    if (!window.confirm(`Delete "${d.event.title}"? This removes the event and its checklist, supplies, campaign, and guests. This can't be undone.`)) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/events/${eventId}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Delete failed')
+      onChanged(); onClose()
+    } catch (e) { window.alert(e instanceof Error ? e.message : 'Delete failed'); setSaving(false) }
+  }
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -367,7 +377,8 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
                   className="w-full bg-transparent text-lg font-extrabold outline-none" style={{ color: '#eaf2fb' }} />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px]" style={{ color: saving ? '#9FD8EC' : '#9FD8EC' }}>{saving ? 'Saving…' : 'Saved'}</span>
+                <span className="text-[10px]" style={{ color: '#9FD8EC' }}>{saving ? 'Saving…' : 'Saved'}</span>
+                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(242,99,126,0.14)', border: '1px solid rgba(242,99,126,0.4)', color: '#f2637e' }}>Delete</button>
                 <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
               </div>
             </div>

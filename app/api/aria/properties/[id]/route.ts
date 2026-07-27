@@ -36,7 +36,12 @@ export async function GET(
     if (error || !data) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 })
     }
-    
+
+    // Per-org isolation: non-corporate callers can only read their own org's row.
+    if (!caller.isCorporate && data.org_id && data.org_id !== caller.org_id) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
     return NextResponse.json(data)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to fetch property'

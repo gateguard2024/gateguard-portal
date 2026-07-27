@@ -114,8 +114,10 @@ export interface AriaUpsertResult {
   tech_providers_seen: number
 }
 
-/** Merge-upsert ARIA prospects into aria_properties + auto-grow the tech catalog. */
-export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsertResult> {
+/** Merge-upsert ARIA prospects into aria_properties + auto-grow the tech catalog.
+ * orgId stamps the researching org so reads can be isolated per-org (never
+ * clobbers an org already on the row). */
+export async function upsertAriaProperties(prospects: any[], orgId?: string | null): Promise<AriaUpsertResult> {
   if (!prospects?.length) return { upserted: 0, failed: 0, errors: [], tech_providers_seen: 0 }
 
   let upserted = 0
@@ -319,6 +321,8 @@ export async function upsertAriaProperties(prospects: any[]): Promise<AriaUpsert
     const upsertData: Record<string, any> = {
       facts,
       deductions,
+      // Stamp the researching org, but never overwrite an org already on the row.
+      org_id:                existing?.org_id ?? orgId ?? null,
       property_name:         propName,
       address:               propAddr,
       // city/state were READ in 4 places but never WRITTEN — a phantom column.
