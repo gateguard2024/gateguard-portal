@@ -43,6 +43,10 @@ export async function GET(req: NextRequest) {
       .order(orderBy, { ascending: dir })
       .range(offset, offset + limit - 1)
 
+    // Per-org isolation: corporate sees everything; everyone else sees only their
+    // own org's researched properties (legacy null-org rows stay corporate-only).
+    if (!user.isCorporate) query = query.eq('org_id', user.org_id ?? '__none__')
+
     if (stage)        query = query.eq('sales_stage', stage)
     if (urgency)      query = query.eq('urgency', urgency)
     if (sara)         query = query.eq('sara_signals', true)
@@ -77,19 +81,22 @@ export async function POST(req: NextRequest) {
     // Auth: accept either a valid Clerk session OR the internal service key
     const serviceKey = req.headers.get('x-service-key')
     const validServiceKey = process.env.ARIA_SERVICE_KEY
-    if (!serviceKey || !validServiceKey || serviceKey !== validServiceKey) {
-      // Fall back to Clerk auth for portal calls
-      try { await getCurrentUser() } catch {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
+    const isService = !!(serviceKey && validServiceKey && serviceKey === validServiceKey)
+    let callerOrgId: string | null = null
+    if (!isService) {
+      const user = await getCurrentUser()
+      if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      callerOrgId = user.org_id ?? null
     }
 
     const body = await req.json()
     const prospects: any[] = body.prospects ?? []
+    // Portal calls stamp the caller's org; service (background) calls may pass org_id.
+    const orgId = callerOrgId ?? (body.org_id ?? null)
 
     if (!prospects.length) return NextResponse.json({ upserted: 0 })
 
-    const { upserted, errors: writeErrors, tech_providers_seen } = await upsertAriaProperties(prospects)
+    const { upserted, errors: writeErrors, tech_providers_seen } = await upsertAriaProperties(prospects, orgId)
 
     // Report failures loudly. A 200 with { upserted: 0 } is how this silently
     // lost every property for months — never let that happen quietly again.

@@ -50,3 +50,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ event: data })
 }
+
+// DELETE /api/events/[id] — remove an event and its child rows. Org-scoped.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser()
+  if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: existing } = await supabase.from('property_events').select('org_id').eq('id', params.id).maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+  if (!user.isCorporate && existing.org_id && existing.org_id !== user.org_id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  // Clear children first (in case the FKs don't cascade), then the event itself.
+  for (const t of ['event_checklist_items', 'event_supplies', 'event_campaign_steps', 'event_guests', 'event_ops_links']) {
+    await supabase.from(t).delete().eq('event_id', params.id)
+  }
+  const { error } = await supabase.from('property_events').delete().eq('id', params.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

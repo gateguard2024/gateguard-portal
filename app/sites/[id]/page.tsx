@@ -250,7 +250,7 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes' | 'warranty' | 'tasks'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes' | 'warranty' | 'tasks' | 'service_analytics'
 
 interface SiteOpportunity {
   id: string
@@ -609,6 +609,7 @@ export default function SiteDetailPage() {
     { id: 'opportunities', label: 'Opportunities', icon: FileText,      count: siteOpps.length },
     { id: 'quotes',        label: 'Quotes',        icon: FileText,      count: siteQuotes.length },
     { id: 'warranty',      label: 'Warranty & RMA', icon: ShieldCheck },
+    { id: 'service_analytics', label: 'Service Analytics', icon: Activity },
     { id: 'tasks',         label: 'Tasks',          icon: ClipboardList },
   ]
 
@@ -979,6 +980,9 @@ export default function SiteDetailPage() {
           )}
         </div>
       )}
+
+      {/* ── Tab: Service Analytics ───────────────────────────────────── */}
+      {tab === 'service_analytics' && <ServiceAnalyticsTab siteId={id} />}
 
       {/* ── Tab: Work Orders ─────────────────────────────────────────── */}
       {tab === 'work_orders' && (
@@ -2036,4 +2040,107 @@ function groupByZone(assets: Asset[]): { zone: string | null; items: Asset[] }[]
     map.get(key)!.push(a)
   }
   return Array.from(map.entries()).map(([zone, items]) => ({ zone, items }))
+}
+
+// ── Service Analytics tab ──────────────────────────────────────────────────
+// Reads the fault/uptime ledger (/api/incidents) and renders uptime, MTTR,
+// incident volume, a by-category breakdown, and recent history for this site.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<{ incidents: any[]; stats: any } | null>(null)
+  useEffect(() => {
+    let live = true
+    fetch(`/api/incidents?site_id=${siteId}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { if (live) setData({ incidents: Array.isArray(j.incidents) ? j.incidents : [], stats: j.stats ?? {} }) })
+      .catch(() => { if (live) setData({ incidents: [], stats: {} }) })
+    return () => { live = false }
+  }, [siteId])
+
+  const dur = (ms: number | null | undefined): string => {
+    if (ms == null) return '—'
+    const h = ms / 3_600_000
+    if (h < 1) return `${Math.round(ms / 60_000)}m`
+    if (h < 48) return `${Math.round(h)}h`
+    return `${Math.round(h / 24)}d`
+  }
+
+  if (!data) return <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-6 text-sm text-[#c3d3e2]">Loading service analytics…</div>
+
+  const s = data.stats ?? {}
+  const inc = data.incidents ?? []
+  const cats = new Map<string, { total: number; open: number }>()
+  for (const i of inc) {
+    const c = String(i.category ?? 'other')
+    const e = cats.get(c) ?? { total: 0, open: 0 }
+    e.total++; if (i.status === 'open' || i.status === 'investigating') e.open++
+    cats.set(c, e)
+  }
+  const catRows = Array.from(cats.entries()).sort((a, b) => b[1].total - a[1].total)
+  const uptime = s.uptimePct ?? 100
+  const uptimeColor = uptime >= 99 ? '#7ee0a8' : uptime >= 95 ? '#fbbf24' : '#f2637e'
+
+  const KPI = ({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) => (
+    <div className="bg-[#14202c] rounded-xl border border-[#2b3d50] p-4">
+      <div className="text-[11px] uppercase tracking-wide text-[#9FD8EC]">{label}</div>
+      <div className="mt-1 text-2xl font-semibold" style={{ color: color ?? '#eaf2fb' }}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-[#c3d3e2]">{sub}</div>}
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KPI label={`Uptime · ${s.windowDays ?? 90}d`} value={`${uptime}%`} color={uptimeColor} sub={`${dur(s.downtimeMs)} total downtime`} />
+        <KPI label="Open incidents" value={String(s.openCount ?? 0)} color={(s.openCount ?? 0) > 0 ? '#f2637e' : '#7ee0a8'} sub={s.currentDowntimeMs ? `${dur(s.currentDowntimeMs)} longest active` : 'all clear'} />
+        <KPI label="Mean time to resolve" value={dur(s.mttrMs)} sub={`${s.resolvedCount ?? 0} resolved`} />
+        <KPI label="Time since last" value={dur(s.timeSinceLastMs)} sub={`${inc.length} total logged`} />
+      </div>
+
+      <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4">
+        <div className="text-sm font-semibold text-[#eaf2fb] mb-3">Incidents by category</div>
+        {catRows.length === 0 ? (
+          <div className="text-xs text-[#c3d3e2]">No incidents logged for this site yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {catRows.map(([cat, e]) => {
+              const pct = Math.round((e.total / inc.length) * 100)
+              return (
+                <div key={cat} className="flex items-center gap-3">
+                  <div className="w-28 shrink-0 text-xs capitalize text-[#c3d3e2]">{cat}</div>
+                  <div className="flex-1 h-2 rounded-full bg-[#14202c] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#5FB8E0' }} />
+                  </div>
+                  <div className="w-24 shrink-0 text-right text-xs text-[#eaf2fb]">{e.total}{e.open > 0 && <span className="text-[#f2637e]"> · {e.open} open</span>}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4">
+        <div className="text-sm font-semibold text-[#eaf2fb] mb-3">Recent incidents</div>
+        {inc.length === 0 ? (
+          <div className="text-xs text-[#c3d3e2]">Nothing logged yet — faults filed here (manual or auto-monitored) build this history.</div>
+        ) : (
+          <div className="space-y-1.5">
+            {inc.slice(0, 15).map((i, k) => {
+              const open = i.status === 'open' || i.status === 'investigating'
+              return (
+                <div key={i.id ?? k} className="flex items-center gap-3 text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: open ? '#f2637e' : '#7ee0a8' }} />
+                  <span className="min-w-0 flex-1 truncate text-[#eaf2fb]">{i.title ?? 'Incident'}</span>
+                  <span className="shrink-0 capitalize text-[#9FD8EC]">{String(i.category ?? '')}</span>
+                  <span className="shrink-0 text-[#c3d3e2]">{i.source === 'monitor' ? 'auto' : (i.source ?? 'manual')}</span>
+                  <span className="shrink-0 w-16 text-right" style={{ color: open ? '#fbbf24' : '#c3d3e2' }}>{open ? 'open' : 'resolved'}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

@@ -2620,7 +2620,7 @@ export async function POST(req: NextRequest) {
           // Direct in-process call. This used to POST to `${baseUrl}/api/aria/properties`
           // — an HTTP request this route made to ITSELF, which fell back to
           // localhost:3000 on Vercel and connected to nothing.
-          const res = await upsertAriaProperties([partial])
+          const res = await upsertAriaProperties([partial], userOrgId)
           if (!(res.upserted > 0)) {
             checkpointFail++
             console.error(`[aria/deep] checkpoint save FAILED: ${res.errors[0] ?? 'nothing upserted'}`)
@@ -3469,7 +3469,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     let savedToIntelDb = false
     let saveError: string | null = null
     try {
-      const upsertRes = await upsertAriaProperties([prospectPayload])
+      const upsertRes = await upsertAriaProperties([prospectPayload], userOrgId)
       if (!(upsertRes.upserted > 0)) {
         saveError = upsertRes.errors[0] ?? 'Nothing saved'
         console.error(`[aria/deep] Intel DB save FAILED for "${property_name}": ${saveError}`)

@@ -129,6 +129,16 @@ function UploadModal({ isCorporate, onClose, onDone }: { isCorporate: boolean; o
   const [allTiers, setAllTiers] = useState(true);
   const [tiers, setTiers] = useState<string[]>(['corporate']);
   const [busy, setBusy] = useState(false);
+  // Optional link back to a site or opportunity (org_documents.site_id / opportunity_id)
+  const [linkType, setLinkType] = useState<'' | 'site' | 'opportunity'>('');
+  const [linkId, setLinkId] = useState('');
+  const [sites, setSites] = useState<Any[]>([]);
+  const [opps, setOpps] = useState<Any[]>([]);
+
+  useEffect(() => {
+    void fetch('/api/sites', { cache: 'no-store' }).then(r => r.json()).then(j => setSites(j.sites ?? j.records ?? j.data ?? [])).catch(() => {});
+    void fetch('/api/crm/opportunities', { cache: 'no-store' }).then(r => r.json()).then(j => setOpps(j.records ?? j.data ?? [])).catch(() => {});
+  }, []);
 
   async function submit() {
     if (!f.name.trim() || !file) return;
@@ -138,6 +148,8 @@ function UploadModal({ isCorporate, onClose, onDone }: { isCorporate: boolean; o
       if (!up.signedUrl) throw new Error(up.error || 'upload url failed');
       await fetch(up.signedUrl, { method: 'PUT', body: file });
       const body: Any = { name: f.name, category: f.category, description: f.description || null, file_url: up.publicUrl, storage_path: up.storagePath, file_size_kb: Math.round(file.size / 1024) };
+      if (linkType === 'site' && linkId) body.site_id = linkId;
+      if (linkType === 'opportunity' && linkId) body.opportunity_id = linkId;
       if (isCorporate && shared) { body.visibility = 'shared'; body.allowed_tiers = allTiers ? [] : tiers; }
       await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       onDone(`Uploaded ${f.name}`);
@@ -156,6 +168,26 @@ function UploadModal({ isCorporate, onClose, onDone }: { isCorporate: boolean; o
               {CATEGORIES.map(c => <option key={c} value={c} style={{ background: '#111a24' }}>{c}</option>)}
             </select>
             <input value={f.description} onChange={e => setF({ ...f, description: e.target.value })} placeholder="Description (optional)" style={INPUT} />
+          </div>
+
+          {/* Optional link back to the site or opportunity this doc belongs to */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+            <select value={linkType} onChange={e => { setLinkType(e.target.value as ''|'site'|'opportunity'); setLinkId(''); }} style={{ ...INPUT, padding: '8px 8px' }}>
+              <option value="" style={{ background: '#111a24' }}>Link to… (none)</option>
+              <option value="site" style={{ background: '#111a24' }}>Site</option>
+              <option value="opportunity" style={{ background: '#111a24' }}>Opportunity</option>
+            </select>
+            {linkType === 'site' ? (
+              <select value={linkId} onChange={e => setLinkId(e.target.value)} style={{ ...INPUT, padding: '8px 8px' }}>
+                <option value="" style={{ background: '#111a24' }}>Choose a site…</option>
+                {sites.map((s: Any) => <option key={s.id} value={s.id} style={{ background: '#111a24' }}>{s.name ?? s.property_name ?? s.title ?? 'Site'}</option>)}
+              </select>
+            ) : linkType === 'opportunity' ? (
+              <select value={linkId} onChange={e => setLinkId(e.target.value)} style={{ ...INPUT, padding: '8px 8px' }}>
+                <option value="" style={{ background: '#111a24' }}>Choose an opportunity…</option>
+                {opps.map((o: Any) => <option key={o.id} value={o.id} style={{ background: '#111a24' }}>{o.name ?? o.title ?? o.company_name ?? 'Opportunity'}</option>)}
+              </select>
+            ) : <div style={{ fontSize: 11, color: '#8ba0b4', alignSelf: 'center' }}>Attach this doc to a record (optional)</div>}
           </div>
 
           {isCorporate && (
