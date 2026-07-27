@@ -167,16 +167,22 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const propertySearch = String(leadRecord.location || companyName || '').replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
   const directProperties: never[] = []
 
-  const sites = propertySearch
-    ? await safe(
-        supabase
-          .from('sites')
-          .select('id, name, address, city, state, zip, property_type, units, status, primary_contact_name, primary_contact_email, primary_contact_phone, notes, created_at, updated_at')
-          .or(`name.ilike.%${propertySearch}%,address.ilike.%${propertySearch}%`)
-          .limit(8),
-        []
-      )
-    : []
+  // Scope the related-site search to the caller's dealer orgs (it used to match
+  // sites across every tenant by the lead's location string).
+  const siteScope = await resolveOrgScope(user)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sites: any[] = []
+  if (propertySearch) {
+    let sitesQ = supabase
+      .from('sites')
+      .select('id, name, address, city, state, zip, property_type, units, status, primary_contact_name, primary_contact_email, primary_contact_phone, notes, created_at, updated_at')
+      .or(`name.ilike.%${propertySearch}%,address.ilike.%${propertySearch}%`)
+    if (!siteScope.all) {
+      const ids = (siteScope.ids.length ? siteScope.ids : ['00000000-0000-0000-0000-000000000000']).join(',')
+      sitesQ = sitesQ.or(`install_dealer_id.in.(${ids}),master_dealer_id.in.(${ids}),service_dealer_id.in.(${ids})`)
+    }
+    sites = await safe(sitesQ.limit(8), [])
+  }
 
   // Activity is now a single table (crm_activities). `crmActivities` kept empty
   // for response-shape compatibility with the lead window UI.

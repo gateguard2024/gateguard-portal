@@ -45,6 +45,13 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Scope by the parent quote's org — same guard the POST already applies.
+  const user  = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  const { data: quote } = await supabase.from('quotes').select('id, org_id').eq('id', params.id).single()
+  if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+  if (!scope.all && !scope.ids.includes(quote.org_id)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { data, error } = await supabase
     .from('quote_line_items')
     .select(`

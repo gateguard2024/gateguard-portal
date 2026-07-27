@@ -9,7 +9,7 @@ const supabase = createClient(
 
 export async function GET(req: Request) {
   const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ activity: [] })
+  if (user.id === 'anonymous') return NextResponse.json({ activity: [] })
 
   const { searchParams } = new URL(req.url)
   const item_id = searchParams.get('item_id')
@@ -21,6 +21,8 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
     .limit(50)
 
+  // Non-corporate callers only see activity within their own org.
+  if (!user.isCorporate && user.org_id) query = query.eq('org_id', user.org_id)
   if (item_id) query = query.eq('item_id', item_id)
 
   const { data, error } = await query
