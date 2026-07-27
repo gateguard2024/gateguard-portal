@@ -87,6 +87,20 @@ function isBypassPath(pathname: string): boolean {
   )
 }
 
+// ── Satellite domain (one Clerk instance across beta + main) ─────────────────
+// When beta runs under the PRODUCTION Clerk instance, it is a "satellite" of the
+// primary domain. Set these on beta ONLY (leave unset on main):
+//   NEXT_PUBLIC_CLERK_IS_SATELLITE = "true"
+//   NEXT_PUBLIC_CLERK_DOMAIN       = "beta.portal.gateguard.co"
+//   NEXT_PUBLIC_CLERK_SIGN_IN_URL  = "https://portal.gateguard.co/sign-in"
+// Main leaves them blank and behaves exactly as before (primary domain).
+const CLERK_IS_SATELLITE   = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true'
+const CLERK_DOMAIN         = process.env.NEXT_PUBLIC_CLERK_DOMAIN || undefined
+const CLERK_PRIMARY_SIGNIN = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || undefined
+const clerkOptions = CLERK_IS_SATELLITE
+  ? { isSatellite: true, domain: CLERK_DOMAIN, signInUrl: CLERK_PRIMARY_SIGNIN }
+  : {}
+
 // Clerk handler — only invoked for portal routes
 const clerkHandler = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname
@@ -101,11 +115,15 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 
   const { userId } = await auth()
   if (!userId) {
-    const signInUrl = new URL('/sign-in', req.url)
+    // On a satellite, sign-in lives on the PRIMARY domain; send them there and
+    // bring them back. On main this is the local /sign-in exactly as before.
+    const signInUrl = CLERK_IS_SATELLITE && CLERK_PRIMARY_SIGNIN
+      ? new URL(CLERK_PRIMARY_SIGNIN)
+      : new URL('/sign-in', req.url)
     signInUrl.searchParams.set('redirect_url', req.url)
     return NextResponse.redirect(signInUrl)
   }
-})
+}, clerkOptions)
 
 // Plain Next.js middleware — runs before Clerk
 export function middleware(req: NextRequest, event: NextFetchEvent) {

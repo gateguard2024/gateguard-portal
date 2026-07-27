@@ -35,10 +35,21 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Satellite domain: when beta runs under the PRODUCTION Clerk instance it is a
+  // satellite of the primary domain. These are set on beta only (blank on main),
+  // so main renders ClerkProvider exactly as before.
+  const isSatellite = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true';
+  const satelliteProps = isSatellite
+    ? {
+        isSatellite: true,
+        domain: process.env.NEXT_PUBLIC_CLERK_DOMAIN,
+        signInUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL,
+      }
+    : {};
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${dmSans.variable} ${plexMono.variable} font-sans`}>
-        <ClerkProvider>
+        <ClerkProvider {...satelliteProps}>
           <ServiceWorkerRegistration />
           <OfflineBanner />
           <PortalShell>{children}</PortalShell>
