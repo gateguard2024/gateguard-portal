@@ -74,8 +74,8 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
         <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Sales</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.64)' }}>{subtitle}</p>
+          <h2 className="mt-1 text-2xl font-semibold" style={{ color: '#eaf2fb' }}>{title}</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
         <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
