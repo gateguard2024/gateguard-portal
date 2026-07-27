@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,39 +11,47 @@ const supabase = createClient(
 )
 
 // GET /api/assistant/alerts — returns counts for badge + briefing
-// Fast endpoint — only counts, no full row data
+// Fast endpoint — only counts, no full row data. Scoped to the caller's org.
 export async function GET() {
   try {
+    const user = await getCurrentUser()
+    if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const scope = await resolveOrgScope(user)
+    const orgIds = scope.all ? null : (scope.ids.length ? scope.ids : ['__none__'])
+
     const today = new Date().toISOString().split('T')[0]
     const soonDate = new Date()
     soonDate.setDate(soonDate.getDate() + 7)
     const soon = soonDate.toISOString().split('T')[0]
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scoped = (q: any): any => orgIds ? q.in('org_id', orgIds) : q
+
     const [todosRes, quotesRes, wosRes, scoutOpenedRes] = await Promise.all([
-      supabase
+      scoped(supabase
         .from('todos')
         .select('id', { count: 'exact', head: true })
         .in('status', ['open', 'in_progress'])
-        .lte('due_date', today),
-      supabase
+        .lte('due_date', today)),
+      scoped(supabase
         .from('quotes')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'sent')
         .not('valid_until', 'is', null)
-        .lte('valid_until', soon),
-      supabase
+        .lte('valid_until', soon)),
+      scoped(supabase
         .from('work_orders')
         .select('id', { count: 'exact', head: true })
-        .in('status', ['open', 'in_progress']),
+        .in('status', ['open', 'in_progress'])),
       // SCOUT: leads that opened the ARIA email but rep hasn't engaged yet
-      supabase
+      scoped(supabase
         .from('leads')
         .select('id, property_name, scout_opened_at', { count: 'exact' })
         .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
         .eq('scout_status', 'opened')
         .in('stage', ['new', 'contacted'])
         .order('scout_opened_at', { ascending: false })
-        .limit(5),
+        .limit(5)),
     ])
 
     const scoutOpened = scoutOpenedRes.data ?? []
