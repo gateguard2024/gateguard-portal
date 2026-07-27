@@ -39,7 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // satellite of the primary domain. These are set on beta only (blank on main),
   // so main renders ClerkProvider exactly as before.
   const isSatellite = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true';
-  const satelliteProps = isSatellite
+  // Typed as any: ClerkProvider's props are a discriminated union that rejects a
+  // string|undefined domain; this is a pass-through config object, not app logic.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const satelliteProps: any = isSatellite
     ? {
         isSatellite: true,
         domain: process.env.NEXT_PUBLIC_CLERK_DOMAIN,

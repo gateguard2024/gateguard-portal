@@ -97,7 +97,8 @@ function isBypassPath(pathname: string): boolean {
 const CLERK_IS_SATELLITE   = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true'
 const CLERK_DOMAIN         = process.env.NEXT_PUBLIC_CLERK_DOMAIN || undefined
 const CLERK_PRIMARY_SIGNIN = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || undefined
-const clerkOptions = CLERK_IS_SATELLITE
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const clerkOptions: any = CLERK_IS_SATELLITE
   ? { isSatellite: true, domain: CLERK_DOMAIN, signInUrl: CLERK_PRIMARY_SIGNIN }
   : {}
 
