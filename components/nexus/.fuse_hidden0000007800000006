@@ -44,7 +44,7 @@ export function SiteNetworkDevices({ siteId }: { siteId: string }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 8 }}>
           {devices.map((d, i) => (
             <div key={d.mac ?? d.name ?? i} style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.online ? '#7ee0a8' : '#f87171', flexShrink: 0 }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.online ? '#7ee0a8' : '#f2637e', flexShrink: 0 }} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name ?? d.model ?? 'Device'}</div>
                 <div style={{ color: '#c3d3e2', fontSize: 10 }}>{[d.model, d.version ? `v${d.version}` : null, d.uptime_s ? `up ${uptime(d.uptime_s)}` : null].filter(Boolean).join(' · ')}</div>

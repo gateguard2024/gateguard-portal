@@ -259,7 +259,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
           {/* ===== COL 3 · WORKLOAD & UPKEEP ===== */}
           <div className="flex flex-col gap-3">
             <Tile>
-              <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
+              <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(242,99,126,0.16)', border: '1px solid rgba(242,99,126,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
               {(d?.requests.items ?? []).length === 0 ? (
                 <div className="py-1.5 text-center text-[11px]" style={{ color: '#9FD8EC' }}>{loading ? 'Loading…' : 'No open requests.'}</div>
               ) : (
@@ -277,7 +277,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <Tile onClick={() => onOpenTab('PM')}>
               <CardHead title="Preventive Maintenance" onOpen={() => onOpenTab('PM')} />
               <div className="flex gap-2">
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(248,113,113,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#f87171' }}>{d?.pm.overdue ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Overdue</div></div>
+                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(242,99,126,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#f87171' }}>{d?.pm.overdue ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Overdue</div></div>
                 <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(251,191,36,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#fbbf24' }}>{d?.pm.dueSoon ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Due 14d</div></div>
                 <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.2)' }}><div className="text-[22px] font-extrabold" style={{ color: '#7ee0a8' }}>{d?.pm.onTrack ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>On track</div></div>
               </div>

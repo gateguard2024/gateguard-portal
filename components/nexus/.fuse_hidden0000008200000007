@@ -64,7 +64,7 @@ export function SiteCameraEvents({ siteId }: { siteId: string }) {
               const alert = ALERT.test(e.label);
               return (
                 <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: alert ? '#f87171' : '#7ee0a8', flexShrink: 0 }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: alert ? '#f2637e' : '#7ee0a8', flexShrink: 0 }} />
                   <span aria-hidden>{glyph(e.label)}</span>
                   <span style={{ color: '#e2ebf4' }}>{e.label}{e.ongoing ? ' · ongoing' : ''}</span>
                   {e.cameraName && <span style={{ color: '#c3d3e2' }}>· {e.cameraName}</span>}

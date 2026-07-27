@@ -54,7 +54,7 @@ export function SiteIncidents({ siteId }: { siteId: string }) {
     await load();
   }
 
-  const healthColor = !stats ? '#9FD8EC' : stats.uptimePct >= 99 ? '#7ee0a8' : stats.uptimePct >= 95 ? '#fbbf24' : '#f87171';
+  const healthColor = !stats ? '#9FD8EC' : stats.uptimePct >= 99 ? '#7ee0a8' : stats.uptimePct >= 95 ? '#fbbf24' : '#f2637e';
 
   return (
     <div style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 14 }}>
@@ -69,7 +69,7 @@ export function SiteIncidents({ siteId }: { siteId: string }) {
       {/* Uptime stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8, marginBottom: 12 }}>
         <Stat label={`Uptime · ${stats?.windowDays ?? 90}d`} value={stats ? `${stats.uptimePct}%` : '—'} color={healthColor} />
-        <Stat label="Open faults" value={stats?.openCount ?? 0} color={open.length ? '#f87171' : '#7ee0a8'} />
+        <Stat label="Open faults" value={stats?.openCount ?? 0} color={open.length ? '#f2637e' : '#7ee0a8'} />
         <Stat label="Since last" value={dur(stats?.timeSinceLastMs)} sub="incident" color="#9FD8EC" />
         <Stat label="Current down" value={dur(stats?.currentDowntimeMs || null)} sub={open.length ? 'active' : 'none'} color={open.length ? '#fbbf24' : '#9FD8EC'} />
         <Stat label="Avg fix (MTTR)" value={dur(stats?.mttrMs)} color="#9FD8EC" />

@@ -184,8 +184,15 @@ export function SalesSurface() {
                     <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(15,26,38,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#f87171' : '#5FB8E0' }} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px]" style={{ color: '#dbeaf7' }}>{a.subject || a.type}</div>
-                        <div className="truncate text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div>
+                        <div className="truncate text-[12px]" style={{ color: '#eaf2fb' }}>{a.subject || a.type}</div>
+                        <div className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>
+                          {a.opportunity_name || 'General'}
+                          {(() => {
+                            const [status, time] = timeLabel(a.due_at).split(' · ')
+                            const overdue = status === 'Overdue'
+                            return <> · <span style={overdue ? { color: '#f87171', fontWeight: 600 } : undefined}>{status}</span>{time ? ` · ${time}` : ''}</>
+                          })()}
+                        </div>
                       </div>
                     </button>
                   ))}

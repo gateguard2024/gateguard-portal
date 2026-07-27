@@ -378,7 +378,7 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px]" style={{ color: '#9FD8EC' }}>{saving ? 'Saving…' : 'Saved'}</span>
-                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' }}>Delete</button>
+                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(242,99,126,0.14)', border: '1px solid rgba(242,99,126,0.4)', color: '#f87171' }}>Delete</button>
                 <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
               </div>
             </div>
