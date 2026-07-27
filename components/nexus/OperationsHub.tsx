@@ -31,7 +31,7 @@ type RealTech = { id: string; name: string };
 
 const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string }[] = [
   { key: "New",         label: "New",         from: ["Pending", "open", "New", "Approved"],                          accent: "#64748b" },
-  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#a855f7" },
+  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#5FB8E0" },
   { key: "Scheduled",   label: "Scheduled",   from: ["Assigned", "scheduled", "Scheduled"],                          accent: "#3b82f6" },
   { key: "In Progress", label: "In-Progress", from: ["In Progress", "in_progress", "On Site", "En Route"],           accent: "#f59e0b" },
   { key: "Stuck",       label: "Stuck",       from: ["stuck", "Stuck", "blocked", "Blocked", "On Hold"],             accent: "#ef4444" },
@@ -230,7 +230,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
       })}
       <button onClick={loadOps} title="Refresh" aria-label="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)", display: "inline-flex", alignItems: "center" }}><RefreshCw size={15} /></button>
     </div>
-    <p style={{ color: "rgba(255,255,255,0.34)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
+    <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} createError={woError} />}
@@ -367,7 +367,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
                       : siteMatches.length === 0 ? <Small>No sites match “{siteQ}”.</Small>
                       : siteMatches.map(s => <button key={s.id} onClick={() => setForm({ ...form, site_id: s.id, customer_name: s.name || "" })} style={{ textAlign: "left", cursor: "pointer", padding: "8px 10px", borderRadius: 10, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
                           <div style={{ fontSize: 13.5 }}>{s.name || "Unnamed site"}</div>
-                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
+                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
                         </button>)}
                   </div>
                 </>}
@@ -403,7 +403,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
       <input placeholder="Search WO#, site, tech…" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, padding: 10, marginBottom: 8 }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
         {WO_FILTERS.map(f => { const on = filter === f.key; const n = f.key === "all" ? jobs.length : jobs.filter(w => f.key === "unassigned" ? !w.assignedTechId : f.key === "urgent" ? ["Urgent", "High"].includes(w.priority) : f.key === "done" ? bucketOf(w.status) === "Done" : bucketOf(w.status) !== "Done").length;
-          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(95,184,224,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.45)" }}>{n}</span></button>; })}
+          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(95,184,224,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.82)" }}>{n}</span></button>; })}
       </div>
       {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : shown.length === 0 ? <Small>No work orders match.</Small> : shown.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
     </Card>
@@ -455,7 +455,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
             <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, margin: "4px 0" }}>{w.property || "—"}{w.assignedTech ? ` · ${w.assignedTech}` : " · Unassigned"}</p>
           </div>)}
-          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
+          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
         </div>;
       })}
     </div>
@@ -467,7 +467,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
       {showDone && <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
         {doneItems.length === 0 ? <Small>No completed jobs yet.</Small> : doneItems.map(w => <div key={w.id} onClick={() => onOpen(w.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", cursor: "pointer" }}>
           <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{w.property || "—"}</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.82)" }}>{w.property || "—"}</span>
         </div>)}
       </div>}
     </div>
@@ -475,7 +475,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
 }
 
 /* ── Calendar: month / week / day, filter by tech (real /api/calendar/events) */
-const EVENT_COLOR: Record<string, string> = { work_order: "#7ee0a8", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#5FB8E0", crm_activity: "#a78bfa", tracker_task: "#a78bfa", nexus_event: "#94a3b8", gcal: "#c084fc" };
+const EVENT_COLOR: Record<string, string> = { work_order: "#7ee0a8", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#5FB8E0", crm_activity: "#5FB8E0", tracker_task: "#5FB8E0", nexus_event: "#94a3b8", gcal: "#9FD8EC" };
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const evTime = (e: any) => (e.time ? String(e.time).slice(0, 5) : "");
@@ -527,7 +527,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     : view === "week" ? `${range.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${range.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
     : anchor.toLocaleString("en-US", { month: "long", year: "numeric" });
 
-  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.45)" }}> · {e.owner_name}</span>}</div>;
+  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.82)" }}> · {e.owner_name}</span>}</div>;
 
   // Assigned/created jobs that have no date yet never land on a calendar grid —
   // surface them here so a job is never invisible. Respects the tech show/hide chips.
@@ -587,7 +587,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
       {Array.from({ length: 7 }, (_, i) => { const d = new Date(range.start); d.setDate(range.start.getDate() + i); return d; }).map(d => {
         const key = ymd(d); const evs = dayEvents(key); const isToday = key === todayKey;
         return <div key={key} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 200, padding: 7, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(95,184,224,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(95,184,224,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.82)" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{d.getDate()}</div>
           {evs.length === 0 ? <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>—</div> : evs.map((e, j) => <Chip key={e.id || j} e={e} mini />)}
         </div>;
@@ -818,7 +818,7 @@ function Locations() {
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
           </div>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
+          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
         </div>
       </Card>)}
     </div>
@@ -879,7 +879,7 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
                   <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.min(tech.utilizationPct, 100)}%`, height: "100%", background: utilColor(tech.utilizationPct) }} />
                   </div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.82)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
                 </div>
                 <span style={{ fontSize: 15, fontWeight: 700, textAlign: "right", color: utilColor(tech.utilizationPct) }}>{tech.utilizationPct}%</span>
               </div>
@@ -894,8 +894,8 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
             <div style={{ display: "grid", gap: 5 }}>
               {callbacks.map(c => (
                 <div key={c.id} onClick={() => onOpen(c.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "7px 10px", background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.22)", borderRadius: 9, cursor: "pointer" }}>
-                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {c.customer_name || ""}</span></span>
-                  <span style={{ color: "rgba(255,255,255,0.45)" }}>{c.assignee_name || "Unassigned"}</span>
+                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {c.customer_name || ""}</span></span>
+                  <span style={{ color: "rgba(255,255,255,0.82)" }}>{c.assignee_name || "Unassigned"}</span>
                 </div>
               ))}
             </div>
@@ -1131,7 +1131,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             </div>
           </div>}
           {assets.length === 0 ? <Small>No equipment logged at this site yet.</Small> : assets.map((a, i) => <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: i < assets.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
           </div>)}
         </Card>
@@ -1370,7 +1370,7 @@ function PM() {
         {s.interval_days ? `Every ${s.interval_days} days` : "—"}
         {s.next_due_at && <div style={{ color: "rgba(255,255,255,0.5)" }}>Next due: {String(s.next_due_at).slice(0, 10)}</div>}
       </div>
-      {s.description && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
+      {s.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
     </Card>)}
   </div>;
 }
@@ -1404,7 +1404,7 @@ function Requests({ onConverted }: { onConverted: () => void }) {
       </div>
       <Small>{r.site_name || "—"}{r.site_city ? ` · ${r.site_city}, ${r.site_state}` : ""}{r.area ? ` · ${r.area}` : ""}</Small>
       {r.description && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
-      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
+      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
       <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, marginTop: 12, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to work order →"}</button>
     </Card>)}
   </div>;
@@ -1462,7 +1462,7 @@ function Procurement() {
           <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#5FB8E0", margin: "8px 0 0" }}>{money(num(p.total))}</div>
           {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
-          {p.notes && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
+          {p.notes && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
             {p.status === "draft" && <button onClick={() => setStatus(p.id, "ordered")} style={{ ...btn, padding: "6px 12px" }}>Mark ordered</button>}
             {p.status === "ordered" && <button onClick={() => setStatus(p.id, "received")} style={{ ...btn, padding: "6px 12px", background: "#10b981" }}>Mark received ✓</button>}
@@ -1893,7 +1893,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   function renderStepGroup(gid: string, phaseId: string | null, name: string, phaseIndex: number) {
     const group = stepsIn(phaseId);
     const gDone = group.filter(c => c.is_complete || c.completed || c.done).length;
-    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
+    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.82)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
     const isPhase = phaseId !== null;
     return <div key={gid} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1916,7 +1916,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} style={{ marginTop: 3, flexShrink: 0 }} />
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: "block", textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
-                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
+                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.82)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
               </span>
             </label>
             <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
@@ -2064,7 +2064,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             {(wo.site_pm_name || wo.site_pm_phone) && <div><Small>Property manager</Small><div style={{ fontSize: 13 }}>{wo.site_pm_name || "—"}{wo.site_pm_phone ? ` · ${wo.site_pm_phone}` : ""}</div></div>}
           </div>
           {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Key size={12} /> Access / gate notes</span></Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
-          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
+          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
         </Card>
 
         {/* Equipment on site + manuals */}
@@ -2083,10 +2083,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </div>
           </Modal>}
           {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
-              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#7dd3fc", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
+              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#9FD8EC", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
             </div>
           </div>; })}
         </Card>
@@ -2102,11 +2102,11 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <button onClick={askAI} disabled={aiBusy || !aiQ.trim()} style={{ ...btn, opacity: aiBusy || !aiQ.trim() ? 0.5 : 1 }}>{aiBusy ? "Thinking…" : "Ask"}</button>
           </div>
           {aiStep && <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ fontSize: 11, color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
+            <div style={{ fontSize: 11, color: "#9FD8EC", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
             <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0" }}>{aiStep.text}</div>
             {aiStep.detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{aiStep.detail}</div>}
             {aiStep.expected && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
-            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#7dd3fc" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
+            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#9FD8EC" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
           </div>}
         </Card>
 

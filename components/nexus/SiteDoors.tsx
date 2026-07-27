@@ -110,11 +110,11 @@ export function SiteDoors({ siteId }: { siteId: string }) {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.9)" }}>{d.name}</div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)", marginTop: 2 }}>
                         {cam ? <>📹 {cam.stream_url ? <a href={cam.stream_url} target="_blank" rel="noreferrer" style={{ color: "#5FB8E0" }}>{cam.camera_name}</a> : cam.camera_name}</> : "No camera linked"}
                       </div>
                       {cam?.tags && cam.tags.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
-                        {cam.tags.map(t => <span key={t} style={{ fontSize: 10, fontWeight: 600, background: "rgba(124,58,237,0.16)", border: "1px solid rgba(124,58,237,0.4)", color: "#c4b5fd", borderRadius: 999, padding: "2px 8px" }}>{t}</span>)}
+                        {cam.tags.map(t => <span key={t} style={{ fontSize: 10, fontWeight: 600, background: "rgba(95,184,224,0.16)", border: "1px solid rgba(95,184,224,0.4)", color: "#9FD8EC", borderRadius: 999, padding: "2px 8px" }}>{t}</span>)}
                       </div>}
                       {!cam && !editing && (() => { const s = suggestCam(d.name); return s ? <button onClick={() => linkSuggested(d, s)} disabled={busyId === d.id} style={{ marginTop: 5, fontSize: 11, fontWeight: 600, background: "rgba(126,224,168,0.14)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 8, padding: "3px 9px", cursor: "pointer" }}>💡 Link “{s.name}”?</button> : null; })()}
                     </div>

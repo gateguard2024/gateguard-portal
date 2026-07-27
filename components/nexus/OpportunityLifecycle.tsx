@@ -7,7 +7,7 @@ import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { ContactsCard } from '@/components/nexus/ContactsCard'
 import { normalizeStage } from '@/lib/pipeline'
 
-const cyan = '#00C8FF'
+const cyan = '#5FB8E0'
 const STAGES = ['Overview', 'Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
 
 // Canonical stage key per lifecycle step (what we PATCH onto opportunities.stage).
@@ -26,7 +26,7 @@ const STAGE_TO_STEP: Record<string, number> = {
 
 const cardStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 18 } as const
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)', borderRadius: 12, padding: '10px 12px', width: '100%' } as const
-const btn = { background: 'rgba(0,200,255,0.18)', border: '1px solid rgba(0,200,255,0.45)', color: '#7DE5FF', borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' } as const
+const btn = { background: 'rgba(95,184,224,0.18)', border: '1px solid rgba(95,184,224,0.45)', color: '#7DE5FF', borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' } as const
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -169,8 +169,8 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
             return (
               <button key={s} onClick={() => goToStage(i)} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 14, cursor: 'pointer',
-                background: active ? 'rgba(0,200,255,0.18)' : done ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${active ? 'rgba(0,200,255,0.5)' : done ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                background: active ? 'rgba(95,184,224,0.18)' : done ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${active ? 'rgba(95,184,224,0.5)' : done ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`,
                 color: active ? '#7DE5FF' : done ? '#6ee7b7' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600,
               }}>
                 <span style={{ width: 20, height: 20, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, background: 'rgba(0,0,0,0.3)' }}>{done ? '✓' : i + 1}</span>
@@ -500,8 +500,8 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start' }}>
       {lead && (
-        <Card style={{ gridColumn: '1 / -1', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)' }}>
-          <Sub>Converted from lead — <b style={{ color: '#c4b5fd' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
+        <Card style={{ gridColumn: '1 / -1', background: 'rgba(95,184,224,0.1)', border: '1px solid rgba(95,184,224,0.3)' }}>
+          <Sub>Converted from lead — <b style={{ color: '#9FD8EC' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
         </Card>
       )}
 
@@ -523,7 +523,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
             {editing ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 {[['Yes', true], ['No', false]].map(([lbl, val]) => (
-                  <button key={String(val)} onClick={() => setForm(f => ({ ...f, unit_automation: val as boolean }))} style={{ ...btn, padding: '8px 18px', background: form.unit_automation === val ? 'rgba(0,200,255,0.2)' : 'rgba(255,255,255,0.05)', border: form.unit_automation === val ? '1px solid rgba(0,200,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: form.unit_automation === val ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{lbl}</button>
+                  <button key={String(val)} onClick={() => setForm(f => ({ ...f, unit_automation: val as boolean }))} style={{ ...btn, padding: '8px 18px', background: form.unit_automation === val ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.05)', border: form.unit_automation === val ? '1px solid rgba(95,184,224,0.5)' : '1px solid rgba(255,255,255,0.12)', color: form.unit_automation === val ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{lbl}</button>
                 ))}
               </div>
             ) : <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.92)' }}>{form.unit_automation ? 'Yes — locks on units' : 'No'}</div>}
@@ -569,7 +569,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
               const done = t.status === 'done'
               if (editId && t.id === editId) {
                 return (
-                  <div key={t.id || i} style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.28)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
+                  <div key={t.id || i} style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(95,184,224,0.28)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
                     <input value={editT.title} onChange={e => setEditT(v => ({ ...v, title: e.target.value }))} placeholder="Task…" style={{ ...inputStyle }} />
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <input type="date" value={editT.due} onChange={e => setEditT(v => ({ ...v, due: e.target.value }))} style={{ ...inputStyle, flex: 1, minWidth: 130 }} />
@@ -595,7 +595,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
                   {/* Click the task to edit it — title, date, assignee, or delete. */}
                   <button onClick={() => openTaskEdit(t)} title="Open to edit" style={{ minWidth: 0, flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                     <div style={{ color: done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.85)', textDecoration: done ? 'line-through' : 'none' }}>{t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}{t.assigned_to_name ? ` · ${t.assigned_to_name}` : ''}</div>
-                    {t.body && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{String(t.body)}</div>}
+                    {t.body && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)' }}>{String(t.body)}</div>}
                   </button>
                 </div>
               )
@@ -630,7 +630,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             {(['call', 'email', 'meeting', 'note'] as const).map(t => (
-              <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(0,200,255,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(0,200,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
+              <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(95,184,224,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
             ))}
           </div>
           {actType === 'email' && <input value={actTo} onChange={e => setActTo(e.target.value)} placeholder="To (email address)" style={{ ...inputStyle, marginBottom: 8 }} />}
@@ -653,7 +653,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
               <div key={a.id || i} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{a.type || 'note'}{a.subject ? ` · ${a.subject}` : ''}</div>
                 {a.body && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{String(a.body)}</div>}
-                {a.created_at && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{String(a.created_at).slice(0, 10)}</div>}
+                {a.created_at && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.82)', marginTop: 2 }}>{String(a.created_at).slice(0, 10)}</div>}
               </div>
             ))}
           </div>
@@ -692,7 +692,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
                 <div key={e.id || i} style={{ fontSize: 13, color: failed ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.8)' }}>
                   {failed ? '⚠️' : '✉️'} {e.subject || '(no subject)'}
                   {failed && <span style={{ color: '#fca5a5', fontWeight: 600 }}> · Not delivered</span>}
-                  {e.created_at ? <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}
+                  {e.created_at ? <span style={{ color: 'rgba(255,255,255,0.82)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}
                 </div>
               )
             })}
@@ -731,7 +731,7 @@ const ACTION_OPTS: { v: SurveyDevice['action']; label: string; color: string }[]
   { v: 'keep', label: 'Keep', color: '#6ee7b7' },
   { v: 'service', label: 'Service', color: '#7DE5FF' },
   { v: 'replace', label: 'Replace', color: '#fbbf24' },
-  { v: 'new', label: 'New install', color: '#c4b5fd' },
+  { v: 'new', label: 'New install', color: '#9FD8EC' },
 ]
 
 const newSurveyDevice = (): SurveyDevice => ({
@@ -904,7 +904,7 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#c4b5fd', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>{banner}</div>}
+      {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#9FD8EC', background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)' }}>{banner}</div>}
 
       {/* 0 · Site basics — drives the install cost in Financials */}
       <Card>
@@ -928,11 +928,11 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
       </Card>
 
       {/* 1 · Voice */}
-      <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.3)' }}>
+      <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(95,184,224,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(95,184,224,0.3)' }}>
         <H>🎙️ Talk through the property</H>
         <Sub>Walk the site and say what you see. Or upload a recording. Then tap “Fill from voice” and Nexus builds your device list.</Sub>
         <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={toggleRecord} style={{ ...btn, background: recording ? 'rgba(248,113,113,0.2)' : 'rgba(139,92,246,0.2)', border: `1px solid ${recording ? 'rgba(248,113,113,0.5)' : 'rgba(139,92,246,0.5)'}`, color: recording ? '#fca5a5' : '#c4b5fd', borderRadius: 999, padding: '12px 20px' }}>{recording ? '■ Stop' : '● Record'}</button>
+          <button onClick={toggleRecord} style={{ ...btn, background: recording ? 'rgba(248,113,113,0.2)' : 'rgba(95,184,224,0.2)', border: `1px solid ${recording ? 'rgba(248,113,113,0.5)' : 'rgba(95,184,224,0.5)'}`, color: recording ? '#fca5a5' : '#9FD8EC', borderRadius: 999, padding: '12px 20px' }}>{recording ? '■ Stop' : '● Record'}</button>
           <button onClick={() => audioRef.current?.click()} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '12px 20px' }}>⬆ Upload recording</button>
           <input ref={audioRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadAudio(f); e.target.value = '' }} />
           <button onClick={fillFromVoice} disabled={parsing} style={{ ...btn, opacity: parsing ? 0.6 : 1 }}>{parsing ? 'Working…' : '✨ Fill from voice'}</button>
@@ -964,7 +964,7 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <H>🧰 What’s on site?</H>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{saving ? 'Saving…' : `${devices.length} item${devices.length === 1 ? '' : 's'}`}</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)' }}>{saving ? 'Saving…' : `${devices.length} item${devices.length === 1 ? '' : 's'}`}</span>
         </div>
         <Sub>Add each device you find. Keep it quick — Location, what it is, is it working, and what to do.</Sub>
         <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
@@ -998,13 +998,13 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
     <div style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }}>
       {/* Thin summary header — click to expand */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', width: 16 }}>{open ? '▾' : '▸'}</span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)', width: 16 }}>{open ? '▾' : '▸'}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {index}. {device.name || <span style={{ color: 'rgba(255,255,255,0.4)' }}>New device — tap to fill in</span>}
             {device.source === 'requested' ? ' · 🚩' : ''}
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {[device.location, device.action ? ACTION_OPTS.find(a => a.v === device.action)?.label : null].filter(Boolean).join(' · ') || 'No location yet'}
           </div>
         </div>
@@ -1127,7 +1127,7 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', overflow: 'auto', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,200,255,0.22)', borderRadius: 22, padding: 18 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', overflow: 'auto', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(95,184,224,0.22)', borderRadius: 22, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <H>{mode === 'search' ? 'Choose a product' : '🚩 Ask corporate to add it'}</H>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18 }}>✕</button>
@@ -1408,7 +1408,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   if (existing) {
     return (
       <div style={{ display: 'grid', gap: 16 }}>
-        <Card style={{ background: 'linear-gradient(180deg, rgba(0,124,255,0.12), rgba(8,18,34,0.6))', border: '1px solid rgba(0,200,255,0.3)' }}>
+        <Card style={{ background: 'linear-gradient(180deg, rgba(95,184,224,0.12), rgba(8,18,34,0.6))', border: '1px solid rgba(95,184,224,0.3)' }}>
           <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Proposal · {acct}</div>
           <h2 style={{ margin: '6px 0', fontSize: 24 }}>{existing.quote_number || 'Quote'}</h2>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1431,7 +1431,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   // Builder.
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <Card style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,124,255,0.18), transparent 55%), rgba(255,255,255,0.04)', textAlign: 'center' }}>
+      <Card style={{ background: 'radial-gradient(circle at 50% 0%, rgba(95,184,224,0.18), transparent 55%), rgba(255,255,255,0.04)', textAlign: 'center' }}>
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Build the proposal · {acct}</div>
         <Sub>Add what you&apos;re selling — search a product or type a line. The total adds up as you go.</Sub>
       </Card>
@@ -1531,7 +1531,7 @@ function Negotiate({ opp }: { opp?: Record<string, any> } = {}) {
             <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '10px 12px', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Try: “Customer says the monthly is too high. What can I do?”</div>
           )}
           {messages.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? 'rgba(0,124,255,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${m.role === 'user' ? 'rgba(0,124,255,0.4)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>{m.text}</div>
+            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? 'rgba(95,184,224,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${m.role === 'user' ? 'rgba(95,184,224,0.4)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>{m.text}</div>
           ))}
           {asking && <div style={{ alignSelf: 'flex-start', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Coach is thinking…</div>}
           {error && <div style={{ fontSize: 12, color: '#fca5a5' }}>{error}</div>}

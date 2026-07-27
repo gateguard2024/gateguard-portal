@@ -170,6 +170,51 @@ function ProgressBar({ pct, height = 6 }: { pct: number; height?: number }) {
   )
 }
 
+// ─── Stage pipeline — horizontal stepper across a job's phases ────────────────
+// Each tracker group IS a workflow stage. A stage is: complete (all items done),
+// current (the first stage that still has open work), or upcoming. This turns the
+// seeded new_install / service templates into a visible deposit→…→billing track.
+function jobStages(job: Job): Array<{ id: string; name: string; color: string; done: number; total: number; state: 'complete' | 'current' | 'upcoming' }> {
+  const groups = (job.groups ?? []).filter(g => (g.items?.length ?? 0) > 0)
+  let currentAssigned = false
+  return groups.map(g => {
+    const total = g.items.length
+    const done = g.items.filter(i => i.status === 'done' || i.status === 'wont_fix').length
+    let state: 'complete' | 'current' | 'upcoming'
+    if (done >= total) state = 'complete'
+    else if (!currentAssigned) { state = 'current'; currentAssigned = true }
+    else state = 'upcoming'
+    return { id: g.id, name: g.name, color: g.color, done, total, state }
+  })
+}
+
+function StagePipeline({ job }: { job: Job }) {
+  const stages = jobStages(job)
+  if (stages.length === 0) return null
+  return (
+    <div className="flex items-stretch gap-1 pl-8 pr-3">
+      {stages.map((s, i) => {
+        const isComplete = s.state === 'complete'
+        const isCurrent = s.state === 'current'
+        const barColor = isComplete ? '#059669' : isCurrent ? '#6B7EFF' : '#E5E7EB'
+        const textColor = isComplete ? '#047857' : isCurrent ? '#4F46E5' : '#9CA3AF'
+        return (
+          <div key={s.id} className="flex-1 min-w-0" title={`${s.name} · ${s.done}/${s.total} done`}>
+            <div className="h-1.5 rounded-full" style={{ background: barColor }} />
+            <div className="mt-1 flex items-center gap-1 min-w-0">
+              {isComplete ? <CheckCircle2 size={11} style={{ color: '#059669', flexShrink: 0 }} />
+                : isCurrent ? <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#6B7EFF' }} />
+                : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#D1D5DB' }} />}
+              <span className="text-[10.5px] font-medium truncate" style={{ color: textColor }}>{s.name}</span>
+              <span className="text-[10px] ml-auto flex-shrink-0" style={{ color: '#9CA3AF' }}>{s.done}/{s.total}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Grid View (Smartsheet-style) ─────────────────────────────────────────────
 
 function GridView({ jobs, onItemStatusChange, onRefresh }: {
@@ -240,6 +285,13 @@ function GridView({ jobs, onItemStatusChange, onRefresh }: {
                     </div>
                   </td>
                 </tr>
+
+                {/* Stage pipeline — always visible, shows where the job is */}
+                {(job.groups?.length ?? 0) > 0 && (
+                  <tr key={`pipe-${job.id}`} className="border-b border-gray-100 bg-white">
+                    <td colSpan={6} className="py-2 px-3"><StagePipeline job={job} /></td>
+                  </tr>
+                )}
 
                 {/* Expanded: groups + items */}
                 {isOpen && (job.groups ?? []).map(group => {

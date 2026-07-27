@@ -143,7 +143,7 @@ const RECORD_BADGE: Record<string, { label: string; color: string }> = {
   opportunity: { label: 'Deal', color: '#818cf8' },
   contact: { label: 'Contact', color: '#60a5fa' },
   job: { label: 'Job', color: '#2dd4bf' },
-  dealer: { label: 'Dealer', color: '#a78bfa' },
+  dealer: { label: 'Dealer', color: '#5FB8E0' },
 };
 // Bucket a conversation by day for the Today / Yesterday / Earlier list grouping.
 const dayBucket = (iso: string) => {
@@ -156,7 +156,7 @@ const dayBucket = (iso: string) => {
 const initials = (name: string) =>
   (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '✉';
 // Soft, deterministic avatar tint per contact so the list reads at a glance.
-const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#A78BFA'];
+const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#5FB8E0'];
 const tintFor = (s: string) => AVATAR_TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
 // Render real email HTML safely: drop scripts, global <style> (would leak into the
 // app), iframes, and inline event handlers — keep inline styles so formatting shows.
@@ -400,7 +400,7 @@ export default function MessagesShell() {
   const glassPanel = { backgroundColor: 'rgba(95,184,224,0.06)', border: '1px solid rgba(140,170,200,0.18)' };
   const textPrimary = { color: 'rgba(255,255,255,0.9)' };
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-  const textFaint = { color: 'rgba(255,255,255,0.34)' };
+  const textFaint = { color: 'rgba(255,255,255,0.82)' };
   const brandBlue = '#5FB8E0';
   if (showSetup) {
     return (
@@ -476,7 +476,7 @@ export default function MessagesShell() {
                         {badge && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide flex-shrink-0" style={{ background: `${badge.color}22`, color: badge.color, border: `1px solid ${badge.color}33` }}>{badge.label}</span>}
                         <span className="truncate text-[13px]" style={{ color: conv.unread ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)', fontWeight: conv.unread ? 500 : 400 }}>{conv.subject || conv.preview || '(no subject)'}</span>
                       </div>
-                      {conv.subject && conv.preview && <span className="truncate text-[12px]" style={{ color: 'rgba(255,255,255,0.35)', paddingLeft: indent }}>{conv.preview}</span>}
+                      {conv.subject && conv.preview && <span className="truncate text-[12px]" style={{ color: 'rgba(255,255,255,0.82)', paddingLeft: indent }}>{conv.preview}</span>}
                     </button>
                   );
                 })}
@@ -559,10 +559,10 @@ export default function MessagesShell() {
               <div className="flex flex-col overflow-hidden rounded-2xl border border-[#5FB8E0]/30" style={{ background: '#1e2a3a' }}>
                 <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center gap-4">
-                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-[#9FD8EC]' : 'text-slate-400 hover:text-slate-200'}`}>↩ Reply</button>
-                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-[#9FD8EC]' : 'text-slate-400 hover:text-slate-200'}`}>↪ Forward</button>
+                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-[#9FD8EC]' : 'text-slate-200 hover:text-slate-200'}`}>↩ Reply</button>
+                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-[#9FD8EC]' : 'text-slate-200 hover:text-slate-200'}`}>↪ Forward</button>
                   </div>
-                  <span className="text-[10px] text-slate-500">Signature added automatically</span>
+                  <span className="text-[10px] text-slate-300">Signature added automatically</span>
                 </div>
                 {composerMode === 'forward' && (
                   <input value={forwardTo} onChange={e => setForwardTo(e.target.value)} placeholder="Forward to (email address)…" className="bg-transparent px-4 py-2 text-[13px] text-slate-200 outline-none placeholder:text-white/30" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }} />
@@ -581,16 +581,16 @@ export default function MessagesShell() {
                   <div ref={editorRef} contentEditable suppressContentEditableWarning onInput={e => setReplyText((e.target as HTMLDivElement).innerText)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleSend(); } }} className="min-h-[84px] max-h-[220px] overflow-y-auto px-4 py-3 text-[14px] text-slate-100 outline-none" />
                 </div>
                 {signature.trim() && (
-                  <div className="whitespace-pre-wrap px-4 pb-2 pt-2 text-[11px] text-slate-500" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>{signature}</div>
+                  <div className="whitespace-pre-wrap px-4 pb-2 pt-2 text-[11px] text-slate-300" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>{signature}</div>
                 )}
                 <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  <button type="button" onClick={() => { setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = ''; }} className="text-[12px] text-slate-400 hover:text-white">Discard</button>
+                  <button type="button" onClick={() => { setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = ''; }} className="text-[12px] text-slate-200 hover:text-white">Discard</button>
                   <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
                 </div>
               </div>
             </div>
             ) : (
-              <div className="p-4 flex-shrink-0 text-center text-[12px] text-slate-500" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>Calls and texts are read-only here.</div>
+              <div className="p-4 flex-shrink-0 text-center text-[12px] text-slate-300" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>Calls and texts are read-only here.</div>
             )}
           </>
         )}

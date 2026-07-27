@@ -39,7 +39,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   };
   const Tile = ({ label, value, unit, accent }: { label: string; value: string | number; unit?: string; accent: string }) => (
     <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderTop: `2px solid ${accent}`, borderRadius: 10, padding: "9px 11px", minWidth: 0 }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.92)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{value}{unit ? <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.45)", marginLeft: 2 }}>{unit}</span> : null}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.92)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{value}{unit ? <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.82)", marginLeft: 2 }}>{unit}</span> : null}</div>
       <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginTop: 3 }}>{label}</div>
     </div>
   );
@@ -56,7 +56,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   const tiles = [
     i.download_mbps != null && { label: "Download", value: round(i.download_mbps), unit: "Mbps", accent: "#7ee0a8" },
     i.upload_mbps != null && { label: "Upload", value: round(i.upload_mbps), unit: "Mbps", accent: "#5FB8E0" },
-    i.latency_ms != null && { label: "Latency", value: Math.round(i.latency_ms), unit: "ms", accent: "#a78bfa" },
+    i.latency_ms != null && { label: "Latency", value: Math.round(i.latency_ms), unit: "ms", accent: "#5FB8E0" },
     i.packet_loss_pct != null && { label: "Pkt Loss", value: round(i.packet_loss_pct), unit: "%", accent: i.packet_loss_pct > 1 ? "#f87171" : "#7ee0a8" },
     i.uptime_pct != null && { label: "Uptime", value: round(i.uptime_pct), unit: "%", accent: "#7ee0a8" },
     { label: "Clients", value: cl.total ?? 0, unit: "", accent: "#5FB8E0" },
@@ -120,7 +120,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {ov.devices.slice(0, 12).map((d: any, n: number) => (
             <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, padding: "5px 10px", background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8 }}>
-              <span style={{ color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: d.online ? "#7ee0a8" : "#f87171", flexShrink: 0 }} />{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
+              <span style={{ color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: d.online ? "#7ee0a8" : "#f87171", flexShrink: 0 }} />{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.82)" }}> · {d.model}</span> : null}</span>
               <span style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, fontSize: 10.5, color: "rgba(255,255,255,0.4)" }}>
                 {[d.ip, d.clients != null ? `${d.clients} clients` : null, upt(d.uptime_s) ? `up ${upt(d.uptime_s)}` : null].filter(Boolean).map((x: string, k: number) => <span key={k}>{x}</span>)}
               </span>
