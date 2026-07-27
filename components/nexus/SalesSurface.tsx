@@ -144,7 +144,10 @@ export function SalesSurface() {
   const stageN = (k: string) => stageRecords(k).length
   const counts = opp.counts ?? { total: 0, open: 0, won: 0 }
   const lostN = stageN('lost')
-  const winRate = (counts.won + lostN) > 0 ? Math.round((counts.won / (counts.won + lostN)) * 100) : 0
+  // Count won from the API count OR the grouped records — whichever is populated
+  // (they can diverge if the stage value normalizes differently in one path).
+  const wonN = counts.won || stageN('won')
+  const winRate = (wonN + lostN) > 0 ? Math.round((wonN / (wonN + lostN)) * 100) : 0
   const avgDeal = (counts.open > 0 && opp.pipelineTotal != null) ? Math.round(opp.pipelineTotal / counts.open) : null
 
   const stageBar = ['meet_present', 'survey', 'propose', 'negotiate', 'contract', 'deposit', 'won']
