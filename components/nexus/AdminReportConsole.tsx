@@ -82,7 +82,7 @@ export function AdminReportConsole({ onOpenTab }: { onOpenTab?: (tab: string) =>
         </div>
         {/* Fleet health donut */}
         <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-          <CardHead title="Fleet health" right={ops ? `${ops.fleet.devicesTotal}` : ''} onOpen={() => onOpenTab?.('recent')} />
+          <CardHead title="Fleet health" right={ops ? `${ops.fleet.devicesTotal}` : ''} onOpen={() => onOpenTab?.('systems')} />
           <FleetDonut health={ops?.fleet.health ?? { online: 0, attention: 0, offline: 0 }} />
         </div>
       </div>

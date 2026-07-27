@@ -37,7 +37,7 @@ const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string 
   { key: "Stuck",       label: "Stuck",       from: ["stuck", "Stuck", "blocked", "Blocked", "On Hold"],             accent: "#ef4444" },
   { key: "Done",        label: "Complete",    from: ["Done", "completed", "Complete"],                               accent: "#10b981" },
 ];
-const bucketOf = (s: string) => JOB_COLUMNS.find(c => c.from.includes(s))?.key ?? "New";
+const bucketOf = (s: string) => { const v = String(s ?? "").toLowerCase().trim(); return JOB_COLUMNS.find(c => c.from.some(f => f.toLowerCase() === v))?.key ?? "New"; };
 const COL_TO_DB: Record<string, string> = { New: "open", Procurement: "procurement", Scheduled: "scheduled", "In Progress": "in_progress", Stuck: "stuck", Done: "completed" };
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 

@@ -240,7 +240,7 @@ export default function NexusHomeClient() {
           })}
           {/* Bell + avatar relocated here from the top bar. */}
           <div className="mx-1.5 h-6 w-px shrink-0" style={{ background: 'rgba(255,255,255,0.14)' }} />
-          <button type="button" aria-label="Notifications" className="relative shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <button type="button" aria-label="Notifications" onClick={toggleRight} title="Priorities & alerts" className="relative shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.6)' }}>
             <Bell size={16} />
             <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: '#2dd4bf' }} />
           </button>
