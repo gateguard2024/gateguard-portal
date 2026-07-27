@@ -71,7 +71,7 @@ const getStatusConfig = (status: InvoiceStatus) => {
 const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const textFaint = { color: 'rgba(255,255,255,0.34)' };
+const textFaint = { color: 'rgba(255,255,255,0.82)' };
 const brandBlue = '#6B7EFF';
 const FILTERS = ['All', 'Open', 'Overdue', 'Paid'] as const;
 type FilterType = typeof FILTERS[number];

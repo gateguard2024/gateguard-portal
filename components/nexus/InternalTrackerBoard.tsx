@@ -31,8 +31,8 @@ function label(bucket: Bucket) {
 function color(bucket: Bucket) {
   if (bucket === 'blocked') return '#F87171'
   if (bucket === 'bugs') return '#FBBF24'
-  if (bucket === 'today') return '#00C8FF'
-  return '#8B5CF6'
+  if (bucket === 'today') return '#5FB8E0'
+  return '#5FB8E0'
 }
 
 export function InternalTrackerBoard() {
@@ -80,9 +80,9 @@ export function InternalTrackerBoard() {
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading tracker…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
-      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>No {label(bucket).toLowerCase()} items right now.</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading tracker…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
+      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>No {label(bucket).toLowerCase()} items right now.</div>}
 
       <div className="space-y-2">
         {shown.map(item => {
@@ -93,8 +93,8 @@ export function InternalTrackerBoard() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
-                  <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{item.linked_label || item.linked_type || item.assigned_to_name || 'Internal tracker item'}</div>
-                  <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.due_date ? `Due ${item.due_date}` : item.status}</div>
+                  <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{item.linked_label || item.linked_type || item.assigned_to_name || 'Internal tracker item'}</div>
+                  <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{item.due_date ? `Due ${item.due_date}` : item.status}</div>
                 </div>
                 <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${c}1f`, border: `1px solid ${c}44`, color: c }}>{item.priority}</div>
               </div>
@@ -104,14 +104,14 @@ export function InternalTrackerBoard() {
       </div>
 
       {selected && (
-        <div className="rounded-3xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)' }}>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#ddd6fe' }}>Selected Tracker Item</div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#cfe0f0' }}>Selected Tracker Item</div>
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selected.title}</div>
           {selected.body && <div className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{selected.body}</div>}
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Status</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.status}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Priority</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.priority}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Due</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.due_date || 'No date'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Status</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.status}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Priority</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.priority}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Due</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.due_date || 'No date'}</div></div>
           </div>
         </div>
       )}

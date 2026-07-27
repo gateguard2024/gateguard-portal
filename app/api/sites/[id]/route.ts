@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getMemberSiteIds } from '@/lib/org-scope'
 import { applyFieldAccess, logSensitiveAccess, SITE_SENSITIVE, CONTACT_SENSITIVE } from '@/lib/sensitive-fields'
 
 const supabase = createClient(
@@ -64,11 +64,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // ── Org isolation check ────────────────────────────────────────────
   // Verify the caller is actually allowed to see this site
   if (!scope.all) {
+    // Dealer subtree OR an explicit property-user membership on this site.
+    const memberSiteIds = await getMemberSiteIds(user.id)
     const allowed =
       scope.ids.includes(rawSite.master_dealer_id) ||
       scope.ids.includes(rawSite.install_dealer_id) ||
       scope.ids.includes(rawSite.service_dealer_id) ||
-      scope.ids.includes(rawSite.org_id)
+      scope.ids.includes(rawSite.org_id) ||
+      memberSiteIds.includes(rawSite.id)
 
     if (!allowed) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })

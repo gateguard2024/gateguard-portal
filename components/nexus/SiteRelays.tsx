@@ -39,19 +39,19 @@ export function SiteRelays({ siteId }: { siteId: string }) {
     else setMsg(res?.error || "Couldn't switch the relay.");
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   // Dealer-facing: if there are no relays to show, hide the whole card (no empty clutter).
   // Corporate still sees it so they can connect/set up.
   if (!loading && relays.length === 0 && !isCorporate) return null;
   return (
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}><Zap size={16} color="#7DE5FF" /> Relays / Power (Shelly)</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}><Zap size={16} color="#5FB8E0" /> Relays / Power (Shelly)</div>
         <button onClick={load} disabled={loading} style={{ fontSize: 11, fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.8)", borderRadius: 8, padding: "5px 11px", cursor: "pointer", opacity: loading ? 0.5 : 1 }}>{loading ? "…" : "↻ Refresh"}</button>
       </div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Switch this site&apos;s Shelly relays. Live status shown; every change is logged with who &amp; when.</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading relays…</div>
-        : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(0,200,255,0.07)", border: "1px solid rgba(0,200,255,0.18)", borderRadius: 10, padding: "10px 12px" }}>Shelly isn&apos;t connected for this site yet. {isCorporate ? "Add the auth key + server in Connections above, then Test." : "Contact Gate Guard to set it up for this property."}</div>
+        : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(95,184,224,0.07)", border: "1px solid rgba(95,184,224,0.18)", borderRadius: 10, padding: "10px 12px" }}>Shelly isn&apos;t connected for this site yet. {isCorporate ? "Add the auth key + server in Connections above, then Test." : "Contact Gate Guard to set it up for this property."}</div>
         : relays.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>No Shelly relays found for this site.</div>
         : (
           <div style={{ display: "grid", gap: 8 }}>
@@ -65,7 +65,7 @@ export function SiteRelays({ siteId }: { siteId: string }) {
                       {r.on === true ? "● ON" : r.on === false ? "○ OFF" : "● Status unknown (offline?)"}
                     </div>
                   </div>
-                  <button onClick={() => toggle(r)} disabled={busy === key} title={r.on == null ? "Live state unknown — this will turn it ON" : undefined} style={{ fontSize: 11.5, fontWeight: 600, background: r.on === true ? "rgba(248,113,113,0.14)" : "rgba(52,211,153,0.16)", border: `1px solid ${r.on === true ? "rgba(248,113,113,0.4)" : "rgba(52,211,153,0.45)"}`, color: r.on === true ? "#fca5a5" : "#6ee7b7", borderRadius: 9, padding: "6px 14px", cursor: "pointer", opacity: busy === key ? 0.5 : 1 }}>{busy === key ? "…" : r.on === true ? "Turn OFF" : "Turn ON"}</button>
+                  <button onClick={() => toggle(r)} disabled={busy === key} title={r.on == null ? "Live state unknown — this will turn it ON" : undefined} style={{ fontSize: 11.5, fontWeight: 600, background: r.on === true ? "rgba(248,113,113,0.14)" : "rgba(126,224,168,0.16)", border: `1px solid ${r.on === true ? "rgba(248,113,113,0.4)" : "rgba(126,224,168,0.45)"}`, color: r.on === true ? "#fca5a5" : "#6ee7b7", borderRadius: 9, padding: "6px 14px", cursor: "pointer", opacity: busy === key ? 0.5 : 1 }}>{busy === key ? "…" : r.on === true ? "Turn OFF" : "Turn ON"}</button>
                 </div>
               );
             })}

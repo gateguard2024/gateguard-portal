@@ -117,7 +117,7 @@ const CATEGORIES: { key: Category; label: string; hint: string }[] = [
 function scoreColor(s: number): string {
   if (s >= 8) return '#ef4444'
   if (s >= 6) return '#f59e0b'
-  if (s >= 4) return '#6B7EFF'
+  if (s >= 4) return '#5FB8E0'
   return '#64748b'
 }
 
@@ -185,7 +185,7 @@ function MiniGauge({ label, val }: { label: string; val: number }) {
             {GAUGE_STOPS.map(s => <stop key={s.at} offset={`${s.at * 100}%`} stopColor={`rgb(${s.c[0]},${s.c[1]},${s.c[2]})`} />)}
           </linearGradient>
         </defs>
-        <path d="M 3 24 A 20 20 0 0 1 43 24" fill="none" stroke="#1c2740" strokeWidth="5" strokeLinecap="round" />
+        <path d="M 3 24 A 20 20 0 0 1 43 24" fill="none" stroke="#22303F" strokeWidth="5" strokeLinecap="round" />
         <path d="M 3 24 A 20 20 0 0 1 43 24" fill="none" stroke={`url(#${gid})`} strokeWidth="5" strokeLinecap="round"
           strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} />
         <text x="23" y="22" textAnchor="middle" fontSize="10" fontWeight="800" fill="#e2e8f0">{v.toFixed(1)}</text>
@@ -208,7 +208,7 @@ function triggerFlags(it: PropItem): { label: string; tone: 'red' | 'amber' | 'b
 const toneClass = (t: 'red' | 'amber' | 'blue') =>
   t === 'red' ? 'bg-rose-400/10 text-rose-300 border-rose-400/30'
   : t === 'amber' ? 'bg-amber-400/10 text-amber-200 border-amber-400/30'
-  : 'bg-[#6B7EFF]/10 text-[#9AA8FF] border-[#6B7EFF]/25'
+  : 'bg-[#5FB8E0]/10 text-[#9FD8EC] border-[#5FB8E0]/25'
 
 // Normalize either a live prospect OR a saved aria_properties row (facts/deductions)
 // into one report shape the tabbed panel renders. This is what makes a Saved
@@ -571,7 +571,7 @@ export default function AriaExplorePage() {
       const el = document.createElement('div')
       const s = it.buy_score ?? 5
       const n = filtered.indexOf(it) + 1   // matches the list number on the right
-      el.style.cssText = `width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${scoreColor(s)};border:2px solid #0B1728;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center`
+      el.style.cssText = `width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${scoreColor(s)};border:2px solid #141E29;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center`
       const inner = document.createElement('span')
       inner.textContent = String(n)
       inner.style.cssText = 'transform:rotate(45deg);color:#fff;font-size:12px;font-weight:800'
@@ -580,7 +580,7 @@ export default function AriaExplorePage() {
       // Hover tooltip (dark) — property name, location, units, top flag.
       const flag = triggerFlags(it)[0]?.label
       const popup = new mapboxgl.Popup({ offset: 22, closeButton: false, closeOnClick: false })
-        .setHTML(`<div style="font-family:Inter,sans-serif;background:#0B1728;color:#f1f5f9;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px 10px;min-width:150px"><div style="font-weight:700;font-size:12px">${it.name}</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">${[it.city, it.state].filter(Boolean).join(', ')}${it.units ? ` · ${it.units} units` : ''}</div>${flag ? `<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-top:4px">${flag}</div>` : ''}</div>`)
+        .setHTML(`<div style="font-family:Inter,sans-serif;background:#141E29;color:#f1f5f9;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px 10px;min-width:150px"><div style="font-weight:700;font-size:12px">${it.name}</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">${[it.city, it.state].filter(Boolean).join(', ')}${it.units ? ` · ${it.units} units` : ''}</div>${flag ? `<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-top:4px">${flag}</div>` : ''}</div>`)
       el.addEventListener('mouseenter', () => popup.setLngLat([it.lng!, it.lat!]).addTo(map))
       el.addEventListener('mouseleave', () => popup.remove())
       const marker = new mapboxgl.Marker(el).setLngLat([it.lng!, it.lat!]).addTo(map)
@@ -1067,27 +1067,27 @@ export default function AriaExplorePage() {
   ]
 
   return (
-    // Shared Nexus backdrop instead of a flat one-off #0B1728, so ARIA reads as
+    // Shared Nexus backdrop instead of a flat one-off #141E29, so ARIA reads as
     // the same app as the dashboard. Panels below still paint their own darker
     // surfaces on top; only the page base changed.
     <div className="relative flex h-full" style={{ background: NEXUS_BG, height: '100dvh', minHeight: '100vh' }}>
       <NexusBackdropLayers variant="page" />
       {/* Left icon nav */}
-      <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#0A1220' }}>
+      <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#10161F' }}>
         {NAV.map((n, i) => n.href ? (
           <a key={i} href={n.href} title={n.label}
-            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
+            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
             <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
           </a>
         ) : (
           <button key={i} onClick={n.onClick} title={n.label}
-            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
+            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
             <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
           </button>
         ))}
         <div className="flex-1" />
         <button onClick={() => setPanel('settings')} title="Settings"
-          className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${panel === 'settings' ? 'text-[#6B7EFF]' : 'text-slate-500 hover:text-slate-200'}`}>
+          className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${panel === 'settings' ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
           <Settings size={18} /><span className="text-[8px] font-bold">Settings</span>
         </button>
       </aside>
@@ -1096,7 +1096,7 @@ export default function AriaExplorePage() {
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ height: '100dvh' }}>
       {/* Header */}
       <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
-        <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
+        <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#1E2A3A] transition-all">
           <ArrowLeft size={13} /> Back to Dashboard
         </a>
         <div className="min-w-0">
@@ -1109,9 +1109,9 @@ export default function AriaExplorePage() {
       {/* Nav panels — History / Leads / Contacts / Settings (all derived from searches) */}
       {panel && (
         <div className="fixed inset-y-0 right-0 z-40 flex" style={{ left: 56 }} onClick={() => setPanel(null)}>
-          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 sticky top-0 z-10" style={{ background: '#0B1728' }}>
-              {panel === 'leads' ? <Star size={15} className="text-[#6B7EFF]" /> : panel === 'contacts' ? <Users size={15} className="text-[#6B7EFF]" /> : panel === 'history' ? <Clock size={15} className="text-[#6B7EFF]" /> : <Settings size={15} className="text-[#6B7EFF]" />}
+          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#141E29', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 sticky top-0 z-10" style={{ background: '#141E29' }}>
+              {panel === 'leads' ? <Star size={15} className="text-[#5FB8E0]" /> : panel === 'contacts' ? <Users size={15} className="text-[#5FB8E0]" /> : panel === 'history' ? <Clock size={15} className="text-[#5FB8E0]" /> : <Settings size={15} className="text-[#5FB8E0]" />}
               <span className="text-base font-bold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : panel === 'history' ? 'Search history' : 'Search settings'}</span>
               {(panel === 'leads' || panel === 'contacts') && <span className="text-[11px] font-semibold text-slate-500">{panelItems.length}</span>}
               <button onClick={() => setPanel(null)} className="ml-auto text-slate-500 hover:text-slate-200"><X size={17} /></button>
@@ -1135,11 +1135,11 @@ export default function AriaExplorePage() {
                 {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No ARIA leads yet. Add properties to Leads from a search.</p>}
                 {panelItems.map((l, i) => (
                   <button key={i} onClick={() => { setPanel(null); openDetail({ id: l.property_name || l.id, name: l.property_name || l.contact_name || 'Property', address: l.location ?? '', city: l.city ?? '', state: l.state ?? '' }) }}
-                    className="w-full text-left rounded-xl border border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50 p-3 transition-all">
+                    className="w-full text-left rounded-xl border border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50 p-3 transition-all">
                     <p className="text-[13px] font-bold text-slate-100 truncate">{l.property_name || l.contact_name || 'Untitled'}</p>
                     <p className="text-[11px] text-slate-400 truncate mt-0.5">{[l.city, l.state].filter(Boolean).join(', ') || '—'}{l.unit_count ? ` · ${l.unit_count} units` : ''}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      {l.stage && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25 capitalize">{l.stage}</span>}
+                      {l.stage && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#5FB8E0]/10 text-[#9FD8EC] border border-[#5FB8E0]/25 capitalize">{l.stage}</span>}
                       {l.scout_status && l.scout_status !== 'queued' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">SCOUT {l.scout_status}</span>}
                     </div>
                   </button>
@@ -1153,7 +1153,7 @@ export default function AriaExplorePage() {
                 {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No contacts yet. Research properties and their decision-makers show up here.</p>}
                 {panelItems.map((c, i) => (
                   <button key={i} onClick={() => { setPanel(null); openDetail({ id: c._property || '', name: c._property || '', address: '', city: '', state: '' }) }}
-                    className="w-full text-left rounded-xl border border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50 p-3 transition-all">
+                    className="w-full text-left rounded-xl border border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50 p-3 transition-all">
                     <p className="text-[13px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
                     <p className="text-[11px] text-slate-400 truncate mt-0.5">{[c.email, c.phone].filter((x: string) => x && x !== 'No data found').join('  ·  ') || 'No email / phone'}</p>
                     {c._property && <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1"><Building2 size={9} /> {c._property}</p>}
@@ -1170,17 +1170,17 @@ export default function AriaExplorePage() {
                   <div className="flex gap-1.5">
                     {CATEGORIES.map(c => (
                       <button key={c.key} onClick={() => { setCategory(c.key); try { localStorage.setItem('aria_def_cat', c.key) } catch { /* */ } }}
-                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${category === c.key ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10'}`}>{c.label}</button>
+                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${category === c.key ? 'bg-[#5FB8E0] text-white border-[#5FB8E0]' : 'text-slate-300 border-white/10'}`}>{c.label}</button>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#131B2E] p-3.5">
+                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1E2A3A] p-3.5">
                   <div>
                     <p className="text-[13px] font-bold text-slate-100">Skip already-found</p>
                     <p className="text-[11px] text-slate-400">Hide properties already in your database from results.</p>
                   </div>
                   <button onClick={() => { const nv = !fNew; setFNew(nv); try { localStorage.setItem('aria_skip_found', String(nv)) } catch { /* */ } }}
-                    className={`w-11 h-6 rounded-full transition-colors relative ${fNew ? 'bg-[#6B7EFF]' : 'bg-white/15'}`}>
+                    className={`w-11 h-6 rounded-full transition-colors relative ${fNew ? 'bg-[#5FB8E0]' : 'bg-white/15'}`}>
                     <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${fNew ? 'left-[22px]' : 'left-0.5'}`} />
                   </button>
                 </div>
@@ -1198,20 +1198,20 @@ export default function AriaExplorePage() {
           {/* Source: live discovery vs the saved Intel DB */}
           <div className="flex items-center rounded-full border border-white/10 overflow-hidden mr-2">
             <button onClick={() => { setSource('discover'); setItems([]); setDetail(null) }}
-              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'discover' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}>Discover</button>
+              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'discover' ? 'bg-[#5FB8E0] text-white' : 'text-slate-300 hover:bg-[#1E2A3A]'}`}>Discover</button>
             <button onClick={() => { setSource('saved'); loadSaved() }}
-              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'saved' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}>Saved</button>
+              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'saved' ? 'bg-[#5FB8E0] text-white' : 'text-slate-300 hover:bg-[#1E2A3A]'}`}>Saved</button>
           </div>
           {source === 'discover' && CATEGORIES.map(c => (
             <button key={c.key} onClick={() => setCategory(c.key)}
-              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${category === c.key ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${category === c.key ? 'bg-[#5FB8E0] text-white border-[#5FB8E0]' : 'text-slate-300 border-white/10 hover:border-[#5FB8E0]/50'}`}>
               {c.label}
             </button>
           ))}
           {source === 'saved' && <span className="text-[11px] text-slate-500 font-medium">Everything you&apos;ve already researched — instant, no spend.</span>}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 rounded-xl px-3 py-2.5 max-w-2xl" style={{ background: 'rgba(15,24,48,0.9)', border: '1px solid rgba(107,126,255,0.2)' }}>
+          <div className="flex-1 flex items-center gap-2 rounded-xl px-3 py-2.5 max-w-2xl" style={{ background: 'rgba(15,24,48,0.9)', border: '1px solid rgba(95,184,224,0.2)' }}>
             <Search size={15} className="text-slate-400 shrink-0" />
             <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && onFind()}
               placeholder={source === 'saved' ? 'Filter saved properties by name…' : CATEGORIES.find(c => c.key === category)?.hint}
@@ -1219,14 +1219,14 @@ export default function AriaExplorePage() {
           </div>
           <button onClick={onFind} disabled={loading || (source === 'discover' && !query.trim())}
             className="flex items-center gap-1.5 text-sm font-bold px-5 py-2.5 rounded-xl text-white disabled:opacity-50 transition-all"
-            style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+            style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}{loading ? 'Loading…' : source === 'saved' ? 'Reload' : 'Find'}
           </button>
           {/* List / Map toggle */}
           {items.length > 0 && (
             <div className="flex items-center rounded-lg border border-white/10 overflow-hidden ml-1">
-              <button onClick={() => setView('map')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'map' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><MapIcon size={12} /> Map</button>
-              <button onClick={() => setView('list')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'list' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><LayoutGrid size={12} /> Big cards</button>
+              <button onClick={() => setView('map')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'map' ? 'bg-[#5FB8E0] text-white' : 'text-slate-300 hover:bg-[#1E2A3A]'}`}><MapIcon size={12} /> Map</button>
+              <button onClick={() => setView('list')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'list' ? 'bg-[#5FB8E0] text-white' : 'text-slate-300 hover:bg-[#1E2A3A]'}`}><LayoutGrid size={12} /> Big cards</button>
             </div>
           )}
         </div>
@@ -1241,12 +1241,12 @@ export default function AriaExplorePage() {
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mr-1">Filter</span>
           {([['Has gate', fGate, setFGate], ['Bulk', fBulk, setFBulk], [`Skip already-found${alreadyCount ? ` (${alreadyCount})` : ''}`, fNew, setFNew]] as const).map(([label, val, set]) => (
             <button key={label} onClick={() => set(v => !v)}
-              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${val ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${val ? 'bg-[#5FB8E0] text-white border-[#5FB8E0]' : 'text-slate-300 border-white/10 hover:border-[#5FB8E0]/50'}`}>
               {label}
             </button>
           ))}
           <select value={fMinUnits} onChange={e => setFMinUnits(Number(e.target.value))}
-            className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#0F1830] text-slate-300 border border-white/10 outline-none">
+            className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#1A2532] text-slate-300 border border-white/10 outline-none">
             <option value={0}>Any units</option>
             <option value={100}>100+ units</option>
             <option value={200}>200+ units</option>
@@ -1254,7 +1254,7 @@ export default function AriaExplorePage() {
           </select>
           {source === 'saved' && (
             <select value={fExpBefore} onChange={e => setFExpBefore(Number(e.target.value))}
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#0F1830] text-slate-300 border border-white/10 outline-none">
+              className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#1A2532] text-slate-300 border border-white/10 outline-none">
               <option value={0}>Any contract</option>
               <option value={new Date().getFullYear() + 1}>Expiring ≤ {new Date().getFullYear() + 1}</option>
               <option value={new Date().getFullYear() + 2}>Expiring ≤ {new Date().getFullYear() + 2}</option>
@@ -1282,7 +1282,7 @@ export default function AriaExplorePage() {
         )}
         {loading && items.length === 0 && view === 'list' && (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
-            <Loader2 size={22} className="animate-spin text-[#6B7EFF]" /><p className="text-xs font-semibold">Finding properties…</p>
+            <Loader2 size={22} className="animate-spin text-[#5FB8E0]" /><p className="text-xs font-semibold">Finding properties…</p>
           </div>
         )}
 
@@ -1297,9 +1297,9 @@ export default function AriaExplorePage() {
                 // the map view — never a satellite tile masquerading as a hero shot.
                 const thumb = it.photo_url ?? null
                 return (
-                  <div key={it.id} className={`relative rounded-xl border overflow-hidden transition-all bg-[#131B2E]/70 ${isSel ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40' : 'border-white/10 hover:border-[#6B7EFF]/50'}`}>
+                  <div key={it.id} className={`relative rounded-xl border overflow-hidden transition-all bg-[#1E2A3A]/70 ${isSel ? 'border-[#5FB8E0] ring-1 ring-[#5FB8E0]/40' : 'border-white/10 hover:border-[#5FB8E0]/50'}`}>
                     {/* Aerial thumbnail */}
-                    <button onClick={() => openDetail(it)} className="block w-full relative h-28 bg-[#0F1830]">
+                    <button onClick={() => openDetail(it)} className="block w-full relative h-28 bg-[#1A2532]">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={thumb} alt={it.name} loading="lazy" className="w-full h-full object-cover" />
@@ -1312,7 +1312,7 @@ export default function AriaExplorePage() {
                     </button>
                     {/* Select checkbox */}
                     <button onClick={() => toggle(it.id)} aria-label="Select"
-                      className={`absolute top-2.5 left-2.5 z-10 w-7 h-7 rounded-lg border-2 flex items-center justify-center shadow-lg transition-all ${isSel ? 'bg-[#6B7EFF] border-white' : 'border-white bg-black/55 backdrop-blur-sm hover:bg-black/75'}`}>
+                      className={`absolute top-2.5 left-2.5 z-10 w-7 h-7 rounded-lg border-2 flex items-center justify-center shadow-lg transition-all ${isSel ? 'bg-[#5FB8E0] border-white' : 'border-white bg-black/55 backdrop-blur-sm hover:bg-black/75'}`}>
                       {isSel && <Check size={16} className="text-white" strokeWidth={3} />}
                     </button>
                     {/* Content */}
@@ -1324,7 +1324,7 @@ export default function AriaExplorePage() {
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded text-white" title="Lead score (0–100): buy intent + size + pro-tech fit"
                             style={{ background: it.lead_score >= 70 ? '#059669' : it.lead_score >= 40 ? '#D97706' : '#475569' }}>LEAD {it.lead_score}</span>
                         )}
-                        {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
+                        {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#1A2532] text-slate-300 border border-white/10">{it.units} units</span> : null}
                         {triggerFlags(it).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
                       </div>
                     </button>
@@ -1344,7 +1344,7 @@ export default function AriaExplorePage() {
           <div className="relative flex-1 min-w-0">
             <div id="aria-explore-map" className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
             {mapErr && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 pointer-events-none" style={{ background: '#0F1830' }}>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 pointer-events-none" style={{ background: '#1A2532' }}>
                 <MapIcon size={26} className="text-slate-600" />
                 <p className="text-[12px] font-semibold text-slate-300">{mapErr}</p>
                 <p className="text-[11px] text-slate-500">Results still work — you just won’t see pins.</p>
@@ -1353,14 +1353,14 @@ export default function AriaExplorePage() {
           </div>
 
           {/* Results (right third) */}
-          <aside className="w-[34%] min-w-[290px] max-w-[420px] shrink-0 flex flex-col border-l border-white/[0.08]" style={{ background: '#0B1728' }}>
+          <aside className="w-[34%] min-w-[290px] max-w-[420px] shrink-0 flex flex-col border-l border-white/[0.08]" style={{ background: '#141E29' }}>
             {/* Plain-English instructions. If you have to explain the flow in a
                 meeting, the screen isn't doing its job. */}
             {visible.length > 0 && (
-              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.06)' }}>
+              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(95,184,224,0.06)' }}>
                 <p className="text-[10.5px] text-slate-300 leading-relaxed">
-                  <span className="font-bold text-[#9AA8FF]">Save</span> keeps a property (free, instant).{' '}
-                  <span className="font-bold text-[#9AA8FF]">Deep research</span> then finds the contacts, internet &amp; TV deals, gate and camera brands, and what residents complain about.
+                  <span className="font-bold text-[#9FD8EC]">Save</span> keeps a property (free, instant).{' '}
+                  <span className="font-bold text-[#9FD8EC]">Deep research</span> then finds the contacts, internet &amp; TV deals, gate and camera brands, and what residents complain about.
                 </p>
               </div>
             )}
@@ -1369,7 +1369,7 @@ export default function AriaExplorePage() {
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">{visible.length} found</span>
               {alreadyCount > 0 && <span className="text-[10px] font-semibold text-emerald-400">{alreadyCount} saved</span>}
               <button onClick={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(v => v.id)))}
-                className="ml-auto text-[10px] font-bold text-[#6B7EFF] hover:underline">
+                className="ml-auto text-[10px] font-bold text-[#5FB8E0] hover:underline">
                 {selected.size === visible.length && visible.length > 0 ? 'Clear all' : 'Select all'}
               </button>
             </div>
@@ -1385,8 +1385,8 @@ export default function AriaExplorePage() {
                   <button key={c.k} onClick={() => setSavedFilter(c.k)}
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all ${
                       savedFilter === c.k
-                        ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]'
-                        : 'text-slate-400 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+                        ? 'bg-[#5FB8E0] text-white border-[#5FB8E0]'
+                        : 'text-slate-400 border-white/10 hover:border-[#5FB8E0]/50'}`}>
                     {c.label} <span className="opacity-70">{c.n}</span>
                   </button>
                 ))}
@@ -1395,10 +1395,10 @@ export default function AriaExplorePage() {
 
             {/* Deep research queue — one at a time, and you can see exactly where it is. */}
             {queue.length > 0 && (
-              <div className="px-3 py-2.5 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.07)' }}>
+              <div className="px-3 py-2.5 border-b border-white/[0.07]" style={{ background: 'rgba(95,184,224,0.07)' }}>
                 <div className="flex items-center gap-2 mb-2">
                   {queueRunning
-                    ? <Loader2 size={12} className="animate-spin text-[#6B7EFF]" />
+                    ? <Loader2 size={12} className="animate-spin text-[#5FB8E0]" />
                     : <Check size={12} className="text-emerald-400" strokeWidth={3} />}
                   <span className="text-[11px] font-bold text-slate-200">
                     {queueRunning
@@ -1414,13 +1414,13 @@ export default function AriaExplorePage() {
                     <div key={q.id} className="flex items-center gap-2 text-[10.5px]">
                       <span className="shrink-0 w-4 text-center">
                         {q.status === 'queued'  && <span className="text-slate-500">•</span>}
-                        {q.status === 'running' && <Loader2 size={10} className="animate-spin text-[#6B7EFF] inline" />}
+                        {q.status === 'running' && <Loader2 size={10} className="animate-spin text-[#5FB8E0] inline" />}
                         {q.status === 'done'    && <span className="text-emerald-400 font-bold">✓</span>}
                         {q.status === 'failed'  && <span className="text-rose-400 font-bold">✕</span>}
                       </span>
                       <span className={`truncate flex-1 ${q.status === 'done' ? 'text-slate-400' : 'text-slate-200'}`}>{q.name}</span>
                       <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide ${
-                        q.status === 'running' ? 'text-[#6B7EFF]'
+                        q.status === 'running' ? 'text-[#5FB8E0]'
                         : q.status === 'done'  ? 'text-emerald-400'
                         : q.status === 'failed' ? 'text-rose-400' : 'text-slate-500'}`}>
                         {q.status === 'queued' ? 'Waiting' : q.status === 'running' ? 'Working…' : q.status === 'done' ? 'Done' : 'Failed'}
@@ -1436,10 +1436,10 @@ export default function AriaExplorePage() {
 
             {/* Save what's selected into the Intel DB — base data only. */}
             {selected.size > 0 && (
-              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(107,126,255,0.08)' }}>
+              <div className="px-3 py-2 border-b border-white/[0.07]" style={{ background: 'rgba(95,184,224,0.08)' }}>
                 <button onClick={() => saveToDb(selectedItems)} disabled={saveBusy}
                   className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg text-white disabled:opacity-50"
-                  style={{ background: '#6B7EFF' }}>
+                  style={{ background: '#5FB8E0' }}>
                   {saveBusy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
                   {saveBusy ? 'Saving…' : `Save ${selected.size} to database`}
                 </button>
@@ -1452,7 +1452,7 @@ export default function AriaExplorePage() {
                 const isSel = selected.has(it.id)
                 return (
                   <div key={it.id}
-                    className={`relative flex items-start gap-2.5 rounded-xl border p-2.5 transition-all cursor-pointer ${isSel ? 'border-[#6B7EFF] bg-[#6B7EFF]/10' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}
+                    className={`relative flex items-start gap-2.5 rounded-xl border p-2.5 transition-all cursor-pointer ${isSel ? 'border-[#5FB8E0] bg-[#5FB8E0]/10' : 'border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50'}`}
                     onClick={() => openDetail(it)}>
                     {/* Number — matches the pin on the map */}
                     <span className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold shadow" style={{ background: scoreColor(s) }}>{i + 1}</span>
@@ -1471,7 +1471,7 @@ export default function AriaExplorePage() {
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded text-white" title="Lead score (0–100): buy intent + size + pro-tech fit"
                             style={{ background: it.lead_score >= 70 ? '#059669' : it.lead_score >= 40 ? '#D97706' : '#475569' }}>LEAD {it.lead_score}</span>
                         )}
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${it.units ? 'bg-[#0F1830] text-slate-300 border-white/10' : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${it.units ? 'bg-[#1A2532] text-slate-300 border-white/10' : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
                           {it.units ? `${it.units} units` : 'Units: no data'}
                         </span>
                         {it.researched && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">✓ Saved</span>}
@@ -1480,7 +1480,7 @@ export default function AriaExplorePage() {
                       <SystemChips systems={it.systems} />
                       {it.website && (
                         <a href={it.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-[10px] text-[#6B7EFF] hover:underline mt-1.5 truncate max-w-full">
+                          className="inline-flex items-center gap-1 text-[10px] text-[#5FB8E0] hover:underline mt-1.5 truncate max-w-full">
                           <Globe size={10} className="shrink-0" />
                           <span className="truncate">{it.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
                         </a>
@@ -1493,7 +1493,7 @@ export default function AriaExplorePage() {
                         {!it.researched ? (
                           <button onClick={e => { e.stopPropagation(); saveToDb([it]) }} disabled={saveBusy}
                             className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg text-white disabled:opacity-50"
-                            style={{ background: '#6B7EFF' }} title="Free. Keeps this property so you never search it again.">
+                            style={{ background: '#5FB8E0' }} title="Free. Keeps this property so you never search it again.">
                             <Plus size={11} /> 1. Save
                           </button>
                         ) : (
@@ -1503,7 +1503,7 @@ export default function AriaExplorePage() {
                         )}
                         <button onClick={e => { e.stopPropagation(); runDeepQueue([it]) }} disabled={queueRunning}
                           className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg text-white disabled:opacity-50"
-                          style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}
+                          style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}
                           title="Digs deep: contacts, internet & TV deals, gate/camera brands, resident complaints.">
                           <Zap size={11} /> 2. Deep research
                         </button>
@@ -1511,7 +1511,7 @@ export default function AriaExplorePage() {
                     </div>
                     {/* Select */}
                     <button onClick={e => { e.stopPropagation(); toggle(it.id) }} aria-label="Select"
-                      className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSel ? 'bg-[#6B7EFF] border-white' : 'border-white/70 bg-black/40 hover:bg-black/70'}`}>
+                      className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isSel ? 'bg-[#5FB8E0] border-white' : 'border-white/70 bg-black/40 hover:bg-black/70'}`}>
                       {isSel && <Check size={13} className="text-white" strokeWidth={3} />}
                     </button>
                   </div>
@@ -1520,7 +1520,7 @@ export default function AriaExplorePage() {
               {/* Empty / loading now live HERE, beside the map — never on top of it. */}
               {loading && items.length === 0 && (
                 <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
-                  <Loader2 size={20} className="animate-spin text-[#6B7EFF]" />
+                  <Loader2 size={20} className="animate-spin text-[#5FB8E0]" />
                   <p className="text-[11px] font-semibold">Finding properties…</p>
                 </div>
               )}
@@ -1544,18 +1544,18 @@ export default function AriaExplorePage() {
             <span className="text-xs font-bold text-slate-200">{selected.size} selected</span>
             {/* Save is the primary action on a base find — keep what you found. */}
             <button onClick={() => saveToDb(selectedItems)} disabled={saveBusy}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#6B7EFF' }}>
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#5FB8E0' }}>
               {saveBusy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
               {saveBusy ? 'Saving…' : 'Save to database'}
             </button>
             {/* Deep research — explicit, sequential, costs a search per property. */}
             <button onClick={() => runDeepQueue(selectedItems)} disabled={queueRunning}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+              style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}>
               <Zap size={13} /> {queueRunning ? 'Researching…' : `Deep research ${selected.size}`}
             </button>
             <button onClick={() => addToLeads(selectedItems)} disabled={busy}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10 disabled:opacity-50">
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#5FB8E0]/40 text-slate-200 hover:bg-[#5FB8E0]/10 disabled:opacity-50">
               <Star size={13} /> {busy ? 'Adding…' : 'Add to Leads'}
             </button>
             <button onClick={() => setSelected(new Set())} className="text-[11px] font-bold text-slate-400 hover:text-slate-200">Clear</button>
@@ -1567,11 +1567,11 @@ export default function AriaExplorePage() {
       {detail && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-8" onClick={() => setDetail(null)}>
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
-          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl" style={{ background: '#0B1728', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl" style={{ background: '#141E29', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
             {/* Hero — the community's own photo (from the base find or the saved
                 record). Satellite is only the fallback when there's no real shot. */}
             {(detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
-              <div className="relative h-44 w-full bg-[#0F1830]">
+              <div className="relative h-44 w-full bg-[#1A2532]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 700, 300)!}
@@ -1591,8 +1591,8 @@ export default function AriaExplorePage() {
                 <h2 className="text-lg font-bold text-slate-100">{detail.name}</h2>
                 <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><MapPin size={11} /> {[detail.address, detail.city, detail.state].filter(Boolean).join(', ') || '—'}</p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {detail.units ? <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#131B2E] text-slate-300 border border-white/10">{detail.units} units</span> : null}
-                  {detail.management_company && <span className="text-[10px] px-2 py-0.5 rounded bg-[#131B2E] text-slate-400 border border-white/10 inline-flex items-center gap-1"><Building2 size={10} />{detail.management_company}</span>}
+                  {detail.units ? <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#1E2A3A] text-slate-300 border border-white/10">{detail.units} units</span> : null}
+                  {detail.management_company && <span className="text-[10px] px-2 py-0.5 rounded bg-[#1E2A3A] text-slate-400 border border-white/10 inline-flex items-center gap-1"><Building2 size={10} />{detail.management_company}</span>}
                   {triggerFlags(detail).map(f => <span key={f.label} className={`text-[10px] font-bold px-2 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
                 </div>
               </div>
@@ -1625,7 +1625,7 @@ export default function AriaExplorePage() {
                   this property viewable later without paying for a search. */}
               {!detail.researched && detail.systems && (
                 <button onClick={() => saveToDb([detail])} disabled={saveBusy}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: '#6B7EFF' }}>
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: '#5FB8E0' }}>
                   {saveBusy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                   {saveBusy ? 'Saving…' : 'Save to database'}
                 </button>
@@ -1637,12 +1637,12 @@ export default function AriaExplorePage() {
                   A base report (community-only, not yet deep-researched) still offers it. */}
               {!detailBusy && (!detailReport || detailReport._base) && (
                 <button onClick={() => researchDetail(detail)}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}>
                   <Zap size={14} /> Deep research this property <span className="opacity-60 text-[11px]">· runs a full search</span>
                 </button>
               )}
               <button onClick={() => addToLeads([detail])} disabled={busy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#1E2A3A] disabled:opacity-60">
                 <Star size={14} /> Add to Leads
               </button>
               {detailReport && !detailReport._base && (
@@ -1703,7 +1703,7 @@ export default function AriaExplorePage() {
                           ))}
                         </linearGradient>
                       </defs>
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#1c2740" strokeWidth="9" strokeLinecap="round" />
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#22303F" strokeWidth="9" strokeLinecap="round" />
                       <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={`url(#${gid})`} strokeWidth="9" strokeLinecap="round"
                         strokeDasharray={AL} strokeDashoffset={AL * (1 - f)}
                         style={{ filter: `drop-shadow(0 0 5px ${tip})`, transition: 'stroke-dashoffset 600ms ease-out' }} />
@@ -1721,11 +1721,11 @@ export default function AriaExplorePage() {
                 : `${detail?.name} is a ${detail?.units ? `${detail.units}-unit ` : ''}property${rep.property?.bulk_agreements?.length ? ' with an existing bulk internet deal worth displacing' : ''}${found.length === 0 ? '. Low proptech saturation signals strong upgrade potential' : ''}. ${buy >= 8 ? 'Hot lead — prioritize.' : buy >= 5 ? 'Warm — worth a call.' : 'Cold for now.'}`
               const Card = ({ id, Icon, title, summary }: { id: typeof openCard; Icon: any; title: string; summary: string }) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                 <button onClick={() => setOpenCard(openCard === id ? null : id)}
-                  className={`text-left rounded-xl border p-3.5 transition-all ${openCard === id ? 'border-[#6B7EFF] bg-[#131B2E] shadow-[0_0_20px_rgba(107,126,255,0.15)]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
-                  <Icon size={20} className="text-[#6B7EFF] mb-2" />
+                  className={`text-left rounded-xl border p-3.5 transition-all ${openCard === id ? 'border-[#5FB8E0] bg-[#1E2A3A] shadow-[0_0_20px_rgba(95,184,224,0.15)]' : 'border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50'}`}>
+                  <Icon size={20} className="text-[#5FB8E0] mb-2" />
                   <p className="text-[12px] font-bold text-slate-100 leading-tight uppercase tracking-wide">{title}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{summary}</p>
-                  <p className="text-[9px] font-bold text-[#6B7EFF] mt-2 uppercase tracking-wide">Click for detailed report</p>
+                  <p className="text-[9px] font-bold text-[#5FB8E0] mt-2 uppercase tracking-wide">Click for detailed report</p>
                 </button>
               )
               return (
@@ -1760,12 +1760,12 @@ export default function AriaExplorePage() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setOpenCard(null)}>
                       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
                       <div className="relative w-full max-w-xl max-h-[82vh] flex flex-col rounded-2xl shadow-2xl"
-                        style={{ background: '#0B1728', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
+                        style={{ background: '#141E29', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
                           <h3 className="text-[13px] font-bold text-slate-100 uppercase tracking-wide">
                             {openCard === 'network' ? 'Network overview' : openCard === 'community' ? 'Community insights' : openCard === 'proptech' ? 'Proptech ops' : 'Deep AI audit'}
                           </h3>
-                          {openCard === 'community' && communityBusy && <Loader2 size={13} className="animate-spin text-[#6B7EFF]" />}
+                          {openCard === 'community' && communityBusy && <Loader2 size={13} className="animate-spin text-[#5FB8E0]" />}
                           <button onClick={() => setOpenCard(null)} aria-label="Close"
                             className="ml-auto w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10">
                             <X size={15} />
@@ -1786,7 +1786,7 @@ export default function AriaExplorePage() {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const bulks = (rep.property?.bulk_agreements ?? []).map((b: any) => b?.provider).filter(Boolean)
                         return (
-                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                          <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
                             <Row k="Internet (ISP)" val={vp(rep.property?.isp_providers, !!pz.internet)} />
                             <Row k="TV / Video" val={vp(rep.property?.video_providers, !!pz.video)} />
                             <Row k="Bulk deal" val={bulks.length ? `Yes — ${bulks.join(', ')}` : (pz.bulk ? 'Yes — provider not identified yet' : 'No data found')} />
@@ -1820,7 +1820,7 @@ export default function AriaExplorePage() {
                         const others = (community as any[]).filter(c => !negRecent.includes(c)) // eslint-disable-line @typescript-eslint/no-explicit-any
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const Card = (c: any, i: number) => (
-                          <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">
+                          <div key={i} className="rounded-xl border border-white/10 bg-[#1E2A3A] p-3">
                             <div className="mb-1 flex flex-wrap items-center gap-1.5">
                               <span className="text-[9px] font-bold text-slate-400">{c.platform || 'Review'}</span>
                               {c.date && c.date !== 'unknown' && <span className="text-[9px] text-slate-500">{c.date}</span>}
@@ -1829,7 +1829,7 @@ export default function AriaExplorePage() {
                             </div>
                             <p className="text-[11px] text-slate-200 italic leading-relaxed">&ldquo;{c.quote}&rdquo;</p>
                             {c.url && (
-                              <a href={c.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9AA8FF] hover:underline">
+                              <a href={c.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9FD8EC] hover:underline">
                                 View source ↗
                               </a>
                             )}
@@ -1841,7 +1841,7 @@ export default function AriaExplorePage() {
                               communityErr ? (
                                 <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-[11px] text-rose-200">{communityErr}</div>
                               ) : (
-                                <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
+                                <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4 text-[11px] text-slate-500 italic">
                                   {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
                                 </div>
                               )
@@ -1862,7 +1862,7 @@ export default function AriaExplorePage() {
                         )
                       })()}
                       {openCard === 'proptech' && (
-                        <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                        <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
                           {/* By CATEGORY — never a merged blob of brand names. Knowing
                               a gate operator is LiftMaster vs the intercom being
                               ButterflyMX is the entire point; a flat list destroys it. */}
@@ -1909,7 +1909,7 @@ export default function AriaExplorePage() {
                                 <div key={i} className="flex items-center gap-2 text-[11px]">
                                   <span className="text-slate-200 font-medium">{x.name}</span>
                                   <span className="text-[9px] text-slate-500">{x.category}</span>
-                                  <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25">~{x.confidence_pct}%</span>
+                                  <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#5FB8E0]/10 text-[#9FD8EC] border border-[#5FB8E0]/25">~{x.confidence_pct}%</span>
                                 </div>
                               ))}
                             </div>
@@ -1918,7 +1918,7 @@ export default function AriaExplorePage() {
                       )}
                       {openCard === 'ai' && (
                         <div className="space-y-2.5">
-                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                          <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Contacts</p>
                             {contacts.length === 0 && <p className="text-[11px] text-slate-500 italic">No contacts found yet</p>}
                             {contacts.slice(0, 6).map((c, i) => (
@@ -1928,7 +1928,7 @@ export default function AriaExplorePage() {
                               </div>
                             ))}
                           </div>
-                          <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                          <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
                             <Row k="Pitch hook" val={v(rep.ai_intel?.pitch_hook)} />
                             <Row k="Buying trends" val={v(rep.ai_intel?.buying_trends)} />
                             {plan && typeof plan === 'object' && (

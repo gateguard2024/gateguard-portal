@@ -34,7 +34,7 @@ function bucketColor(bucket: DocumentBucket): string {
   if (bucket === 'needs_signature') return '#F87171'
   if (bucket === 'waiting_on_customer') return '#FBBF24'
   if (bucket === 'recently_signed') return '#34D399'
-  return '#00C8FF'
+  return '#5FB8E0'
 }
 
 function shortDate(value?: string | null): string {
@@ -89,11 +89,11 @@ export function MoneyDocsDocumentsBoard() {
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading documents…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading documents…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
 
       {!loading && shownDocuments.length === 0 && !message && (
-        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>
+        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>
           No {bucketLabel(selectedBucket).toLowerCase()} documents right now.
         </div>
       )}
@@ -108,8 +108,8 @@ export function MoneyDocsDocumentsBoard() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{document.title}</div>
-                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{document.signer_name || document.signer_email || document.signer_company || 'No signer name'}</div>
-                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{document.signed_at ? `Signed ${shortDate(document.signed_at)}` : document.sent_at ? `Sent ${shortDate(document.sent_at)}` : 'Not sent yet'}</div>
+                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{document.signer_name || document.signer_email || document.signer_company || 'No signer name'}</div>
+                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{document.signed_at ? `Signed ${shortDate(document.signed_at)}` : document.sent_at ? `Sent ${shortDate(document.sent_at)}` : 'Not sent yet'}</div>
                   </div>
                   <div className="text-right">
                     <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${color}1f`, border: `1px solid ${color}44`, color }}>{document.status}</div>
@@ -122,18 +122,18 @@ export function MoneyDocsDocumentsBoard() {
       )}
 
       {selectedDocument && (
-        <div className="rounded-3xl p-4" style={{ background: 'rgba(0,124,255,0.08)', border: '1px solid rgba(0,200,255,0.18)' }}>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#7dd3fc' }}>Selected Document</div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#9FD8EC' }}>Selected Document</div>
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selectedDocument.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{selectedDocument.signer_company || selectedDocument.signer_email || 'Signer not set'}</div>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Signer</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedDocument.signer_name || selectedDocument.signer_email || 'Not set'}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Sent</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{shortDate(selectedDocument.sent_at) || 'Not sent'}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Expires</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{shortDate(selectedDocument.expires_at) || 'No date'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Signer</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedDocument.signer_name || selectedDocument.signer_email || 'Not set'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Sent</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{shortDate(selectedDocument.sent_at) || 'Not sent'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Expires</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{shortDate(selectedDocument.expires_at) || 'No date'}</div></div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {selectedDocument.final_url && <a href={selectedDocument.final_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final {selectedDocument.title.includes('NDA') ? 'NDA' : selectedDocument.title.includes('Agreement') ? 'Agreement' : 'Copy'}</a>}
-            {!selectedDocument.final_url && selectedDocument.document_url && <a href={selectedDocument.document_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open Document</a>}
+            {!selectedDocument.final_url && selectedDocument.document_url && <a href={selectedDocument.document_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>Open Document</a>}
             <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Send Reminder</button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +22,8 @@ const SUPPLY_STATUSES = [
 // GET /api/maintenance/[id]/parts — list all parts for a WO, each with its PO
 // (po_number / supplier / status) resolved so the tech can see at a glance
 // whether the part is still at the supplier or already on his truck.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('work_order_parts')
     .select(`
@@ -73,6 +75,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // Errors are returned, never swallowed — a status that silently doesn't save is
 // worse than an error message, because the tech drives out on a bad assumption.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -117,6 +120,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // Body: { inventory_item_id?, name, sku?, qty, unit_cost?, action, notes?, added_by? }
 // Backward-compat: also accepts { part_name, part_number, quantity } from old UI
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   // Normalize legacy field names from old UI calls
@@ -212,7 +216,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
 // DELETE /api/maintenance/[id]/parts — legacy: remove by part_used_id in body
 // (new UI uses DELETE /api/maintenance/[id]/parts/[partId])
-export async function DELETE(req: NextRequest, _ctx: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
+  const { params } = ctx
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const partId = body.part_used_id ?? body.part_id
   if (!partId) return NextResponse.json({ error: 'part_used_id required' }, { status: 400 })
@@ -222,27 +228,28 @@ export async function DELETE(req: NextRequest, _ctx: { params: { id: string } })
     .from('work_order_parts')
     .select('inventory_item_id, qty, action')
     .eq('id', partId)
+    .eq('work_order_id', params.id)   // part must belong to the guarded WO
     .single()
+  if (!part) return NextResponse.json({ error: 'Part not found on this job' }, { status: 404 })
 
+  // Restore stock BEFORE deleting the part row — awaited so it actually lands in
+  // serverless (a detached write would leave inventory drifting low over time).
   if (part?.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
-    void (async () => {
-      try {
-        const { data: inv } = await supabase
-          .from('inventory_items')
-          .select('on_hand')
-          .eq('id', part.inventory_item_id)
-          .single()
-        if (inv) {
-          await supabase
-            .from('inventory_items')
-            .update({ on_hand: inv.on_hand + part.qty, updated_at: new Date().toISOString() })
-            .eq('id', part.inventory_item_id)
-        }
-      } catch (_) { /* non-blocking */ }
-    })()
+    const { data: inv } = await supabase
+      .from('inventory_items')
+      .select('on_hand')
+      .eq('id', part.inventory_item_id)
+      .single()
+    if (inv) {
+      const { error: restockErr } = await supabase
+        .from('inventory_items')
+        .update({ on_hand: (Number(inv.on_hand) || 0) + (Number(part.qty) || 0), updated_at: new Date().toISOString() })
+        .eq('id', part.inventory_item_id)
+      if (restockErr) console.warn('[wo parts] inventory restock failed:', restockErr.message)
+    }
   }
 
-  const { error } = await supabase.from('work_order_parts').delete().eq('id', partId)
+  const { error } = await supabase.from('work_order_parts').delete().eq('id', partId).eq('work_order_id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

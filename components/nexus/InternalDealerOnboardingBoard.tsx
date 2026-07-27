@@ -58,13 +58,13 @@ function label(bucket: Bucket) {
 }
 
 function color(bucket: Bucket) {
-  if (bucket === 'ready_to_approve') return '#34D399'
-  if (bucket === 'live') return '#00C8FF'
-  if (bucket === 'agreement_signed') return '#34D399'
+  if (bucket === 'ready_to_approve') return '#7EE0A8'
+  if (bucket === 'live') return '#5FB8E0'
+  if (bucket === 'agreement_signed') return '#7EE0A8'
   if (bucket === 'needs_compliance') return '#F87171'
   if (bucket === 'needs_nda' || bucket === 'needs_agreement') return '#FBBF24'
-  if (bucket === 'nda_sent') return '#8B5CF6'
-  if (bucket === 'nda_signed') return '#C4B5FD'
+  if (bucket === 'nda_sent') return '#5FB8E0'
+  if (bucket === 'nda_signed') return '#9FD8EC'
   return '#64748B'
 }
 
@@ -225,10 +225,10 @@ export function InternalDealerOnboardingBoard() {
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading dealer onboarding…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading dealer onboarding…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
       {actionMessage && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.24)', color: '#FBBF24' }}>{actionMessage}</div>}
-      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>No {label(bucket).toLowerCase()} records right now.</div>}
+      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>No {label(bucket).toLowerCase()} records right now.</div>}
 
       <div className="space-y-2">
         {shown.map(item => {
@@ -239,7 +239,7 @@ export function InternalDealerOnboardingBoard() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
-                  <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{tierText(item)} • {item.contact_email || item.subtitle}</div>
+                  <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{tierText(item)} • {item.contact_email || item.subtitle}</div>
                   <div className="mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.22)', color: '#FBBF24' }}>Next: {item.next_action || label(item.bucket)}</div>
                 </div>
                 <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${c}1f`, border: `1px solid ${c}44`, color: c }}>{label(item.bucket)}</div>
@@ -274,8 +274,8 @@ export function InternalDealerOnboardingBoard() {
       />
 
       {selected && (
-        <div className="rounded-3xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)' }}>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#ddd6fe' }}>Selected Dealer Onboarding</div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#cfe0f0' }}>Selected Dealer Onboarding</div>
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selected.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{tierText(selected)} • {selected.contact_email || 'No contact email'}</div>
 
@@ -285,16 +285,16 @@ export function InternalDealerOnboardingBoard() {
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div>{selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#7DE5FF' }}>Open final copy →</a>}</div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div>{selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#7DE5FF' }}>Open final copy →</a>}</div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div>{selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#9FD8EC' }}>Open final copy →</a>}</div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div>{selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#9FD8EC' }}>Open final copy →</a>}</div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
           </div>
 
           {/* Partner health — 8-stage spec layer: vetting, channel manager, reviews */}
           <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-center justify-between">
-              <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Partner health</div>
-              <div className="text-[10px] font-semibold" style={{ color: '#C4B5FD' }}>Stage {stageForBucket(selected.bucket).n} of 8 — {stageForBucket(selected.bucket).label}</div>
+              <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Partner health</div>
+              <div className="text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Stage {stageForBucket(selected.bucket).n} of 8 — {stageForBucket(selected.bucket).label}</div>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Vetting (stage 1) */}
@@ -312,7 +312,7 @@ export function InternalDealerOnboardingBoard() {
                 <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Channel Manager</div>
                 <div className="flex gap-1.5">
                   <input value={cmDraft} onChange={e => setCmDraft(e.target.value)} placeholder="Assign a manager" className="min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }} />
-                  <button type="button" disabled={savingHealth || cmDraft === (selected.channel_manager_name ?? '')} onClick={() => saveHealth(selected.id, { channel_manager_name: cmDraft.trim() })} className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', color: '#ddd6fe' }}>Save</button>
+                  <button type="button" disabled={savingHealth || cmDraft === (selected.channel_manager_name ?? '')} onClick={() => saveHealth(selected.id, { channel_manager_name: cmDraft.trim() })} className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.4)', color: '#cfe0f0' }}>Save</button>
                 </div>
               </div>
             </div>
@@ -322,7 +322,7 @@ export function InternalDealerOnboardingBoard() {
                 <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>30 / 60 / 90-day reviews</div>
                 <div className="flex flex-wrap gap-1.5">
                   {selected.reviews.map(r => {
-                    const c = r.state === 'overdue' ? '#F87171' : r.state === 'due' ? '#FBBF24' : '#34D399'
+                    const c = r.state === 'overdue' ? '#F87171' : r.state === 'due' ? '#FBBF24' : '#7EE0A8'
                     const txt = r.state === 'overdue' ? 'overdue' : r.state === 'due' ? 'due now' : `due ${new Date(r.dueAt).toLocaleDateString()}`
                     return <span key={r.day} className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: `${c}22`, border: `1px solid ${c}55`, color: c }}>{r.day}-day · {txt}</span>
                   })}
@@ -333,18 +333,18 @@ export function InternalDealerOnboardingBoard() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{busy === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
-            {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
-            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
-            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
+            {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #7EE0A8, #5FB8E0)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
+            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #5FB8E0, #2f7fb8)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
+            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #7EE0A8, #5FB8E0)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
             {/* Upload buttons — for offline/pre-signed docs */}
             {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent' || selected.bucket === 'nda_signed') && !selected.nda_executed_cert_url && (
-              <button type="button" disabled={!!uploadingDoc} onClick={() => ndaFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(196,181,253,0.12)', border: '1px solid rgba(196,181,253,0.28)', color: '#C4B5FD' }}>{uploadingDoc === 'nda' ? 'Uploading…' : 'Upload Signed NDA ↑'}</button>
+              <button type="button" disabled={!!uploadingDoc} onClick={() => ndaFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(159,216,236,0.12)', border: '1px solid rgba(159,216,236,0.28)', color: '#9FD8EC' }}>{uploadingDoc === 'nda' ? 'Uploading…' : 'Upload Signed NDA ↑'}</button>
             )}
             {(selected.bucket === 'needs_agreement' || selected.bucket === 'agreement_signed') && !selected.agreement_executed_cert_url && (
-              <button type="button" disabled={!!uploadingDoc} onClick={() => agreementFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(196,181,253,0.12)', border: '1px solid rgba(196,181,253,0.28)', color: '#C4B5FD' }}>{uploadingDoc === 'agreement' ? 'Uploading…' : 'Upload Executed Agreement ↑'}</button>
+              <button type="button" disabled={!!uploadingDoc} onClick={() => agreementFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(159,216,236,0.12)', border: '1px solid rgba(159,216,236,0.28)', color: '#9FD8EC' }}>{uploadingDoc === 'agreement' ? 'Uploading…' : 'Upload Executed Agreement ↑'}</button>
             )}
-            {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final NDA</a>}
-            {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Agreement</a>}
+            {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(126,224,168,0.12)', border: '1px solid rgba(126,224,168,0.24)', color: '#7EE0A8' }}>Open Final NDA</a>}
+            {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(126,224,168,0.12)', border: '1px solid rgba(126,224,168,0.24)', color: '#7EE0A8' }}>Open Final Agreement</a>}
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
           </div>
         </div>

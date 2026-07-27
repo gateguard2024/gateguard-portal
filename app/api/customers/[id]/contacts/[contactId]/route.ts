@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardOrg } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +12,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string; contactId: string } }
 ) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   // If setting as primary, clear others first
@@ -38,6 +40,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string; contactId: string } }
 ) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('org_contacts')
     .delete()

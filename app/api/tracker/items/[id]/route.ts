@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardTrackerItem } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,7 +10,8 @@ const supabase = createClient(
 /**
  * GET /api/tracker/items/[id]
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardTrackerItem(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('tracker_items')
     .select('*')
@@ -24,6 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
  * PATCH /api/tracker/items/[id]
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardTrackerItem(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     const body = await req.json()
     const allowed = [
@@ -56,7 +59,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 /**
  * DELETE /api/tracker/items/[id]
  */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardTrackerItem(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('tracker_items')
     .delete()

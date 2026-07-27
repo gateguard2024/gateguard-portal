@@ -78,19 +78,19 @@ interface Tech {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const COLUMNS: { status: JobStatus; label: string; accent: string; bg: string }[] = [
-  { status: "Pending",     label: "Pending",     accent: "border-slate-300",  bg: "bg-slate-50"   },
-  { status: "Assigned",    label: "Assigned",    accent: "border-blue-300",   bg: "bg-blue-50"    },
+  { status: "Pending",     label: "Pending",     accent: "border-slate-300",  bg: "bg-[#1a2532]"   },
+  { status: "Assigned",    label: "Assigned",    accent: "border-blue-300",   bg: "bg-[#22303f]"    },
   { status: "En Route",    label: "En Route",    accent: "border-sky-300",    bg: "bg-sky-50"     },
-  { status: "On Site",     label: "On Site",     accent: "border-cyan-300",   bg: "bg-cyan-50"    },
-  { status: "In Progress", label: "In Progress", accent: "border-amber-300",  bg: "bg-amber-50"   },
-  { status: "Done",        label: "Done",        accent: "border-emerald-300", bg: "bg-emerald-50" },
+  { status: "On Site",     label: "On Site",     accent: "border-cyan-300",   bg: "bg-[rgba(95,184,224,0.15)]"    },
+  { status: "In Progress", label: "In Progress", accent: "border-amber-300",  bg: "bg-[rgba(251,191,36,0.15)]"   },
+  { status: "Done",        label: "Done",        accent: "border-[rgba(126,224,168,0.4)]", bg: "bg-[rgba(126,224,168,0.15)]" },
 ];
 
 const jobTypeConfig: Record<JobType, { label: string; color: string }> = {
-  Install:     { label: "Install",   color: "bg-blue-100 text-blue-700"   },
+  Install:     { label: "Install",   color: "bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]"   },
   Repair:      { label: "Repair",    color: "bg-rose-100 text-rose-700"   },
-  PM:          { label: "PM",        color: "bg-violet-100 text-violet-700" },
-  "Site Walk": { label: "Site Walk", color: "bg-teal-100 text-teal-700"   },
+  PM:          { label: "PM",        color: "bg-[rgba(167,139,250,0.15)] text-violet-300" },
+  "Site Walk": { label: "Site Walk", color: "bg-[rgba(45,212,191,0.15)] text-teal-300"   },
 };
 
 const jobTypeIcon: Record<JobType, React.ReactNode> = {
@@ -107,10 +107,10 @@ const priorityDot: Record<Priority, string> = {
 };
 
 const techStatusConfig: Record<TechStatus, { label: string; badge: string; dot: string }> = {
-  Available: { label: "Available", badge: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
-  "On Site": { label: "On Site",   badge: "bg-blue-100 text-blue-700",       dot: "bg-blue-500"   },
-  Driving:   { label: "Driving",   badge: "bg-amber-100 text-amber-700",     dot: "bg-amber-500"  },
-  Offline:   { label: "Offline",   badge: "bg-slate-100 text-slate-500",     dot: "bg-slate-400"  },
+  Available: { label: "Available", badge: "bg-[rgba(126,224,168,0.15)] text-emerald-300", dot: "bg-emerald-500" },
+  "On Site": { label: "On Site",   badge: "bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]",       dot: "bg-[#2f7fb8]"   },
+  Driving:   { label: "Driving",   badge: "bg-[rgba(251,191,36,0.15)] text-amber-300",     dot: "bg-amber-500"  },
+  Offline:   { label: "Offline",   badge: "bg-[#22303f] text-[#98abbd]",     dot: "bg-slate-400"  },
 };
 
 const JOB_TYPES: JobType[] = ["Install", "Repair", "PM", "Site Walk"];
@@ -164,47 +164,47 @@ function SitePicker({ value, onChange }: { value: { id: string; name: string } |
   return (
     <div ref={ref} className="relative">
       {value ? (
-        <div className="flex items-center justify-between border border-emerald-300 bg-emerald-50 rounded-xl px-3 py-2.5">
+        <div className="flex items-center justify-between border border-[rgba(126,224,168,0.4)] bg-[rgba(126,224,168,0.15)] rounded-xl px-3 py-2.5">
           <div>
-            <p className="text-sm font-semibold text-slate-800">{value.name}</p>
+            <p className="text-sm font-semibold text-[#dbe6f0]">{value.name}</p>
           </div>
-          <button type="button" onClick={clear} className="p-0.5 rounded hover:bg-emerald-100 text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={clear} className="p-0.5 rounded hover:bg-emerald-100 text-[#8598aa] hover:text-[#c3d3e2]">
             <X size={13} />
           </button>
         </div>
       ) : (
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8598aa] pointer-events-none" />
           <input
             value={query}
             onChange={e => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             placeholder="Search properties…"
-            className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="w-full border border-[#33465b] rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
           />
         </div>
       )}
       {open && !value && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-56 overflow-y-auto">
-          {loading && <div className="text-xs text-slate-400 px-3 py-2">Searching…</div>}
+        <div className="absolute left-0 right-0 top-full mt-1 bg-[#1e2a3a] border border-[#33465b] rounded-xl shadow-lg z-50 max-h-56 overflow-y-auto">
+          {loading && <div className="text-xs text-[#8598aa] px-3 py-2">Searching…</div>}
           {!loading && query.trim() && results.length === 0 && (
-            <div className="text-xs text-slate-400 px-3 py-2">No properties found. Type a name to search.</div>
+            <div className="text-xs text-[#8598aa] px-3 py-2">No properties found. Type a name to search.</div>
           )}
           {results.map(s => (
             <button
               key={s.id}
               type="button"
               onClick={() => selectSite(s)}
-              className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+              className="w-full text-left px-3 py-2.5 hover:bg-[#22303f] transition-colors border-b border-slate-50 last:border-0"
             >
-              <p className="text-sm font-medium text-slate-800">{s.name}</p>
+              <p className="text-sm font-medium text-[#dbe6f0]">{s.name}</p>
               {(s.city || s.address) && (
-                <p className="text-[11px] text-slate-400">{[s.address, s.city, s.state].filter(Boolean).join(", ")}</p>
+                <p className="text-[11px] text-[#8598aa]">{[s.address, s.city, s.state].filter(Boolean).join(", ")}</p>
               )}
             </button>
           ))}
           {!loading && !query.trim() && (
-            <div className="text-xs text-slate-400 px-3 py-3 text-center">Start typing to search properties</div>
+            <div className="text-xs text-[#8598aa] px-3 py-3 text-center">Start typing to search properties</div>
           )}
         </div>
       )}
@@ -240,26 +240,26 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
   const next = NEXT_STATUS[job.status];
 
   const statusColors: Record<JobStatus, string> = {
-    Pending:       "bg-slate-100 text-slate-600",
-    Assigned:      "bg-blue-100 text-blue-700",
-    "En Route":    "bg-sky-100 text-sky-700",
-    "On Site":     "bg-cyan-100 text-cyan-700",
-    "In Progress": "bg-amber-100 text-amber-700",
-    Done:          "bg-emerald-100 text-emerald-700",
+    Pending:       "bg-[#22303f] text-[#aebfce]",
+    Assigned:      "bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]",
+    "En Route":    "bg-sky-100 text-[#9FD8EC]",
+    "On Site":     "bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]",
+    "In Progress": "bg-[rgba(251,191,36,0.15)] text-amber-300",
+    Done:          "bg-[rgba(126,224,168,0.15)] text-emerald-300",
   };
 
   return (
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 w-[460px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
+      <div className="fixed inset-y-0 right-0 w-[460px] bg-[#1e2a3a] border-l border-[#33465b] z-50 flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[#2a3a4d]">
           <div>
-            <p className="text-[10px] font-mono text-slate-400 mb-0.5">{job.woNumber}</p>
-            <h2 className="text-sm font-bold text-slate-900 leading-tight">{job.title || job.property}</h2>
+            <p className="text-[10px] font-mono text-[#8598aa] mb-0.5">{job.woNumber}</p>
+            <h2 className="text-sm font-bold text-[#eaf2fb] leading-tight">{job.title || job.property}</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors mt-0.5">
-            <X size={14} className="text-slate-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#2a3a4d] transition-colors mt-0.5">
+            <X size={14} className="text-[#98abbd]" />
           </button>
         </div>
 
@@ -272,18 +272,18 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
             <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full", typeConf.color)}>
               {jobTypeIcon[job.jobType]}{typeConf.label}
             </span>
-            <span className="text-[11px] text-slate-500">{priorityLabel[job.priority]}</span>
+            <span className="text-[11px] text-[#98abbd]">{priorityLabel[job.priority]}</span>
           </div>
 
           {/* Property */}
-          <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Property</p>
+          <div className="bg-[#1a2532] rounded-xl p-4 space-y-1">
+            <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider">Property</p>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-800">{job.property}</p>
+              <p className="text-sm font-semibold text-[#dbe6f0]">{job.property}</p>
               {job.site_id && (
                 <a
                   href={`/sites/${job.site_id}`}
-                  className="inline-flex items-center gap-1 text-[11px] text-[#6B7EFF] hover:underline"
+                  className="inline-flex items-center gap-1 text-[11px] text-[#5FB8E0] hover:underline"
                 >
                   <ExternalLink size={11} />
                   View Site
@@ -294,59 +294,59 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
 
           {/* Scheduled */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Scheduled</p>
-              <div className="flex items-center gap-1.5 text-sm text-slate-700">
-                <Clock size={12} className="text-slate-400" />
-                {job.eta === "TBD" ? <span className="text-slate-400 italic">TBD</span> : job.eta}
+            <div className="bg-[#1a2532] rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Scheduled</p>
+              <div className="flex items-center gap-1.5 text-sm text-[#c3d3e2]">
+                <Clock size={12} className="text-[#8598aa]" />
+                {job.eta === "TBD" ? <span className="text-[#8598aa] italic">TBD</span> : job.eta}
               </div>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Job Type</p>
-              <p className="text-sm text-slate-700">{job.jobType}</p>
+            <div className="bg-[#1a2532] rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Job Type</p>
+              <p className="text-sm text-[#c3d3e2]">{job.jobType}</p>
             </div>
           </div>
 
           {/* Assigned Tech */}
           {tech ? (
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Assigned Technician</p>
+            <div className="bg-[#1a2532] rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider mb-2">Assigned Technician</p>
               <div className="flex items-center gap-3">
                 <div className={cn(
                   "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0",
-                  tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+                  tech.status === "Offline" ? "bg-slate-400" : "bg-[#2f7fb8]"
                 )}>
                   {tech.initials}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">{tech.name}</p>
-                  <p className="text-[11px] text-slate-400">{tech.role}</p>
+                  <p className="text-sm font-semibold text-[#dbe6f0]">{tech.name}</p>
+                  <p className="text-[11px] text-[#8598aa]">{tech.role}</p>
                 </div>
                 {tech.phone && (
-                  <a href={`tel:${tech.phone}`} className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
-                    <Phone size={13} className="text-slate-500" />
+                  <a href={`tel:${tech.phone}`} className="p-2 rounded-lg bg-[#1e2a3a] border border-[#33465b] hover:bg-[#22303f] transition-colors">
+                    <Phone size={13} className="text-[#98abbd]" />
                   </a>
                 )}
               </div>
             </div>
           ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+            <div className="bg-[rgba(251,191,36,0.15)] border border-[rgba(251,191,36,0.4)] rounded-xl p-4 text-sm text-amber-300">
               No technician assigned yet
             </div>
           )}
 
           {/* Notes */}
           {job.notes && (
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes / Access Info</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{job.notes}</p>
+            <div className="bg-[#1a2532] rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider mb-2">Notes / Access Info</p>
+              <p className="text-sm text-[#c3d3e2] whitespace-pre-wrap leading-relaxed">{job.notes}</p>
             </div>
           )}
 
           {/* View full WO link */}
           <a
             href={`/maintenance/${job.id}`}
-            className="flex items-center gap-2 text-sm text-[#6B7EFF] hover:underline font-medium"
+            className="flex items-center gap-2 text-sm text-[#5FB8E0] hover:underline font-medium"
           >
             <FileText size={14} />
             Open Full Work Order
@@ -354,15 +354,15 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
         </div>
 
         {/* Footer — status advance */}
-        <div className="border-t border-slate-100 p-4 flex gap-3">
+        <div className="border-t border-[#2a3a4d] p-4 flex gap-3">
           <button type="button" onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            className="flex-1 py-2.5 rounded-xl border border-[#33465b] text-sm text-[#aebfce] hover:bg-[#22303f] transition-colors">
             Close
           </button>
           {next && (
             <button
               onClick={() => { onStatusChange(job.id, next); onClose(); }}
-              className="flex-1 py-2.5 rounded-xl bg-[#2563EB] text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+              className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] text-white text-sm font-semibold hover:bg-[#2f7fb8] transition-colors"
             >
               → Move to {next}
             </button>
@@ -454,86 +454,86 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
   return (
     <>
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 w-[420px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-bold text-slate-900">New Job</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-            <X size={14} className="text-slate-500" />
+      <div className="fixed inset-y-0 right-0 w-[420px] bg-[#1e2a3a] border-l border-[#33465b] z-50 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a3a4d]">
+          <h2 className="text-sm font-bold text-[#eaf2fb]">New Job</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#2a3a4d] transition-colors">
+            <X size={14} className="text-[#98abbd]" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Property *</label>
+            <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Property *</label>
             <SitePicker value={selectedSite} onChange={setSelectedSite} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Job Type</label>
+              <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Job Type</label>
               <div className="relative">
                 <select value={form.job_type} onChange={e => set("job_type", e.target.value)}
-                  className="w-full appearance-none border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-8">
+                  className="w-full appearance-none border border-[#33465b] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 pr-8">
                   {JOB_TYPES.map(jt => <option key={jt}>{jt}</option>)}
                 </select>
-                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8598aa] pointer-events-none" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Priority</label>
+              <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Priority</label>
               <div className="relative">
                 <select value={form.priority} onChange={e => set("priority", e.target.value)}
-                  className="w-full appearance-none border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-8">
+                  className="w-full appearance-none border border-[#33465b] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 pr-8">
                   <option value="urgent">🔴 Urgent</option>
                   <option value="high">🟠 High</option>
                   <option value="medium">🔵 Medium</option>
                   <option value="low">⚪ Low</option>
                 </select>
-                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8598aa] pointer-events-none" />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Assign Tech</label>
+            <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Assign Tech</label>
             <div className="relative">
               <select value={form.assignee_id} onChange={e => handleTechChange(e.target.value)}
-                className="w-full appearance-none border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-8">
+                className="w-full appearance-none border border-[#33465b] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 pr-8">
                 <option value="">— Unassigned —</option>
                 {techs.map(t => <option key={t.id} value={t.id}>{t.name} ({t.role})</option>)}
               </select>
-              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8598aa] pointer-events-none" />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Scheduled Date</label>
+            <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Scheduled Date</label>
             <input type="date" value={form.scheduled_date} onChange={e => set("scheduled_date", e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+              className="w-full border border-[#33465b] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30" />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notes / Access Info</label>
+            <label className="block text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-1.5">Notes / Access Info</label>
             <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={3}
               placeholder="Access codes, parking info, gate combos, special instructions…"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+              className="w-full border border-[#33465b] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none" />
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-red-500 text-xs bg-red-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-[#fb7185] text-xs bg-[rgba(239,68,68,0.13)] rounded-xl px-3 py-2">
               <AlertTriangle size={13} /> {error}
             </div>
           )}
         </form>
 
-        <div className="border-t border-slate-100 p-4 flex gap-3">
+        <div className="border-t border-[#2a3a4d] p-4 flex gap-3">
           <button type="button" onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            className="flex-1 py-2.5 rounded-xl border border-[#33465b] text-sm text-[#aebfce] hover:bg-[#22303f] transition-colors">
             Cancel
           </button>
           <button onClick={handleSubmit as unknown as React.MouseEventHandler<HTMLButtonElement>}
             disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#2563EB] text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+            className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] text-white text-sm font-semibold hover:bg-[#2f7fb8] transition-colors disabled:opacity-50">
             {saving ? "Saving…" : "Create Job"}
           </button>
         </div>
@@ -563,45 +563,45 @@ function QuickAssignPopover({ techs, onAssign, onClose }: {
 
   return (
     <div ref={ref}
-      className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden"
+      className="absolute top-full left-0 mt-1 w-52 bg-[#1e2a3a] border border-[#33465b] rounded-xl shadow-xl z-50 overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-slate-100">
-        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Assign Tech</p>
+      <div className="px-3 py-2 border-b border-[#2a3a4d]">
+        <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider">Assign Tech</p>
       </div>
       <div className="max-h-48 overflow-y-auto">
         {available.length === 0 && offline.length === 0 && (
-          <p className="text-xs text-slate-400 px-3 py-3 italic">No technicians in roster</p>
+          <p className="text-xs text-[#8598aa] px-3 py-3 italic">No technicians in roster</p>
         )}
         {available.map(t => (
           <button key={t.id} type="button"
             onClick={() => { onAssign(t.id, t.name); onClose(); }}
-            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2"
+            className="w-full text-left px-3 py-2 hover:bg-[#22303f] transition-colors flex items-center gap-2"
           >
-            <div className="w-6 h-6 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+            <div className="w-6 h-6 rounded-full bg-[#2f7fb8] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
               {t.initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-800 truncate">{t.name}</p>
-              <p className="text-[10px] text-emerald-600">{t.status}</p>
+              <p className="text-xs font-semibold text-[#dbe6f0] truncate">{t.name}</p>
+              <p className="text-[10px] text-emerald-300">{t.status}</p>
             </div>
           </button>
         ))}
         {offline.length > 0 && available.length > 0 && (
-          <div className="px-3 py-1 border-t border-slate-100">
-            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Offline</p>
+          <div className="px-3 py-1 border-t border-[#2a3a4d]">
+            <p className="text-[9px] font-semibold text-[#8598aa] uppercase tracking-wider">Offline</p>
           </div>
         )}
         {offline.map(t => (
           <button key={t.id} type="button"
             onClick={() => { onAssign(t.id, t.name); onClose(); }}
-            className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2 opacity-60"
+            className="w-full text-left px-3 py-2 hover:bg-[#22303f] transition-colors flex items-center gap-2 opacity-60"
           >
             <div className="w-6 h-6 rounded-full bg-slate-400 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
               {t.initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-700 truncate">{t.name}</p>
-              <p className="text-[10px] text-slate-400">Offline</p>
+              <p className="text-xs font-semibold text-[#c3d3e2] truncate">{t.name}</p>
+              <p className="text-[10px] text-[#8598aa]">Offline</p>
             </div>
           </button>
         ))}
@@ -637,10 +637,10 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
     const match = job.eta.match(/(\d{4}-\d{2}-\d{2})/);
     if (!match) return null;
     const diff = Math.round((new Date(match[1]).getTime() - Date.now()) / 86400000);
-    if (diff < 0)  return { text: `${Math.abs(diff)}d overdue`, cls: "text-red-500" };
-    if (diff === 0) return { text: "Today", cls: "text-emerald-600 font-semibold" };
-    if (diff === 1) return { text: "Tomorrow", cls: "text-amber-600 font-semibold" };
-    return { text: `in ${diff}d`, cls: "text-slate-400" };
+    if (diff < 0)  return { text: `${Math.abs(diff)}d overdue`, cls: "text-[#fb7185]" };
+    if (diff === 0) return { text: "Today", cls: "text-emerald-300 font-semibold" };
+    if (diff === 1) return { text: "Tomorrow", cls: "text-amber-300 font-semibold" };
+    return { text: `in ${diff}d`, cls: "text-[#8598aa]" };
   })();
 
   const isUrgentUnassigned = job.priority === "urgent" && !job.assignedTechId;
@@ -650,7 +650,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-white rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 cursor-grab active:cursor-grabbing",
+        "bg-[#1e2a3a] rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 cursor-grab active:cursor-grabbing",
         "hover:shadow-md transition-all select-none relative",
         job.priority === "urgent"    ? "border-l-red-500"
         : job.priority === "normal" ? "border-l-amber-400"
@@ -670,10 +670,10 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-mono text-slate-400">{job.woNumber}</p>
-          <p className="text-sm font-semibold text-slate-800 leading-tight truncate">{job.property}</p>
+          <p className="text-[10px] font-mono text-[#8598aa]">{job.woNumber}</p>
+          <p className="text-sm font-semibold text-[#dbe6f0] leading-tight truncate">{job.property}</p>
           {job.title && job.title !== job.property && (
-            <p className="text-[11px] text-slate-500 truncate">{job.title}</p>
+            <p className="text-[11px] text-[#98abbd] truncate">{job.title}</p>
           )}
         </div>
         <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0", typeConf.color)}>
@@ -686,10 +686,10 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
       <div className="flex items-center gap-2">
         {assignedTechObj ? (
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+            <div className="w-5 h-5 rounded-full bg-[#2f7fb8] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
               {assignedTechObj.initials}
             </div>
-            <span className="text-xs text-slate-700 font-medium">{assignedTechObj.name}</span>
+            <span className="text-xs text-[#c3d3e2] font-medium">{assignedTechObj.name}</span>
           </div>
         ) : (
           <div className="relative">
@@ -697,7 +697,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
               type="button"
               onPointerDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); setShowAssign(v => !v); }}
-              className="inline-flex items-center gap-1 text-[11px] text-[#6B7EFF] hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2 py-1 transition-colors font-medium"
+              className="inline-flex items-center gap-1 text-[11px] text-[#5FB8E0] hover:text-[#9FD8EC] bg-[#22303f] hover:bg-indigo-100 rounded-lg px-2 py-1 transition-colors font-medium"
             >
               <Users size={10} />
               Assign Tech
@@ -718,7 +718,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
 
       {/* Date + priority */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+        <div className="flex items-center gap-1.5 text-xs text-[#8598aa]">
           <Clock size={10} />
           {daysLabel ? (
             <span className={daysLabel.cls}>{daysLabel.text}</span>
@@ -728,12 +728,12 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
         </div>
         <div className="flex items-center gap-1.5">
           <span className={cn("w-2 h-2 rounded-full", priorityDot[job.priority])} title={job.priority} />
-          <span className="text-[10px] text-slate-400 capitalize">{job.priority}</span>
+          <span className="text-[10px] text-[#8598aa] capitalize">{job.priority}</span>
         </div>
       </div>
 
       {job.notes && (
-        <p className="text-[11px] text-slate-400 truncate">{job.notes}</p>
+        <p className="text-[11px] text-[#8598aa] truncate">{job.notes}</p>
       )}
 
       {/* View / advance buttons */}
@@ -742,7 +742,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
           type="button"
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onSelect(job); }}
-          className="flex-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg py-1.5 transition-colors"
+          className="flex-1 text-[11px] font-medium text-[#98abbd] hover:text-slate-700 bg-[#1a2532] hover:bg-[#2a3a4d] rounded-lg py-1.5 transition-colors"
         >
           Details
         </button>
@@ -758,7 +758,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
               const next = NEXT[job.status];
               if (next) onStatusChange(job.id, next);
             }}
-            className="flex-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+            className="flex-1 text-[11px] font-medium text-[#9FD8EC] hover:text-[#9FD8EC] bg-[#22303f] hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
           >
             → Advance
           </button>
@@ -780,13 +780,13 @@ function DroppableColumn({ status, label, accent, bg, children, count }: {
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: status });
   return (
-    <div ref={setNodeRef} className={cn("space-y-2 rounded-xl transition-colors", isOver && "ring-2 ring-[#6B7EFF]/40 ring-offset-1")}>
+    <div ref={setNodeRef} className={cn("space-y-2 rounded-xl transition-colors", isOver && "ring-2 ring-[#5FB8E0]/40 ring-offset-1")}>
       <div className={cn(
         "flex items-center justify-between px-3 py-2 rounded-lg border",
         bg, accent
       )}>
-        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{label}</span>
-        <span className="text-xs font-bold text-slate-500 bg-white/70 rounded-full px-2 py-0.5 border border-slate-200">{count}</span>
+        <span className="text-xs font-semibold text-[#c3d3e2] uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-bold text-[#98abbd] bg-[#1e2a3a]/70 rounded-full px-2 py-0.5 border border-[#33465b]">{count}</span>
       </div>
       <div className="space-y-2 min-h-[60px]">
         {children}
@@ -891,17 +891,17 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1e2a3a] rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a3a4d] flex-shrink-0">
           <div>
-            <h2 className="text-sm font-bold text-slate-800">{tech.name}</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <h2 className="text-sm font-bold text-[#dbe6f0]">{tech.name}</h2>
+            <p className="text-[11px] text-[#8598aa] mt-0.5">
               {isContractor ? 'Committed availability days' : 'Weekly work schedule'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
-            <X size={14} className="text-slate-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#2a3a4d]">
+            <X size={14} className="text-[#98abbd]" />
           </button>
         </div>
 
@@ -911,7 +911,7 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
             /* ── Employee: recurring weekly ── */
             <>
               <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Working Days</p>
+                <p className="text-[11px] font-semibold text-[#98abbd] uppercase tracking-wider mb-2">Working Days</p>
                 <div className="flex gap-1.5 flex-wrap">
                   {DAY_LABELS.map((label, i) => (
                     <button
@@ -920,8 +920,8 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
                       className={cn(
                         'w-9 h-9 rounded-lg text-[11px] font-semibold transition-colors',
                         selDays.includes(i)
-                          ? 'bg-[#2563EB] text-white'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          ? 'bg-[#2f7fb8] text-white'
+                          : 'bg-[#22303f] text-[#98abbd] hover:bg-[#32465b]'
                       )}
                     >
                       {label}
@@ -931,46 +931,46 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Start</p>
+                  <p className="text-[11px] font-semibold text-[#98abbd] uppercase tracking-wider mb-1">Start</p>
                   <select
                     value={startH}
                     onChange={e => setStartH(Number(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+                    className="w-full text-sm border border-[#33465b] rounded-lg px-2.5 py-1.5 bg-[#1e2a3a]"
                   >
                     {hours.map(h => <option key={h} value={h}>{fmt12(h)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">End</p>
+                  <p className="text-[11px] font-semibold text-[#98abbd] uppercase tracking-wider mb-1">End</p>
                   <select
                     value={endH}
                     onChange={e => setEndH(Number(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+                    className="w-full text-sm border border-[#33465b] rounded-lg px-2.5 py-1.5 bg-[#1e2a3a]"
                   >
                     {hours.filter(h => h > startH).map(h => <option key={h} value={h}>{fmt12(h)}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
-                Status auto-sets to <span className="font-semibold text-emerald-600">Available</span> {selDays.map(d => DAY_LABELS[d]).join(', ')} {fmt12(startH)}–{fmt12(endH)}, <span className="font-semibold text-slate-500">Offline</span> otherwise
+              <div className="text-[11px] text-[#8598aa] bg-[#1a2532] rounded-lg px-3 py-2">
+                Status auto-sets to <span className="font-semibold text-emerald-300">Available</span> {selDays.map(d => DAY_LABELS[d]).join(', ')} {fmt12(startH)}–{fmt12(endH)}, <span className="font-semibold text-[#98abbd]">Offline</span> otherwise
               </div>
             </>
           ) : (
             /* ── Contractor: committed dates ── */
             <>
               <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Add Committed Dates</p>
+                <p className="text-[11px] font-semibold text-[#98abbd] uppercase tracking-wider mb-2">Add Committed Dates</p>
                 <div className="flex gap-2">
                   <input
                     type="date"
                     value={dateInput}
                     onChange={e => setDateInput(e.target.value)}
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5"
+                    className="flex-1 text-sm border border-[#33465b] rounded-lg px-2.5 py-1.5"
                   />
                   <button
                     onClick={addDate}
                     disabled={!dateInput}
-                    className="px-3 py-1.5 text-sm bg-[#2563EB] text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
+                    className="px-3 py-1.5 text-sm bg-[#2f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-40"
                   >
                     Add
                   </button>
@@ -979,36 +979,36 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
               {dates.length > 0 ? (
                 <div className="space-y-1">
                   {dates.map(d => (
-                    <div key={d} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
-                      <span className="text-sm text-slate-700">{new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</span>
-                      <button onClick={() => removeDate(d)} className="p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-400">
+                    <div key={d} className="flex items-center justify-between px-3 py-2 bg-[#1a2532] rounded-lg">
+                      <span className="text-sm text-[#c3d3e2]">{new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</span>
+                      <button onClick={() => removeDate(d)} className="p-0.5 rounded hover:bg-[rgba(239,68,68,0.16)] text-[#aebfce] hover:text-red-400">
                         <X size={11} />
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-400 italic">No dates committed yet — status stays Offline</p>
+                <p className="text-[11px] text-[#8598aa] italic">No dates committed yet — status stays Offline</p>
               )}
-              <div className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
-                Status auto-sets to <span className="font-semibold text-emerald-600">Available</span> on committed dates, <span className="font-semibold text-slate-500">Offline</span> on all other days
+              <div className="text-[11px] text-[#8598aa] bg-[#1a2532] rounded-lg px-3 py-2">
+                Status auto-sets to <span className="font-semibold text-emerald-300">Available</span> on committed dates, <span className="font-semibold text-[#98abbd]">Offline</span> on all other days
               </div>
             </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 flex-shrink-0 border-t border-slate-100 pt-4 flex gap-2">
+        <div className="px-5 pb-5 flex-shrink-0 border-t border-[#2a3a4d] pt-4 flex gap-2">
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 bg-[#2563EB] text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="flex-1 bg-[#2f7fb8] text-white rounded-lg py-2 text-sm font-medium hover:bg-[#2f7fb8] disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save Schedule'}
           </button>
           <button
             onClick={onClose}
-            className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2 text-sm hover:bg-slate-50"
+            className="flex-1 border border-[#33465b] text-[#aebfce] rounded-lg py-2 text-sm hover:bg-[#22303f]"
           >
             Cancel
           </button>
@@ -1055,12 +1055,12 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
   }
 
   return (
-    <div className="py-3 px-4 hover:bg-slate-50 transition-colors group">
+    <div className="py-3 px-4 hover:bg-[#22303f] transition-colors group">
       <div className="flex items-center gap-3">
         <div className="relative shrink-0">
           <div className={cn(
             "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white",
-            tech.status === "Offline" ? "bg-slate-400" : "bg-[#6B7EFF]"
+            tech.status === "Offline" ? "bg-slate-400" : "bg-[#5FB8E0]"
           )}>
             {tech.initials}
           </div>
@@ -1070,7 +1070,7 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-semibold text-slate-800 truncate">{tech.name}</p>
+            <p className="text-sm font-semibold text-[#dbe6f0] truncate">{tech.name}</p>
             {hasPortalAccess && (
               <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Has portal access" />
             )}
@@ -1087,12 +1087,12 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-400">{tech.role}{isContractor ? ' · Contractor' : ''}</p>
+          <p className="text-[11px] text-[#8598aa]">{tech.role}{isContractor ? ' · Contractor' : ''}</p>
           {scheduleLabel && (
-            <p className="text-[10px] text-slate-400 truncate">{scheduleLabel}</p>
+            <p className="text-[10px] text-[#8598aa] truncate">{scheduleLabel}</p>
           )}
           {currentJob && (
-            <p className="text-[10px] text-slate-400 truncate">{currentJob.property}</p>
+            <p className="text-[10px] text-[#8598aa] truncate">{currentJob.property}</p>
           )}
         </div>
         <div className="text-right shrink-0 space-y-1">
@@ -1106,7 +1106,7 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
             </select>
             <button
               onClick={() => onEditSchedule(tech)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-blue-50 text-slate-300 hover:text-blue-400"
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-[#22303f] text-[#aebfce] hover:text-blue-400"
               title={tech.schedule ? 'Edit schedule' : 'Set schedule'}
             >
               <Calendar size={11} />
@@ -1116,7 +1116,7 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
                 onClick={() => {
                   if (confirm(`Remove ${tech.name} from the roster?`)) onDelete(tech.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-400"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-[rgba(239,68,68,0.16)] text-[#aebfce] hover:text-red-400"
                 title="Remove technician"
               >
                 <X size={11} />
@@ -1126,43 +1126,43 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
           {!hasPortalAccess && tech.email && (
             <button
               onClick={() => onInvite(tech)}
-              className="text-[10px] text-[#6B7EFF] hover:underline w-full text-right"
+              className="text-[10px] text-[#5FB8E0] hover:underline w-full text-right"
             >
               Send portal invite →
             </button>
           )}
           {hasPortalAccess && (
-            <p className="text-[10px] text-emerald-600 w-full text-right">Portal ✓</p>
+            <p className="text-[10px] text-emerald-300 w-full text-right">Portal ✓</p>
           )}
         </div>
       </div>
 
       {/* /tech access code row */}
-      <div className="mt-2 flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-100">
-        <span className="text-[9px] font-medium text-slate-400 shrink-0">/tech</span>
+      <div className="mt-2 flex items-center gap-2 bg-[#1a2532] rounded-lg px-2.5 py-1.5 border border-[#2a3a4d]">
+        <span className="text-[9px] font-medium text-[#8598aa] shrink-0">/tech</span>
         {tech.tech_code ? (
           <>
-            <span className="font-mono text-[10px] text-slate-700 flex-1 tracking-widest">{tech.tech_code}</span>
+            <span className="font-mono text-[10px] text-[#c3d3e2] flex-1 tracking-widest">{tech.tech_code}</span>
             <button
               onClick={() => { void navigator.clipboard.writeText(tech.tech_code ?? '') }}
-              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+              className="p-0.5 rounded hover:bg-[#32465b] text-[#8598aa] hover:text-[#c3d3e2] transition-colors"
               title="Copy code"
             >
               <Copy size={10} />
             </button>
             <button
               onClick={() => onGenerateCode?.(tech.id)}
-              className="text-[9px] font-medium text-[#6B7EFF] hover:underline shrink-0"
+              className="text-[9px] font-medium text-[#5FB8E0] hover:underline shrink-0"
             >
               Regen
             </button>
           </>
         ) : (
           <>
-            <span className="text-[9px] italic text-slate-400 flex-1">No code set</span>
+            <span className="text-[9px] italic text-[#8598aa] flex-1">No code set</span>
             <button
               onClick={() => onGenerateCode?.(tech.id)}
-              className="text-[9px] font-semibold text-[#6B7EFF] hover:underline shrink-0"
+              className="text-[9px] font-semibold text-[#5FB8E0] hover:underline shrink-0"
             >
               Generate →
             </button>
@@ -1210,10 +1210,10 @@ function jobDateKey(eta: string): string | null {
 }
 
 const chipColors: Record<JobType, string> = {
-  Install:     "bg-blue-100 text-blue-800 border-blue-200",
+  Install:     "bg-[rgba(95,184,224,0.15)] text-[#9FD8EC] border-blue-200",
   Repair:      "bg-rose-100 text-rose-800 border-rose-200",
-  PM:          "bg-violet-100 text-violet-800 border-violet-200",
-  "Site Walk": "bg-teal-100 text-teal-800 border-teal-200",
+  PM:          "bg-[rgba(167,139,250,0.15)] text-violet-300 border-violet-200",
+  "Site Walk": "bg-[rgba(45,212,191,0.15)] text-teal-300 border-teal-200",
 };
 
 // ─── Calendar View ────────────────────────────────────────────────────────────
@@ -1256,31 +1256,31 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
   const DAY_COL_W  = "1fr";
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+    <div className="bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden">
       {/* Calendar toolbar */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-[#2a3a4d]">
         <div className="flex items-center gap-2">
           <button
             onClick={onPrev}
-            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[#2a3a4d] transition-colors"
             aria-label="Previous week"
           >
-            <ChevronLeft size={15} className="text-slate-500" />
+            <ChevronLeft size={15} className="text-[#98abbd]" />
           </button>
-          <span className="text-sm font-semibold text-slate-800 min-w-[200px] text-center">
+          <span className="text-sm font-semibold text-[#dbe6f0] min-w-[200px] text-center">
             {weekLabel}
           </span>
           <button
             onClick={onNext}
-            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[#2a3a4d] transition-colors"
             aria-label="Next week"
           >
-            <ChevronRight size={15} className="text-slate-500" />
+            <ChevronRight size={15} className="text-[#98abbd]" />
           </button>
         </div>
         <button
           onClick={onToday}
-          className="text-xs font-medium text-[#6B7EFF] hover:text-blue-700 border border-[#6B7EFF]/30 rounded-lg px-3 py-1.5 hover:bg-[#6B7EFF]/5 transition-colors"
+          className="text-xs font-medium text-[#5FB8E0] hover:text-[#9FD8EC] border border-[#5FB8E0]/30 rounded-lg px-3 py-1.5 hover:bg-[#5FB8E0]/5 transition-colors"
         >
           This Week
         </button>
@@ -1297,7 +1297,7 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
         >
           {/* Header row */}
           {/* empty corner */}
-          <div className="border-b border-r border-slate-100 bg-slate-50 px-3 py-2" />
+          <div className="border-b border-r border-[#2a3a4d] bg-[#1a2532] px-3 py-2" />
           {days.map((day) => {
             const key     = toISO(day);
             const isToday = key === todayKey;
@@ -1305,16 +1305,16 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
               <div
                 key={key}
                 className={cn(
-                  "border-b border-r border-slate-100 px-2 py-2 text-center",
-                  isToday ? "bg-[#6B7EFF]" : "bg-slate-50"
+                  "border-b border-r border-[#2a3a4d] px-2 py-2 text-center",
+                  isToday ? "bg-[#5FB8E0]" : "bg-[#1a2532]"
                 )}
               >
                 <p className={cn("text-[10px] font-semibold uppercase tracking-wide",
-                  isToday ? "text-white/80" : "text-slate-400")}>
+                  isToday ? "text-white/80" : "text-[#8598aa]")}>
                   {day.toLocaleDateString("en-US", { weekday: "short" })}
                 </p>
                 <p className={cn("text-sm font-bold",
-                  isToday ? "text-white" : "text-slate-700")}>
+                  isToday ? "text-white" : "text-[#c3d3e2]")}>
                   {day.getDate()}
                 </p>
               </div>
@@ -1324,7 +1324,7 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
           {/* Tech rows */}
           {techs.length === 0 ? (
             <div
-              className="col-span-8 text-center text-sm text-slate-400 py-10"
+              className="col-span-8 text-center text-sm text-[#8598aa] py-10"
               style={{ gridColumn: "1 / -1" }}
             >
               No technicians in roster
@@ -1336,16 +1336,16 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
                 // Tech header cell
                 <div
                   key={`th-${tech.id}`}
-                  className="border-b border-r border-slate-100 bg-white px-3 py-2.5 flex items-center gap-2"
+                  className="border-b border-r border-[#2a3a4d] bg-[#1e2a3a] px-3 py-2.5 flex items-center gap-2"
                 >
                   <div className={cn(
                     "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
-                    tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+                    tech.status === "Offline" ? "bg-slate-400" : "bg-[#2f7fb8]"
                   )}>
                     {tech.initials}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-800 truncate leading-tight">{tech.name}</p>
+                    <p className="text-xs font-semibold text-[#dbe6f0] truncate leading-tight">{tech.name}</p>
                     <span className={cn("inline-block text-[9px] font-medium px-1.5 py-0.5 rounded-full mt-0.5", conf.badge)}>
                       {conf.label}
                     </span>
@@ -1360,9 +1360,9 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
                     <div
                       key={`td-${tech.id}-${dk}`}
                       className={cn(
-                        "border-b border-r border-slate-100 px-1.5 py-1.5 min-h-[72px] align-top",
-                        isToday ? "bg-[#6B7EFF]/4" : "bg-white",
-                        "hover:bg-slate-50 transition-colors"
+                        "border-b border-r border-[#2a3a4d] px-1.5 py-1.5 min-h-[72px] align-top",
+                        isToday ? "bg-[#5FB8E0]/4" : "bg-[#1e2a3a]",
+                        "hover:bg-[#22303f] transition-colors"
                       )}
                     >
                       {cellJobs.map((job) => {
@@ -1396,8 +1396,8 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
 
       {/* Unscheduled strip */}
       {unscheduled.length > 0 && (
-        <div className="border-t border-slate-100 px-5 py-3 bg-slate-50">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+        <div className="border-t border-[#2a3a4d] px-5 py-3 bg-[#1a2532]">
+          <p className="text-[10px] font-semibold text-[#8598aa] uppercase tracking-wider mb-2">
             Unscheduled / Unassigned ({unscheduled.length})
           </p>
           <div className="flex flex-wrap gap-2">
@@ -1419,7 +1419,7 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
                   <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", priorityDot[job.priority])} />
                   {job.woNumber} {job.property}
                   {!job.assignedTechId && (
-                    <span className="text-slate-400 italic ml-1">· unassigned</span>
+                    <span className="text-[#8598aa] italic ml-1">· unassigned</span>
                   )}
                 </Tag>
               );
@@ -1574,16 +1574,12 @@ export default function DispatchPage() {
       mapRef.current = map;
 
       map.on('load', () => {
-        // Add tech markers — use real GPS if available, else demo coords
-        const demoFallback: [number, number][] = [
-          [-87.6298, 41.8781], [-104.9903, 39.7392], [-118.2437, 34.0522],
-          [-73.9857, 40.7484], [-95.3698, 29.7604],
-        ];
-        techs.forEach((tech, idx) => {
+        // Add tech markers — REAL GPS only. Techs with no fleet_locations entry
+        // get no marker (never a fabricated position).
+        techs.forEach((tech) => {
           const gpsEntry = fleetLocations.find(f => f.tech_id === tech.id);
-          const coords: [number, number] = gpsEntry
-            ? [gpsEntry.lng, gpsEntry.lat]
-            : (demoFallback[idx % 5] ?? [-98.5795, 39.8283]);
+          if (!gpsEntry) return;
+          const coords: [number, number] = [gpsEntry.lng, gpsEntry.lat];
           const dotColor = tech.status === 'Available' ? '#10b981'
             : tech.status === 'On Site'   ? '#3b82f6'
             : tech.status === 'Driving'   ? '#f59e0b'
@@ -1795,14 +1791,14 @@ export default function DispatchPage() {
   const completedToday  = jobs.filter(j => j.status === "Done").length;
 
   const stats = [
-    { label: "Active Jobs",      value: String(activeJobs),                   icon: Zap,          color: "text-[#6B7EFF]",   bg: "bg-[#6B7EFF]/10" },
-    { label: "Available Techs",  value: `${availableTechs}/${techs.length}`,   icon: Users,        color: "text-emerald-600", bg: "bg-emerald-50"   },
-    { label: "In Transit",       value: String(inTransit),                    icon: Navigation,   color: "text-amber-600",   bg: "bg-amber-50"     },
-    { label: "Completed Today",  value: String(completedToday),               icon: CheckCircle2, color: "text-violet-600",  bg: "bg-violet-50"    },
+    { label: "Active Jobs",      value: String(activeJobs),                   icon: Zap,          color: "text-[#5FB8E0]",   bg: "bg-[#5FB8E0]/10" },
+    { label: "Available Techs",  value: `${availableTechs}/${techs.length}`,   icon: Users,        color: "text-emerald-300", bg: "bg-[rgba(126,224,168,0.15)]"   },
+    { label: "In Transit",       value: String(inTransit),                    icon: Navigation,   color: "text-amber-300",   bg: "bg-[rgba(251,191,36,0.15)]"     },
+    { label: "Completed Today",  value: String(completedToday),               icon: CheckCircle2, color: "text-violet-300",  bg: "bg-[rgba(167,139,250,0.15)]"    },
   ];
 
   return (
-    <div className="flex flex-col min-h-full bg-[#F8FAFC]">
+    <div className="flex flex-col min-h-full bg-[#141e29]">
       <NewJobSlideOver
         open={newJobOpen}
         onClose={() => setNewJobOpen(false)}
@@ -1826,32 +1822,32 @@ export default function DispatchPage() {
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => !inviteSending && setInvitingTech(null)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <div className="bg-[#1e2a3a] rounded-xl shadow-2xl w-full max-w-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-slate-900">Send Portal Invite</h2>
-                <button onClick={() => setInvitingTech(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+                <h2 className="text-sm font-bold text-[#eaf2fb]">Send Portal Invite</h2>
+                <button onClick={() => setInvitingTech(null)} className="text-[#8598aa] hover:text-[#c3d3e2]"><X size={16} /></button>
               </div>
-              <p className="text-sm text-slate-600 mb-1">
+              <p className="text-sm text-[#aebfce] mb-1">
                 Sending invite to <span className="font-semibold">{invitingTech.name}</span>
               </p>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-[#8598aa] mb-4">
                 They will receive a Clerk sign-up email at <span className="font-mono">{invitingTech.email}</span> and can log into the portal to view and update their assigned work orders.
               </p>
               {inviteMsg && (
-                <p className={`text-xs mb-3 font-medium ${inviteMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{inviteMsg}</p>
+                <p className={`text-xs mb-3 font-medium ${inviteMsg.startsWith('✓') ? 'text-emerald-300' : 'text-[#fca5a5]'}`}>{inviteMsg}</p>
               )}
               <div className="flex gap-2">
                 <button
                   onClick={handleSendInvite}
                   disabled={inviteSending}
-                  className="flex-1 text-sm bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-indigo-600 disabled:opacity-50"
+                  className="flex-1 text-sm bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50"
                 >
                   {inviteSending ? 'Sending…' : 'Send Invite'}
                 </button>
                 <button
                   onClick={() => setInvitingTech(null)}
                   disabled={inviteSending}
-                  className="flex-1 text-sm border border-slate-200 text-slate-600 py-2 rounded-lg hover:bg-slate-50"
+                  className="flex-1 text-sm border border-[#33465b] text-[#aebfce] py-2 rounded-lg hover:bg-[#22303f]"
                 >
                   Cancel
                 </button>
@@ -1880,18 +1876,18 @@ export default function DispatchPage() {
         actions={
           <div className="flex items-center gap-2">
             {/* Board / Calendar toggle */}
-            <div className="hidden lg:flex items-center bg-white/10 border border-white/15 rounded-lg overflow-hidden">
+            <div className="hidden lg:flex items-center bg-[#1e2a3a]/10 border border-white/15 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode("board")}
                 className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
-                  viewMode === "board" ? "bg-[#6B7EFF] text-white" : "text-slate-300 hover:text-white")}
+                  viewMode === "board" ? "bg-[#5FB8E0] text-white" : "text-[#aebfce] hover:text-white")}
               >
                 <List size={14} /> Board
               </button>
               <button
                 onClick={() => setViewMode("calendar")}
                 className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
-                  viewMode === "calendar" ? "bg-[#6B7EFF] text-white" : "text-slate-300 hover:text-white")}
+                  viewMode === "calendar" ? "bg-[#5FB8E0] text-white" : "text-[#aebfce] hover:text-white")}
               >
                 <Calendar size={14} /> Calendar
               </button>
@@ -1900,7 +1896,7 @@ export default function DispatchPage() {
               <button
                 onClick={() => { setShowMap(v => !v); if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }}
                 className={cn("hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors",
-                  showMap ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white/10 text-slate-300 border-white/15 hover:text-white")}
+                  showMap ? "bg-[#5FB8E0] text-white border-[#5FB8E0]" : "bg-[#1e2a3a]/10 text-[#aebfce] border-white/15 hover:text-white")}
               >
                 <MapPin size={14} /> Map
               </button>
@@ -1918,12 +1914,12 @@ export default function DispatchPage() {
                 <Route size={14} /> {optimizing ? "Optimizing…" : "Optimize"}
               </button>
             )}
-            <button onClick={fetchData} className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white/10 text-slate-300 border border-white/15 rounded-lg hover:text-white transition-colors">
+            <button onClick={fetchData} className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-[#1e2a3a]/10 text-[#aebfce] border border-white/15 rounded-lg hover:text-white transition-colors">
               <RefreshCw size={14} className={cn(loading && "animate-spin")} />
             </button>
             <button
               onClick={() => setNewJobOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-[#6B7EFF] rounded-lg hover:bg-[#5a6df0] transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-[#5FB8E0] rounded-lg hover:bg-[#5a6df0] transition-colors"
             >
               <Plus size={14} /> New Job
             </button>
@@ -1936,7 +1932,7 @@ export default function DispatchPage() {
         {(["jobs","schedule","roster"] as const).map(tab => (
           <button key={tab} onClick={() => setMobileTab(tab)}
             className={cn("flex-1 py-2.5 text-xs font-semibold capitalize transition-colors border-b-2",
-              mobileTab === tab ? "border-[#6B7EFF] text-[#6B7EFF]" : "border-transparent text-muted-foreground")}
+              mobileTab === tab ? "border-[#5FB8E0] text-[#5FB8E0]" : "border-transparent text-muted-foreground")}
           >{tab}</button>
         ))}
       </div>
@@ -1962,19 +1958,19 @@ export default function DispatchPage() {
 
       {/* Optimize Results Panel */}
       {optimizeResults !== null && (
-        <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1e2a3a] rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-emerald-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Route size={14} className="text-emerald-600" />
-              <h2 className="text-sm font-semibold text-slate-800">Route Optimization Suggestions</h2>
-              <span className="text-[10px] text-slate-400">{optimizeResults.length} suggestion{optimizeResults.length !== 1 ? "s" : ""}</span>
+              <Route size={14} className="text-emerald-300" />
+              <h2 className="text-sm font-semibold text-[#dbe6f0]">Route Optimization Suggestions</h2>
+              <span className="text-[10px] text-[#8598aa]">{optimizeResults.length} suggestion{optimizeResults.length !== 1 ? "s" : ""}</span>
             </div>
-            <button onClick={() => setOptimizeResults(null)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+            <button onClick={() => setOptimizeResults(null)} className="p-1 rounded hover:bg-[#2a3a4d] text-[#8598aa] hover:text-[#c3d3e2]">
               <X size={14} />
             </button>
           </div>
           {optimizeResults.length === 0 ? (
-            <div className="px-5 py-6 text-center text-sm text-slate-400">
+            <div className="px-5 py-6 text-center text-sm text-[#8598aa]">
               All jobs are already optimally assigned. No changes suggested.
             </div>
           ) : (
@@ -1982,20 +1978,20 @@ export default function DispatchPage() {
               {optimizeResults.map((s, i) => (
                 <div key={i} className="px-5 py-3 flex items-start gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{s.wo_title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{s.reason}</p>
+                    <p className="text-sm font-medium text-[#dbe6f0] truncate">{s.wo_title}</p>
+                    <p className="text-xs text-[#98abbd] mt-0.5">{s.reason}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-xs font-semibold text-emerald-600">{s.assigned_tech_name}</p>
+                    <p className="text-xs font-semibold text-emerald-300">{s.assigned_tech_name}</p>
                     {s.estimated_drive_mins > 0 && (
-                      <p className="text-[10px] text-slate-400">~{s.estimated_drive_mins} min drive</p>
+                      <p className="text-[10px] text-[#8598aa]">~{s.estimated_drive_mins} min drive</p>
                     )}
                   </div>
                   <button
                     onClick={() => {
                       void handleAssignTech(s.wo_id, s.assigned_tech_id, s.assigned_tech_name);
                     }}
-                    className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors"
+                    className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-[#2f7fb8] rounded-lg hover:bg-[#2f7fb8] transition-colors"
                   >
                     Apply
                   </button>
@@ -2009,7 +2005,7 @@ export default function DispatchPage() {
       {/* Main Content — Board or Calendar */}
       {viewMode === "calendar" ? (
         loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+          <div className="flex items-center justify-center py-20 text-[#8598aa] text-sm">
             <RefreshCw size={16} className="animate-spin mr-2" /> Loading…
           </div>
         ) : (
@@ -2059,7 +2055,7 @@ export default function DispatchPage() {
                 return (
                   <button key={f} className={cn(
                     "flex-shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap",
-                    f === 'All' ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-card text-muted-foreground border-border hover:border-[#6B7EFF]/40"
+                    f === 'All' ? "bg-[#5FB8E0] text-white border-[#5FB8E0]" : "bg-card text-muted-foreground border-border hover:border-[#5FB8E0]/40"
                   )}>
                     {f} <span className="opacity-70">({count})</span>
                   </button>
@@ -2075,12 +2071,12 @@ export default function DispatchPage() {
                 {jobs.map(job => {
                   const priorityStripe = job.priority === 'urgent' ? 'border-l-red-500' : job.priority === 'normal' ? 'border-l-amber-400' : 'border-l-emerald-400';
                   const statusColors: Record<string,string> = {
-                    Pending:      'bg-slate-100 text-slate-600',
-                    Assigned:     'bg-blue-50 text-blue-700',
-                    'En Route':   'bg-violet-50 text-violet-700',
-                    'On Site':    'bg-amber-50 text-amber-700',
-                    'In Progress':'bg-orange-50 text-orange-700',
-                    Done:         'bg-emerald-50 text-emerald-700',
+                    Pending:      'bg-[#22303f] text-[#aebfce]',
+                    Assigned:     'bg-[#22303f] text-[#9FD8EC]',
+                    'En Route':   'bg-[rgba(167,139,250,0.15)] text-violet-300',
+                    'On Site':    'bg-[rgba(251,191,36,0.15)] text-amber-300',
+                    'In Progress':'bg-orange-50 text-orange-300',
+                    Done:         'bg-[rgba(126,224,168,0.15)] text-emerald-300',
                   };
                   const assignedTech = techs.find(t => t.id === job.assignedTechId);
                   const isDone = job.status === 'Done';
@@ -2092,27 +2088,27 @@ export default function DispatchPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-mono text-[10px] text-muted-foreground">{job.woNumber}</span>
-                          {job.priority === 'urgent' && <span className="text-[9px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Urgent</span>}
+                          {job.priority === 'urgent' && <span className="text-[9px] font-semibold text-[#fca5a5] bg-[rgba(239,68,68,0.13)] px-1.5 py-0.5 rounded">Urgent</span>}
                         </div>
                         <p className="text-sm font-medium text-foreground truncate">{job.property}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium",jobTypeConfig[job.jobType]?.color ?? 'bg-slate-100 text-slate-600')}>{job.jobType}</span>
+                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium",jobTypeConfig[job.jobType]?.color ?? 'bg-[#22303f] text-[#aebfce]')}>{job.jobType}</span>
                           {job.eta && job.eta !== 'TBD' && <span className="text-[10px] text-muted-foreground">{job.eta}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         {assignedTech ? (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] text-[9px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
+                            <div className="w-6 h-6 rounded-full bg-[#5FB8E0]/10 text-[#5FB8E0] text-[9px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
                             <span className="hidden lg:block text-xs text-muted-foreground">{assignedTech.name.split(' ')[0]}</span>
                           </div>
                         ) : (
                           <button
-                            className="text-[10px] text-[#6B7EFF] font-medium hover:underline"
+                            className="text-[10px] text-[#5FB8E0] font-medium hover:underline"
                             onClick={e => { e.stopPropagation(); }}
                           >Assign</button>
                         )}
-                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", statusColors[job.status] ?? 'bg-slate-100 text-slate-600')}>{job.status}</span>
+                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", statusColors[job.status] ?? 'bg-[#22303f] text-[#aebfce]')}>{job.status}</span>
                       </div>
                     </div>
                   );
@@ -2126,7 +2122,7 @@ export default function DispatchPage() {
               <div className="p-3 grid grid-cols-3 gap-3">
                 {[
                   { label: 'Open',   statuses: ['Pending','Assigned'] as JobStatus[],                    accentColor: '#f59e0b' },
-                  { label: 'Active', statuses: ['En Route','On Site','In Progress'] as JobStatus[],       accentColor: '#6B7EFF' },
+                  { label: 'Active', statuses: ['En Route','On Site','In Progress'] as JobStatus[],       accentColor: '#5FB8E0' },
                   { label: 'Done',   statuses: ['Done'] as JobStatus[],                                   accentColor: '#10b981' },
                 ].map(group => {
                   const groupJobs = jobs.filter(j => group.statuses.includes(j.status));
@@ -2142,7 +2138,7 @@ export default function DispatchPage() {
                         const assignedTech = techs.find(t => t.id === job.assignedTechId);
                         return (
                           <div key={job.id}
-                            className={cn("bg-card border border-border rounded-lg p-2.5 mb-2 border-l-[3px] cursor-pointer hover:border-[#6B7EFF]/30 transition-colors", priorityBorder)}
+                            className={cn("bg-card border border-border rounded-lg p-2.5 mb-2 border-l-[3px] cursor-pointer hover:border-[#5FB8E0]/30 transition-colors", priorityBorder)}
                             onClick={() => setSelectedJob(job)}
                           >
                             <p className="font-mono text-[9px] text-muted-foreground mb-1">{job.woNumber}</p>
@@ -2150,7 +2146,7 @@ export default function DispatchPage() {
                             <div className="flex items-center justify-between">
                               {assignedTech ? (
                                 <div className="flex items-center gap-1">
-                                  <div className="w-4 h-4 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] text-[8px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
+                                  <div className="w-4 h-4 rounded-full bg-[#5FB8E0]/10 text-[#5FB8E0] text-[8px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
                                   <span className="text-[9px] text-muted-foreground">{assignedTech.name.split(' ')[0]}</span>
                                 </div>
                               ) : <span className="text-[9px] text-muted-foreground">Unassigned</span>}
@@ -2172,32 +2168,32 @@ export default function DispatchPage() {
 
           {/* Mapbox Map Panel */}
           {showMap && (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#2a3a4d] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-[#6B7EFF]" />
-                  <h2 className="text-sm font-semibold text-slate-800">Tech Locations</h2>
+                  <MapPin size={14} className="text-[#5FB8E0]" />
+                  <h2 className="text-sm font-semibold text-[#dbe6f0]">Tech Locations</h2>
                 </div>
                 {!process.env.NEXT_PUBLIC_MAPBOX_TOKEN && (
-                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                  <span className="text-[10px] text-amber-300 bg-[rgba(251,191,36,0.15)] px-2 py-0.5 rounded-full border border-[rgba(251,191,36,0.4)] font-medium">
                     Add NEXT_PUBLIC_MAPBOX_TOKEN to enable
                   </span>
                 )}
               </div>
               <div ref={mapContainerRef} className="h-72 bg-slate-900" />
-              <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-3">
+              <div className="px-4 py-2 border-t border-[#2a3a4d] flex items-center gap-3">
                 {(["Available", "On Site", "Driving", "Offline"] as const).map(s => (
                   <div key={s} className="flex items-center gap-1.5">
                     <span className={cn("w-2.5 h-2.5 rounded-full", {
                       "bg-emerald-500": s === "Available",
-                      "bg-blue-500":    s === "On Site",
+                      "bg-[#2f7fb8]":    s === "On Site",
                       "bg-amber-400":   s === "Driving",
                       "bg-slate-400":   s === "Offline",
                     })} />
-                    <span className="text-[10px] text-slate-500">{s}</span>
+                    <span className="text-[10px] text-[#98abbd]">{s}</span>
                   </div>
                 ))}
-                <span className="ml-auto text-[10px] text-slate-400 italic">
+                <span className="ml-auto text-[10px] text-[#8598aa] italic">
                   {fleetLocations.length > 0 ? "Live GPS — techs check in via the field tool" : "Demo coords — techs check in via the field tool"}
                 </span>
               </div>
@@ -2216,7 +2212,7 @@ export default function DispatchPage() {
               </div>
               <button
                 onClick={() => { setShowAddTech(true); setAddTechError(null); }}
-                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#6B7EFF] text-white hover:bg-[#5a6df0] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#5FB8E0] text-white hover:bg-[#5a6df0] transition-colors"
                 title="Add technician"
               >
                 <Plus size={14} />
@@ -2233,12 +2229,12 @@ export default function DispatchPage() {
                   .sort((a, b) => techStreak(b.id) - techStreak(a.id))
                   .slice(0, 3)
                   .map((tech, i) => {
-                    const rankColors = ['text-amber-500', 'text-slate-400', 'text-amber-700'];
+                    const rankColors = ['text-amber-300', 'text-[#8598aa]', 'text-amber-300'];
                     const jobCount   = (techStreak(tech.id) * 1.4 + 3) | 0;
                     return (
-                      <div key={tech.id} className={cn("flex items-center gap-2.5 px-4 py-2.5 border-b border-border/50", i === 0 && "bg-amber-50/40 dark:bg-amber-950/10")}>
+                      <div key={tech.id} className={cn("flex items-center gap-2.5 px-4 py-2.5 border-b border-border/50", i === 0 && "bg-[rgba(251,191,36,0.15)]/40 dark:bg-amber-950/10")}>
                         <span className={cn("text-sm font-bold w-4 text-center", rankColors[i])}>{i + 1}</span>
-                        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", tech.status === 'Offline' ? 'bg-slate-400' : 'bg-[#6B7EFF]')}>
+                        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", tech.status === 'Offline' ? 'bg-slate-400' : 'bg-[#5FB8E0]')}>
                           {tech.initials}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -2246,7 +2242,7 @@ export default function DispatchPage() {
                           <p className="text-[10px] text-muted-foreground">{tech.role}</p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-sm font-bold text-[#6B7EFF]">{jobCount}</p>
+                          <p className="text-sm font-bold text-[#5FB8E0]">{jobCount}</p>
                           <p className="text-[9px] text-muted-foreground">jobs</p>
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
@@ -2265,13 +2261,13 @@ export default function DispatchPage() {
                 <p className="text-xs font-semibold text-foreground mb-2">Add to roster</p>
                 <div className="space-y-2">
                   <input
-                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-card"
                     placeholder="Full name *"
                     value={newTechForm.name}
                     onChange={e => setNewTechForm(f => ({ ...f, name: e.target.value }))}
                   />
                   <select
-                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-card"
                     value={newTechForm.role}
                     onChange={e => setNewTechForm(f => ({ ...f, role: e.target.value }))}
                   >
@@ -2282,29 +2278,29 @@ export default function DispatchPage() {
                     <option value="Apprentice">Apprentice</option>
                   </select>
                   <input
-                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-card"
                     placeholder="Phone"
                     value={newTechForm.phone}
                     onChange={e => setNewTechForm(f => ({ ...f, phone: e.target.value }))}
                   />
                   <input
-                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-card"
                     placeholder="Email (for portal invite)"
                     value={newTechForm.email}
                     onChange={e => setNewTechForm(f => ({ ...f, email: e.target.value }))}
                   />
                   <select
-                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-card"
                     value={newTechForm.employment_type}
                     onChange={e => setNewTechForm(f => ({ ...f, employment_type: e.target.value }))}
                   >
                     <option value="employee">Employee</option>
                     <option value="contractor">Contractor</option>
                   </select>
-                  {addTechError && <p className="text-xs text-red-500">{addTechError}</p>}
+                  {addTechError && <p className="text-xs text-[#fb7185]">{addTechError}</p>}
                   <div className="flex gap-2">
                     <button onClick={handleAddTech} disabled={addTechSaving}
-                      className="flex-1 text-xs bg-[#6B7EFF] text-white py-1.5 rounded-lg font-medium hover:bg-[#5a6df0] disabled:opacity-50">
+                      className="flex-1 text-xs bg-[#5FB8E0] text-white py-1.5 rounded-lg font-medium hover:bg-[#5a6df0] disabled:opacity-50">
                       {addTechSaving ? 'Adding…' : 'Add to Roster'}
                     </button>
                     <button onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' }); }}
@@ -2328,7 +2324,7 @@ export default function DispatchPage() {
               ) : techs.length === 0 ? (
                 <div className="text-center text-sm text-muted-foreground py-8">
                   <p>No technicians yet</p>
-                  <button onClick={() => setShowAddTech(true)} className="text-xs text-[#6B7EFF] hover:underline mt-1">Add your first tech →</button>
+                  <button onClick={() => setShowAddTech(true)} className="text-xs text-[#5FB8E0] hover:underline mt-1">Add your first tech →</button>
                 </div>
               ) : (
                 techs.map(tech => (

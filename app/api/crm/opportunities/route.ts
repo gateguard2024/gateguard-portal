@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
 import { STAGE_ORDER, STAGE_LABELS, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
 // Columns the drift-resilient insert retry must NEVER drop. Stripping a scoping
@@ -32,8 +32,19 @@ export async function GET(req: NextRequest) {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
-    // ── Org isolation ──────────────────────────────────────────────
-    query = applyOrgScope(query, scope, 'dealer_org_id')
+    // ── Org isolation + cross-org assignment ───────────────────────
+    // Normal: opps in your org subtree. PLUS any opp where you are the rep,
+    // even if it belongs to another org (e.g. a Channel Sales Partner selling
+    // a corporate or dealer deal assigned to them).
+    if (!scope.all) {
+      const profileId = await getProfileId(user.id)
+      const parts: string[] = []
+      if (scope.ids.length > 0) parts.push(`dealer_org_id.in.(${scope.ids.join(',')})`)
+      if (profileId) parts.push(`rep_id.eq.${profileId}`)
+      query = parts.length
+        ? query.or(parts.join(','))
+        : query.eq('id', '00000000-0000-0000-0000-000000000000') // fail closed
+    }
 
     if (stage)   query = query.eq('stage', stage)
     if (type)    query = query.eq('opp_type', type)

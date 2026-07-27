@@ -62,16 +62,18 @@ export async function POST(
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-  // Move related commission payouts to 'pending' (ready for admin approval)
-  void (async () => {
-    try {
-      await supabase
-        .from('commission_payouts')
-        .update({ status: 'pending', updated_at: new Date().toISOString() })
-        .eq('invoice_id', params.id)
-        .eq('status', 'pending') // only touch pending, not already approved/paid
-    } catch (_) { /* non-blocking */ }
-  })()
+  // When the invoice clears, RELEASE any HELD commission payouts to 'pending'
+  // (ready for admin approval). Must be awaited — a detached write silently never
+  // lands in serverless (CLAUDE.md). Only touches 'held'; never re-opens
+  // approved/paid. Was previously a no-op (pending→pending) AND detached.
+  {
+    const { error: payoutErr } = await supabase
+      .from('commission_payouts')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('invoice_id', params.id)
+      .eq('status', 'held')
+    if (payoutErr) console.warn('[mark-paid] commission payout release failed:', payoutErr.message)
+  }
 
   // Fire QB sync in background (non-blocking — failure must not block the paid flow)
   void (async () => {

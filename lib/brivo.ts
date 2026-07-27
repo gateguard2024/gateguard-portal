@@ -245,6 +245,23 @@ export interface BrivoUser {
   unitNumber:  string | null
   active:      boolean
   groupIds:    string[]
+  groupNames:  string[]
+}
+
+// Brivo returns contact info as arrays in varied shapes — pull the primary value.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function brivoEmail(u: any): string | null {
+  if (u.email) return String(u.email)
+  const arr = u.emails ?? u.emailAddresses ?? []
+  for (const e of arr) { const v = typeof e === 'string' ? e : (e?.address ?? e?.email ?? e?.value); if (v) return String(v) }
+  return null
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function brivoPhone(u: any): string | null {
+  const arr = u.phoneNumbers ?? u.phones ?? []
+  for (const p of arr) { const v = typeof p === 'string' ? p : (p?.number ?? p?.phoneNumber ?? p?.value); if (v) return String(v) }
+  const cf = u.customFields?.find((f: any) => /phone|mobile|cell/i.test(f.fieldName ?? ''))?.value
+  return cf ? String(cf) : null
 }
 
 /**
@@ -260,9 +277,16 @@ export async function listBrivoUsers(
   let offset = 0
   const pageSize = 100
 
+  // NOTE: Brivo's `/users` endpoint rejects the `site eq "X"` filter with a
+  // 400 "Invalid filter format" (users belong to a site via GROUPS, not a
+  // direct site field). So we page ALL account users, then narrow client-side
+  // to the site's groups when we can determine them (mirrors the doors pattern).
+  const siteGroups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId).catch(() => [] as any[])
+  const siteGroupSet = new Set(siteGroups.map((g: any) => String(g.id)))
+  const groupNameById = new Map<string, string>(siteGroups.map((g: any) => [String(g.id), String(g.name ?? 'Group')]))
+
   while (true) {
     const data = await brivoGet(token, apiKey, '/users', {
-      filter:   `site eq "${brivoSiteId}"`,
       pageSize: String(pageSize),
       offset:   String(offset),
     })
@@ -284,15 +308,17 @@ export async function listBrivoUsers(
       const unitMatch  = unitGroup?.match(/(\d+[A-Za-z]*)/)
       const unitNumber = unitMatch ? unitMatch[1] : null
 
+      const gids = (u.groupIds ?? []).map((g: any) => String(g))
       users.push({
         id:         String(u.id),
         firstName:  u.firstName?.trim() ?? '',
         lastName:   u.lastName?.trim()  ?? '',
-        email:      u.email || null,
-        phone:      phone   || null,
+        email:      brivoEmail(u),
+        phone:      brivoPhone(u) || phone || null,
         unitNumber: unitNumber || u.externalId || null,
         active:     u.suspended !== true,
-        groupIds:   u.groupIds ?? [],
+        groupIds:   gids,
+        groupNames: gids.map((id: string) => groupNameById.get(id)).filter(Boolean) as string[],
       })
     }
 
@@ -300,6 +326,13 @@ export async function listBrivoUsers(
     offset += pageSize
   }
 
+  // Narrow to this site's groups — but ONLY if that leaves results. If the /users
+  // payload carries no matching groupIds (Brivo doesn't always expand them), fall
+  // back to the full account list rather than showing nothing. (Doors do the same.)
+  if (siteGroupSet.size > 0) {
+    const scoped = users.filter(u => (u.groupIds ?? []).some(g => siteGroupSet.has(String(g))))
+    if (scoped.length > 0) return scoped
+  }
   return users
 }
 
@@ -401,6 +434,9 @@ export async function listSiteBrivoEvents(siteId: string, pageSize = 40): Promis
 // BRIVO_BMP_FORMAT_ID, or confirm the call against the GGSOC implementation.
 // These functions are the single spot to adjust.
 const BMP_FORMAT_ID = process.env.BRIVO_BMP_FORMAT_ID ? Number(process.env.BRIVO_BMP_FORMAT_ID) : 110
+// Physical card/fob credential format id — account-specific (e.g. a 26-bit Wiegand
+// format). Set BRIVO_CARD_FORMAT_ID; confirm the value in your Brivo account.
+const CARD_FORMAT_ID = process.env.BRIVO_CARD_FORMAT_ID ? Number(process.env.BRIVO_CARD_FORMAT_ID) : 100
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function listBrivoUserCredentials(token: string, apiKey: string, userId: string): Promise<any[]> {
@@ -415,7 +451,7 @@ export async function deleteBrivoCredential(token: string, apiKey: string, crede
 
 /** Resend a Brivo Mobile Pass: revoke existing mobile-pass credentials for the
  * user, then issue + assign a fresh one (Brivo emails the new invite). */
-export async function resendBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null): Promise<{ revoked: number }> {
+export async function resendBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null, dates?: { from?: string | null; to?: string | null }): Promise<{ revoked: number }> {
   const creds = await listBrivoUserCredentials(token, apiKey, userId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const passes = creds.filter((c: any) => /mobile|bmp|pass/i.test(`${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`))
@@ -428,8 +464,145 @@ export async function resendBrivoMobilePass(token: string, apiKey: string, userI
     referenceId: email ?? `user-${userId}`,
   })
   const credId = String(created.id ?? created.referenceId ?? '')
-  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  if (credId) {
+    // Assign to the user, optionally time-boxed (effective from/to — used for guests).
+    const assign: Record<string, unknown> = {}
+    if (dates?.from) assign.effectiveFrom = dates.from
+    if (dates?.to) assign.effectiveTo = dates.to
+    try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, assign) } catch { /* assignment best-effort */ }
+  }
   return { revoked: passes.length }
+}
+
+/** Issue a NEW Brivo Mobile Pass and assign it to the user WITHOUT touching any
+ * existing credentials (so a user can hold a pass + a fob at once). Brivo emails
+ * the invite. Use resendBrivoMobilePass() instead for the "didn't get it" case. */
+export async function issueBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null): Promise<{ credentialId: string }> {
+  const created = await brivoPost(token, apiKey, '/credentials', {
+    credentialFormat: { id: BMP_FORMAT_ID },
+    referenceId: email ?? `user-${userId}`,
+  })
+  const credId = String(created.id ?? created.referenceId ?? '')
+  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  return { credentialId: credId }
+}
+
+/** Create a physical card/fob credential and assign it to the user. cardNumber is
+ * the number stamped on the fob; facilityCode is optional (site-code cards). */
+export async function assignBrivoFob(token: string, apiKey: string, userId: string, cardNumber: string, facilityCode?: string | null): Promise<{ credentialId: string }> {
+  const body: Record<string, unknown> = { credentialFormat: { id: CARD_FORMAT_ID }, cardNumber: String(cardNumber).trim() }
+  if (facilityCode) body.facilityCode = String(facilityCode).trim()
+  const created = await brivoPost(token, apiKey, '/credentials', body)
+  const credId = String(created.id ?? '')
+  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  return { credentialId: credId }
+}
+
+/** Reversibly turn a single credential off (revoke) or back on (reinstate) —
+ * keeps the credential on the user so it stays visible and can be reinstated,
+ * unlike deleteBrivoCredential which is permanent. Brivo suspend support is
+ * account-dependent; confirm the field name against your account if it 400s. */
+export async function setBrivoCredentialSuspended(token: string, apiKey: string, credentialId: string, suspended: boolean): Promise<{ success: true }> {
+  await brivoPut(token, apiKey, `/credentials/${credentialId}`, { suspended })
+  return { success: true }
+}
+
+/** Assign a Brivo user to a group (how Brivo grants site access). */
+export async function assignBrivoUserToGroup(token: string, apiKey: string, groupId: string, userId: string): Promise<{ success: true }> {
+  await brivoPut(token, apiKey, `/groups/${groupId}/users/${userId}`, {})
+  return { success: true }
+}
+
+/** Remove a Brivo user from a group (revokes that group's access). */
+export async function removeBrivoUserFromGroup(token: string, apiKey: string, groupId: string, userId: string): Promise<{ success: true }> {
+  await brivoDelete(token, apiKey, `/groups/${groupId}/users/${userId}`)
+  return { success: true }
+}
+
+/** The groups a user actually belongs to right now (access assignments). Brivo
+ * doesn't reliably expand groupIds on /users, so we ask per-user directly. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getBrivoUserGroups(token: string, apiKey: string, userId: string): Promise<{ id: string; name: string }[]> {
+  const data = await brivoGet(token, apiKey, `/users/${userId}/groups`, { pageSize: '100' }).catch(() => ({ data: [] as any[] }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data.data ?? []) as any[]).map(g => ({ id: String(g.id), name: g.name ?? 'Group' }))
+}
+
+/** Fetch a single Brivo user's raw object. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getBrivoUser(token: string, apiKey: string, userId: string): Promise<any> {
+  return brivoGet(token, apiKey, `/users/${userId}`)
+}
+
+/** Update a Brivo user's name / email / phone. Fetch-merge-PUT so other fields
+ * are preserved. Email/phone are stored as arrays — we set the primary entry. */
+export async function updateBrivoUser(token: string, apiKey: string, userId: string, changes: { firstName?: string; lastName?: string; email?: string | null; phone?: string | null }): Promise<{ success: true }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cur: any = await getBrivoUser(token, apiKey, userId).catch(() => ({}))
+  const body: Record<string, unknown> = {
+    firstName: changes.firstName ?? cur.firstName,
+    lastName:  changes.lastName ?? cur.lastName,
+  }
+  if (changes.email !== undefined) body.emails = changes.email ? [{ address: changes.email, email: true }] : []
+  if (changes.phone !== undefined) body.phoneNumbers = changes.phone ? [{ number: changes.phone }] : []
+  await brivoPut(token, apiKey, `/users/${userId}`, body)
+  return { success: true }
+}
+
+/** Map a user's credentials to a compact, UI-friendly shape. */
+export async function getBrivoUserCredentialSummary(token: string, apiKey: string, userId: string): Promise<Array<{ id: string; label: string; type: string; isPass: boolean; active: boolean; effectiveFrom: string | null; effectiveTo: string | null }>> {
+  const creds = await listBrivoUserCredentials(token, apiKey, userId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (creds as any[]).map(c => {
+    const fmt = `${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`
+    return {
+      id: String(c.id),
+      label: c.credentialFormat?.name ?? c.type ?? c.referenceId ?? 'Credential',
+      type: String(c.type ?? c.credentialFormat?.name ?? 'credential'),
+      isPass: /mobile|bmp|pass/i.test(fmt),
+      active: c.suspended !== true && c.disabled !== true,
+      effectiveFrom: c.effectiveFrom ?? c.effective ?? null,
+      effectiveTo: c.expiration ?? c.effectiveTo ?? null,
+    }
+  })
+}
+
+/** Revoke ALL mobile-pass credentials for a user (turns off their pass) without
+ * issuing a new one. Returns how many were revoked. */
+export async function revokeBrivoMobilePass(token: string, apiKey: string, userId: string): Promise<{ revoked: number }> {
+  const creds = await listBrivoUserCredentials(token, apiKey, userId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const passes = creds.filter((c: any) => /mobile|bmp|pass/i.test(`${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`))
+  for (const p of passes) { try { await deleteBrivoCredential(token, apiKey, String(p.id)) } catch { /* continue */ } }
+  return { revoked: passes.length }
+}
+
+/** Raw group rows for a site — pages ALL groups then narrows client-side by any
+ * site field present (Brivo's `/groups` endpoint rejects the `site eq "X"` filter
+ * with a 400 "Invalid filter format", same as /users). */
+async function listBrivoSiteGroupsRaw(token: string, apiKey: string, brivoSiteId: string): Promise<any[]> {
+  const out: any[] = []
+  let offset = 0
+  const pageSize = 100
+  while (true) {
+    const data = await brivoGet(token, apiKey, '/groups', { pageSize: String(pageSize), offset: String(offset) })
+    const page: any[] = data.data ?? []
+    out.push(...page)
+    if (page.length < pageSize) break
+    offset += pageSize
+    if (offset > 5000) break
+  }
+  if (brivoSiteId) {
+    const narrowed = out.filter(g => String(g.siteId ?? g.site?.id ?? g.site ?? '') === String(brivoSiteId))
+    if (narrowed.length > 0) return narrowed  // only narrow if the field actually matched
+  }
+  return out
+}
+
+/** Group ids for a site — used to narrow the (unfilterable) user list. */
+export async function listBrivoSiteGroupIds(token: string, apiKey: string, brivoSiteId: string): Promise<string[]> {
+  const groups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId)
+  return groups.map(g => String(g.id))
 }
 
 /** List the Brivo groups for a site (used for the Add-User access picker). */
@@ -438,6 +611,6 @@ export async function listBrivoGroups(
   apiKey: string,
   brivoSiteId: string,
 ): Promise<{ id: string; name: string }[]> {
-  const data = await brivoGet(token, apiKey, '/groups', { filter: `site eq "${brivoSiteId}"`, pageSize: '100' })
-  return (data.data ?? []).map((g: any) => ({ id: String(g.id), name: g.name ?? 'Group' }))
+  const groups = await listBrivoSiteGroupsRaw(token, apiKey, brivoSiteId)
+  return groups.map((g: any) => ({ id: String(g.id), name: g.name ?? 'Group' }))
 }

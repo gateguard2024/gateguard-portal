@@ -197,7 +197,7 @@ const PRIORITY_CFG: Record<WOPriority, { bg: string; text: string; label: string
 }
 
 const STATUS_CFG: Record<WOStatus, { label: string; bg: string; text: string; dot: string }> = {
-  open:        { label: 'Open',        bg: 'bg-blue-500/10',    text: 'text-blue-400',    dot: 'bg-blue-400'    },
+  open:        { label: 'Open',        bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]',    dot: 'bg-[#3f7fb8]'    },
   scheduled:   { label: 'Scheduled',   bg: 'bg-violet-500/10',  text: 'text-violet-400',  dot: 'bg-violet-400'  },
   in_route:    { label: 'En Route',    bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
   on_site:     { label: 'On Site',     bg: 'bg-orange-500/10',  text: 'text-orange-400',  dot: 'bg-orange-400'  },
@@ -225,7 +225,7 @@ const PRIORITIES: { value: WOPriority; label: string }[] = [
 
 // Compact category colors used in Details tab checklist overview
 const CATEGORY_COLORS: Record<string, string> = {
-  task:         'bg-blue-500/10 text-blue-400',
+  task:         'bg-[#2f7fb8]/10 text-[#5FB8E0]',
   safety:       'bg-red-500/10 text-red-400',
   inspection:   'bg-violet-500/10 text-violet-400',
   verification: 'bg-emerald-500/10 text-emerald-400',
@@ -296,8 +296,8 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <div className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all',
                   isPast   && 'bg-emerald-500 border-emerald-500 text-white',
-                  isActive && !isPast && 'bg-[#6B7EFF] border-[#6B7EFF] text-white shadow-md shadow-[#6B7EFF]/30',
-                  isFuture && !isActive && 'bg-white border-slate-200 text-slate-300',
+                  isActive && !isPast && 'bg-[#5FB8E0] border-[#5FB8E0] text-white shadow-md shadow-[#5FB8E0]/30',
+                  isFuture && !isActive && 'bg-card border-border text-foreground',
                 )}>
                   {isPast ? (
                     <Check size={14} strokeWidth={2.5} />
@@ -308,7 +308,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <span className={cn(
                   'text-[10px] font-medium whitespace-nowrap',
                   isPast   && 'text-emerald-600',
-                  isActive && !isPast && 'text-[#6B7EFF]',
+                  isActive && !isPast && 'text-[#5FB8E0]',
                   isFuture && !isActive && 'text-slate-400',
                 )}>
                   {step.label}
@@ -319,7 +319,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
               {i < TIMELINE_STEPS.length - 1 && (
                 <div className={cn(
                   'flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all',
-                  stepIndex > i ? 'bg-emerald-400' : 'bg-slate-100',
+                  stepIndex > i ? 'bg-emerald-400' : 'bg-muted',
                 )} />
               )}
             </div>
@@ -386,8 +386,8 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 
   if (!open) return null
 
-  const sel = 'w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8'
-  const inp = 'w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background'
+  const sel = 'w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8'
+  const inp = 'w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background'
   const lbl = 'block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5'
 
   return (
@@ -465,7 +465,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 
           <div><label className={lbl}>Notes</label>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={4}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background resize-none" /></div>
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background resize-none" /></div>
 
           {error && (
             <div className="flex items-center gap-2 text-red-500 text-xs bg-red-500/10 rounded-xl px-3 py-2">
@@ -481,7 +481,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
               type="checkbox"
               checked={sendNotifications}
               onChange={e => setSendNotifications(e.target.checked)}
-              className="w-4 h-4 rounded border-border accent-brand-500 cursor-pointer"
+              className="w-4 h-4 rounded border-border accent-[#2f7fb8] cursor-pointer"
             />
             <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
               Send email notification to property manager on status change
@@ -492,7 +492,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
         <div className="border-t border-border p-4 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-500/20">
+            className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-[#5FB8E0]/20">
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
@@ -502,6 +502,30 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
+
+// Steel palette scoped to this page: overrides the shadcn CSS-variable tokens
+// (background / card / muted / accent / border / foreground) with dark steel
+// values, so every `bg-card` / `border-border` / `text-foreground` etc. on the
+// page flips to the tactical-steel theme with correct contrast — no per-class edits.
+const STEEL_SCOPE = {
+  '--background': '212 33% 13%',
+  '--foreground': '210 30% 92%',
+  '--card': '213 31% 17%',
+  '--card-foreground': '210 30% 92%',
+  '--popover': '213 31% 15%',
+  '--popover-foreground': '210 30% 92%',
+  '--muted': '211 26% 24%',
+  '--muted-foreground': '208 16% 66%',
+  '--accent': '212 28% 27%',
+  '--accent-foreground': '210 30% 92%',
+  '--secondary': '212 26% 24%',
+  '--secondary-foreground': '210 30% 92%',
+  '--border': '210 19% 31%',
+  '--input': '210 19% 29%',
+  '--ring': '199 58% 62%',
+  background: 'linear-gradient(180deg,#16202c,#111a24)',
+  minHeight: '100%',
+} as unknown as React.CSSProperties
 
 export default function WorkOrderDetailPage() {
   const params = useParams()
@@ -1068,7 +1092,7 @@ export default function WorkOrderDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col min-h-full">
+      <div className="flex flex-col min-h-full" style={STEEL_SCOPE}>
         <TopBar title="Work Order" subtitle="Loading…" />
         <div className="flex items-center justify-center flex-1 text-muted-foreground text-sm">
           <RefreshCw size={16} className="animate-spin mr-2" /> Loading work order…
@@ -1103,7 +1127,7 @@ export default function WorkOrderDetailPage() {
   }, 0)
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-full" style={STEEL_SCOPE}>
       <TopBar
         title={wo.wo_number}
         subtitle={wo.title}
@@ -1114,7 +1138,7 @@ export default function WorkOrderDetailPage() {
             </Link>
             <button
               onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#2f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] transition-colors"
             >
               <Edit2 size={12} /> Edit
             </button>
@@ -1148,7 +1172,7 @@ export default function WorkOrderDetailPage() {
                     <button
                       key={t.id}
                       onClick={() => handleSelectTemplate(t.id)}
-                      className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-brand-500/50 hover:bg-accent/30 transition-all text-sm font-medium text-foreground"
+                      className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all text-sm font-medium text-foreground"
                     >
                       {t.label}
                     </button>
@@ -1156,7 +1180,7 @@ export default function WorkOrderDetailPage() {
                 </div>
               ) : (
                 <>
-                  <button onClick={() => setEmailTemplate(null)} className="text-xs text-brand-400 hover:text-brand-500 flex items-center gap-1">
+                  <button onClick={() => setEmailTemplate(null)} className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] flex items-center gap-1">
                     <ArrowLeft size={11} /> Back to templates
                   </button>
 
@@ -1166,17 +1190,17 @@ export default function WorkOrderDetailPage() {
                       value={emailTo}
                       onChange={e => setEmailTo(e.target.value)}
                       placeholder="recipient@example.com"
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                     />
                     {(wo.site_pm_email || wo.site_contact_email) && (
                       <div className="flex gap-2 mt-1.5 flex-wrap">
                         {wo.site_pm_email && (
-                          <button onClick={() => setEmailTo(wo.site_pm_email!)} className="text-xs text-brand-400 hover:underline">
+                          <button onClick={() => setEmailTo(wo.site_pm_email!)} className="text-xs text-[#5FB8E0] hover:underline">
                             Use PM: {wo.site_pm_email}
                           </button>
                         )}
                         {wo.site_contact_email && wo.site_contact_email !== wo.site_pm_email && (
-                          <button onClick={() => setEmailTo(wo.site_contact_email!)} className="text-xs text-brand-400 hover:underline">
+                          <button onClick={() => setEmailTo(wo.site_contact_email!)} className="text-xs text-[#5FB8E0] hover:underline">
                             Use contact: {wo.site_contact_email}
                           </button>
                         )}
@@ -1189,7 +1213,7 @@ export default function WorkOrderDetailPage() {
                     <input
                       value={emailSubject}
                       onChange={e => setEmailSubject(e.target.value)}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                     />
                   </div>
 
@@ -1199,7 +1223,7 @@ export default function WorkOrderDetailPage() {
                       value={emailBody}
                       onChange={e => setEmailBody(e.target.value)}
                       rows={10}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none"
                     />
                   </div>
                 </>
@@ -1212,7 +1236,7 @@ export default function WorkOrderDetailPage() {
                 <button
                   onClick={handleSendEmail}
                   disabled={emailSending || !emailTo.trim() || !emailSubject.trim() || emailSent}
-                  className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold disabled:opacity-50 shadow-lg shadow-brand-500/20"
+                  className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold disabled:opacity-50 shadow-lg shadow-[#5FB8E0]/20"
                 >
                   {emailSent ? '✓ Sent!' : emailSending ? 'Sending…' : 'Send Email'}
                 </button>
@@ -1322,7 +1346,7 @@ export default function WorkOrderDetailPage() {
                       className={cn(
                         'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
                         tab === t.key
-                          ? 'border-brand-500 text-brand-400'
+                          ? 'border-[#5FB8E0] text-[#5FB8E0]'
                           : 'border-transparent text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -1350,11 +1374,11 @@ export default function WorkOrderDetailPage() {
                     {/* Tasks */}
                     <button
                       onClick={() => setTab('field_tickets')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <CheckCircle2 size={15} className="text-brand-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Tasks →</span>
+                        <CheckCircle2 size={15} className="text-[#5FB8E0]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Tasks →</span>
                       </div>
                       {totalCount > 0 ? (
                         <>
@@ -1371,11 +1395,11 @@ export default function WorkOrderDetailPage() {
                     {/* Crew */}
                     <button
                       onClick={() => setTab('crew')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Users size={15} className="text-violet-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Crew →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Crew →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {crewCount === null ? '—' : crewCount}
@@ -1387,11 +1411,11 @@ export default function WorkOrderDetailPage() {
                     {/* Schedule */}
                     <button
                       onClick={() => setTab('schedule')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <Calendar size={15} className="text-blue-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Schedule →</span>
+                        <Calendar size={15} className="text-[#5FB8E0]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Schedule →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {phaseCount === null ? '—' : phaseCount}
@@ -1403,11 +1427,11 @@ export default function WorkOrderDetailPage() {
                     {/* Time */}
                     <button
                       onClick={() => setTab('time')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Clock size={15} className="text-amber-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Time →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Time →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {totalMins > 0 ? `${Math.floor(totalMins / 60)}h ${totalMins % 60}m` : '0h'}
@@ -1420,11 +1444,11 @@ export default function WorkOrderDetailPage() {
                     {/* Comments */}
                     <button
                       onClick={() => setTab('comments')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <MessageSquare size={15} className="text-sky-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Comments →</span>
+                        <MessageSquare size={15} className="text-[#9FD8EC]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Comments →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">{comments.length}</p>
                       <p className="text-xs text-muted-foreground mt-1">{comments.length === 0 ? 'No comments yet' : `Last: ${timeAgo(comments[comments.length - 1].created_at)}`}</p>
@@ -1433,11 +1457,11 @@ export default function WorkOrderDetailPage() {
                     {/* Parts */}
                     <button
                       onClick={() => setTab('parts')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Package size={15} className="text-emerald-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Parts →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Parts →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">{partsUsed.length}</p>
                       <p className="text-xs text-muted-foreground mt-1">{partsTotal > 0 ? `$${partsTotal.toFixed(2)} total` : 'No parts logged'}</p>
@@ -1448,7 +1472,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-brand-400" />
+                        <CheckCircle2 size={14} className="text-[#5FB8E0]" />
                         Checklist
                         {totalCount > 0 && (
                           <span className="text-xs text-muted-foreground font-normal">({doneCount}/{totalCount})</span>
@@ -1456,7 +1480,7 @@ export default function WorkOrderDetailPage() {
                       </h3>
                       <button
                         onClick={() => setTab('field_tickets')}
-                        className="text-xs text-brand-400 hover:text-brand-500 font-medium transition-colors"
+                        className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] font-medium transition-colors"
                       >
                         Manage in Field Tickets →
                       </button>
@@ -1476,7 +1500,7 @@ export default function WorkOrderDetailPage() {
                                 'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
                                 item.completed
                                   ? 'bg-emerald-400 border-emerald-400'
-                                  : 'border-border hover:border-brand-400'
+                                  : 'border-border hover:border-[#5FB8E0]'
                               )}
                             >
                               {item.completed && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -1508,12 +1532,12 @@ export default function WorkOrderDetailPage() {
                         onChange={e => setNewItem(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAddItem()}
                         placeholder="Quick-add a task…"
-                        className="flex-1 text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        className="flex-1 text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                       />
                       <button
                         onClick={handleAddItem}
                         disabled={addingItem || !newItem.trim()}
-                        className="px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
+                        className="px-3 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
                       >
                         <Plus size={14} />
                       </button>
@@ -1524,7 +1548,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Camera size={14} className="text-brand-400" />
+                        <Camera size={14} className="text-[#5FB8E0]" />
                         Photos
                         {photos.length > 0 && (
                           <span className="text-xs text-muted-foreground font-normal">({photos.length})</span>
@@ -1533,7 +1557,7 @@ export default function WorkOrderDetailPage() {
                       <button
                         onClick={() => photoInputRef.current?.click()}
                         disabled={uploadingPhoto}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-brand-400 hover:text-brand-500 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 text-xs font-semibold text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors disabled:opacity-50"
                       >
                         <Plus size={13} />
                         {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
@@ -1566,7 +1590,7 @@ export default function WorkOrderDetailPage() {
                         <p className="text-sm text-muted-foreground">No photos yet</p>
                         <button
                           onClick={() => photoInputRef.current?.click()}
-                          className="text-xs font-semibold text-brand-400 hover:text-brand-500 transition-colors"
+                          className="text-xs font-semibold text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors"
                         >
                           Add the first photo
                         </button>
@@ -1632,7 +1656,7 @@ export default function WorkOrderDetailPage() {
                     <div className="bg-card border border-border rounded-xl overflow-hidden">
                       <div className="px-5 py-3.5 border-b border-border">
                         <h3 className="text-sm font-semibold flex items-center gap-2">
-                          <Wrench size={14} className="text-brand-400" />
+                          <Wrench size={14} className="text-[#5FB8E0]" />
                           Sub-Work Orders
                           <span className="text-xs text-muted-foreground font-normal">({subWOs.length})</span>
                         </h3>
@@ -1646,11 +1670,11 @@ export default function WorkOrderDetailPage() {
                               href={`/maintenance/${sub.id}`}
                               className="flex items-center gap-4 px-5 py-3 hover:bg-accent/30 transition-colors"
                             >
-                              <span className="font-mono text-xs text-brand-400">{sub.wo_number}</span>
+                              <span className="font-mono text-xs text-[#5FB8E0]">{sub.wo_number}</span>
                               <span className="flex-1 text-sm font-medium text-foreground">{sub.title}</span>
                               {sub.assignee_name && (
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <div className="w-5 h-5 rounded-full bg-brand-900 flex items-center justify-center text-[10px] text-brand-300 font-semibold">
+                                  <div className="w-5 h-5 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[10px] text-[#9FD8EC] font-semibold">
                                     {sub.assignee_name.split(' ').map(n => n[0]).join('')}
                                   </div>
                                   {sub.assignee_name}
@@ -1686,7 +1710,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="px-5 py-4 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Clock size={14} className="text-brand-400" />
+                        <Clock size={14} className="text-[#5FB8E0]" />
                         Time Clock
                         {totalMins > 0 && (
                           <span className="ml-auto text-xs text-muted-foreground font-normal">
@@ -1728,7 +1752,7 @@ export default function WorkOrderDetailPage() {
                           value={clockTechName}
                           onChange={e => setClockTechName(e.target.value)}
                           placeholder="Technician name"
-                          className="flex-1 text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                          className="flex-1 text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                         />
                         <button
                           onClick={handleClockIn}
@@ -1819,7 +1843,7 @@ export default function WorkOrderDetailPage() {
                   {comments.map(c => (
                     <div key={c.id} className="bg-card border border-border rounded-xl p-4 group">
                       <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-900 flex items-center justify-center text-[11px] text-brand-300 font-bold shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[11px] text-[#9FD8EC] font-bold shrink-0">
                           {c.author_initials}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1849,13 +1873,13 @@ export default function WorkOrderDetailPage() {
                       onChange={e => setNewComment(e.target.value)}
                       placeholder="Add a comment…"
                       rows={3}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none mb-3"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none mb-3"
                     />
                     <div className="flex justify-end">
                       <button
                         onClick={handlePostComment}
                         disabled={postingComment || !newComment.trim()}
-                        className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors"
                       >
                         <Send size={13} />
                         {postingComment ? 'Posting…' : 'Post Comment'}
@@ -1885,7 +1909,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Package size={14} className="text-brand-400" />
+                        <Package size={14} className="text-[#5FB8E0]" />
                         Parts Used
                       </h3>
                       {partsTotal > 0 && (
@@ -1916,7 +1940,7 @@ export default function WorkOrderDetailPage() {
                           {partsUsed.map(p => {
                             const np = normPart(p)
                             const actionColors: Record<string, string> = {
-                              used:      'bg-blue-500/10 text-blue-400',
+                              used:      'bg-[#2f7fb8]/10 text-[#5FB8E0]',
                               installed: 'bg-emerald-500/10 text-emerald-400',
                               returned:  'bg-amber-500/10 text-amber-400',
                               warranty:  'bg-violet-500/10 text-violet-400',
@@ -1942,7 +1966,7 @@ export default function WorkOrderDetailPage() {
                                         disabled={markingUsed === p.id}
                                         className={cn(
                                           'opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] font-semibold transition-all',
-                                          'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 disabled:opacity-40'
+                                          'bg-[#2f7fb8]/10 text-[#5FB8E0] hover:bg-[#2f7fb8]/20 disabled:opacity-40'
                                         )}
                                       >
                                         {markingUsed === p.id ? '…' : 'Mark Used'}
@@ -1979,7 +2003,7 @@ export default function WorkOrderDetailPage() {
                             value={invSearch}
                             onChange={e => handleInvSearch(e.target.value)}
                             placeholder="Search inventory (or enter manually below)…"
-                            className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                           />
                           {selectedInvItem && (
                             <button
@@ -2016,7 +2040,7 @@ export default function WorkOrderDetailPage() {
                         </div>
 
                         {selectedInvItem && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-brand-500/10 rounded-lg text-xs text-brand-400">
+                          <div className="flex items-center gap-2 px-3 py-2 bg-[#2f7fb8]/10 rounded-lg text-xs text-[#5FB8E0]">
                             <Package size={12} />
                             <span className="font-medium">{selectedInvItem.name}</span>
                             <span className="text-muted-foreground">· {selectedInvItem.on_hand} in stock</span>
@@ -2028,27 +2052,27 @@ export default function WorkOrderDetailPage() {
                             value={partForm.part_name}
                             onChange={e => setPartForm(f => ({ ...f, part_name: e.target.value }))}
                             placeholder="Part name *"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                           />
                           <input
                             value={partForm.part_number}
                             onChange={e => setPartForm(f => ({ ...f, part_number: e.target.value }))}
                             placeholder="SKU / Part # (optional)"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                           />
                           <input
                             type="number" min="1"
                             value={partForm.quantity}
                             onChange={e => setPartForm(f => ({ ...f, quantity: e.target.value }))}
                             placeholder="Qty"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                           />
                           <input
                             type="number" step="0.01" min="0"
                             value={partForm.unit_cost}
                             onChange={e => setPartForm(f => ({ ...f, unit_cost: e.target.value }))}
                             placeholder="Unit cost ($)"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
                           />
                         </div>
 
@@ -2061,8 +2085,8 @@ export default function WorkOrderDetailPage() {
                               className={cn(
                                 'flex-1 py-1.5 text-xs font-medium rounded-lg border capitalize transition-colors',
                                 partForm.action === a
-                                  ? 'bg-brand-500 text-white border-brand-500'
-                                  : 'border-border text-muted-foreground hover:border-brand-400'
+                                  ? 'bg-[#2f7fb8] text-white border-[#5FB8E0]'
+                                  : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
                               )}
                             >
                               {a}
@@ -2072,14 +2096,14 @@ export default function WorkOrderDetailPage() {
 
                         <div className="flex gap-2">
                           <button onClick={() => { setShowAddPart(false); setSelectedInvItem(null); setInvResults([]) }} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
-                          <button onClick={handleAddPart} disabled={addingPart || !partForm.part_name.trim()} className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40 transition-colors">
+                          <button onClick={handleAddPart} disabled={addingPart || !partForm.part_name.trim()} className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40 transition-colors">
                             {addingPart ? 'Adding…' : 'Add Part'}
                           </button>
                         </div>
                       </div>
                     ) : (
                       <div className="px-5 py-3 border-t border-border">
-                        <button onClick={() => setShowAddPart(true)} className="flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-500 transition-colors">
+                        <button onClick={() => setShowAddPart(true)} className="flex items-center gap-1.5 text-sm text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors">
                           <Plus size={14} /> Add Part
                         </button>
                       </div>
@@ -2093,7 +2117,7 @@ export default function WorkOrderDetailPage() {
                 <div className="space-y-5">
                   {costsLoading ? (
                     <div className="flex items-center justify-center py-16">
-                      <div className="animate-spin w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full" />
+                      <div className="animate-spin w-6 h-6 border-2 border-[#5FB8E0] border-t-transparent rounded-full" />
                     </div>
                   ) : (
                     <>
@@ -2172,7 +2196,7 @@ export default function WorkOrderDetailPage() {
                                   </div>
                                   <div className="w-full bg-muted rounded-full h-2">
                                     <div
-                                      className="h-2 rounded-full bg-brand-400"
+                                      className="h-2 rounded-full bg-[#3f7fb8]"
                                       style={{ width: `${actualPct}%` }}
                                     />
                                   </div>
@@ -2224,7 +2248,7 @@ export default function WorkOrderDetailPage() {
                                   <td className="px-5 py-3">
                                     <span className={cn(
                                       'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium',
-                                      c.source === 'manual'      ? 'bg-blue-500/10 text-blue-400' :
+                                      c.source === 'manual'      ? 'bg-[#2f7fb8]/10 text-[#5FB8E0]' :
                                       c.source === 'time_entry'  ? 'bg-amber-500/10 text-amber-400' :
                                       c.source === 'parts_used'  ? 'bg-emerald-500/10 text-emerald-400' :
                                       'bg-muted text-muted-foreground'
@@ -2248,7 +2272,7 @@ export default function WorkOrderDetailPage() {
                               <select
                                 value={costForm.cost_type}
                                 onChange={e => setCostForm(f => ({ ...f, cost_type: e.target.value }))}
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
                               >
                                 {['labor','parts','subcontractor','travel','overhead','other'].map(t => (
                                   <option key={t} value={t} className="capitalize">{t}</option>
@@ -2258,7 +2282,7 @@ export default function WorkOrderDetailPage() {
                                 value={costForm.description}
                                 onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))}
                                 placeholder="Description"
-                                className="col-span-1 h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                className="col-span-1 h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
                               />
                               <input
                                 value={costForm.quantity}
@@ -2267,7 +2291,7 @@ export default function WorkOrderDetailPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
                               />
                               <input
                                 value={costForm.unit_cost}
@@ -2276,7 +2300,7 @@ export default function WorkOrderDetailPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
                               />
                             </div>
                             <div className="flex gap-2">
@@ -2308,7 +2332,7 @@ export default function WorkOrderDetailPage() {
                                     fetch(`/api/job-costs/${wo.id}`).then(r => r.json()).then(d => setJobCosts(d)).finally(() => setCostsLoading(false))
                                   } finally { setAddingCost(false) }
                                 }}
-                                className="px-3 py-1.5 text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-40 transition-colors"
+                                className="px-3 py-1.5 text-sm bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white rounded-lg disabled:opacity-40 transition-colors"
                               >
                                 {addingCost ? 'Adding…' : 'Add Entry'}
                               </button>
@@ -2318,7 +2342,7 @@ export default function WorkOrderDetailPage() {
                           <div className="px-5 py-3 border-t border-border">
                             <button
                               onClick={() => setShowAddCost(true)}
-                              className="flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-500 transition-colors"
+                              className="flex items-center gap-1.5 text-sm text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors"
                             >
                               <Plus size={14} /> Add Manual Entry
                             </button>
@@ -2364,7 +2388,7 @@ export default function WorkOrderDetailPage() {
                 <div className="p-4 space-y-3.5">
 
                   <DetailRow icon={<Hash size={13} />} label="WO Number">
-                    <span className="font-mono text-brand-400 text-xs">{wo.wo_number}</span>
+                    <span className="font-mono text-[#5FB8E0] text-xs">{wo.wo_number}</span>
                   </DetailRow>
 
                   <DetailRow icon={<Tag size={13} />} label="Category">
@@ -2374,7 +2398,7 @@ export default function WorkOrderDetailPage() {
                   <DetailRow icon={<User size={13} />} label="Assigned To">
                     {wo.assignee_name ? (
                       <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-brand-900 flex items-center justify-center text-[10px] text-brand-300 font-semibold">
+                        <div className="w-5 h-5 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[10px] text-[#9FD8EC] font-semibold">
                           {wo.assignee_name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <span className="text-sm">{wo.assignee_name}</span>
@@ -2431,7 +2455,7 @@ export default function WorkOrderDetailPage() {
                         href={mapsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] text-brand-400 hover:text-brand-500 font-semibold flex items-center gap-1"
+                        className="text-[10px] text-[#5FB8E0] hover:text-[#5FB8E0] font-semibold flex items-center gap-1"
                       >
                         Directions →
                       </a>
@@ -2462,7 +2486,7 @@ export default function WorkOrderDetailPage() {
                           href={mapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 text-xs font-semibold rounded-lg transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#2f7fb8]/10 text-[#5FB8E0] hover:bg-[#2f7fb8]/20 text-xs font-semibold rounded-lg transition-colors"
                         >
                           <Navigation size={11} /> Get Directions
                         </a>
@@ -2506,14 +2530,14 @@ export default function WorkOrderDetailPage() {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Property Manager</p>
                         <p className="text-sm font-medium text-foreground">{wo.site_pm_name}</p>
                         {wo.site_pm_phone && (
-                          <a href={`tel:${wo.site_pm_phone}`} className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5">
+                          <a href={`tel:${wo.site_pm_phone}`} className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5">
                             <PhoneCall size={10} /> {wo.site_pm_phone}
                           </a>
                         )}
                         {wo.site_pm_email && (
                           <button
                             onClick={() => { setEmailTo(wo.site_pm_email!); setEmailSlideOpen(true) }}
-                            className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5"
                           >
                             <Send size={10} /> {wo.site_pm_email}
                           </button>
@@ -2525,14 +2549,14 @@ export default function WorkOrderDetailPage() {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Primary Contact</p>
                         <p className="text-sm font-medium text-foreground">{wo.site_contact_name}</p>
                         {wo.site_contact_phone && (
-                          <a href={`tel:${wo.site_contact_phone}`} className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5">
+                          <a href={`tel:${wo.site_contact_phone}`} className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5">
                             <PhoneCall size={10} /> {wo.site_contact_phone}
                           </a>
                         )}
                         {wo.site_contact_email && (
                           <button
                             onClick={() => { setEmailTo(wo.site_contact_email!); setEmailSlideOpen(true) }}
-                            className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5"
                           >
                             <Send size={10} /> {wo.site_contact_email}
                           </button>
@@ -2656,10 +2680,10 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
   const available = techs.filter(t => !assignedIds.has(t.id))
 
   const ROLE_COLORS: Record<string, string> = {
-    lead:       'bg-blue-100 text-blue-700',
+    lead:       'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',
     owner:      'bg-violet-100 text-violet-700',
     supervisor: 'bg-amber-100 text-amber-700',
-    crew:       'bg-slate-100 text-slate-600',
+    crew:       'bg-muted text-muted-foreground',
   }
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading crew…</div>
@@ -2673,7 +2697,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
         >
           <Plus size={13} /> Add Crew
         </button>
@@ -2681,10 +2705,10 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
 
       {/* Add crew form */}
       {adding && (
-        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+        <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">Add crew member</p>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             value={selectedTechId}
             onChange={e => setSelectedTechId(e.target.value)}
           >
@@ -2694,7 +2718,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
             ))}
           </select>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             value={selectedRole}
             onChange={e => setSelectedRole(e.target.value)}
           >
@@ -2705,7 +2729,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
           </select>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add to Job'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2719,13 +2743,13 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         <div className="border border-dashed border-border rounded-xl p-8 text-center">
           <Users size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No crew assigned yet</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline mt-1">Add first crew member →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline mt-1">Add first crew member →</button>
         </div>
       ) : (
         <div className="space-y-2">
           {crew.map(member => (
-            <div key={member.id} className="flex items-center gap-3 bg-white border border-border rounded-xl px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-[#6B7EFF] text-white text-xs font-bold flex items-center justify-center shrink-0">
+            <div key={member.id} className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-[#5FB8E0] text-white text-xs font-bold flex items-center justify-center shrink-0">
                 {member.technician.initials}
               </div>
               <div className="flex-1 min-w-0">
@@ -2851,8 +2875,8 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
   }
 
   const PHASE_STATUS_CFG: Record<string, { label: string; color: string }> = {
-    pending:     { label: 'Pending',     color: 'bg-slate-100 text-slate-500' },
-    in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
+    pending:     { label: 'Pending',     color: 'bg-muted text-slate-500' },
+    in_progress: { label: 'In Progress', color: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' },
     complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700' },
     skipped:     { label: 'Skipped',     color: 'bg-amber-100 text-amber-600' },
   }
@@ -2872,17 +2896,17 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
         >
           <Plus size={13} /> Add Phase
         </button>
       </div>
 
       {adding && (
-        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+        <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">New phase / day</p>
           <input
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
             placeholder={'Name — e.g. "Day 1 – Rough-in" or "Phase 2 – Commissioning"'}
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -2892,7 +2916,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                 value={form.scheduled_date}
                 onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
               />
@@ -2901,14 +2925,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date (optional)</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                 value={form.end_date}
                 onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
               />
             </div>
           </div>
           <textarea
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
             rows={2}
             placeholder="Notes for this phase (optional)"
             value={form.notes}
@@ -2916,7 +2940,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add Phase'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2931,7 +2955,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           <Calendar size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground font-medium">No phases defined</p>
           <p className="text-xs text-muted-foreground mt-1 mb-3">Add phases to split this job across multiple days or stages</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline">Add first phase →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline">Add first phase →</button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -2939,12 +2963,12 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
             const cfg = PHASE_STATUS_CFG[phase.status] ?? PHASE_STATUS_CFG.pending
             const isEditing = editingPhaseId === phase.id
             return (
-              <div key={phase.id} className="bg-white border border-border rounded-xl overflow-hidden">
+              <div key={phase.id} className="bg-card border border-border rounded-xl overflow-hidden">
                 {isEditing ? (
                   <div className="px-4 py-3 space-y-3">
                     <p className="text-xs font-semibold text-foreground">Edit phase {idx + 1}</p>
                     <input
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                       placeholder="Phase name"
                       value={editPhaseForm.name}
                       onChange={e => setEditPhaseForm(f => ({ ...f, name: e.target.value }))}
@@ -2954,7 +2978,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                           value={editPhaseForm.scheduled_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))}
                         />
@@ -2963,14 +2987,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
                           value={editPhaseForm.end_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, end_date: e.target.value }))}
                         />
                       </div>
                     </div>
                     <textarea
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
                       rows={2}
                       placeholder="Notes (optional)"
                       value={editPhaseForm.notes}
@@ -2978,7 +3002,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     />
                     {editError && <p className="text-xs text-red-500">{editError}</p>}
                     <div className="flex gap-2">
-                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
                         {editSaving ? 'Saving…' : 'Save Changes'}
                       </button>
                       <button onClick={cancelEdit} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2988,7 +3012,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                   </div>
                 ) : (
                   <div className="px-4 py-3 flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-muted text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {idx + 1}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -3010,7 +3034,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     </button>
                     <button
                       onClick={() => startEdit(phase)}
-                      className="text-muted-foreground hover:text-[#6B7EFF] transition-colors mt-0.5 shrink-0"
+                      className="text-muted-foreground hover:text-[#5FB8E0] transition-colors mt-0.5 shrink-0"
                       title="Edit phase"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3045,7 +3069,7 @@ interface FTTabProps {
 }
 
 const CATEGORY_CFG: Record<string, { label: string; bg: string; text: string }> = {
-  task:         { label: 'Task',         bg: 'bg-blue-500/10',    text: 'text-blue-400'    },
+  task:         { label: 'Task',         bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]'    },
   safety:       { label: 'Safety',       bg: 'bg-red-500/10',     text: 'text-red-400'     },
   inspection:   { label: 'Inspect',      bg: 'bg-violet-500/10',  text: 'text-violet-400'  },
   verification: { label: 'Verify',       bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
@@ -3209,7 +3233,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
   // ── Derived ─────────────────────────────────────────────────────────────────
   const tasksDone  = tasks.filter(t => t.completed).length
   const equipDone  = equipment.filter(e => e.confirmed).length
-  const inp        = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30'
+  const inp        = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30'
 
   return (
     <div className="space-y-5">
@@ -3218,7 +3242,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-brand-400" />
+            <CheckCircle2 size={14} className="text-[#5FB8E0]" />
             Service Tasks
             {tasks.length > 0 && (
               <span className="text-xs text-muted-foreground font-normal">({tasksDone}/{tasks.length} done)</span>
@@ -3226,7 +3250,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           </h3>
           <button
             onClick={() => setShowAddTask(true)}
-            className="flex items-center gap-1 text-xs bg-brand-500 text-white px-2.5 py-1.5 rounded-lg hover:bg-brand-600 font-medium"
+            className="flex items-center gap-1 text-xs bg-[#2f7fb8] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
           >
             <Plus size={12} /> Add Task
           </button>
@@ -3254,7 +3278,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                       'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
                       task.completed
                         ? 'bg-emerald-400 border-emerald-400'
-                        : 'border-border hover:border-brand-400'
+                        : 'border-border hover:border-[#5FB8E0]'
                     )}
                   >
                     {task.completed && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -3364,7 +3388,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                       className={cn(
                         'text-[10px] font-semibold px-2 py-1 rounded-md border capitalize transition-colors',
                         taskForm.added_by === a
-                          ? 'bg-brand-500 text-white border-transparent'
+                          ? 'bg-[#2f7fb8] text-white border-transparent'
                           : 'border-border text-muted-foreground hover:border-foreground'
                       )}
                     >
@@ -3386,7 +3410,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 Cancel
               </button>
               <button onClick={handleAddTask} disabled={savingTask || !taskForm.title.trim()}
-                className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40 transition-colors">
+                className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40 transition-colors">
                 {savingTask ? 'Adding…' : 'Add Task'}
               </button>
             </div>
@@ -3413,7 +3437,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Package size={14} className="text-brand-400" />
+            <Package size={14} className="text-[#5FB8E0]" />
             Equipment Manifest
             {equipment.length > 0 && (
               <span className="text-xs text-muted-foreground font-normal">({equipDone}/{equipment.length} confirmed)</span>
@@ -3421,7 +3445,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           </h3>
           <button
             onClick={() => setShowAddEquip(true)}
-            className="flex items-center gap-1 text-xs bg-brand-500 text-white px-2.5 py-1.5 rounded-lg hover:bg-brand-600 font-medium"
+            className="flex items-center gap-1 text-xs bg-[#2f7fb8] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
           >
             <Plus size={12} /> Add Equipment
           </button>
@@ -3453,7 +3477,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 </div>
 
                 {item.image_url && (
-                  <img src={item.image_url} alt="" className="w-9 h-9 object-contain rounded bg-white border border-border shrink-0" />
+                  <img src={item.image_url} alt="" className="w-9 h-9 object-contain rounded bg-card border border-border shrink-0" />
                 )}
 
                 <div className="flex-1 min-w-0">
@@ -3566,7 +3590,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 className={inp}
               />
               {eqShowCatalog && eqCatalog.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
                   {eqCatalog.map(p => (
                     <button
                       key={p.id}
@@ -3574,12 +3598,12 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                         setEquipForm(f => ({ ...f, name: p.name, sku: p.sku ?? '', make: p.brand ?? f.make, product_id: p.id, image_url: p.image_url ?? null }))
                         setEqCatalogQuery(p.name); setEqShowCatalog(false)
                       }}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2.5"
+                      className="w-full text-left px-3 py-2 hover:bg-[#22303f] transition-colors flex items-center gap-2.5"
                     >
                       {p.image_url
-                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-white border border-gray-100 shrink-0" />
-                        : <span className="w-7 h-7 rounded bg-gray-100 border border-gray-100 shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
-                      <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 truncate">{p.name}</span>
+                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-card border border-border shrink-0" />
+                        : <span className="w-7 h-7 rounded bg-muted border border-border shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
+                      <span className="flex-1 min-w-0 text-xs font-medium text-foreground truncate">{p.name}</span>
                       {p.sku && <span className="text-[10px] font-mono text-gray-400 shrink-0">{p.sku}</span>}
                     </button>
                   ))}
@@ -3588,7 +3612,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
             </div>
             {equipForm.image_url && (
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <img src={equipForm.image_url} alt="" className="w-8 h-8 object-contain rounded bg-white border border-border" />
+                <img src={equipForm.image_url} alt="" className="w-8 h-8 object-contain rounded bg-card border border-border" />
                 Linked to catalog product
               </div>
             )}
@@ -3615,7 +3639,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 {(['management', 'tech'] as const).map(a => (
                   <button key={a} onClick={() => setEquipForm(f => ({ ...f, added_by: a }))}
                     className={cn('text-[10px] font-semibold px-2.5 py-1 rounded-md border capitalize transition-colors',
-                      equipForm.added_by === a ? 'bg-brand-500 text-white border-transparent' : 'border-border text-muted-foreground hover:border-foreground'
+                      equipForm.added_by === a ? 'bg-[#2f7fb8] text-white border-transparent' : 'border-border text-muted-foreground hover:border-foreground'
                     )}>
                     {a}
                   </button>
@@ -3625,7 +3649,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
             <div className="flex gap-2">
               <button onClick={() => setShowAddEquip(false)} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent">Cancel</button>
               <button onClick={handleAddEquip} disabled={savingEquip || !equipForm.name.trim()}
-                className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40">
+                className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40">
                 {savingEquip ? 'Adding…' : 'Add to Manifest'}
               </button>
             </div>
@@ -3781,7 +3805,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
   const OUTCOME_CFG: Record<string, { label: string; color: string }> = {
     reached:            { label: 'Reached',           color: 'bg-emerald-500/10 text-emerald-400' },
     no_answer:          { label: 'No Answer',          color: 'bg-slate-500/10 text-slate-400'     },
-    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-blue-500/10 text-blue-400'       },
+    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-[#2f7fb8]/10 text-[#5FB8E0]'       },
     wrong_number:       { label: 'Wrong Number',       color: 'bg-red-500/10 text-red-400'         },
     callback_requested: { label: 'Callback Requested', color: 'bg-amber-500/10 text-amber-400'     },
   }
@@ -3796,7 +3820,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
       : null,
   ].filter(Boolean) as { name: string; phone: string; label: string }[]
 
-  const inp = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30'
+  const inp = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30'
   const lbl = 'block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1'
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading calls…</div>
@@ -3822,7 +3846,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">{c.label}</p>
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-                  <p className="text-xs text-brand-400">{c.phone}</p>
+                  <p className="text-xs text-[#5FB8E0]">{c.phone}</p>
                 </div>
                 <a
                   href={`tel:${c.phone}`}
@@ -3845,13 +3869,13 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <PhoneCall size={14} className="text-brand-400" />
+            <PhoneCall size={14} className="text-[#5FB8E0]" />
             Call Log
             {calls.length > 0 && <span className="text-xs font-normal text-muted-foreground">({calls.length})</span>}
           </h3>
           <button
             onClick={() => setShowLogForm(v => !v)}
-            className="flex items-center gap-1.5 text-xs bg-brand-500 text-white px-3 py-1.5 rounded-lg hover:bg-brand-600 font-medium transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-[#2f7fb8] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium transition-colors"
           >
             <Plus size={12} /> Log a Call
           </button>
@@ -3871,8 +3895,8 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                   className={cn(
                     'flex-1 py-2 text-xs font-semibold rounded-lg border capitalize transition-colors flex items-center justify-center gap-1.5',
                     form.direction === d
-                      ? 'bg-brand-500 text-white border-brand-500'
-                      : 'border-border text-muted-foreground hover:border-brand-400'
+                      ? 'bg-[#2f7fb8] text-white border-[#5FB8E0]'
+                      : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
                   )}
                 >
                   {d === 'outbound' ? <PhoneOutgoing size={11} /> : <PhoneCall size={11} />}
@@ -3912,7 +3936,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                       'px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-colors',
                       form.outcome === o
                         ? OUTCOME_CFG[o].color + ' border-transparent'
-                        : 'border-border text-muted-foreground hover:border-brand-400'
+                        : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
                     )}
                   >
                     {OUTCOME_CFG[o].label}
@@ -3928,7 +3952,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 rows={3}
                 placeholder="What was discussed? Any follow-up needed?"
-                className="w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                className="w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none"
               />
             </div>
 
@@ -3942,7 +3966,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                className="flex-1 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
               >
                 {saving ? 'Saving…' : 'Save Call'}
               </button>
@@ -3971,10 +3995,10 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5',
-                      call.direction === 'outbound' ? 'bg-brand-500/10' : 'bg-emerald-500/10'
+                      call.direction === 'outbound' ? 'bg-[#2f7fb8]/10' : 'bg-emerald-500/10'
                     )}>
                       {call.direction === 'outbound'
-                        ? <PhoneOutgoing size={14} className="text-brand-400" />
+                        ? <PhoneOutgoing size={14} className="text-[#5FB8E0]" />
                         : <PhoneCall size={14} className="text-emerald-400" />
                       }
                     </div>
@@ -3982,7 +4006,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-foreground">{call.contact_name || 'Unknown contact'}</span>
                         {call.phone && (
-                          <a href={`tel:${call.phone}`} className="text-xs text-brand-400 hover:underline">{call.phone}</a>
+                          <a href={`tel:${call.phone}`} className="text-xs text-[#5FB8E0] hover:underline">{call.phone}</a>
                         )}
                         {outcomeInfo && (
                           <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', outcomeInfo.color)}>
@@ -3994,7 +4018,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                         <span>{fmtCallTime(call.called_at)}</span>
                         {call.duration_mins && <span>· {call.duration_mins}min</span>}
                         {call.made_by && <span>· by {call.made_by}</span>}
-                        <span className={cn('capitalize', call.direction === 'outbound' ? 'text-brand-400' : 'text-emerald-400')}>
+                        <span className={cn('capitalize', call.direction === 'outbound' ? 'text-[#5FB8E0]' : 'text-emerald-400')}>
                           · {call.direction}
                         </span>
                       </div>

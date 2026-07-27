@@ -17,7 +17,13 @@ const supabase = createClient(
 
 export async function GET(req: NextRequest) {
   try {
-    await getCurrentUser()
+    // This route is inside the /api/aria/* middleware bypass, so it MUST self-guard.
+    // getCurrentUser() returns the fail-closed 'anonymous' user when unauthenticated —
+    // reject it so the shared prospect DB (property + decision-maker PII) is never
+    // readable from the public internet. aria_properties has no org column yet, so
+    // access is limited to authenticated members; per-org scoping is a future migration.
+    const user = await getCurrentUser()
+    if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { searchParams } = new URL(req.url)
 
     const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200)

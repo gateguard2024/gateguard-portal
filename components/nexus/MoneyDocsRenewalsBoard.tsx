@@ -34,7 +34,7 @@ function bucketColor(bucket: RenewalBucket): string {
   if (bucket === 'needs_followup') return '#F87171'
   if (bucket === 'expiring_soon') return '#FBBF24'
   if (bucket === 'recently_renewed') return '#34D399'
-  return '#00C8FF'
+  return '#5FB8E0'
 }
 
 export function MoneyDocsRenewalsBoard() {
@@ -85,11 +85,11 @@ export function MoneyDocsRenewalsBoard() {
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading renewals…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading renewals…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
 
       {!loading && shownRenewals.length === 0 && !message && (
-        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>
+        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>
           No {bucketLabel(selectedBucket).toLowerCase()} renewals right now.
         </div>
       )}
@@ -104,8 +104,8 @@ export function MoneyDocsRenewalsBoard() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{renewal.title}</div>
-                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{renewal.property_name || renewal.company_name || 'Customer account'}</div>
-                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{renewal.contract_end ? `Ends ${renewal.contract_end}` : 'No end date'}</div>
+                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{renewal.property_name || renewal.company_name || 'Customer account'}</div>
+                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{renewal.contract_end ? `Ends ${renewal.contract_end}` : 'No end date'}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold" style={{ color }}>{formatMoney(renewal.mrr)} MRR</div>
@@ -124,9 +124,9 @@ export function MoneyDocsRenewalsBoard() {
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selectedRenewal.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{selectedRenewal.property_name || selectedRenewal.company_name || 'Customer account'}</div>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>MRR</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{formatMoney(selectedRenewal.mrr)}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Start</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedRenewal.contract_start || 'No start date'}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>End</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedRenewal.contract_end || 'No end date'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>MRR</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{formatMoney(selectedRenewal.mrr)}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Start</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedRenewal.contract_start || 'No start date'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>End</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedRenewal.contract_end || 'No end date'}</div></div>
           </div>
           {selectedRenewal.notes && <div className="mt-3 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.52)' }}>{selectedRenewal.notes}</div>}
           <div className="mt-4 flex flex-wrap gap-2">

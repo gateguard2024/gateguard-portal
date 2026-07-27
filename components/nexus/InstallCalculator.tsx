@@ -32,7 +32,7 @@ function PartTable({ title, parts, qty, setQty }: { title: string; parts: Array<
             <tr key={name} style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
               <td className="py-1.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
                 {name}
-                <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{usd(cost)}{hours ? ` · ${hours}h` : ''}</div>
+                <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{usd(cost)}{hours ? ` · ${hours}h` : ''}</div>
               </td>
               <td className="py-1.5 text-right">
                 <input type="number" min="0" value={qty[name] ?? 0} onChange={e => setQty(name, Math.max(0, Number(e.target.value) || 0))}
@@ -80,7 +80,7 @@ export function InstallCalculator({ initialWorkingGates, initialBrokenGates, ini
   return (
     <div className="space-y-5">
       {/* 1. Charge (guideline) */}
-      <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,200,255,0.16)' }}>
+      <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(95,184,224,0.16)' }}>
         <div className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>1. What you charge</div>
         <div className="mb-3 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Working gate $500 · broken gate $750 · first camera free · extra cameras $100.</div>
         <div className="grid grid-cols-3 gap-3">

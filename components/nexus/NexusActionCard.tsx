@@ -76,7 +76,7 @@ export function NexusActionCard({
               style={i > 0 ? { borderLeft: '1px solid rgba(255,255,255,0.10)', paddingLeft: 12 } : undefined}
             >
               <div className="text-[15px] font-bold leading-tight" style={{ color: s.accent ? `rgba(${color},0.95)` : 'rgba(255,255,255,0.94)' }}>{s.value}</div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: 'rgba(255,255,255,0.44)' }}>{s.label}</div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{s.label}</div>
             </div>
           ))}
         </div>

@@ -10,7 +10,7 @@ interface Item { id: string; kind: string; title: string; detail: string | null;
 const KIND_META: Record<string, { icon: string; color: string }> = {
   call:       { icon: '📞', color: '#0ea5b7' },
   email:      { icon: '✉️', color: '#6B7EFF' },
-  meeting:    { icon: '👥', color: '#a855f7' },
+  meeting:    { icon: '👥', color: '#5FB8E0' },
   task:       { icon: '☑️', color: '#f59e0b' },
   note:       { icon: '📝', color: '#94a3b8' },
   event:      { icon: '⚡', color: '#22d3ee' },

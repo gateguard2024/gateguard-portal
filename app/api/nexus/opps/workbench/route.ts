@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
 
   // No .limit() — the UI sorts + scrolls the full list. Capping here hid leads.
   const myLeads = ownershipIds.length > 0
-    ? await safe(myLeadsQ.in('assigned_to', ownershipIds).is('lost_at', null).order('updated_at', { ascending: false }), [])
+    ? await safe(myLeadsQ.in('assigned_to', ownershipIds).is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: false }), [])
     : []
 
   if (!user.canViewCRM) {
@@ -151,15 +151,15 @@ export async function GET(req: NextRequest) {
   let openLeadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   openLeadsQ = applyOrgScope(openLeadsQ, scope)
   // No .limit() — the UI sorts + scrolls the full list. Capping here hid leads.
-  const openLeads = await safe(openLeadsQ.is('lost_at', null).order('updated_at', { ascending: false }), [])
+  const openLeads = await safe(openLeadsQ.is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: false }), [])
 
   let needsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   needsQ = applyOrgScope(needsQ, scope)
-  const needsAttention = await safe(needsQ.is('lost_at', null).order('updated_at', { ascending: true }).limit(10), [])
+  const needsAttention = await safe(needsQ.is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: true }).limit(10), [])
 
   let openOppsQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at')
   openOppsQ = applyOrgScope(openOppsQ, scope, 'dealer_org_id')
-  const openOpportunities = await safe(openOppsQ.is('won_at', null).is('lost_at', null).order('updated_at', { ascending: false }).limit(20), [])
+  const openOpportunities = await safe(openOppsQ.is('won_at', null).is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: false }).limit(20), [])
 
   let proposalQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at')
   proposalQ = applyOrgScope(proposalQ, scope, 'dealer_org_id')

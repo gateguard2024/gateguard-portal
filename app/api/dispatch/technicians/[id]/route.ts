@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,7 @@ const supabase = createClient(
 
 // PATCH /api/dispatch/technicians/[id] — update status or current job
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('technicians', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
 
   // Drift-resilient: if a column doesn't exist yet (e.g. level/skills before
@@ -32,6 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 // DELETE /api/dispatch/technicians/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('technicians', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('technicians')
     .delete()

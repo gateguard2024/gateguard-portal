@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
+import { sendClerkInvite } from '@/lib/send-invite'
 import { getCurrentUser, OrgTier, PortalRole } from '@/lib/current-user'
 import { Resend } from 'resend'
 import crypto from 'crypto'
@@ -248,7 +249,7 @@ export async function POST(req: NextRequest) {
         clerk_user_id = existing.data[0].id
         invite_status = 'existing_user'
       } else {
-        await clerk.invitations.createInvitation({
+        await sendClerkInvite({
           emailAddress: admin_email,
           publicMetadata: {
             org_id: org.id,

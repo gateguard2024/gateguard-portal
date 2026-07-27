@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { guardFieldTicket } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +9,8 @@ const supabase = createClient(
 )
 export const dynamic = 'force-dynamic'
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardFieldTicket(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     await getCurrentUser()
     const { data, error } = await supabase
@@ -25,6 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardFieldTicket(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     const user = await getCurrentUser()
     const body = await req.json()
@@ -66,7 +69,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardFieldTicket(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     await getCurrentUser()
     const { error } = await supabase

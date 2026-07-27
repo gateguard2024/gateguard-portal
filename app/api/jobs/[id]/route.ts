@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { recordInScope } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,7 @@ export async function GET(
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await recordInScope('jobs', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const { data: job, error } = await supabase
       .from('jobs')
@@ -70,6 +72,7 @@ export async function PATCH(
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await recordInScope('jobs', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
     const allowed = [
@@ -84,6 +87,7 @@ export async function PATCH(
     if (body.status === 'completed' && !patch.completed_at) {
       patch.completed_at = new Date().toISOString()
     }
+    if (user.isCorporate && body.org_id) patch.org_id = body.org_id   // corporate transfer
 
     const { data, error } = await supabase
       .from('jobs')
@@ -97,4 +101,18 @@ export async function PATCH(
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown' }, { status: 500 })
   }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  if (!(await recordInScope('jobs', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('id', params.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }

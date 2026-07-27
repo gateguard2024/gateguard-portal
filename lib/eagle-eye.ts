@@ -88,7 +88,7 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
   return { token: t.access_token, baseHost }
 }
 
-export interface EagleEyeCamera { id: string; name: string; tags: string[] }
+export interface EagleEyeCamera { id: string; name: string; tags: string[]; esn: string | null; online: boolean | null }
 
 /** Grab a single preview JPEG frame for a camera (server-side, so the token
  * never reaches the browser). Returns null if unavailable. */
@@ -152,6 +152,49 @@ export async function eagleEyeFetchMp4(token: string, mp4Url: string): Promise<{
   } catch { return null }
 }
 
+export interface EagleEyeEvent { id: string; type: string; label: string; cameraId: string | null; when: string | null; ongoing: boolean }
+
+const EEN_EVENT_LABELS: Record<string, string> = {
+  'een.motionDetectionEvent.v1': 'Motion',
+  'een.motionInRegionDetectionEvent.v1': 'Motion (region)',
+  'een.lprPlateReadEvent.v1': 'License plate',
+  'een.loiterDetectionEvent.v1': 'Loitering',
+  'een.tamperDetectionEvent.v1': 'Tamper / blocked',
+  'een.objectLineCrossEvent.v1': 'Line cross',
+  'een.objectIntrusionEvent.v1': 'Intrusion',
+  'een.deviceCloudStatusUpdateEvent.v1': 'Device status',
+}
+export function eenEventLabel(type: string): string {
+  return EEN_EVENT_LABELS[type] ?? String(type).replace(/^een\./, '').replace(/Event\.v\d+$/, '').replace(/([A-Z])/g, ' $1').trim()
+}
+
+/** Historical camera events (motion, LPR, tamper, line-cross, device status…) for a
+ * property over the last `hours`. Time-range per EEN v3 events API. */
+export async function listEagleEyeEvents(token: string, baseHost: string, opts?: { hours?: number; cameraId?: string; types?: string[] }): Promise<EagleEyeEvent[]> {
+  const hours = Math.min(168, Math.max(1, opts?.hours ?? 24))
+  const iso = (d: Date) => d.toISOString().replace('Z', '+00:00')
+  const end = new Date()
+  const start = new Date(Date.now() - hours * 36e5)
+  const qs = new URLSearchParams({ startTimestamp__gte: iso(start), endTimestamp__lte: iso(end), pageSize: '100' })
+  if (opts?.cameraId) qs.set('actor', `camera:${opts.cameraId}`)
+  if (opts?.types?.length) qs.set('type__in', opts.types.join(','))
+  const res = await fetch(`https://${baseHost}/api/v3.0/events?${qs.toString()}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(10000),
+  })
+  if (!res.ok) throw new Error(`Eagle Eye events (${res.status})`)
+  const d = await res.json()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (d.results ?? d.data ?? []) as any[]
+  return rows.map(e => ({
+    id: String(e.id ?? `${e.actorId}-${e.startTimestamp}-${e.type}`),
+    type: String(e.type ?? ''),
+    label: eenEventLabel(String(e.type ?? '')),
+    cameraId: e.actorId ? String(e.actorId) : null,
+    when: e.startTimestamp ?? null,
+    ongoing: e.endTimestamp == null && e.span === true,
+  }))
+}
+
 export async function listEagleEyeCameras(token: string, baseHost: string): Promise<EagleEyeCamera[]> {
   const res = await fetch(`https://${baseHost}/api/v3.0/cameras?pageSize=1000`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
@@ -161,5 +204,17 @@ export async function listEagleEyeCameras(token: string, baseHost: string): Prom
   const d = await res.json()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = (d.results ?? d.data ?? []) as any[]
-  return rows.map(c => ({ id: String(c.id ?? c.esn ?? ''), name: c.name ?? 'Camera', tags: Array.isArray(c.tags) ? c.tags.map((t: unknown) => String(t)) : [] }))
+  const eenOnline = (c: any): boolean | null => {
+    const st = c.status
+    if (typeof c.isOnline === 'boolean') return c.isOnline
+    if (st == null) return null
+    if (typeof st === 'string') return /online|streaming/i.test(st) && !/offline/i.test(st)
+    if (typeof st === 'object') {
+      const cs = st.connectionStatus ?? st.connection ?? st.cameraOnline ?? st.state
+      if (typeof cs === 'boolean') return cs
+      if (typeof cs === 'string') return /online|streaming/i.test(cs) && !/offline/i.test(cs)
+    }
+    return null
+  }
+  return rows.map(c => ({ id: String(c.id ?? c.esn ?? ''), esn: c.esn ? String(c.esn) : (c.id ? String(c.id) : null), name: c.name ?? 'Camera', tags: Array.isArray(c.tags) ? c.tags.map((t: unknown) => String(t)) : [], online: eenOnline(c) }))
 }

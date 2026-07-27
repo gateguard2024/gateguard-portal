@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
 import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
 
-export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people' | 'design' | 'systems' | 'dispatch' | 'catalog' | 'help'
+export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people' | 'design' | 'systems' | 'dispatch' | 'catalog' | 'help' | 'events'
 
 type StepId =
   | 'start'
@@ -133,13 +133,13 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
       {
         title: 'Capture Lead',
         subtitle: 'Phone call, walk-in, outbound, website, or other source.',
-        hex: '#00C8FF',
+        hex: '#5FB8E0',
         action: { kind: 'next', stepId: 'call-source' },
       },
       {
         title: 'Work Existing Leads',
         subtitle: 'Open leads, opportunities, follow-ups, and search.',
-        hex: '#007CFF',
+        hex: '#5FB8E0',
         action: { kind: 'workbench', focus: 'myLeads' },
       },
       {
@@ -151,7 +151,7 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
       {
         title: 'Run ARIA Live',
         subtitle: 'AI property research before you call, quote, or pitch.',
-        hex: '#a855f7',
+        hex: '#5FB8E0',
         action: { kind: 'route', href: '/aria' },
       },
     ],
@@ -161,9 +161,9 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
     title: 'Use intel before the sales move.',
     subtitle: 'Research the property, then turn it into a lead or pitch.',
     cards: [
-      { title: 'Run ARIA', subtitle: 'Research a property or management company.', hex: '#a855f7', action: { kind: 'route', href: '/aria' } },
-      { title: 'Pitch Brief', subtitle: 'Generate simple outreach notes.', hex: '#007CFF', action: { kind: 'assistant', prompt: 'Generate a pitch brief for the last ARIA search', scope: 'opps_leads' } },
-      { title: 'Back', subtitle: 'Return to growth choices.', hex: '#00C8FF', action: { kind: 'next', stepId: 'start' } },
+      { title: 'Run ARIA', subtitle: 'Research a property or management company.', hex: '#5FB8E0', action: { kind: 'route', href: '/aria' } },
+      { title: 'Pitch Brief', subtitle: 'Generate simple outreach notes.', hex: '#5FB8E0', action: { kind: 'assistant', prompt: 'Generate a pitch brief for the last ARIA search', scope: 'opps_leads' } },
+      { title: 'Back', subtitle: 'Return to growth choices.', hex: '#5FB8E0', action: { kind: 'next', stepId: 'start' } },
     ],
   },
   opportunity: {
@@ -171,9 +171,9 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
     title: 'What should happen with this deal?',
     subtitle: 'Start the deal, quote it, or schedule the next touch.',
     cards: [
-      { title: 'New Deal', subtitle: 'Create an opportunity from scratch.', hex: '#007CFF', action: { kind: 'panel', panel: 'new-opp' } },
+      { title: 'New Deal', subtitle: 'Create an opportunity from scratch.', hex: '#5FB8E0', action: { kind: 'panel', panel: 'new-opp' } },
       { title: 'Generate Quote', subtitle: 'Start a quote or proposal.', hex: '#fbbf24', action: { kind: 'panel', panel: 'rough-calc' } },
-      { title: 'Follow-Up', subtitle: 'Make sure the deal does not stall.', hex: '#00C8FF', action: { kind: 'panel', panel: 'existing-opp' } },
+      { title: 'Follow-Up', subtitle: 'Make sure the deal does not stall.', hex: '#5FB8E0', action: { kind: 'panel', panel: 'existing-opp' } },
     ],
   },
 }
@@ -287,11 +287,11 @@ function FlowCardButton({
       className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
       style={{
         background: isAria
-          ? 'radial-gradient(circle at 25% 20%, rgba(168,85,247,0.34), rgba(0,200,255,0.14) 38%, rgba(255,255,255,0.035) 100%)'
+          ? 'radial-gradient(circle at 25% 20%, rgba(95,184,224,0.34), rgba(95,184,224,0.14) 38%, rgba(255,255,255,0.035) 100%)'
           : `linear-gradient(145deg, rgba(${color},0.18), rgba(255,255,255,0.035))`,
-        border: isAria ? '1px solid rgba(168,85,247,0.42)' : `1px solid rgba(${color},0.30)`,
+        border: isAria ? '1px solid rgba(95,184,224,0.42)' : `1px solid rgba(${color},0.30)`,
         boxShadow: isAria
-          ? '0 0 28px rgba(168,85,247,0.26), 0 18px 50px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)'
+          ? '0 0 28px rgba(95,184,224,0.26), 0 18px 50px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)'
           : `0 0 22px rgba(${color},0.12), 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)`,
         backdropFilter: 'blur(18px)',
       }}
@@ -300,19 +300,19 @@ function FlowCardButton({
         <>
           <div
             className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full"
-            style={{ background: 'rgba(168,85,247,0.18)', filter: 'blur(18px)' }}
+            style={{ background: 'rgba(95,184,224,0.18)', filter: 'blur(18px)' }}
           />
           <div
             className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em]"
             style={{
-              background: 'rgba(168,85,247,0.16)',
+              background: 'rgba(95,184,224,0.16)',
               border: '1px solid rgba(216,180,254,0.32)',
               color: 'rgba(233,213,255,0.95)',
             }}
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
-              style={{ background: '#c084fc', boxShadow: '0 0 10px rgba(192,132,252,0.9)' }}
+              style={{ background: '#9FD8EC', boxShadow: '0 0 10px rgba(192,132,252,0.9)' }}
             />
             Live
           </div>
@@ -322,7 +322,7 @@ function FlowCardButton({
       <div
         className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm"
         style={{
-          background: isAria ? 'rgba(168,85,247,0.28)' : `rgba(${color},0.28)`,
+          background: isAria ? 'rgba(95,184,224,0.28)' : `rgba(${color},0.28)`,
           border: isAria ? '1px solid rgba(216,180,254,0.38)' : `1px solid rgba(${color},0.38)`,
           color: 'rgba(255,255,255,0.9)',
         }}
@@ -334,7 +334,7 @@ function FlowCardButton({
         {card.title}
       </div>
 
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
         {card.subtitle}
       </div>
 
@@ -350,20 +350,20 @@ function FlowCardButton({
 
 function CaptureStep({ label, help, value, onChange, onNext, onBack }: { label: string; help: string; value: string; onChange: (v: string) => void; onNext: () => void; onBack: () => void }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'rgba(0,200,255,0.045)', border: '1px solid rgba(0,200,255,0.16)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.045)', border: '1px solid rgba(95,184,224,0.16)' }}>
       <label className="block text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{label}</label>
-      <p className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.46)' }}>{help}</p>
+      <p className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.82)' }}>{help}</p>
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && value.trim()) onNext() }}
         className="mt-4 w-full rounded-2xl px-4 py-3 text-sm outline-none"
-        style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,200,255,0.28)', color: 'rgba(255,255,255,0.9)' }}
+        style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.28)', color: 'rgba(255,255,255,0.9)' }}
         autoFocus
       />
       <div className="mt-4 flex justify-between gap-3">
         <button type="button" onClick={onBack} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>Back</button>
-        <button type="button" disabled={!value.trim()} onClick={onNext} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Next</button>
+        <button type="button" disabled={!value.trim()} onClick={onNext} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>Next</button>
       </div>
     </div>
   )
@@ -384,10 +384,10 @@ function SourceStep({
   onBack: () => void
 }) {
   const options: Array<{ source: LeadSource; title: string; subtitle: string; hex: string }> = [
-    { source: 'phone', title: 'Phone Call', subtitle: 'Someone called in and needs help.', hex: '#00C8FF' },
+    { source: 'phone', title: 'Phone Call', subtitle: 'Someone called in and needs help.', hex: '#5FB8E0' },
     { source: 'walk_in', title: 'Walk-In', subtitle: 'Someone came in or asked in person.', hex: '#fbbf24' },
-    { source: 'outbound', title: 'Outbound Cold Call', subtitle: 'You found or called a new lead.', hex: '#007CFF' },
-    { source: 'website', title: 'Website / Other', subtitle: 'Website, referral, email, or another source.', hex: '#a855f7' },
+    { source: 'outbound', title: 'Outbound Cold Call', subtitle: 'You found or called a new lead.', hex: '#5FB8E0' },
+    { source: 'website', title: 'Website / Other', subtitle: 'Website, referral, email, or another source.', hex: '#5FB8E0' },
   ]
 
   return (
@@ -404,7 +404,7 @@ function SourceStep({
               style={{ background: `linear-gradient(145deg, rgba(${color},0.18), rgba(255,255,255,0.035))`, border: `1px solid rgba(${color},0.28)`, boxShadow: `0 0 18px rgba(${color},0.10), 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)` }}
             >
               <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{option.title}</div>
-              <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.46)' }}>{option.subtitle}</div>
+              <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{option.subtitle}</div>
               <div className="absolute bottom-4 right-4 text-xs opacity-60 transition-opacity group-hover:opacity-100" style={{ color: option.hex }}>Choose</div>
             </button>
           )
@@ -426,7 +426,7 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
   loadingOpportunityId?: string | null
 }) {
   if (records.length === 0) {
-    return <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.42)' }}>{emptyText}</div>
+    return <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{emptyText}</div>
   }
 
   return (
@@ -447,8 +447,8 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
             onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') isLead ? onLeadClick!(record.id) : onOpportunityClick!(record.id) } : undefined}
             className={clickable ? 'rounded-2xl p-4 transition-all cursor-pointer hover:-translate-y-0.5' : 'rounded-2xl p-4'}
             style={{
-              background: isLoading ? 'rgba(0,200,255,0.12)' : 'rgba(255,255,255,0.035)',
-              border: isLoading ? '1px solid rgba(0,200,255,0.30)' : '1px solid rgba(255,255,255,0.08)',
+              background: isLoading ? 'rgba(95,184,224,0.12)' : 'rgba(255,255,255,0.035)',
+              border: isLoading ? '1px solid rgba(95,184,224,0.30)' : '1px solid rgba(255,255,255,0.08)',
             }}
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -458,23 +458,23 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
                     {isLoading ? 'Opening...' : recordDisplayName(record)}
                   </div>
                   {clickable && !isLoading && (
-                    <span className="text-[10px] opacity-55" style={{ color: '#00C8FF' }}>Open →</span>
+                    <span className="text-[10px] opacity-55" style={{ color: '#5FB8E0' }}>Open →</span>
                   )}
                 </div>
-                <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
                   {recordDisplayCompany(record)}
                 </div>
                 {isLead && record.location && (
-                  <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                  <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
                     {String(record.location)}
                   </div>
                 )}
               </div>
-              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(0,200,255,0.1)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.18)', whiteSpace: 'nowrap' }}>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(95,184,224,0.1)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(95,184,224,0.18)', whiteSpace: 'nowrap' }}>
                 {record.stage ?? 'open'}
               </div>
             </div>
-            {record.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.38)' }}>{record.notes}</div>}
+            {record.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{record.notes}</div>}
           </div>
         )
       })}
@@ -690,7 +690,7 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(0,200,255,0.07), rgba(255,255,255,0.022))', border: '1px solid rgba(0,200,255,0.14)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(0,200,255,0.07), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(95,184,224,0.07), rgba(255,255,255,0.022))', border: '1px solid rgba(95,184,224,0.14)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(95,184,224,0.07), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
         {selectedLeadId && leadWindowData && (
           <LeadGlassWindow
             data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
@@ -715,11 +715,11 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : stepId === 'call-source' ? 'Capture Lead' : simpleStep?.eyebrow ?? 'Capture Lead'}</div>
+                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(95,184,224,0.78)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : stepId === 'call-source' ? 'Capture Lead' : simpleStep?.eyebrow ?? 'Capture Lead'}</div>
                 <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.96)' }}>{stepId === 'workbench' ? 'Work what is already open.' : stepId === 'call-source' ? 'Where did this lead come from?' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : stepId === 'call-source' ? 'Pick the source so the lead is tracked correctly.' : simpleStep?.subtitle ?? `Source: ${sourceLabel(draft.source)}. No CRM training needed. Answer the simple question, then press Next.`}</p>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : stepId === 'call-source' ? 'Pick the source so the lead is tracked correctly.' : simpleStep?.subtitle ?? `Source: ${sourceLabel(draft.source)}. No CRM training needed. Answer the simple question, then press Next.`}</p>
               </div>
-              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,200,255,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.24)' }}>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(95,184,224,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(95,184,224,0.24)' }}>
                 {activeTab === 'opps' || !activeTab ? 'New Opps / Leads' : 'Guided Flow'}
               </div>
             </div>
@@ -744,7 +744,7 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
                   {(['myLeads', 'openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
-                    <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(0,200,255,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(0,200,255,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
+                    <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(95,184,224,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(95,184,224,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
                       <div className="font-semibold">{WORKBENCH_LABELS[focus]}</div>
                       {focus !== 'search' && <div className="mt-1 opacity-50">{workbench?.stats?.[focus] ?? 0} items</div>}
                     </button>
@@ -753,14 +753,14 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
 
                 {workbenchFocus === 'search' && (
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.22)', color: 'rgba(255,255,255,0.88)' }} />
-                    <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Search</button>
+                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.88)' }} />
+                    <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>Search</button>
                   </div>
                 )}
 
                 {showLeadSort && focusedRecords.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Sort:</span>
+                    <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Sort:</span>
                     {(['newest', 'name', 'activity'] as LeadSort[]).map(option => (
                       <button
                         key={option}
@@ -768,14 +768,14 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
                         onClick={() => setLeadSort(option)}
                         className="rounded-full px-3 py-1 text-[11px] font-medium transition-all"
                         style={leadSort === option
-                          ? { background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.92)' }
+                          ? { background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.32)', color: 'rgba(255,255,255,0.92)' }
                           : { background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }
                         }
                       >
                         {LEAD_SORT_LABELS[option]}
                       </button>
                     ))}
-                    <span className="ml-auto text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                    <span className="ml-auto text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
                       {focusedRecords.length} {focusedRecords.length === 1 ? 'lead' : 'leads'}
                     </span>
                   </div>
@@ -799,7 +799,7 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
             {stepId === 'call-need' && <CaptureStep label="What do they need?" help="Example: gate guard, camera monitoring, quote, service, or site walk." value={draft.need} onChange={need => setDraft(prev => ({ ...prev, need }))} onNext={() => setStepId('call-review')} onBack={() => setStepId('call-property')} />}
 
             {stepId === 'call-review' && (
-              <div className="rounded-3xl p-4" style={{ background: 'rgba(0,200,255,0.055)', border: '1px solid rgba(0,200,255,0.18)' }}>
+              <div className="rounded-3xl p-4" style={{ background: 'rgba(95,184,224,0.055)', border: '1px solid rgba(95,184,224,0.18)' }}>
                 <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Ready to create the lead?</div>
                 <div className="mt-3 grid gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.66)' }}>
                   <div>Source: {sourceLabel(draft.source)}</div>
@@ -817,14 +817,14 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
                       </div>
                     ))}
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <button type="button" disabled={leadWindowBusy} onClick={() => { const m = duplicateState.matches[0]; if (m) void openLead(m.id) }} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.92)' }}>{leadWindowBusy ? 'Opening...' : 'Use Existing Lead'}</button>
+                      <button type="button" disabled={leadWindowBusy} onClick={() => { const m = duplicateState.matches[0]; if (m) void openLead(m.id) }} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.32)', color: 'rgba(255,255,255,0.92)' }}>{leadWindowBusy ? 'Opening...' : 'Use Existing Lead'}</button>
                       <button type="button" disabled={busy} onClick={() => void submitInboundLead(true)} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.68)' }}>{busy ? 'Creating...' : 'Create New Anyway'}</button>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-4 flex justify-between gap-3">
                     <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
-                    <button type="button" disabled={busy} onClick={() => void submitInboundLead()} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{busy ? 'Creating...' : 'Create Lead'}</button>
+                    <button type="button" disabled={busy} onClick={() => void submitInboundLead()} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>{busy ? 'Creating...' : 'Create Lead'}</button>
                   </div>
                 )}
               </div>
@@ -833,20 +833,20 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
             {nextCards.length > 0 && (
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {nextCards.map(card => (
-                  <div key={card.title} className="rounded-2xl p-4" style={{ background: 'rgba(0,200,255,0.055)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.82)' }}>
+                  <div key={card.title} className="rounded-2xl p-4" style={{ background: 'rgba(95,184,224,0.055)', border: '1px solid rgba(95,184,224,0.16)', color: 'rgba(255,255,255,0.82)' }}>
                     <div className="text-sm font-semibold">{card.title}</div>
-                    <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>{card.subtitle}</div>
+                    <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{card.subtitle}</div>
                   </div>
                 ))}
               </div>
             )}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>Pick one card. Nexus gives the next obvious step.</div>
+              <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Pick one card. Nexus gives the next obvious step.</div>
               {stepId !== 'start' && <button type="button" onClick={resetFlow} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>Start over</button>}
             </div>
 
-            {(busy || status) && <div className="mt-4 rounded-2xl px-4 py-3 text-xs" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.76)' }}>{busy ? 'Nexus is working...' : status}</div>}
+            {(busy || status) && <div className="mt-4 rounded-2xl px-4 py-3 text-xs" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.16)', color: 'rgba(255,255,255,0.76)' }}>{busy ? 'Nexus is working...' : status}</div>}
           </>
         )}
       </div>

@@ -76,6 +76,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { searchParams } = new URL(req.url)
   const contactId = searchParams.get('contactId')
 

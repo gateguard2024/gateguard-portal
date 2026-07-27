@@ -51,7 +51,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
   function statusOf(v: Vendor) { return statuses.find(s => s.vendor === v); }
   function chip(s?: Status) {
     if (!s || !s.configured) return { label: "Not set", color: "#64748b" };
-    if (s.status === "verified") return { label: "Verified", color: "#34d399" };
+    if (s.status === "verified") return { label: "Verified", color: "#7ee0a8" };
     if (s.status === "error") return { label: "Error", color: "#f87171" };
     return { label: "Configured", color: "#fbbf24" };
   }
@@ -94,7 +94,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     finally { setLoadingSites(false); }
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (
@@ -112,7 +112,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>{label}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: c.color }}>{c.label}</span>
-                    <button onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); }} style={{ fontSize: 12, color: "#7DE5FF", background: "none", border: "none", cursor: "pointer" }}>{isOpen ? "Cancel" : s?.configured ? "Update" : "Set up"}</button>
+                    <button onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); }} style={{ fontSize: 12, color: "#5FB8E0", background: "none", border: "none", cursor: "pointer" }}>{isOpen ? "Cancel" : s?.configured ? "Update" : "Set up"}</button>
                   </div>
                 </div>
                 {s?.last_error && !isOpen && <div style={{ fontSize: 11, color: "#fca5a5", marginTop: 4 }}>{s.last_error}</div>}
@@ -127,7 +127,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                     {/* UniFi cloud site picker */}
                     {vendor === "unifi" && (
                       <div style={{ display: "grid", gap: 6, paddingTop: 2 }}>
-                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#7DE5FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
+                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#5FB8E0", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
                         {cloudSites.length > 0 && (
                           <select value={form.cloud_site_id ?? ""} onChange={e => { const s = cloudSites.find(x => x.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: s?.host_id ?? p.cloud_host_id ?? "" })); }} style={input}>
                             <option value="">— pick this property&apos;s UniFi site —</option>
@@ -151,9 +151,9 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                       </>
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
-                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
-                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
+                      <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
+                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
+                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
                       {s?.configured && <button onClick={() => remove(vendor, label)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1, marginLeft: "auto" }}>Remove</button>}
                     </div>
                   </div>

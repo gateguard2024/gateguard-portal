@@ -15,8 +15,8 @@ type Article = {
 const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }
 const textPrimary = { color: 'rgba(255,255,255,0.9)' }
 const textSecondary = { color: 'rgba(255,255,255,0.5)' }
-const textFaint = { color: 'rgba(255,255,255,0.34)' }
-const brandCyan = '#00C8FF'
+const textFaint = { color: 'rgba(255,255,255,0.82)' }
+const brandCyan = '#5FB8E0'
 
 // Reads the platform how-tos seeded in kb_articles (category "Platform How-To").
 async function loadHowTos(): Promise<Article[]> {
@@ -55,18 +55,18 @@ export function HelpSurface() {
 
   return (
     <section className="mt-9 w-full max-w-3xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,200,255,0.13), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.16)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.09), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(95,184,224,0.13), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(95,184,224,0.16)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(95,184,224,0.09), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
         {/* Header */}
         <div className="mb-5">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(95,184,224,0.82)' }}>
             <BookOpen size={13} /> Help Center
           </div>
-          <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>How do I…?</h2>
+          <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(95,184,224,0.22)' }}>How do I…?</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={textSecondary}>Simple step-by-step answers for everything in Nexus. Search a question or browse below.</p>
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl mb-4" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.22)' }}>
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl mb-4" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(95,184,224,0.22)' }}>
           <Search size={16} style={textSecondary} />
           <input
             value={query}

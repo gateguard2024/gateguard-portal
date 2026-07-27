@@ -19,7 +19,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { clerkClient } from '@clerk/nextjs/server'
+import { sendClerkInvite } from '@/lib/send-invite'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 import { canManageOrg, canInviteUser, normalizeRole, type SimpleRole } from '@/lib/permissions'
@@ -79,8 +79,7 @@ export async function POST(req: NextRequest) {
       if (targetOrgId && !canInviteUser(caller, targetOrgId, role, scope.ids)) {
         return NextResponse.json({ success: false, message: 'You cannot invite a user at or above your own role.' }, { status: 403 })
       }
-      const client = await clerkClient()
-      const invitation = await client.invitations.createInvitation({
+      const invitation = await sendClerkInvite({
         emailAddress: email,
         redirectUrl: `${APP_URL}/sign-up`,
         publicMetadata: { role, org_id: targetOrgId, org_tier: orgTier, invited_by: caller.id },
@@ -111,8 +110,7 @@ export async function POST(req: NextRequest) {
       let invitation_id: string | null = null
       if (login_method === 'full_login') {
         if (!email) return NextResponse.json({ success: false, message: 'Email is required for a full login.' }, { status: 400 })
-        const client = await clerkClient()
-        const invitation = await client.invitations.createInvitation({
+        const invitation = await sendClerkInvite({
           emailAddress: email,
           redirectUrl: `${APP_URL}/sign-up`,
           publicMetadata: { role: 'tech', org_id: targetOrgId, org_tier: orgTier, technician_id: tech.id, invited_by: caller.id },

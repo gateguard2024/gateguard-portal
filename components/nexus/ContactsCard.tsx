@@ -7,10 +7,10 @@ import { useCallback, useEffect, useState } from 'react'
 type Linked = { link_id: string; contact_id: string; name: string; email: string | null; phone: string | null; title: string | null; role: string | null }
 type Found = { id: string; name: string; email: string | null; title?: string | null }
 
-const card = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 } as const
-const input = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
+const card = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 16, padding: 16, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' } as const
+const input = { background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
 
-export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { entityType: string; entityId?: string; accent?: string }) {
+export function ContactsCard({ entityType, entityId, accent = '#5FB8E0' }: { entityType: string; entityId?: string; accent?: string }) {
   const [rows, setRows] = useState<Linked[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
@@ -114,9 +114,9 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
               <div style={{ width: 30, height: 30, borderRadius: 999, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: `${accent}22`, color: accent }}>{initials(r.name)}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}{r.title ? <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {r.title}</span> : ''}</div>
-                {r.email && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</div>}
+                {r.email && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</div>}
               </div>
-              <button onClick={() => remove(r.link_id)} title="Remove" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
+              <button onClick={() => remove(r.link_id)} title="Remove" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.82)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
             </div>
           ))}
         </div>
@@ -135,7 +135,7 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
           </div>
           {q.trim() && (
             <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Not in the list? Add their details and create them.</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)', marginBottom: 6 }}>Not in the list? Add their details and create them.</div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email (optional)" style={input} />
                 <input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="Phone (optional)" style={input} />
@@ -145,7 +145,7 @@ export function ContactsCard({ entityType, entityId, accent = '#6B7EFF' }: { ent
             </div>
           )}
           {err && <div style={{ marginTop: 8, fontSize: 12, color: '#fca5a5', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '6px 8px' }}>{err}</div>}
-          <button onClick={resetAdd} style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.45)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={resetAdd} style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.82)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
     </div>

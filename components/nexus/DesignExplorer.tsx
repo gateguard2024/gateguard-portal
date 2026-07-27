@@ -53,7 +53,7 @@ const STAGE_LABEL: Record<Stage, string> = {
 const STAGE_COLOR: Record<Stage, string> = {
   floor_plan: BRAND, system_design: CYAN, as_built: '#34D399',
   riser: '#F59E0B', site_survey: '#EC4899', network: '#0891B2',
-  wiring_detail: '#8B5CF6', general: '#94A3B8', proposal: '#F97316',
+  wiring_detail: '#5FB8E0', general: '#94A3B8', proposal: '#F97316',
 };
 function stageOf(status: string): Stage {
   const s = (status ?? '').toLowerCase().replace(/[\s-]+/g, '_');

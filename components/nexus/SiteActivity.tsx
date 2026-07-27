@@ -52,11 +52,11 @@ export function SiteActivity({ siteId }: { siteId: string }) {
     return () => { cancelled = true; };
   }, [siteId]);
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 16 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 16 } as const;
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#7DE5FF" /> Activity</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#5FB8E0" /> Activity</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
         : events.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{brivoNote ?? "No activity yet. Door unlocks, installs, and alerts will show here."}</div>
         : <div style={{ display: "grid", gap: 2 }}>
@@ -71,7 +71,7 @@ export function SiteActivity({ siteId }: { siteId: string }) {
             ))}
           </div>}
       {!loading && events.length > 0 && brivoNote && (
-        <div style={{ marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.42)" }}>{brivoNote}</div>
+        <div style={{ marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.82)" }}>{brivoNote}</div>
       )}
     </div>
   );

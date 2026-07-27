@@ -24,14 +24,14 @@ export type UserWindowData = {
   orgSites?: { id: string; name: string }[]
 }
 
-const VIOLET = '#8B5CF6'
+const VIOLET = '#5FB8E0'
 const ROLE_BLURB: Record<SimpleRole, { title: string; sub: string }> = {
   admin:      { title: 'Admin',      sub: 'Sees everything in the org. Can manage users and access.' },
   supervisor: { title: 'Supervisor', sub: 'Sees everything in the org. Cannot manage users.' },
   user:       { title: 'User',       sub: 'Sees only work assigned to them. No admin tools.' },
 }
 const LEVEL_LABEL: Record<AccessLevel, string> = { none: 'Hidden', view: 'View', edit: 'Edit' }
-const LEVEL_COLOR: Record<AccessLevel, string> = { none: 'rgba(255,255,255,0.30)', view: '#7dd3fc', edit: '#34d399' }
+const LEVEL_COLOR: Record<AccessLevel, string> = { none: 'rgba(255,255,255,0.30)', view: '#9FD8EC', edit: '#34d399' }
 const LEVELS: AccessLevel[] = ['none', 'view', 'edit']
 
 function Section({ title, children, accent = VIOLET }: { title: string; children: React.ReactNode; accent?: string }) {
@@ -119,22 +119,21 @@ export function UserGlassWindow({
       <div
         className="mx-auto flex h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)]"
         style={{
-          background: 'radial-gradient(circle at 16% 0%, rgba(139,92,246,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))',
-          border: '1px solid rgba(139,92,246,0.22)',
-          boxShadow: '0 30px 100px rgba(0,0,0,0.6), 0 0 58px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(28px)',
+          background: 'radial-gradient(circle at 16% 0%, rgba(95,184,224,0.10), transparent 34%), linear-gradient(180deg,#1d2a39,#141d28)',
+          border: '1px solid rgba(95,184,224,0.22)',
+          boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.07)',
         }}
       >
         {/* Header */}
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <button type="button" onClick={onBack} className="mb-2 text-[11px]" style={{ color: 'rgba(196,181,253,0.86)' }}>← Back to Users</button>
+            <button type="button" onClick={onBack} className="mb-2 text-[11px]" style={{ color: 'rgba(159,216,236,0.86)' }}>← Back to Users</button>
             <h2 className="text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>{user.name}</h2>
             <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
               {user.email} · {user.org_name} · {user.org_tier.replace(/_/g, ' ')}
             </div>
           </div>
-          <div className="rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ background: 'rgba(139,92,246,0.16)', border: '1px solid rgba(139,92,246,0.34)', color: '#ddd6fe' }}>
+          <div className="rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.34)', color: '#c3d3e2' }}>
             {ROLE_BLURB[role].title}
           </div>
         </div>
@@ -151,8 +150,8 @@ export function UserGlassWindow({
                   <button key={r} type="button" disabled={busy} onClick={() => changeRole(r)}
                     className="rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-60"
                     style={{
-                      background: active ? 'rgba(139,92,246,0.16)' : 'rgba(0,0,0,0.18)',
-                      border: active ? '1px solid rgba(139,92,246,0.42)' : '1px solid rgba(255,255,255,0.07)',
+                      background: active ? 'rgba(95,184,224,0.16)' : 'rgba(0,0,0,0.18)',
+                      border: active ? '1px solid rgba(95,184,224,0.42)' : '1px solid rgba(255,255,255,0.07)',
                     }}>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{ROLE_BLURB[r].title}</div>
                     <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{ROLE_BLURB[r].sub}</div>
@@ -176,7 +175,7 @@ export function UserGlassWindow({
                     : { background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>
                   {user.deactivated ? 'Reactivate user' : 'Deactivate user'}
                 </button>
-                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{user.deactivated ? 'They cannot sign in until reactivated.' : 'Blocks sign-in. Reversible at any time.'}</div>
+                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{user.deactivated ? 'They cannot sign in until reactivated.' : 'Blocks sign-in. Reversible at any time.'}</div>
               </div>
               {/* Move org */}
               <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -188,9 +187,9 @@ export function UserGlassWindow({
                     {orgs.filter(o => o.id !== user.org_id).map(o => <option key={o.id} value={o.id}>{o.name} ({o.tier_label})</option>)}
                   </select>
                   <button type="button" disabled={busy || !moveTo} onClick={async () => { const ok = await post({ action: 'move_org', dest_org_id: moveTo }); if (ok) setMoveTo('') }}
-                    className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', color: '#ddd6fe' }}>Move</button>
+                    className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.4)', color: '#c3d3e2' }}>Move</button>
                 </div>
-                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>Only organizations in your network are listed.</div>
+                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Only organizations in your network are listed.</div>
               </div>
             </div>
           </Section>
@@ -240,14 +239,14 @@ export function UserGlassWindow({
                 if (shown.length === 0) return null
                 return (
                   <div key={section}>
-                    <div className="mb-1.5 text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>{section}</div>
+                    <div className="mb-1.5 text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{section}</div>
                     <div className="flex flex-wrap gap-1.5">
                       {shown.map(i => {
                         const lvl = previewLevel(i.key)
                         const overridden = userOverrides[i.key] != null
                         return (
                           <span key={i.key} className="rounded-full px-2.5 py-1 text-[11px]"
-                            style={{ background: 'rgba(0,0,0,0.22)', border: `1px solid ${overridden ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.08)'}`, color: 'rgba(255,255,255,0.78)' }}>
+                            style={{ background: 'rgba(0,0,0,0.22)', border: `1px solid ${overridden ? 'rgba(95,184,224,0.5)' : 'rgba(255,255,255,0.08)'}`, color: 'rgba(255,255,255,0.78)' }}>
                             {i.label} <span style={{ color: LEVEL_COLOR[lvl] }}>· {LEVEL_LABEL[lvl]}</span>
                           </span>
                         )
@@ -256,13 +255,13 @@ export function UserGlassWindow({
                   </div>
                 )
               })}
-              {visibleCount === 0 && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.38)' }}>This role currently sees nothing — the org may not have access to these features.</div>}
+              {visibleCount === 0 && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.82)' }}>This role currently sees nothing — the org may not have access to these features.</div>}
             </div>
           </Section>
 
           {/* Advanced per-feature tuning */}
-          <Section title="Advanced — fine-tune individual features" accent="#7dd3fc">
-            <button type="button" onClick={() => setAdvanced(a => !a)} className="mb-3 text-[11px]" style={{ color: '#7dd3fc' }}>
+          <Section title="Advanced — fine-tune individual features" accent="#9FD8EC">
+            <button type="button" onClick={() => setAdvanced(a => !a)} className="mb-3 text-[11px]" style={{ color: '#9FD8EC' }}>
               {advanced ? 'Hide advanced ▲' : 'Show advanced ▼'}
             </button>
             {advanced && (
@@ -278,12 +277,12 @@ export function UserGlassWindow({
                     <div key={c.key} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.16)', border: '1px solid rgba(255,255,255,0.05)' }}>
                       <div className="min-w-0">
                         <div className="truncate text-xs" style={{ color: 'rgba(255,255,255,0.8)' }}>{c.label}</div>
-                        <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{c.section_label} · preset {LEVEL_LABEL[preset]}</div>
+                        <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{c.section_label} · preset {LEVEL_LABEL[preset]}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <button type="button" disabled={busy} onClick={() => post({ action: 'clear_feature_access', feature_key: c.key })}
                           className="rounded-lg px-2 py-1 text-[10px] disabled:opacity-50"
-                          style={{ background: override == null ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: override == null ? '#ddd6fe' : 'rgba(255,255,255,0.5)' }}>
+                          style={{ background: override == null ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: override == null ? '#c3d3e2' : 'rgba(255,255,255,0.5)' }}>
                           Preset
                         </button>
                         {LEVELS.map(lvl => {
@@ -313,8 +312,8 @@ export function UserGlassWindow({
         </div>
 
         <div className="mt-3 flex items-center justify-between">
-          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{busy ? 'Saving…' : 'Changes save automatically'}</div>
-          <button type="button" onClick={onBack} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>Done</button>
+          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{busy ? 'Saving…' : 'Changes save automatically'}</div>
+          <button type="button" onClick={onBack} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>Done</button>
         </div>
       </div>
     </div>

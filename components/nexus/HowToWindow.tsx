@@ -71,7 +71,7 @@ export function HowToWindow() {
     return (
       <button type="button" onClick={() => setOpen(true)} aria-label="Open how-to help"
         className="fixed z-[60] flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-sm font-semibold"
-        style={{ right: 16, bottom: 'calc(86px + env(safe-area-inset-bottom))', background: 'linear-gradient(135deg, rgba(0,124,255,0.9), rgba(0,200,255,0.7))', color: 'white', boxShadow: '0 6px 24px rgba(0,124,255,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
+        style={{ right: 16, bottom: 'calc(86px + env(safe-area-inset-bottom))', background: 'linear-gradient(135deg, rgba(95,184,224,0.9), rgba(95,184,224,0.7))', color: 'white', boxShadow: '0 6px 24px rgba(95,184,224,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
         ? <span className="hidden sm:inline">How-to</span>
       </button>
     )
@@ -79,11 +79,11 @@ export function HowToWindow() {
 
   return (
     <div className="fixed z-[60] flex w-[min(360px,calc(100vw-16px))] flex-col rounded-2xl"
-      style={{ left: pos.x, top: pos.y, maxHeight: 'min(70vh, 560px)', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 24px 70px rgba(0,0,0,0.6), 0 0 40px rgba(0,124,255,0.16)', backdropFilter: 'blur(20px)' }}>
+      style={{ left: pos.x, top: pos.y, maxHeight: 'min(70vh, 560px)', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(95,184,224,0.28)', boxShadow: '0 24px 70px rgba(0,0,0,0.6), 0 0 40px rgba(95,184,224,0.16)', backdropFilter: 'blur(20px)' }}>
       {/* Drag handle / header */}
       <div onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
         className="flex cursor-move items-center justify-between gap-2 rounded-t-2xl px-3 py-2.5 select-none"
-        style={{ background: 'rgba(0,124,255,0.14)', borderBottom: '1px solid rgba(0,200,255,0.18)', touchAction: 'none' }}>
+        style={{ background: 'rgba(95,184,224,0.14)', borderBottom: '1px solid rgba(95,184,224,0.18)', touchAction: 'none' }}>
         <span className="text-xs font-semibold" style={{ color: '#7DE5FF' }}>⠿ How-To · drag me anywhere</span>
         <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>✕</button>
       </div>
@@ -95,8 +95,8 @@ export function HowToWindow() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {!loaded ? <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>Loading…</div>
-          : filtered.length === 0 ? <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>No how-tos match “{q}”.</div>
+        {!loaded ? <div className="text-xs" style={{ color: 'rgba(255,255,255,0.82)' }}>Loading…</div>
+          : filtered.length === 0 ? <div className="text-xs" style={{ color: 'rgba(255,255,255,0.82)' }}>No how-tos match “{q}”.</div>
           : (
             <div className="space-y-1.5">
               {filtered.map(a => {
@@ -106,7 +106,7 @@ export function HowToWindow() {
                     <button type="button" onClick={() => setOpenId(isOpen ? null : a.id)} className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left">
                       <span>
                         <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{a.title}</span>
-                        {a.description && !isOpen && <span className="mt-0.5 block text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{a.description}</span>}
+                        {a.description && !isOpen && <span className="mt-0.5 block text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{a.description}</span>}
                       </span>
                       <span className="text-[11px]" style={{ color: '#7DE5FF' }}>{isOpen ? '−' : '+'}</span>
                     </button>

@@ -66,16 +66,27 @@ export async function POST(req: NextRequest) {
 
   // Auto-stamp org_id from the authenticated user
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
-  // assigned_to (profile id) is what the jobs board "My Jobs" filters on — keep
-  // assignee_id in sync so a task shows up for the tech it's assigned to.
-  const owner = assigned_to ?? assignee_id ?? null
+  // assigned_to → profiles(id); assignee_id → technicians(id). DIFFERENT tables —
+  // never write the same id to both or a tech id lands in the profiles-FK column
+  // and Postgres 500s the insert. Resolve the tech to its portal profile so the
+  // job still shows up in that person's "My Jobs".
+  let ownerProfileId: string | null = assigned_to ?? null
+  if (!ownerProfileId && assignee_id) {
+    const { data: tech } = await supabase.from('technicians').select('clerk_user_id').eq('id', assignee_id).maybeSingle()
+    const clerkId = (tech as { clerk_user_id?: string } | null)?.clerk_user_id
+    if (clerkId) {
+      const { data: prof } = await supabase.from('profiles').select('id').eq('clerk_user_id', clerkId).maybeSingle()
+      ownerProfileId = (prof as { id?: string } | null)?.id ?? null
+    }
+  }
+  const techId: string | null = assignee_id ?? null
 
   const { data, error } = await supabase
     .from('work_orders')
     .insert({
       title, description, customer_name: resolvedCustomer,
-      assigned_to:    owner,
-      assignee_id:    owner,
+      assigned_to:    ownerProfileId,
+      assignee_id:    techId,
       assignee_name:  assignee_name ?? null,
       priority, status, job_type,
       scheduled_date: scheduled_date ?? null,

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'site_id or org_id is required' }, { status: 400 })
     }
 
-    const result = await resendBrivoMobilePass(token, apiKey, params.id, body.email ? String(body.email) : null)
+    const result = await resendBrivoMobilePass(token, apiKey, params.id, body.email ? String(body.email) : null, { from: body.effectiveFrom ?? null, to: body.effectiveTo ?? null })
 
     if (siteId) {
       try {

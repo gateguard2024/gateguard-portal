@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordInScope } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,7 @@ const supabase = createClient(
 // POST /api/dispatch/technicians/[id]/invite
 // Sends a Clerk portal invite to the tech's email using the Clerk invitations API
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await recordInScope('technicians', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     const body = await req.json().catch(() => ({}))
     const overrideEmail = body.email as string | undefined

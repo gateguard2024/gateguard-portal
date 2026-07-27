@@ -16,6 +16,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SlideOver, SlideOverFooter } from '@/components/ui/SlideOver'
 import { TopBar } from '@/components/layout/TopBar'
+import { TIER_LABELS } from '@/lib/tier-labels'
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface PartnerDoc {
@@ -104,12 +105,12 @@ interface Commission {
 /* ─── Tier config ────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  master_agent:       { label: 'Master Agent',                     icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100'  },
-  master_dealer:      { label: 'MSO — Master System Operator',     icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50'    },
-  full_dealer:        { label: 'System Operator (Full Dealership)', icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
-  service_dealer:     { label: 'Servicing Partner',                icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100' },
-  install_contractor: { label: 'Installation Partner',             icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100'   },
-  sales_partner:      { label: 'Sales Partner',                    icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100'     },
+  master_agent:       { label: TIER_LABELS.master_agent,                     icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100'  },
+  master_dealer:      { label: TIER_LABELS.master_dealer,     icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50'    },
+  full_dealer:        { label: TIER_LABELS.full_dealer, icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
+  service_dealer:     { label: TIER_LABELS.service_dealer,                icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  install_contractor: { label: TIER_LABELS.install_contractor,             icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100'   },
+  sales_partner:      { label: TIER_LABELS.sales_partner,                    icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100'     },
 }
 
 /* ─── Document config ────────────────────────────────────── */

@@ -373,7 +373,7 @@ export function Sidebar() {
         collapsed ? "w-16" : "w-64"
       )}
       style={{
-        background: "radial-gradient(ellipse at 50% 68%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)",
+        background: "#0e1e38",
       }}
     >
 

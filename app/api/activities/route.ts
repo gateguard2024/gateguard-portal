@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,22 @@ export async function GET(req: NextRequest) {
 
     if (!recordType || !recordId) {
       return NextResponse.json({ error: 'record_type and record_id are required' }, { status: 400 })
+    }
+
+    // Require a real (non-anonymous) session — this route had no auth at all.
+    const user = await getCurrentUser()
+    if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Cross-tenant guard: confirm the parent record is in the caller's org scope
+    // before returning its activity notes. Falls back to auth-only if a parent
+    // column can't be resolved (never throws / never leaks another org's rows).
+    const scope = await resolveOrgScope(user)
+    if (!scope.all) {
+      let parentOrg: string | null = null
+      if (recordType === 'customer') parentOrg = recordId
+      else if (recordType === 'opportunity') { const { data: p } = await supabase.from('opportunities').select('dealer_org_id').eq('id', recordId).maybeSingle(); parentOrg = (p?.dealer_org_id as string) ?? null }
+      else if (recordType === 'lead') { const { data: p } = await supabase.from('leads').select('dealer_org_id').eq('id', recordId).maybeSingle(); parentOrg = (p?.dealer_org_id as string) ?? null }
+      if (parentOrg && !scope.ids.includes(parentOrg)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const col = fkColumn(recordType)

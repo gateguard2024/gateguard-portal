@@ -1,219 +1,115 @@
 /**
- * GateGuard MONTHLY RECURRING pricing model — SERVER ONLY. Model "v16".
+ * lib/pricing-model.ts — Gate Guard pricing engine v2 (SERVER ONLY).
  *
- * Revenue (customer bill) = graduated per-unit tiers + an included gate/camera
- * allotment + per-item add-ons, floored to a whole-deal Gate Guard minimum and
- * rounded down to the dollar.
+ * Corporate sees the full breakdown (cost sheet + dealer/sales/distributor/GG net).
+ * Master-dealer-and-below see only Dealer, Sales rep, and ONE combined Gate Guard
+ * line (cost + net + distribution folded in) — never our cost or the distributor cut.
  *
- * Distribution = FLAT PER-UNIT commissions, capped: dealer $3/unit, sales
- * $1/unit, distribution $1/unit. Gate Guard keeps everything left after cost.
- *
- * Cost = the real recurring cost sheet (Brivo site + tiered entry-point licenses
- * + smart locks + Eagle Eye NVR + per-camera stack + cellular).
- *
- * GG cost + net are proprietary — returned only when `internal` (corporate).
- * A one-time / install-fee section is intentionally NOT here yet (coming next).
- * Imported only by /api/pricing/compute.
+ * Locked production GG-net model = "min2" ($2/unit floor). Corporate may pass 'double'.
+ * Corporate may pass ggNetModel:'min2' to model the $2/unit floor instead.
  */
-
-// ── Revenue (v14 engine, locked) ─────────────────────────────────────────────
-const TIERS: Array<[number, number]> = [[100, 10], [300, 7], [600, 5], [Infinity, 3]]
-const INCL_GATES_PER_100 = 1.5
-const INCL_CAMS_PER_100 = 1
-const ADDON_GATE = 155
-const ADDON_CAM_NEW = 91
-const ADDON_CAM_EXISTING = 85
-
-// ── Distribution — flat per-unit caps ────────────────────────────────────────
-const DEALER_PER_UNIT = 3
-const SALES_PER_UNIT = 1
-const DIST_PER_UNIT = 1
-// A dealer who MAINTAINS the entry points must clear at least $150 per entry
-// point per month — gate service has to pay. This can lift the dealer above the
-// $3/unit cap on gate-heavy / smaller sites; the customer bill covers it.
-const DEALER_MIN_PER_ENTRY = 150
-
-// ── Real recurring cost sheet ────────────────────────────────────────────────
-const COST_BRIVO_SITE = 90
-const COST_ENTRY_TIER = { t1: 10, t2: 7, t3: 5 }   // 1st–2nd, 3rd–8th, 9+
-const COST_SMART_LOCK = 3                            // per unit
-const COST_NVR = 25                                  // Eagle Eye, per site
-const COST_CAM_MONTHLY = 10                          // camera
-const COST_CLOUD = 9                                 // cloud storage / camera
-const COST_CALL_CENTER = 25                          // call center / camera
-const COST_CELLULAR = 10                             // IOT ea
-const COST_PER_CAMERA = COST_CAM_MONTHLY + COST_CLOUD + COST_CALL_CENTER   // $44
-
-const GG_MIN_NET = 350
-
-const round2 = (n: number) => Math.round(n * 100) / 100
-
-function graduatedRevenue(units: number): number {
-  let prev = 0, rev = 0
-  for (const [cap, rate] of TIERS) {
-    const upto = Math.min(units, cap)
-    rev += Math.max(0, upto - prev) * rate
-    prev = upto
-    if (prev >= units) break
-  }
-  return rev
-}
-
-function tieredEntryCost(entryPoints: number): number {
-  let c = 0
-  for (let i = 1; i <= entryPoints; i++) c += i <= 2 ? COST_ENTRY_TIER.t1 : i <= 8 ? COST_ENTRY_TIER.t2 : COST_ENTRY_TIER.t3
-  return c
-}
+export type SmartPackage = 'none' | 'lock' | 'full'
+export type Cellular = 'none' | 'relay' | 'full'
+export type GgNetModel = 'double' | 'min2'
 
 export interface PricingInputs {
-  livingUnits?: number | string
-  entryPoints?: number | string
-  cameras?: number | string
-  cameraType?: 'new' | 'existing' | string
-  smartLockUnits?: number | string
-  cellular?: number | string
-  dealerMaintainsEntry?: boolean
-  // Legacy field names still accepted.
-  doors?: number | string
-  camMon?: number | string
-  commonLocks?: number | string
-}
-
-export interface PricingResult {
-  empty: boolean
-  noUnits: boolean
-  units: number
+  livingUnits: number
   entryPoints: number
-  cameras: number
-  cameraType: 'new' | 'existing'
-  smartLockUnits: number
-  cellular: number
-  includedGates: number
-  includedCameras: number
-  extraGates: number
-  extraCameras: number
-  // customer-facing
-  customerMonthly: number
-  perUnit: number
-  atFloor: boolean
-  // distribution (dealer sees their own + channel)
-  dealerCut: number
-  salesCut: number
-  distCut: number
-  dealerPerUnit: number
-  salesPerUnit: number
-  distPerUnit: number
+  camerasMonitored: number
+  camerasNonMonitored: number
+  smartPackage: SmartPackage
+  cellular: Cellular
   dealerMaintainsEntry: boolean
-  dealerEntryFloor: number
-  dealerEntryFloorRate: number
-  dealerFloorBinds: boolean
-  // legacy callback fields
-  ggFee: number                // GG net (internal) — 0 for dealers
-  suggestedRetail: number      // = customerMonthly
-  commission: number           // = sales + dist
-  dealerProfit: number         // = dealerCut
-  dealerMonthlyNet: number     // = dealerCut
-  // internal-only
-  ggCost?: number
-  ggNet?: number
-  margin?: number
-  marginPerUnit?: number
-  costBrivo?: number
-  costEntry?: number
-  costSmartLock?: number
-  costNvr?: number
-  costCameras?: number
-  costCellular?: number
-  perCameraCost?: number
+  ggNetModel?: GgNetModel        // corporate-only; dealers are always 'double'
 }
 
-export function computePricing(input: PricingInputs, internal: boolean): PricingResult {
-  const n = (s: number | string | undefined) => Number(s) || 0
-  const units = Math.max(0, n(input.livingUnits))
-  const entryPoints = Math.max(0, n(input.entryPoints ?? input.doors))
-  const cameras = Math.max(0, n(input.cameras ?? input.camMon))
-  const smartLockUnits = Math.max(0, n(input.smartLockUnits ?? input.commonLocks))
-  const cellular = Math.max(0, n(input.cellular))
-  const cameraType: 'new' | 'existing' = input.cameraType === 'existing' ? 'existing' : 'new'
-  const addonCamPrice = cameraType === 'existing' ? ADDON_CAM_EXISTING : ADDON_CAM_NEW
+// ── Cost sheet (v2) ──────────────────────────────────────────────────────────
+const BRIVO_SITE = 90                               // flat per site
+const ENTRY_T1 = 10, ENTRY_T2 = 8, ENTRY_T3 = 5     // entry points 1–2, 3–6, 7+
+const LARGE_THRESHOLD = 350, LARGE_BLOCK = 75, LARGE_FEE = 25   // +$25 / 75 units over 350
+const CAM_BASE = 60, CAM_BASE_CAP = 20, CAM_EACH = 20, CAM_CALL = 25, CAM_SMALL = 50
+const CELL_RELAY = 6, CELL_FULL = 60
+const SMART_COST = 2.5                              // per unit × multiplier
+// ── Distribution ─────────────────────────────────────────────────────────────
+const DEALER_PER_UNIT = 3, SALES_PER_UNIT = 1, DIST_PER_UNIT = 1
+const DEALER_MIN_PER_ENTRY = 150                    // dealer floor when maintaining
+const GG_MIN_NET_PER_UNIT = 2
+const SMART_DEALER_ADD = 0.25, SMART_PARTY_ADD = 0.10  // per unit × multiplier
 
-  // Revenue
-  const gradRev = graduatedRevenue(units)
-  const includedGates = units > 0 ? Math.max(1, (units * INCL_GATES_PER_100) / 100) : 0
-  const includedCameras = units > 0 ? Math.max(1, (units * INCL_CAMS_PER_100) / 100) : 0
-  const extraGates = Math.max(0, entryPoints - includedGates)
-  const extraCameras = Math.max(0, cameras - includedCameras)
-  const growth = gradRev + extraGates * ADDON_GATE + extraCameras * addonCamPrice
+const round2 = (n: number) => Math.round(n * 100) / 100
+const smartMult = (p: SmartPackage) => p === 'full' ? 2 : p === 'lock' ? 1 : 0
 
-  // Cost (real sheet)
-  const costBrivo = (entryPoints > 0 || smartLockUnits > 0) ? COST_BRIVO_SITE : 0
-  const costEntry = tieredEntryCost(entryPoints)
-  const costSmartLock = smartLockUnits * COST_SMART_LOCK
-  const costNvr = cameras > 0 ? COST_NVR : 0
-  const costCameras = cameras * COST_PER_CAMERA
-  const costCellular = cellular * COST_CELLULAR
-  const ggCost = costBrivo + costEntry + costSmartLock + costNvr + costCameras + costCellular
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function computePricing(input: PricingInputs, internal: boolean): Record<string, any> {
+  const u   = Math.max(0, Math.round(input.livingUnits || 0))
+  const ep  = Math.max(0, Math.round(input.entryPoints || 0))
+  const mon = Math.max(0, Math.round(input.camerasMonitored || 0))
+  const non = Math.max(0, Math.round(input.camerasNonMonitored || 0))
+  const mult = smartMult(input.smartPackage)
+  const su  = mult > 0 ? u : 0                       // smart units = living units
 
-  // Distribution — flat per-unit caps, with a dealer-maintenance floor.
-  const dealerMaintainsEntry = input.dealerMaintainsEntry !== false   // default true
-  const dealerByUnit = DEALER_PER_UNIT * units
-  const dealerEntryFloor = DEALER_MIN_PER_ENTRY * entryPoints
-  const dealer = dealerMaintainsEntry ? Math.max(dealerByUnit, dealerEntryFloor) : dealerByUnit
-  const dealerFloorBinds = dealerMaintainsEntry && dealerEntryFloor > dealerByUnit
-  const sales = SALES_PER_UNIT * units
-  const dist = DIST_PER_UNIT * units
+  // Gate Guard cost
+  const costBrivo = (ep > 0 || su > 0) ? BRIVO_SITE : 0
+  let costEntry = 0
+  for (let i = 1; i <= ep; i++) costEntry += i <= 2 ? ENTRY_T1 : i <= 6 ? ENTRY_T2 : ENTRY_T3
+  const costLarge = u > LARGE_THRESHOLD ? Math.floor((u - LARGE_THRESHOLD) / LARGE_BLOCK) * LARGE_FEE : 0
+  const totCam = mon + non
+  let costCameras = 0
+  if (totCam > 0 && totCam <= 2) costCameras = mon * CAM_SMALL + non * CAM_EACH
+  else if (totCam > 0) costCameras = Math.ceil(totCam / CAM_BASE_CAP) * CAM_BASE + totCam * CAM_EACH + mon * CAM_CALL
+  const costCellular = input.cellular === 'relay' ? CELL_RELAY : input.cellular === 'full' ? CELL_FULL : 0
+  const costSmart = SMART_COST * mult * su
+  const ggCost = round2(costBrivo + costEntry + costLarge + costCameras + costCellular + costSmart)
 
-  const floorBill = ggCost + dealer + sales + dist + GG_MIN_NET
-  const atFloor = floorBill > growth
-  const bill = Math.floor(Math.max(growth, floorBill))
-  const ggNet = bill - dealer - sales - dist - ggCost
-  const perUnit = units > 0 ? Math.floor(bill / units) : 0
+  // Distribution — dealer is the anchor, everyone else scales to hold 3:1:1:2
+  const dealerMin = DEALER_PER_UNIT * u
+  const dealerFloor = input.dealerMaintainsEntry ? DEALER_MIN_PER_ENTRY * ep : 0
+  const dealerBase = Math.max(dealerMin, dealerFloor)
+  const scale = dealerMin > 0 ? dealerBase / dealerMin : 1
+  const dealerAdd = SMART_DEALER_ADD * mult * su    // flat smart add-ons
+  const partyAdd  = SMART_PARTY_ADD * mult * su
+  const dealer = round2(dealerBase + dealerAdd)
+  const sales  = round2(SALES_PER_UNIT * u * scale + partyAdd)
+  const dist   = round2(DIST_PER_UNIT * u * scale + partyAdd)
 
-  const result: PricingResult = {
-    empty: units <= 0 && entryPoints <= 0 && cameras <= 0 && smartLockUnits <= 0,
-    noUnits: units <= 0,
-    units, entryPoints, cameras, cameraType, smartLockUnits, cellular,
-    includedGates: Math.round(includedGates * 10) / 10,
-    includedCameras: Math.round(includedCameras * 10) / 10,
-    extraGates: Math.round(extraGates * 10) / 10,
-    extraCameras: Math.round(extraCameras * 10) / 10,
-    customerMonthly: bill,
-    perUnit,
-    atFloor,
-    dealerCut: round2(dealer),
-    salesCut: round2(sales),
-    distCut: round2(dist),
-    dealerPerUnit: DEALER_PER_UNIT,
-    salesPerUnit: SALES_PER_UNIT,
-    distPerUnit: DIST_PER_UNIT,
-    dealerMaintainsEntry,
-    dealerEntryFloor: round2(dealerEntryFloor),
+  // GG net: locked 'double' for dealers; corporate may model 'min2'
+  const model: GgNetModel = internal && input.ggNetModel === 'double' ? 'double' : 'min2'
+  const ggNet = model === 'double'
+    ? round2(2 * ggCost)                             // net = 2× cost → GG take = 3× cost
+    : round2(GG_MIN_NET_PER_UNIT * u * scale + partyAdd)
+
+  const bill = round2(ggCost + dealer + sales + dist + ggNet)
+  const gateGuardCombined = round2(bill - dealer - sales)   // the single dealer-facing GG line
+  const perUnit = u > 0 ? round2(bill / u) : 0
+  const empty = u === 0 && ep === 0 && totCam === 0
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: Record<string, any> = {
+    livingUnits: u, entryPoints: ep, empty,
+    customerMonthly: bill, perUnit,
+    dealerCut: dealer, salesCut: sales,
+    gateGuardCombined,                              // dealers see this ONE Gate Guard number
+    scale: round2(scale),
+    dealerFloorBinds: dealerFloor > dealerMin,
+    dealerPerUnit: DEALER_PER_UNIT, salesPerUnit: SALES_PER_UNIT,
     dealerEntryFloorRate: DEALER_MIN_PER_ENTRY,
-    dealerFloorBinds,
-    ggFee: internal ? round2(ggNet) : 0,
-    suggestedRetail: bill,
-    commission: round2(sales + dist),
-    dealerProfit: round2(dealer),
-    dealerMonthlyNet: round2(dealer),
+    dealerMonthlyNet: dealer,
   }
   if (internal) {
-    result.ggCost = round2(ggCost)
-    result.ggNet = round2(ggNet)
-    result.margin = round2(ggNet)
-    result.marginPerUnit = units > 0 ? round2(ggNet / units) : 0
+    result.ggCost = ggCost
+    result.ggNet = ggNet
+    result.ggNetModel = model
+    result.distCut = dist
+    result.distPerUnit = DIST_PER_UNIT
+    result.smartMult = mult
     result.costBrivo = costBrivo
     result.costEntry = round2(costEntry)
-    result.costSmartLock = round2(costSmartLock)
-    result.costNvr = costNvr
+    result.costLarge = costLarge
     result.costCameras = round2(costCameras)
-    result.costCellular = round2(costCellular)
-    result.perCameraCost = COST_PER_CAMERA
+    result.costCellular = costCellular
+    result.costSmart = round2(costSmart)
+    result.camerasMonitored = mon
+    result.camerasNonMonitored = non
   }
   return result
-}
-
-export const PRICING_PUBLIC = {
-  DEALER_PER_UNIT, SALES_PER_UNIT, DIST_PER_UNIT, DEALER_MIN_PER_ENTRY,
-  ADDON_GATE, ADDON_CAM_NEW, ADDON_CAM_EXISTING,
-  INCL_GATES_PER_100, INCL_CAMS_PER_100,
 }

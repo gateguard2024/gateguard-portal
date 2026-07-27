@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { recordInScope } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,6 +29,7 @@ async function ensureBucket() {
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   await getCurrentUser()
+  if (!(await recordInScope('permits', params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   await ensureBucket()
 
   const { filename, contentType } = await req.json()

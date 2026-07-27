@@ -36,9 +36,10 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
       title,
       start_time: start,
-      end_time: (body.end as string) ?? start,
+      end_time: (body.end as string) ?? new Date(new Date(start as string).getTime() + 3600000).toISOString(),
       is_all_day: Boolean(body.all_day),
       location: (body.location as string) ?? null,
+      category: (body.category as string) ?? null,
       related_type: (body.related_type as string) ?? null,
       related_id: (body.related_id as string) ?? null,
       source: 'nexus',
@@ -70,6 +71,7 @@ export interface CalendarEvent {
   status: string
   priority?: string
   color: string      // hex
+  category?: string  // persisted event category (nexus events)
   link?: string      // portal deep link
   gcal_event_id?: string
   opportunity_name?: string
@@ -111,7 +113,7 @@ export async function GET(req: NextRequest) {
     try {
       let nexusQ = supabase
         .from('calendar_events')
-        .select('id, title, start_time, end_time, status, location, org_id')
+        .select('id, title, start_time, end_time, status, location, org_id, category')
         .gte('start_time', `${startDate}T00:00:00`)
         .lte('start_time', `${endDate}T23:59:59`)
         .neq('status', 'cancelled')
@@ -124,7 +126,7 @@ export async function GET(req: NextRequest) {
           id: ev.id, type: 'nexus_event', title: ev.title ?? 'Nexus Event',
           date: startIso.split('T')[0],
           time: startIso.includes('T') ? startIso.split('T')[1]?.substring(0, 5) : undefined,
-          status: ev.status ?? 'confirmed', color: '#007CFF',
+          status: ev.status ?? 'confirmed', color: '#007CFF', category: (ev.category as string) ?? undefined,
         })
       }
     } catch { /* table may not exist until migration 096 */ }

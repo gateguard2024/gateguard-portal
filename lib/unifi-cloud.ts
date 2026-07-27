@@ -126,7 +126,14 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
     version: d.version ?? d.firmwareVersion ?? null,
     uptime_s: num(d.uptime, d.uptimeSec),
     clients: num(d.numSta, d.num_client, d.clientCount, d.connectedClients),
-    online: (d.state ?? d.status) === 'online' || d.state === 1 || d.connected === true,
+    // Site Manager reports device state in varied shapes/casing (e.g. "ONLINE",
+    // "online", "connected", numeric 1, nested reportedState). Be tolerant.
+    online: (() => {
+      const raw = d.state ?? d.status ?? d.connectionState ?? d.reportedState?.state ?? d.reportedState?.status
+      const s = String(raw ?? '').toLowerCase()
+      if (s) return /online|connected|active|running|provisioned/.test(s) && !/offline|disconnected|unreachable/.test(s)
+      return raw === 1 || d.connected === true || d.online === true
+    })(),
   }))
   const online = devices.filter(d => d.online).length
 

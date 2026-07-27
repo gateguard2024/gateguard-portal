@@ -25,18 +25,18 @@ export interface ActionItem {
 
 const STAGE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   // Lead stages
-  new:           { label: 'New lead',          color: '#93a3ff', bg: 'rgba(107,126,255,0.15)' },
-  contacted:     { label: 'Contacted',          color: '#93a3ff', bg: 'rgba(107,126,255,0.12)' },
+  new:           { label: 'New lead',          color: '#93a3ff', bg: 'rgba(95,184,224,0.15)' },
+  contacted:     { label: 'Contacted',          color: '#93a3ff', bg: 'rgba(95,184,224,0.12)' },
   qualified:     { label: 'Qualified',          color: '#6ee7b7', bg: 'rgba(52,211,153,0.12)'  },
   unqualified:   { label: 'Unqualified',        color: '#fca5a5', bg: 'rgba(239,68,68,0.1)'   },
   // Opportunity stages
-  prospect:      { label: 'Prospect',           color: '#93a3ff', bg: 'rgba(107,126,255,0.12)' },
+  prospect:      { label: 'Prospect',           color: '#93a3ff', bg: 'rgba(95,184,224,0.12)' },
   survey_requested: { label: 'Survey requested', color: '#6ee7b7', bg: 'rgba(52,211,153,0.1)'  },
   proposal_sent: { label: 'Proposal sent',      color: '#fcd34d', bg: 'rgba(251,191,36,0.1)'  },
   negotiation:   { label: 'Negotiating',        color: '#fcd34d', bg: 'rgba(251,191,36,0.12)' },
   won:           { label: 'Closed won',         color: '#86efac', bg: 'rgba(52,211,153,0.18)' },
   lost:          { label: 'Closed lost',        color: '#fca5a5', bg: 'rgba(239,68,68,0.08)'  },
-  aria_draft:    { label: 'ARIA draft',         color: '#c084fc', bg: 'rgba(168,85,247,0.14)' },
+  aria_draft:    { label: 'ARIA draft',         color: '#9FD8EC', bg: 'rgba(95,184,224,0.14)' },
 }
 
 // ─── Next best action per stage ───────────────────────────────────────────────
@@ -56,7 +56,7 @@ interface ActionDef {
 const LEAD_ACTIONS: Record<string, ActionDef> = {
   new: {
     label: 'Mark as contacted',
-    btnColor: 'rgba(107,126,255,0.22)', btnText: '#93a3ff',
+    btnColor: 'rgba(95,184,224,0.22)', btnText: '#93a3ff',
     confirmText: i => `Update "${i.name}" → Contacted`,
     toolName: 'update_lead_stage',
     getArgs: i => ({ lead_id: i.id, stage: 'contacted', reasoning: 'Marking lead as contacted from action center' }),
@@ -96,7 +96,7 @@ const LEAD_ACTIONS: Record<string, ActionDef> = {
 const OPP_ACTIONS: Record<string, ActionDef> = {
   prospect: {
     label: 'Run ARIA research',
-    btnColor: 'rgba(168,85,247,0.22)', btnText: '#c084fc',
+    btnColor: 'rgba(95,184,224,0.22)', btnText: '#9FD8EC',
     confirmText: i => `Launch ARIA research on ${i.propertyName || i.name}`,
     toolName: 'aria_navigate',
     getArgs: i => ({ property: i.propertyName || i.name }),
@@ -222,7 +222,7 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
   const actions  = item.type === 'lead' ? LEAD_ACTIONS : OPP_ACTIONS
   const actionDef = actions[item.stage] ?? null
   const score    = aiScore(item.id, item.stage)
-  const stageCfg = STAGE_LABELS[item.stage] ?? { label: item.stage, color: '#93a3ff', bg: 'rgba(107,126,255,0.12)' }
+  const stageCfg = STAGE_LABELS[item.stage] ?? { label: item.stage, color: '#93a3ff', bg: 'rgba(95,184,224,0.12)' }
 
   const displayName    = item.propertyName || item.name
   const locationLine   = [item.units ? `${item.units} units` : null, item.propertyAddress].filter(Boolean).join(' · ')
@@ -289,10 +289,10 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
       className="rounded-2xl p-4 mb-3 relative"
       style={{
         background: isHighPriority
-          ? 'rgba(107,126,255,0.06)'
+          ? 'rgba(95,184,224,0.06)'
           : 'rgba(255,255,255,0.03)',
         border: isHighPriority
-          ? '1px solid rgba(107,126,255,0.2)'
+          ? '1px solid rgba(95,184,224,0.2)'
           : '0.5px solid rgba(255,255,255,0.08)',
       }}
     >
@@ -332,7 +332,7 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
         <div
           className="rounded-lg flex-shrink-0"
           style={{
-            background: score >= 80 ? 'rgba(107,126,255,0.2)' : 'rgba(255,255,255,0.05)',
+            background: score >= 80 ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.05)',
             color:      score >= 80 ? '#93a3ff'                : 'rgba(255,255,255,0.3)',
             fontSize:   11,
             fontWeight: 500,
@@ -350,7 +350,7 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
           style={{
             padding: '9px 12px',
             background: 'rgba(255,255,255,0.03)',
-            borderLeft: '2px solid rgba(107,126,255,0.35)',
+            borderLeft: '2px solid rgba(95,184,224,0.35)',
             color: 'rgba(255,255,255,0.4)',
           }}
         >
@@ -361,7 +361,7 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
       {/* Amount badge for opps */}
       {item.amount != null && item.amount > 0 && (
         <div className="mb-3 flex items-center gap-2">
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>Pipeline value</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)' }}>Pipeline value</span>
           <span style={{ fontSize: 13, fontWeight: 500, color: '#6ee7b7' }}>
             ${item.amount.toLocaleString()}
           </span>
@@ -392,10 +392,10 @@ export function OpportunityActionCard({ item, onDismiss, onExecuted }: Props) {
           className="rounded-xl mt-1 p-3"
           style={{
             background: 'rgba(13,33,80,0.9)',
-            border:     '1px solid rgba(107,126,255,0.35)',
+            border:     '1px solid rgba(95,184,224,0.35)',
           }}
         >
-          <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Nexus will:</p>
+          <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.82)' }}>Nexus will:</p>
           <p className="text-sm mb-3 leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
             {actionDef.confirmText(item)}
           </p>

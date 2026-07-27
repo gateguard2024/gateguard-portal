@@ -75,6 +75,8 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/billing/webhook') ||
     // Clerk webhook — verified via Svix signature, no Clerk session
     pathname.startsWith('/api/webhooks/clerk') ||
+    // Adobe Acrobat Sign webhook — verified via X-AdobeSign-ClientId echo, no Clerk session
+    pathname.startsWith('/api/adobe-sign/webhook') ||
     // Public Nexus Document Portal — external no-login document pages (slug + token credential)
     pathname.startsWith('/document/') ||
     pathname.startsWith('/api/document/') ||

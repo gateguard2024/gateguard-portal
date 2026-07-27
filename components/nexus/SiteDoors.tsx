@@ -88,14 +88,14 @@ export function SiteDoors({ siteId }: { siteId: string }) {
     setBusyId(null); setEditId(null); load();
   }
 
-  const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "7px 9px", width: "100%", fontSize: 12.5 } as const;
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Key size={16} color="#7DE5FF" /> Doors (Brivo)</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Key size={16} color="#5FB8E0" /> Doors (Brivo)</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Live from this site&apos;s Brivo account. Link the camera that watches each door, then unlocking is logged with the camera so you can pull footage.</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading doors…</div>
-        : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(0,200,255,0.07)", border: "1px solid rgba(0,200,255,0.18)", borderRadius: 10, padding: "10px 12px" }}>
+        : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(95,184,224,0.07)", border: "1px solid rgba(95,184,224,0.18)", borderRadius: 10, padding: "10px 12px" }}>
             Brivo isn&apos;t connected for this site yet.{" "}
             {isCorporate ? "Add it in Connections above, then Test." : "Contact Gate Guard to set it up for this property."}
           </div>
@@ -110,13 +110,13 @@ export function SiteDoors({ siteId }: { siteId: string }) {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.9)" }}>{d.name}</div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>
-                        {cam ? <>📹 {cam.stream_url ? <a href={cam.stream_url} target="_blank" rel="noreferrer" style={{ color: "#7DE5FF" }}>{cam.camera_name}</a> : cam.camera_name}</> : "No camera linked"}
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)", marginTop: 2 }}>
+                        {cam ? <>📹 {cam.stream_url ? <a href={cam.stream_url} target="_blank" rel="noreferrer" style={{ color: "#5FB8E0" }}>{cam.camera_name}</a> : cam.camera_name}</> : "No camera linked"}
                       </div>
                       {cam?.tags && cam.tags.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
-                        {cam.tags.map(t => <span key={t} style={{ fontSize: 10, fontWeight: 600, background: "rgba(124,58,237,0.16)", border: "1px solid rgba(124,58,237,0.4)", color: "#c4b5fd", borderRadius: 999, padding: "2px 8px" }}>{t}</span>)}
+                        {cam.tags.map(t => <span key={t} style={{ fontSize: 10, fontWeight: 600, background: "rgba(95,184,224,0.16)", border: "1px solid rgba(95,184,224,0.4)", color: "#9FD8EC", borderRadius: 999, padding: "2px 8px" }}>{t}</span>)}
                       </div>}
-                      {!cam && !editing && (() => { const s = suggestCam(d.name); return s ? <button onClick={() => linkSuggested(d, s)} disabled={busyId === d.id} style={{ marginTop: 5, fontSize: 11, fontWeight: 600, background: "rgba(52,211,153,0.14)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 8, padding: "3px 9px", cursor: "pointer" }}>💡 Link “{s.name}”?</button> : null; })()}
+                      {!cam && !editing && (() => { const s = suggestCam(d.name); return s ? <button onClick={() => linkSuggested(d, s)} disabled={busyId === d.id} style={{ marginTop: 5, fontSize: 11, fontWeight: 600, background: "rgba(126,224,168,0.14)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 8, padding: "3px 9px", cursor: "pointer" }}>💡 Link “{s.name}”?</button> : null; })()}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <button onClick={() => editing ? setEditId(null) : startEdit(d)} style={{ fontSize: 11.5, fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", borderRadius: 9, padding: "6px 10px", cursor: "pointer" }}>{cam ? "Camera" : "+ Camera"}</button>
@@ -135,7 +135,7 @@ export function SiteDoors({ siteId }: { siteId: string }) {
                       <input placeholder="Live view URL (optional)" value={camForm.stream_url} onChange={e => setCamForm({ ...camForm, stream_url: e.target.value })} style={input} />
                       <input placeholder="Tags (comma-separated, e.g. entrance, LPR)" value={camForm.tags} onChange={e => setCamForm({ ...camForm, tags: e.target.value })} style={input} />
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => saveCam(d)} disabled={!camForm.camera_name.trim()} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", borderRadius: 9, padding: "6px 12px", cursor: "pointer", opacity: camForm.camera_name.trim() ? 1 : 0.5 }}>Save camera</button>
+                        <button onClick={() => saveCam(d)} disabled={!camForm.camera_name.trim()} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 9, padding: "6px 12px", cursor: "pointer", opacity: camForm.camera_name.trim() ? 1 : 0.5 }}>Save camera</button>
                         {cam && <button onClick={() => unlinkCam(d)} style={{ fontSize: 12, fontWeight: 600, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5", borderRadius: 9, padding: "6px 12px", cursor: "pointer" }}>Unlink</button>}
                       </div>
                     </div>

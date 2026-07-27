@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { DM_Sans, IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], weight: ["300","400","500","600","700","800"] });
+const dmSans = DM_Sans({ subsets: ["latin"], weight: ["400","500","700"], variable: "--font-dm-sans" });
 // IBM Plex Mono is the design system's mono (tech chips, ARIA machine UI). It was
 // referenced by Tailwind `font-mono` but never actually loaded, so every mono element
 // fell back to the OS Courier/Menlo — the "legacy" look. Load it as a CSS variable.
@@ -37,7 +37,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} ${plexMono.variable}`}>
+      <body className={`${dmSans.variable} ${plexMono.variable} font-sans`}>
         <ClerkProvider>
           <ServiceWorkerRegistration />
           <OfflineBanner />

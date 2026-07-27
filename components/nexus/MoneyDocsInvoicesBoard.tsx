@@ -33,7 +33,7 @@ function bucketColor(bucket: InvoiceBucket): string {
   if (bucket === 'past_due') return '#F87171'
   if (bucket === 'due_soon') return '#FBBF24'
   if (bucket === 'recently_paid') return '#34D399'
-  return '#00C8FF'
+  return '#5FB8E0'
 }
 
 export function MoneyDocsInvoicesBoard() {
@@ -90,11 +90,11 @@ export function MoneyDocsInvoicesBoard() {
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading invoices…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading invoices…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
 
       {!loading && shownInvoices.length === 0 && !message && (
-        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>
+        <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>
           No {bucketLabel(selectedBucket).toLowerCase()} invoices right now.
         </div>
       )}
@@ -115,8 +115,8 @@ export function MoneyDocsInvoicesBoard() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{invoice.title}</div>
-                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{invoice.customer_name || invoice.invoice_number}</div>
-                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{invoice.due_date ? `Due ${invoice.due_date}` : invoice.paid_at ? `Paid ${invoice.paid_at.slice(0, 10)}` : 'No due date'}</div>
+                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{invoice.customer_name || invoice.invoice_number}</div>
+                    <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{invoice.due_date ? `Due ${invoice.due_date}` : invoice.paid_at ? `Paid ${invoice.paid_at.slice(0, 10)}` : 'No due date'}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold" style={{ color }}>{formatMoney(invoice.amount)}</div>
@@ -135,9 +135,9 @@ export function MoneyDocsInvoicesBoard() {
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selectedInvoice.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{selectedInvoice.customer_name || selectedInvoice.invoice_number}</div>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Amount</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{formatMoney(selectedInvoice.amount)}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Due Date</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedInvoice.due_date || 'No due date'}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Status</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedInvoice.status}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Amount</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{formatMoney(selectedInvoice.amount)}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Due Date</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedInvoice.due_date || 'No due date'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Status</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selectedInvoice.status}</div></div>
           </div>
           {selectedInvoice.notes && <div className="mt-3 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.52)' }}>{selectedInvoice.notes}</div>}
           <div className="mt-4 flex flex-wrap gap-2">

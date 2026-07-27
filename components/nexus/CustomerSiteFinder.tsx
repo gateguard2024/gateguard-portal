@@ -75,9 +75,9 @@ const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px so
 const glassAction = { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' };
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const textFaint = { color: 'rgba(255,255,255,0.34)' };
+const textFaint = { color: 'rgba(255,255,255,0.82)' };
 const brandBlue = '#6B7EFF';
-const brandCyan = '#00C8FF';
+const brandCyan = '#5FB8E0';
 const FILTERS = ['All', 'Customers', 'Properties', 'Companies', 'Contacts', 'Sites'] as const;
 type FilterType = typeof FILTERS[number];
 const getTypeIcon = (type: ResultType) => {
@@ -94,7 +94,7 @@ const getTypeColor = (type: ResultType) => {
     case 'customer': return brandBlue;
     case 'property': return brandCyan;
     case 'company': return '#F59E0B'; // Amber
-    case 'contact': return '#8B5CF6'; // Violet
+    case 'contact': return '#5FB8E0'; // Violet
     case 'site': return '#34D399'; // Emerald
   }
 };

@@ -24,13 +24,14 @@ const { Printer, X, Truck, MapPin, CheckCircle2, Star, FileText, Mail, RotateCcw
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
+import CalendarViews from "@/components/nexus/CalendarViews";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
 
 const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string }[] = [
   { key: "New",         label: "New",         from: ["Pending", "open", "New", "Approved"],                          accent: "#64748b" },
-  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#a855f7" },
+  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#5FB8E0" },
   { key: "Scheduled",   label: "Scheduled",   from: ["Assigned", "scheduled", "Scheduled"],                          accent: "#3b82f6" },
   { key: "In Progress", label: "In-Progress", from: ["In Progress", "in_progress", "On Site", "En Route"],           accent: "#f59e0b" },
   { key: "Stuck",       label: "Stuck",       from: ["stuck", "Stuck", "blocked", "Blocked", "On Hold"],             accent: "#ef4444" },
@@ -47,15 +48,15 @@ const PRESET_PHASES = ["Wiring", "Trim", "Headend", "Program"];
 // Bucket key for steps with phase_id = null — they still show, never disappear.
 const PHASE_OTHER = "__other";
 
-const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
-const btn = { background: "#6366f1", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
-const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(255,255,255,.22)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
-const sel = { background: "rgba(0,0,0,.34)", border: "1px solid rgba(255,255,255,.22)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
+const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18, boxShadow: "0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12)" } as const;
+const btn = { background: "#2f7fb8", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
+const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(95,184,224,.28)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
+const sel = { background: "rgba(0,0,0,.34)", border: "1px solid rgba(95,184,224,.28)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
 const Small = ({ children }: { children: React.ReactNode }) => <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{children}</div>;
-const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 30, fontWeight: 800, color: color ?? "#00C8FF", margin: "6px 0" }}>{children}</div>;
+const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 30, fontWeight: 800, color: color ?? "#5FB8E0", margin: "6px 0" }}>{children}</div>;
 const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => <div style={{ ...card, ...style }}>{children}</div>;
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) {
-  const bg = tone === "urgent" ? "rgba(255,80,80,.18)" : tone === "high" ? "rgba(255,170,0,.18)" : tone === "good" ? "rgba(52,211,153,.18)" : "rgba(255,255,255,.08)";
+  const bg = tone === "urgent" ? "rgba(255,80,80,.18)" : tone === "high" ? "rgba(255,170,0,.18)" : tone === "good" ? "rgba(126,224,168,.18)" : "rgba(255,255,255,.08)";
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
@@ -77,9 +78,9 @@ const SUPPLY_COLOR: Record<string, string> = {
   not_ordered: "#f87171",
   ordered:     "#fbbf24",
   shipped:     "#fbbf24",
-  at_office:   "#34d399",
-  on_truck:    "#34d399",
-  installed:   "#34d399",
+  at_office:   "#7ee0a8",
+  on_truck:    "#7ee0a8",
+  installed:   "#7ee0a8",
 };
 // Plain phrases for the summary line ("2 not ordered yet, 1 shipped").
 const SUPPLY_PENDING_PHRASE: Record<string, string> = {
@@ -152,7 +153,7 @@ function printWorkOrder(wo: any, equip: any[]) {
 // each task is a clear, focused step (easy enough for a 5th grader).
 function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(0,200,255,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(95,184,224,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ fontSize: 17, margin: 0 }}>{title}</h2>
         <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "white", borderRadius: 9, width: 30, height: 30, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
@@ -161,15 +162,14 @@ function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; on
     </div>
   </div>;
 }
-const TABS = ["Dashboard", "Work Orders", "Schedule", "Analytics", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
+const TABS = ["Dashboard", "Work Orders", "Schedule", "Analytics", "Requests", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
-  Schedule: "Drag jobs onto a tech & day",
+  Schedule: "What's scheduled — jobs, PMs & to-dos",
   Analytics: "Utilization + first-time-fix",
   Requests: "Incoming requests → turn into jobs",
-  Calendar: "What's scheduled, by day",
   Locations: "Your sites — tap to edit details",
   Techs: "Add techs + set their app code",
   Parts: "Inventory + stock levels",
@@ -217,7 +217,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
 
   return <div style={{ color: "white", paddingBottom: 120 }}>
     {!embedded && <>
-      <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(0,200,255,0.8)" }}>Nexus</div>
+      <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(95,184,224,0.8)" }}>Nexus</div>
       <h1 style={{ margin: "4px 0 2px", fontSize: 26, fontWeight: 700 }}>Operations Hub</h1>
       <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, marginBottom: 16 }}>Jobs, work orders, dispatch, sites, and parts — in one place.</p>
     </>}
@@ -225,19 +225,18 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
       {TABS.map(p => {
         const on = page === p;
         return <button key={p} onClick={() => setPage(p)} style={{ padding: "9px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          background: on ? "linear-gradient(135deg, rgba(0,124,255,0.42), rgba(0,200,255,0.16))" : "rgba(255,255,255,0.02)",
-          border: on ? "1px solid rgba(0,200,255,0.42)" : "0.5px solid rgba(255,255,255,0.07)", color: on ? "white" : "rgba(255,255,255,0.5)" }}>{p}</button>;
+          background: on ? "linear-gradient(135deg, rgba(47,127,184,0.42), rgba(95,184,224,0.16))" : "rgba(255,255,255,0.02)",
+          border: on ? "1px solid rgba(95,184,224,0.42)" : "0.5px solid rgba(255,255,255,0.07)", color: on ? "white" : "rgba(255,255,255,0.5)" }}>{p}</button>;
       })}
       <button onClick={loadOps} title="Refresh" aria-label="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)", display: "inline-flex", alignItems: "center" }}><RefreshCw size={15} /></button>
     </div>
-    <p style={{ color: "rgba(255,255,255,0.34)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
+    <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} createError={woError} />}
-    {page === "Schedule" && <DispatchBoard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
+    {page === "Schedule" && <CalendarViews />}
     {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
-    {page === "Calendar" && <CalendarView onOpenWO={setOpenId} jobs={jobs} />}
     {page === "Locations" && <Locations />}
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
@@ -253,7 +252,7 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[];
   const unassigned = jobs.filter(j => !j.assignedTechId && bucketOf(j.status) !== "Done");
   return <div style={{ display: "grid", gap: 16 }}>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14 }}>
-      {JOB_COLUMNS.map(col => <Card key={col.key}><Small>{col.label}</Small><Big color={col.accent === "#10b981" ? "#34d399" : undefined}>{loading ? "…" : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>)}
+      {JOB_COLUMNS.map(col => <Card key={col.key}><Small>{col.label}</Small><Big color={col.accent === "#10b981" ? "#7ee0a8" : undefined}>{loading ? "…" : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>)}
     </div>
 
     {/* Dispatch strip — folds dispatch in without a crowded separate page */}
@@ -356,7 +355,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
           {!form.isTask && <div>
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
             {form.site_id
-              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.4)" }}>
+              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(95,184,224,0.12)", border: "1px solid rgba(95,184,224,0.4)" }}>
                   <span style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={13} /> {form.customer_name}</span>
                   <button onClick={() => setForm({ ...form, site_id: "", customer_name: "" })} style={{ ...sel, cursor: "pointer" }}>Change</button>
                 </div>
@@ -368,7 +367,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
                       : siteMatches.length === 0 ? <Small>No sites match “{siteQ}”.</Small>
                       : siteMatches.map(s => <button key={s.id} onClick={() => setForm({ ...form, site_id: s.id, customer_name: s.name || "" })} style={{ textAlign: "left", cursor: "pointer", padding: "8px 10px", borderRadius: 10, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
                           <div style={{ fontSize: 13.5 }}>{s.name || "Unnamed site"}</div>
-                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
+                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
                         </button>)}
                   </div>
                 </>}
@@ -404,7 +403,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
       <input placeholder="Search WO#, site, tech…" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, padding: 10, marginBottom: 8 }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
         {WO_FILTERS.map(f => { const on = filter === f.key; const n = f.key === "all" ? jobs.length : jobs.filter(w => f.key === "unassigned" ? !w.assignedTechId : f.key === "urgent" ? ["Urgent", "High"].includes(w.priority) : f.key === "done" ? bucketOf(w.status) === "Done" : bucketOf(w.status) !== "Done").length;
-          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(0,200,255,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.45)" }}>{n}</span></button>; })}
+          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(95,184,224,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.82)" }}>{n}</span></button>; })}
       </div>
       {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : shown.length === 0 ? <Small>No work orders match.</Small> : shown.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
     </Card>
@@ -456,7 +455,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
             <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, margin: "4px 0" }}>{w.property || "—"}{w.assignedTech ? ` · ${w.assignedTech}` : " · Unassigned"}</p>
           </div>)}
-          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
+          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
         </div>;
       })}
     </div>
@@ -468,7 +467,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
       {showDone && <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
         {doneItems.length === 0 ? <Small>No completed jobs yet.</Small> : doneItems.map(w => <div key={w.id} onClick={() => onOpen(w.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", cursor: "pointer" }}>
           <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{w.property || "—"}</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.82)" }}>{w.property || "—"}</span>
         </div>)}
       </div>}
     </div>
@@ -476,7 +475,7 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
 }
 
 /* ── Calendar: month / week / day, filter by tech (real /api/calendar/events) */
-const EVENT_COLOR: Record<string, string> = { work_order: "#34d399", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#6B7EFF", crm_activity: "#a78bfa", tracker_task: "#a78bfa", nexus_event: "#94a3b8", gcal: "#c084fc" };
+const EVENT_COLOR: Record<string, string> = { work_order: "#7ee0a8", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#5FB8E0", crm_activity: "#5FB8E0", tracker_task: "#5FB8E0", nexus_event: "#94a3b8", gcal: "#9FD8EC" };
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const evTime = (e: any) => (e.time ? String(e.time).slice(0, 5) : "");
@@ -528,7 +527,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     : view === "week" ? `${range.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${range.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
     : anchor.toLocaleString("en-US", { month: "long", year: "numeric" });
 
-  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.45)" }}> · {e.owner_name}</span>}</div>;
+  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.82)" }}> · {e.owner_name}</span>}</div>;
 
   // Assigned/created jobs that have no date yet never land on a calendar grid —
   // surface them here so a job is never invisible. Respects the tech show/hide chips.
@@ -547,7 +546,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     {/* Toolbar */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6 }}>
-        {(["month", "week", "day"] as const).map(v => <button key={v} onClick={() => setView(v)} style={{ ...sel, padding: "6px 12px", cursor: "pointer", background: view === v ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,.06)", border: view === v ? "1px solid rgba(0,200,255,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white", textTransform: "capitalize" }}>{v}</button>)}
+        {(["month", "week", "day"] as const).map(v => <button key={v} onClick={() => setView(v)} style={{ ...sel, padding: "6px 12px", cursor: "pointer", background: view === v ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,.06)", border: view === v ? "1px solid rgba(95,184,224,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white", textTransform: "capitalize" }}>{v}</button>)}
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <button onClick={() => shift(-1)} style={{ ...btn, background: "rgba(255,255,255,0.06)", padding: "8px 12px" }}>‹</button>
@@ -560,7 +559,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     {/* Tech filter */}
     {techList.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", alignSelf: "center" }}>Show techs:</span>
-      {techList.map(t => { const off = hidden.has(t); return <button key={t} onClick={() => toggleTech(t)} style={{ ...sel, cursor: "pointer", padding: "4px 10px", opacity: off ? 0.4 : 1, background: off ? "rgba(255,255,255,.04)" : "rgba(52,211,153,.14)", border: off ? "1px solid rgba(255,255,255,.12)" : "1px solid rgba(52,211,153,.34)", color: "white" }}>{off ? "○" : "●"} {t}</button>; })}
+      {techList.map(t => { const off = hidden.has(t); return <button key={t} onClick={() => toggleTech(t)} style={{ ...sel, cursor: "pointer", padding: "4px 10px", opacity: off ? 0.4 : 1, background: off ? "rgba(255,255,255,.04)" : "rgba(126,224,168,.14)", border: off ? "1px solid rgba(255,255,255,.12)" : "1px solid rgba(126,224,168,.34)", color: "white" }}>{off ? "○" : "●"} {t}</button>; })}
     </div>}
 
     {/* Month grid */}
@@ -574,7 +573,7 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
           if (day === null) return <div key={`x${i}`} style={{ minWidth: 0 }} />;
           const key = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const evs = dayEvents(key); const isToday = key === todayKey;
-          return <div key={day} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 72, padding: 5, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(0,200,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,200,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
+          return <div key={day} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 72, padding: 5, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(95,184,224,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(95,184,224,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3 }}>{day}</div>
             {evs.slice(0, 3).map((e, j) => <Chip key={e.id || j} e={e} mini />)}
             {evs.length > 3 && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>+{evs.length - 3} more</div>}
@@ -587,8 +586,8 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     {view === "week" && <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 6, width: "100%" }}>
       {Array.from({ length: 7 }, (_, i) => { const d = new Date(range.start); d.setDate(range.start.getDate() + i); return d; }).map(d => {
         const key = ymd(d); const evs = dayEvents(key); const isToday = key === todayKey;
-        return <div key={key} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 200, padding: 7, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(0,200,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,200,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
+        return <div key={key} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 200, padding: 7, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(95,184,224,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(95,184,224,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.82)" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{d.getDate()}</div>
           {evs.length === 0 ? <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>—</div> : evs.map((e, j) => <Chip key={e.id || j} e={e} mini />)}
         </div>;
@@ -604,10 +603,10 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     })()}
 
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-      <span><span style={{ color: "#34d399" }}>■</span> Work order</span>
+      <span><span style={{ color: "#7ee0a8" }}>■</span> Work order</span>
       <span><span style={{ color: "#f59e0b" }}>■</span> Job phase</span>
       <span><span style={{ color: "#0ea5e9" }}>■</span> PM</span>
-      <span><span style={{ color: "#6B7EFF" }}>■</span> To-do</span>
+      <span><span style={{ color: "#5FB8E0" }}>■</span> To-do</span>
     </div>
   </Card>;
 }
@@ -716,7 +715,7 @@ function Techs() {
             <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
               <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 5 }}>Working days</div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                {WEEK_DAYS.map(d => { const on = sched.days.includes(d); return <button key={d} onClick={() => setSched(s => ({ ...s, days: on ? s.days.filter(x => x !== d) : [...s.days, d] }))} style={{ ...sel, cursor: "pointer", padding: "4px 9px", background: on ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,.05)", border: on ? "1px solid rgba(0,200,255,0.42)" : "1px solid rgba(255,255,255,.12)", color: "white" }}>{d}</button>; })}
+                {WEEK_DAYS.map(d => { const on = sched.days.includes(d); return <button key={d} onClick={() => setSched(s => ({ ...s, days: on ? s.days.filter(x => x !== d) : [...s.days, d] }))} style={{ ...sel, cursor: "pointer", padding: "4px 9px", background: on ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,.05)", border: on ? "1px solid rgba(95,184,224,0.42)" : "1px solid rgba(255,255,255,.12)", color: "white" }}>{d}</button>; })}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
                 <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Hours</span>
@@ -749,7 +748,7 @@ function Techs() {
           <div style={{ marginTop: 12 }}>
             <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 4 }}>App code (their password for /tech)</div>
             {t.tech_code ? <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <code style={{ fontFamily: "monospace", fontSize: 14, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.3)", borderRadius: 8, padding: "5px 10px" }}>{t.tech_code}</code>
+              <code style={{ fontFamily: "monospace", fontSize: 14, background: "rgba(95,184,224,0.12)", border: "1px solid rgba(95,184,224,0.3)", borderRadius: 8, padding: "5px 10px" }}>{t.tech_code}</code>
               <button onClick={() => copy(t.tech_code)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>{copied === t.tech_code ? "Copied!" : "Copy"}</button>
               <button onClick={() => setCode(t)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>Regen</button>
             </div> : <button onClick={() => setCode(t)} style={btn}>Generate code</button>}
@@ -819,7 +818,7 @@ function Locations() {
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
           </div>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
+          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
         </div>
       </Card>)}
     </div>
@@ -852,19 +851,19 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
   const perTech: any[] = data?.perTech ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callbacks: any[] = data?.callbackList ?? [];
-  const utilColor = (p: number) => p >= 80 ? "#34d399" : p >= 50 ? "#fbbf24" : "#f87171";
+  const utilColor = (p: number) => p >= 80 ? "#7ee0a8" : p >= 50 ? "#fbbf24" : "#f87171";
   const kpi = (label: string, val: string | number, accent: string) => (
     <Card><Small>{label}</Small><div style={{ fontSize: 26, fontWeight: 800, color: accent, marginTop: 4 }}>{val}</div></Card>
   );
-  const rangeBtn = (d: number) => <button key={d} onClick={() => setDays(d)} style={{ ...btn, padding: "5px 12px", background: days === d ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,0.06)", border: days === d ? "1px solid rgba(0,200,255,0.45)" : "1px solid rgba(255,255,255,0.1)", color: days === d ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{d}d</button>;
+  const rangeBtn = (d: number) => <button key={d} onClick={() => setDays(d)} style={{ ...btn, padding: "5px 12px", background: days === d ? "rgba(95,184,224,0.18)" : "rgba(255,255,255,0.06)", border: days === d ? "1px solid rgba(95,184,224,0.45)" : "1px solid rgba(255,255,255,0.1)", color: days === d ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{d}d</button>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "flex", gap: 6 }}>{[7, 30, 90].map(rangeBtn)}</div>
       {loading ? <Card><Small>Crunching numbers…</Small></Card> : <>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 10 }}>
-          {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "rgba(255,255,255,0.6)" : t.ftfPct >= 90 ? "#34d399" : t.ftfPct >= 75 ? "#fbbf24" : "#f87171")}
-          {kpi("Callbacks / re-work", t.callbacks ?? 0, (t.callbacks ?? 0) === 0 ? "#34d399" : "#f87171")}
+          {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "rgba(255,255,255,0.6)" : t.ftfPct >= 90 ? "#7ee0a8" : t.ftfPct >= 75 ? "#fbbf24" : "#f87171")}
+          {kpi("Callbacks / re-work", t.callbacks ?? 0, (t.callbacks ?? 0) === 0 ? "#7ee0a8" : "#f87171")}
           {kpi("Completed", t.completed ?? 0, "#7DE5FF")}
           {kpi("Hours logged", t.hours ?? 0, "#7DE5FF")}
           {kpi("Avg utilization", `${t.avgUtilizationPct ?? 0}%`, utilColor(t.avgUtilizationPct ?? 0))}
@@ -880,7 +879,7 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
                   <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.min(tech.utilizationPct, 100)}%`, height: "100%", background: utilColor(tech.utilizationPct) }} />
                   </div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.82)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
                 </div>
                 <span style={{ fontSize: 15, fontWeight: 700, textAlign: "right", color: utilColor(tech.utilizationPct) }}>{tech.utilizationPct}%</span>
               </div>
@@ -895,8 +894,8 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
             <div style={{ display: "grid", gap: 5 }}>
               {callbacks.map(c => (
                 <div key={c.id} onClick={() => onOpen(c.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "7px 10px", background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.22)", borderRadius: 9, cursor: "pointer" }}>
-                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {c.customer_name || ""}</span></span>
-                  <span style={{ color: "rgba(255,255,255,0.45)" }}>{c.assignee_name || "Unassigned"}</span>
+                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {c.customer_name || ""}</span></span>
+                  <span style={{ color: "rgba(255,255,255,0.82)" }}>{c.assignee_name || "Unassigned"}</span>
                 </div>
               ))}
             </div>
@@ -929,7 +928,7 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
 
   const card = (w: RealWO) => (
     <div key={w.id} draggable onDragStart={e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(null); setOverCell(null); }} onClick={() => onOpen(w.id)}
-      style={{ padding: "6px 8px", borderRadius: 8, background: "rgba(0,200,255,0.1)", border: "1px solid rgba(0,200,255,0.28)", marginBottom: 5, cursor: "grab", fontSize: 11.5, opacity: dragId === w.id ? 0.4 : 1 }}>
+      style={{ padding: "6px 8px", borderRadius: 8, background: "rgba(95,184,224,0.1)", border: "1px solid rgba(95,184,224,0.28)", marginBottom: 5, cursor: "grab", fontSize: 11.5, opacity: dragId === w.id ? 0.4 : 1 }}>
       <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.title || w.woNumber || "WO"}</div>
       {w.property && <div style={{ color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.property}</div>}
     </div>
@@ -964,7 +963,7 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
                 const cell = jobs.filter(w => (w.assignedTechId || "") === row.id && jobDate(w) === iso(d));
                 return (
                   <div key={key} onDragOver={e => { e.preventDefault(); if (overCell !== key) setOverCell(key); }} onDragLeave={() => setOverCell(c => c === key ? null : c)} onDrop={e => { e.preventDefault(); drop(row.id, iso(d)); }}
-                    style={{ minHeight: 60, background: overCell === key ? "rgba(0,200,255,0.12)" : "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 5 }}>
+                    style={{ minHeight: 60, background: overCell === key ? "rgba(95,184,224,0.12)" : "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 5 }}>
                     {cell.map(card)}
                   </div>
                 );
@@ -1065,11 +1064,11 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
     if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
   }
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(95,184,224,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
       <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
-          <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>SITE</div>
+          <div style={{ fontSize: 11, color: "rgba(95,184,224,0.8)", letterSpacing: "0.1em" }}>SITE</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{site.name || "Site"}</h2>
           <Small>{[site.city, site.state].filter(Boolean).join(", ") || "—"}</Small>
           {/* Lifecycle status (#60): Active only when contract signed AND deposit paid */}
@@ -1092,11 +1091,11 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             <input placeholder="What needs doing? (e.g. Gate won't open)" value={woTitle} onChange={e => setWoTitle(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createWorkOrder(); }} style={{ ...input, padding: 9 }} />
             <button onClick={createWorkOrder} disabled={!woTitle.trim() || busy} style={{ ...btn, opacity: woTitle.trim() && !busy ? 1 : 0.5 }}>Create</button>
           </div>}
-          {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#34d399" : "#fca5a5", marginTop: 8 }}>{woMsg}</p>}
+          {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#7ee0a8" : "#fca5a5", marginTop: 8 }}>{woMsg}</p>}
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
             <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 6 }}>Public request form — give this link (or a QR of it) to the property manager so they can report issues:</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <code style={{ fontSize: 11, background: "rgba(0,200,255,0.1)", border: "1px solid rgba(0,200,255,0.25)", borderRadius: 8, padding: "5px 9px", wordBreak: "break-all" }}>{`/request/${id}`}</code>
+              <code style={{ fontSize: 11, background: "rgba(95,184,224,0.1)", border: "1px solid rgba(95,184,224,0.25)", borderRadius: 8, padding: "5px 9px", wordBreak: "break-all" }}>{`/request/${id}`}</code>
               <button onClick={() => { const url = `${typeof window !== "undefined" ? window.location.origin : ""}/request/${id}`; navigator.clipboard?.writeText(url).then(() => setWoMsg("Request link copied ✓")).catch(() => {}); }} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12 }}>Copy link</button>
               <a href={`/request/${id}`} target="_blank" rel="noreferrer" style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12, textDecoration: "none" }}>Open</a>
             </div>
@@ -1111,7 +1110,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
               <input value={val(f.key)} onChange={e => setEdit(p => ({ ...p, [f.key]: e.target.value }))} style={{ ...input, padding: 9, fontSize: 13 }} />
             </div>)}
           </div>
-          <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#10b981" : "#6366f1" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
+          <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#10b981" : "#2f7fb8" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
         </Card>
 
         {/* Equipment on site */}
@@ -1132,7 +1131,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             </div>
           </div>}
           {assets.length === 0 ? <Small>No equipment logged at this site yet.</Small> : assets.map((a, i) => <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: i < assets.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
           </div>)}
         </Card>
@@ -1290,7 +1289,7 @@ function Parts() {
           <input placeholder="e.g. LiftMaster CSL24UL  or  https://…/manual.pdf" value={findQ} onChange={e => setFindQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") findProduct(); }} style={{ ...input, flex: 1 }} />
           <button onClick={findProduct} disabled={!findQ.trim() || finding} style={{ ...btn, opacity: findQ.trim() && !finding ? 1 : 0.5 }}>{finding ? "Looking…" : "Look it up"}</button>
         </div>
-        {findMsg && <p style={{ fontSize: 12, color: findMsg.startsWith("Found") ? "#34d399" : "#fbbf24", margin: 0 }}>{findMsg}</p>}
+        {findMsg && <p style={{ fontSize: 12, color: findMsg.startsWith("Found") ? "#7ee0a8" : "#fbbf24", margin: 0 }}>{findMsg}</p>}
       </div>
       {showNew ? <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Product name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
@@ -1303,14 +1302,14 @@ function Parts() {
           <input placeholder="Sell price $" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} style={{ ...input, flex: 1 }} />
         </div>
         <input placeholder="Manual PDF URL (or upload below)" value={form.manual_url} onChange={e => setForm({ ...form, manual_url: e.target.value })} style={input} />
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,200,255,0.08)", border: "1px dashed rgba(0,200,255,0.4)", borderRadius: 10, padding: "8px 12px" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#7DE5FF", cursor: "pointer", background: "rgba(95,184,224,0.08)", border: "1px dashed rgba(95,184,224,0.4)", borderRadius: 10, padding: "8px 12px" }}>
           {mUploading === "new" ? "Uploading…" : form.manual_url ? "📎 Manual attached ✓ — replace?" : "📎 Upload a manual PDF from your computer"}
           <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === "new"} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setMUploading("new"); const url = await uploadManual(`intake-${Date.now()}`, f); setMUploading(null); if (url) { setForm(s => ({ ...s, manual_url: url })); setMsg("Manual uploaded ✓ — it'll vectorize after you Add."); } else setMsg("Upload failed — try a smaller PDF or paste a URL."); }} />
         </label>
         <input placeholder="Image URL (optional)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={input} />
         <button onClick={create} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Adding…" : "Add to catalog"}</button>
       </div> : <Small>Name is all you need. Add a manual PDF link and it powers the field tool's AI diagnostics, wiring help, and step images.</Small>}
-      {msg && <p style={{ fontSize: 12, color: msg.includes("✓") ? "#34d399" : "#fca5a5", marginTop: 8 }}>{msg}</p>}
+      {msg && <p style={{ fontSize: 12, color: msg.includes("✓") ? "#7ee0a8" : "#fca5a5", marginTop: 8 }}>{msg}</p>}
     </Card>
     <input placeholder="Search parts by name or SKU" value={q} onChange={e => setQ(e.target.value)} style={input} />
     {shown.length === 0 ? <Card><Small>No parts found.</Small></Card> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
@@ -1337,7 +1336,7 @@ function Parts() {
           {/* AI manual intake: vectorize on demand so the field tool gets diagnostics + diagrams */}
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
             {!p.manual_url ? (
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,200,255,0.08)", border: "1px dashed rgba(0,200,255,0.4)", borderRadius: 9, padding: "5px 11px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7DE5FF", cursor: "pointer", background: "rgba(95,184,224,0.08)", border: "1px dashed rgba(95,184,224,0.4)", borderRadius: 9, padding: "5px 11px" }}>
                 {mUploading === p.id ? "Uploading…" : "📎 Add manual PDF"}
                 <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === p.id} onChange={e => { const f = e.target.files?.[0]; if (f) attachManualToProduct(p, f); }} />
               </label>
@@ -1371,7 +1370,7 @@ function PM() {
         {s.interval_days ? `Every ${s.interval_days} days` : "—"}
         {s.next_due_at && <div style={{ color: "rgba(255,255,255,0.5)" }}>Next due: {String(s.next_due_at).slice(0, 10)}</div>}
       </div>
-      {s.description && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
+      {s.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
     </Card>)}
   </div>;
 }
@@ -1405,7 +1404,7 @@ function Requests({ onConverted }: { onConverted: () => void }) {
       </div>
       <Small>{r.site_name || "—"}{r.site_city ? ` · ${r.site_city}, ${r.site_state}` : ""}{r.area ? ` · ${r.area}` : ""}</Small>
       {r.description && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
-      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
+      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
       <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, marginTop: 12, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to work order →"}</button>
     </Card>)}
   </div>;
@@ -1461,9 +1460,9 @@ function Procurement() {
             <Badge tone={poTone(p.status)}>{p.status}</Badge>
           </div>
           <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#00C8FF", margin: "8px 0 0" }}>{money(num(p.total))}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#5FB8E0", margin: "8px 0 0" }}>{money(num(p.total))}</div>
           {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
-          {p.notes && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
+          {p.notes && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
             {p.status === "draft" && <button onClick={() => setStatus(p.id, "ordered")} style={{ ...btn, padding: "6px 12px" }}>Mark ordered</button>}
             {p.status === "ordered" && <button onClick={() => setStatus(p.id, "received")} style={{ ...btn, padding: "6px 12px", background: "#10b981" }}>Mark received ✓</button>}
@@ -1894,7 +1893,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   function renderStepGroup(gid: string, phaseId: string | null, name: string, phaseIndex: number) {
     const group = stepsIn(phaseId);
     const gDone = group.filter(c => c.is_complete || c.completed || c.done).length;
-    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
+    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.82)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
     const isPhase = phaseId !== null;
     return <div key={gid} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1908,7 +1907,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <button onClick={() => deletePhase(phases[phaseIndex])} style={{ ...sel, cursor: "pointer", color: "#fca5a5", border: "1px solid rgba(248,113,113,0.35)", padding: "4px 9px", flexShrink: 0 }}>Delete</button>
         </>}
       </div>
-      <div style={{ display: "grid", gap: 2, marginTop: 8, paddingLeft: 10, borderLeft: "2px solid rgba(0,200,255,0.22)" }}>
+      <div style={{ display: "grid", gap: 2, marginTop: 8, paddingLeft: 10, borderLeft: "2px solid rgba(95,184,224,0.22)" }}>
         {group.length === 0 && <Small>No steps yet — add the first one.</Small>}
         {group.map((c, i) => {
           const done = c.is_complete || c.completed || c.done;
@@ -1917,7 +1916,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} style={{ marginTop: 3, flexShrink: 0 }} />
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: "block", textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
-                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
+                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.82)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
               </span>
             </label>
             <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
@@ -1940,14 +1939,14 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0a1228,#05091a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 24, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0a1228,#05091a)", border: "1px solid rgba(95,184,224,0.22)", borderRadius: 18, padding: 24, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
         <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
         {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
       </div>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 18 }}>
         <div>
-          <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
+          <div style={{ fontSize: 11, color: "rgba(95,184,224,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{wo.title || "Work order"}</h2>
           <Small>{wo.customer_name || wo.site_address || "—"}{wo.scheduled_date ? ` · ${String(wo.scheduled_date).slice(0, 10)}` : ""}</Small>
         </div>
@@ -1955,7 +1954,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         {/* Tabs — keep every feature one click away in a clean console */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "linear-gradient(180deg,#0c1530,#0c1530ee)", paddingBottom: 4 }}>
           {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => (
-            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(0,200,255,0.5)" : "1px solid rgba(255,255,255,0.1)", background: tab === tb ? "rgba(0,200,255,0.16)" : "rgba(255,255,255,0.04)", color: tab === tb ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{tb}</button>
+            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(95,184,224,0.5)" : "1px solid rgba(255,255,255,0.1)", background: tab === tb ? "rgba(95,184,224,0.16)" : "rgba(255,255,255,0.04)", color: tab === tb ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{tb}</button>
           ))}
         </div>
 
@@ -1987,7 +1986,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <Small>Text the customer</Small>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
             <input placeholder="ETA e.g. 2:30 PM" value={eta} onChange={e => setEta(e.target.value)} style={{ ...sel, width: 130 }} />
-            <button onClick={() => notifyCustomer("in_route")} disabled={smsBusy} style={{ ...btn, background: "rgba(0,200,255,0.16)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", display: "inline-flex", alignItems: "center", gap: 6 }}><Truck size={14} /> On my way</button>
+            <button onClick={() => notifyCustomer("in_route")} disabled={smsBusy} style={{ ...btn, background: "rgba(95,184,224,0.16)", border: "1px solid rgba(95,184,224,0.4)", color: "#7DE5FF", display: "inline-flex", alignItems: "center", gap: 6 }}><Truck size={14} /> On my way</button>
             <button onClick={() => notifyCustomer("on_site")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> Arrived</button>
             <button onClick={() => notifyCustomer("completed")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} /> Job done</button>
             <button onClick={() => notifyCustomer("review_request")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><Star size={14} /> Ask for review</button>
@@ -2005,7 +2004,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </select>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(0,200,255,0.14)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}><Star size={12} /> {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
+            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(95,184,224,0.14)", border: "1px solid rgba(95,184,224,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}><Star size={12} /> {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
             {crew.map(c => (
               <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", borderRadius: 20, padding: "5px 10px" }}>
                 {c.technician?.name || "Tech"}<span style={{ opacity: 0.55 }}>· {c.role}</span>
@@ -2035,7 +2034,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <input placeholder="New visit (e.g. Day 2 – Commissioning)" value={phaseForm.name} onChange={e => setPhaseForm(f => ({ ...f, name: e.target.value }))} style={{ ...sel, flex: 1, minWidth: 160 }} />
             <input type="date" value={phaseForm.scheduled_date} onChange={e => setPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))} style={{ ...sel, width: 150 }} />
-            <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
+            <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#7DE5FF", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
           </div>
         </Card>
         </>)}
@@ -2065,7 +2064,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             {(wo.site_pm_name || wo.site_pm_phone) && <div><Small>Property manager</Small><div style={{ fontSize: 13 }}>{wo.site_pm_name || "—"}{wo.site_pm_phone ? ` · ${wo.site_pm_phone}` : ""}</div></div>}
           </div>
           {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Key size={12} /> Access / gate notes</span></Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
-          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
+          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
         </Card>
 
         {/* Equipment on site + manuals */}
@@ -2084,10 +2083,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </div>
           </Modal>}
           {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
-              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#7dd3fc", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
+              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#9FD8EC", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
             </div>
           </div>; })}
         </Card>
@@ -2095,7 +2094,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
 
         {tab === "Execution" && (<>
         {/* AI Tech Support */}
-        <Card style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.22)" }}>
+        <Card style={{ background: "rgba(95,184,224,0.06)", border: "1px solid rgba(95,184,224,0.22)" }}>
           <h2 style={{ fontSize: 15, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Bot size={16} /> AI Tech Support</h2>
           <Small>Describe the symptom — get guided, manual-backed steps.</Small>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -2103,11 +2102,11 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <button onClick={askAI} disabled={aiBusy || !aiQ.trim()} style={{ ...btn, opacity: aiBusy || !aiQ.trim() ? 0.5 : 1 }}>{aiBusy ? "Thinking…" : "Ask"}</button>
           </div>
           {aiStep && <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ fontSize: 11, color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
+            <div style={{ fontSize: 11, color: "#9FD8EC", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
             <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0" }}>{aiStep.text}</div>
             {aiStep.detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{aiStep.detail}</div>}
             {aiStep.expected && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
-            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#7dd3fc" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
+            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#9FD8EC" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
           </div>}
         </Card>
 
@@ -2117,7 +2116,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <h2 style={{ fontSize: 15 }}>Money on this job</h2>
             {partsRev > 0 && <Badge tone="good">{marginPct}% margin</Badge>}
           </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: "#00C8FF", margin: "6px 0" }}>{money(margin)} <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>margin</span></div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "#5FB8E0", margin: "6px 0" }}>{money(margin)} <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>margin</span></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
             <div><Small>Parts cost</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsCost)}</div></div>
             <div><Small>Parts price</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsRev)}</div></div>
@@ -2136,7 +2135,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
             <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>
           </div>
-          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
+          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
           {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#6ee7b7" : "#fca5a5", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 
@@ -2213,7 +2212,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
                     </div>
                     <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
                       Qty {num(p.qty)}
-                      {num(p.unit_price) > 0 && <span style={{ color: "#34d399" }}> · {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span>}
+                      {num(p.unit_price) > 0 && <span style={{ color: "#7ee0a8" }}> · {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span>}
                     </div>
                   </div>
                   {/* One tap: where is this part right now? */}
@@ -2228,7 +2227,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
                     {p.po.po_number ? `PO ${p.po.po_number}` : "On a PO"}{p.po.supplier ? ` · ${p.po.supplier}` : ""}
                   </span>}
                   <label title="Wire, connectors, screws — stuff you don't track one by one" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!p.is_expendable} disabled={!p.id || saving} onChange={e => patchPart(String(p.id), { is_expendable: e.target.checked })} style={{ accentColor: "#6366f1", cursor: "pointer" }} />
+                    <input type="checkbox" checked={!!p.is_expendable} disabled={!p.id || saving} onChange={e => patchPart(String(p.id), { is_expendable: e.target.checked })} style={{ accentColor: "#2f7fb8", cursor: "pointer" }} />
                     Expendable
                   </label>
                   <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>

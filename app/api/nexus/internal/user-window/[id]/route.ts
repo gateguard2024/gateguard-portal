@@ -151,7 +151,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // Caller's grantable ceiling per feature = min(caller effective, target org cap).
     let callerCap: Record<string, AccessLevel> = {}
     if (caller.isCorporate) {
-      for (const f of catalog) callerCap[f.key] = orgAccess[f.key] // corporate capped only by the org
+      // Corporate is the top authority — it can grant any level (the write handler
+      // also skips the ceiling check for corporate). Cap at 'edit' so no button locks.
+      for (const f of catalog) callerCap[f.key] = 'edit'
     } else {
       const callerEff = await computeUserEffective(caller.id, caller.org_id!, normalizeRole(caller.role), orgAccess, catalog)
       for (const f of catalog) callerCap[f.key] = capAccess(callerEff[f.key] ?? 'none', orgAccess[f.key] ?? 'none')

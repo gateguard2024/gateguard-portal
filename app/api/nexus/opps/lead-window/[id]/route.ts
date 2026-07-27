@@ -61,6 +61,33 @@ async function getProfileId(clerkUserId: string): Promise<string | null> {
 
 // Fetch lead with org-scope enforcement — uses resolveOrgScope + applyOrgScope
 // Handles corporate (all), subtree (MSO/MA/SO), self-only (SP/SD)
+// Auto-advancing lifecycle: reps' actions move the lead forward — no manual status change needed.
+// New (created_at) → Contacted (contacted_at) → Info Sent (sent_info_at) → Visited (visited_at) → Converted (converted_at).
+const LEAD_BUCKET_RANK: Record<string, number> = { identified: 0, contacted: 1, sent_info: 2, converted: 3 }
+function leadBucket(stage: string | null | undefined): string {
+  const v = String(stage ?? '').toLowerCase()
+  if (/converted|won/.test(v)) return 'converted'
+  if (/proposal|propose|sent|negoti/.test(v)) return 'sent_info'
+  if (/contact|qualif/.test(v)) return 'contacted'
+  return 'identified'
+}
+async function advanceLead(lead: { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null; lost_at?: string | null }, target: 'contacted' | 'sent_info') {
+  if (lead.lost_at) return   // never auto-advance a lost/dead lead
+  const now = new Date().toISOString()
+  const patch: Record<string, unknown> = {}
+  if (LEAD_BUCKET_RANK[target] > LEAD_BUCKET_RANK[leadBucket(lead.stage)]) patch.stage = target === 'contacted' ? 'contacted' : 'proposal'
+  if (!lead.contacted_at) patch.contacted_at = now                       // contact is implied by reaching either milestone
+  if (target === 'sent_info' && !lead.sent_info_at) patch.sent_info_at = now
+  if (Object.keys(patch).length === 0) return
+  patch.updated_at = now
+  // Drift-resilient: skip timestamp cols an env may not have migrated yet.
+  const { error } = await supabase.from('leads').update(patch).eq('id', lead.id)
+  if (error && (String(error.code) === '42703' || /contacted_at|sent_info_at/.test(error.message ?? ''))) {
+    delete patch.contacted_at; delete patch.sent_info_at
+    if (Object.keys(patch).length > 1) await supabase.from('leads').update(patch).eq('id', lead.id)
+  }
+}
+
 async function getScopedLead(
   leadId: string,
   user: PortalUser
@@ -69,7 +96,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, converted_at, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name, lost_at')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
@@ -222,6 +249,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       { title: 'Run ARIA', subtitle: 'Research the property or company before outreach.', action: 'run_aria' },
       { title: 'Create Opportunity', subtitle: 'Convert this lead into a real revenue opportunity.', action: 'create_opportunity' },
     ],
+    canReassign: user.role === 'admin' || user.isCorporate,
   })
 }
 
@@ -336,10 +364,23 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
     }
 
+    await advanceLead(lead as unknown as { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, 'contacted')
     return NextResponse.json({ success: true, message: 'Call logged.', activity: data })
   }
 
   // ── schedule_followup ───────────────────────────────────────────────────────
+  if (action === 'log_visit') {
+    const summary = clean(body.summary ?? body.body ?? body.note) || 'Site visit completed.'
+    // Stamp the visit (drift-resilient: skip if column not migrated yet).
+    const { error: stampErr } = await supabase.from('leads').update({ visited_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', lead.id)
+    if (stampErr && !(String(stampErr.code) === '42703' || /visited_at/.test(stampErr.message ?? ''))) {
+      return NextResponse.json({ success: false, message: stampErr.message }, { status: 500 })
+    }
+    const { error: logErr } = await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'meeting', subject: 'Site visit', body: summary, lead_id: lead.id })
+    if (logErr) return NextResponse.json({ success: false, message: logErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Site visit logged.' })
+  }
+
   if (action === 'schedule_followup') {
     const title = clean(body.title) || 'Follow up on lead'
     const notes = clean(body.body ?? body.notes)
@@ -372,7 +413,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     // Best-effort activity log for the follow-up
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'task',
@@ -417,6 +458,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       fieldsMap.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
     }
 
+    // Lead sizing (Lead Analysis) — carries to the opportunity on convert.
+    const asInt = (v: unknown) => { const n = parseInt(clean(v), 10); return isNaN(n) ? undefined : n }
+    const asNum = (v: unknown) => { const n = parseFloat(clean(v)); return isNaN(n) ? undefined : n }
+    const leadType = clean(body.lead_type); if (leadType) fieldsMap.lead_type = leadType
+    const epv = asInt(body.entry_points); if (epv !== undefined) fieldsMap.entry_points = epv
+    const camv = asInt(body.cameras);     if (camv !== undefined) fieldsMap.cameras = camv
+    const mrrv = asNum(body.mrr);         if (mrrv !== undefined) fieldsMap.mrr = mrrv
+    const pcrv = asNum(body.pcr);         if (pcrv !== undefined) fieldsMap.pcr = pcrv
+
     if (Object.keys(fieldsMap).length === 0) {
       return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
     }
@@ -445,7 +495,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by:    profileId,
       type:          'note',
@@ -458,6 +508,37 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   // ── update_status ───────────────────────────────────────────────────────────
+  if (action === 'send_info') {
+    const note = clean(body.note ?? body.body) || 'Information sent to the prospect.'
+    const { error } = await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'email', subject: 'Information sent', body: note, lead_id: lead.id })
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    await advanceLead(lead as unknown as { id: string; stage?: string | null; contacted_at?: string | null; sent_info_at?: string | null }, 'sent_info')
+    return NextResponse.json({ success: true, message: 'Marked information sent — lead moved to Sent Info.' })
+  }
+
+  if (action === 'reassign_lead') {
+    if (!(user.role === 'admin' || user.isCorporate)) {
+      return NextResponse.json({ success: false, message: 'Only an administrator can reassign leads.' }, { status: 403 })
+    }
+    const assigneeId = clean(body.assignee_id)
+    const assigneeName = clean(body.assignee_name)
+    if (!assigneeId) return NextResponse.json({ success: false, message: 'Choose someone to assign this lead to.' }, { status: 400 })
+    // assigneeId is a Clerk user id. assigned_to_user_id holds the Clerk id;
+    // assigned_to holds profiles(id). Resolve the profile so both scoping paths
+    // ("assigned to me" by Clerk id AND by profile id) find the lead.
+    const { data: aprof } = await supabase.from('profiles').select('id').eq('clerk_user_id', assigneeId).maybeSingle()
+    const assigneeProfileId = (aprof as { id?: string } | null)?.id ?? null
+    const { error } = await supabase.from('leads').update({
+      assigned_to: assigneeProfileId,
+      assigned_to_user_id: assigneeId,
+      assigned_to_name: assigneeName || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', lead.id)
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: 'Lead reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, lead_id: lead.id })
+    return NextResponse.json({ success: true, message: `Lead assigned to ${assigneeName || 'the selected user'}.` })
+  }
+
   if (action === 'update_status') {
     const stage = clean(body.stage)
 
@@ -479,6 +560,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (stage === 'won')       updates.won_at       = new Date().toISOString()
     if (stage === 'lost' || stage === 'dead') updates.lost_at = new Date().toISOString()
 
+    // First-entry stage timestamps → time-in-stage reporting (never overwrite the first touch).
+    const Lrec = lead as unknown as Record<string, unknown>
+    const bucket = /proposal|propose|sent|negoti/.test(stage) ? 'sentInfo' : /contact|qualif/.test(stage) ? 'contacted' : 'identified'
+    const nowIso = new Date().toISOString()
+    if ((bucket === 'contacted' || bucket === 'sentInfo') && !Lrec.contacted_at) updates.contacted_at = nowIso
+    if (bucket === 'sentInfo' && !Lrec.sent_info_at) updates.sent_info_at = nowIso
+
     const { data, error: updateError } = await supabase
       .from('leads')
       .update(updates)
@@ -490,7 +578,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('crm_activities').insert({
+    await supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'note',
@@ -593,6 +681,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       site_contact_phone:  L.phone ?? null,
       site_contact_email:  L.email ?? null,
       units:               L.unit_count ?? null,
+      vehicle_gates:       L.entry_points ?? null,
+      new_cameras:         L.cameras ?? null,
+      est_mrr:             L.mrr ?? null,
       property_type:       L.property_type ?? null,
       interests:           L.interests ?? null,
       next_step:           optionalNextStep || 'Schedule discovery call',

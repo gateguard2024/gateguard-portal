@@ -13,9 +13,12 @@ const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 // GET /api/crm/contacts?q=  → search contacts (for the attach-existing picker)
 export async function GET(req: NextRequest) {
-  await getCurrentUser()
+  const user = await getCurrentUser()
+  if (user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const q = clean(new URL(req.url).searchParams.get('q'))
   let query = supabase.from('contacts').select('id, first_name, last_name, email, phone, title').order('created_at', { ascending: false }).limit(20)
+  // Non-corporate callers only see their own org's contacts (the POST already stamps org_id).
+  if (!user.isCorporate && user.org_id) query = query.eq('org_id', user.org_id)
   if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

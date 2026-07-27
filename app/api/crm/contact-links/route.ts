@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
+import { entityInScope } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
   const contactId = clean(searchParams.get('contact_id'))
 
   if (entityType && entityId) {
+    if (!(await entityInScope(req, entityType, entityId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const { data: links, error } = await supabase
       .from('contact_links').select('id, contact_id, role, is_primary')
       .eq('entity_type', entityType).eq('entity_id', entityId)
@@ -44,7 +46,10 @@ export async function GET(req: NextRequest) {
       .from('contact_links').select('id, entity_type, entity_id, role, is_primary')
       .eq('contact_id', contactId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ links: data ?? [] })
+    // Only return links whose entity the caller is allowed to see (no cross-tenant enumeration).
+    const rows = data ?? []
+    const allowed = await Promise.all(rows.map(l => entityInScope(req, l.entity_type, l.entity_id)))
+    return NextResponse.json({ links: rows.filter((_, i) => allowed[i]) })
   }
 
   return NextResponse.json({ error: 'entity_type+entity_id or contact_id required' }, { status: 400 })
@@ -59,6 +64,7 @@ export async function POST(req: NextRequest) {
   if (!contact_id || !entity_type || !entity_id) {
     return NextResponse.json({ error: 'contact_id, entity_type, entity_id required' }, { status: 400 })
   }
+  if (!(await entityInScope(req, entity_type, entity_id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('contact_links')
     .upsert({ contact_id, entity_type, entity_id, role: clean(body.role) || null, is_primary: body.is_primary === true, created_by: user.id }, { onConflict: 'contact_id,entity_type,entity_id' })
@@ -73,10 +79,15 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const id = clean(searchParams.get('id'))
   let q = supabase.from('contact_links').delete()
-  if (id) q = q.eq('id', id)
-  else {
+  if (id) {
+    const { data: link } = await supabase.from('contact_links').select('entity_type, entity_id').eq('id', id).maybeSingle()
+    if (!link) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!(await entityInScope(req, link.entity_type, link.entity_id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    q = q.eq('id', id)
+  } else {
     const ct = clean(searchParams.get('contact_id')), et = clean(searchParams.get('entity_type')), ei = clean(searchParams.get('entity_id'))
     if (!ct || !et || !ei) return NextResponse.json({ error: 'id or (contact_id+entity_type+entity_id) required' }, { status: 400 })
+    if (!(await entityInScope(req, et, ei))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     q = q.eq('contact_id', ct).eq('entity_type', et).eq('entity_id', ei)
   }
   const { error } = await q

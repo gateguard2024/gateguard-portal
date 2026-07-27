@@ -50,7 +50,7 @@ export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => vo
   return (
     <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'radial-gradient(circle at 16% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(0,200,255,0.22)', backdropFilter: 'blur(28px)' }}>
+        style={{ background: 'radial-gradient(circle at 16% 0%, rgba(95,184,224,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(95,184,224,0.22)', backdropFilter: 'blur(28px)' }}>
         {windowData ? (
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             {/* onRefresh is required for in-window actions (Schedule Follow-Up,
@@ -73,7 +73,7 @@ export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => vo
           <>
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Existing Opportunity</div>
+                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(95,184,224,0.82)' }}>Existing Opportunity</div>
                 <h2 className="mt-1 text-xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>Pick a deal to work</h2>
               </div>
               <button type="button" onClick={onClose} className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
@@ -87,13 +87,13 @@ export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => vo
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{o.name || 'Opportunity'}</div>
-                      <div className="mt-0.5 truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{[o.account_name, (o.stage ?? '').replace(/_/g, ' '), o.owner_name].filter(Boolean).join(' · ') || 'Deal'}</div>
+                      <div className="mt-0.5 truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{[o.account_name, (o.stage ?? '').replace(/_/g, ' '), o.owner_name].filter(Boolean).join(' · ') || 'Deal'}</div>
                     </div>
                     <span className="shrink-0 text-[11px]" style={{ color: 'rgba(125,229,255,0.85)' }}>{busyId === o.id ? '…' : 'Open →'}</span>
                   </div>
                 </button>
               ))}
-              {!loading && filtered.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)' }}>{query ? 'No opportunities match your search.' : 'No opportunities you can see yet. Create one from New Opportunity.'}</div>}
+              {!loading && filtered.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{query ? 'No opportunities match your search.' : 'No opportunities you can see yet. Create one from New Opportunity.'}</div>}
             </div>
           </>
         )}

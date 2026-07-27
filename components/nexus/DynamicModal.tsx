@@ -63,9 +63,9 @@ export function DynamicModal({ type, label, onClose }: Props) {
           className="w-full max-w-2xl rounded-2xl p-5 max-h-[calc(100vh-76px-24px)] overflow-y-auto overscroll-contain"
           style={{
             background:    'rgba(6, 12, 32, 0.94)',
-            border:        '1px solid rgba(107,126,255,0.22)',
+            border:        '1px solid rgba(95,184,224,0.22)',
             backdropFilter: 'blur(28px)',
-            boxShadow:     '0 -8px 48px rgba(107,126,255,0.14), 0 0 0 0.5px rgba(107,126,255,0.08)',
+            boxShadow:     '0 -8px 48px rgba(95,184,224,0.14), 0 0 0 0.5px rgba(95,184,224,0.08)',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -74,7 +74,7 @@ export function DynamicModal({ type, label, onClose }: Props) {
             <div>
               <p
                 className="text-xs uppercase tracking-[0.14em] mb-0.5"
-                style={{ color: 'rgba(107,126,255,0.55)' }}
+                style={{ color: 'rgba(95,184,224,0.55)' }}
               >
                 Quick actions
               </p>
@@ -87,7 +87,7 @@ export function DynamicModal({ type, label, onClose }: Props) {
               className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
               style={{
                 background: 'rgba(255,255,255,0.05)',
-                color:      'rgba(255,255,255,0.35)',
+                color:      'rgba(255,255,255,0.82)',
                 border:     '0.5px solid rgba(255,255,255,0.08)',
               }}
               onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}

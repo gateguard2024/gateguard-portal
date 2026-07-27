@@ -31,7 +31,7 @@ export function NexusBottomNav({ activeTab, badge }: Props) {
         background:
           'linear-gradient(to top, rgba(2,8,16,0.98) 0%, rgba(2,8,16,0.82) 100%)',
         backdropFilter: 'blur(16px)',
-        borderTop: '0.5px solid rgba(107,126,255,0.1)',
+        borderTop: '0.5px solid rgba(95,184,224,0.1)',
       }}
     >
       <div className="flex justify-center gap-2 px-4 py-3 overflow-x-auto scrollbar-none">
@@ -47,8 +47,8 @@ export function NexusBottomNav({ activeTab, badge }: Props) {
               style={
                 isActive
                   ? {
-                      background: 'rgba(107,126,255,0.2)',
-                      border: '1px solid rgba(107,126,255,0.45)',
+                      background: 'rgba(95,184,224,0.2)',
+                      border: '1px solid rgba(95,184,224,0.45)',
                       color: '#93a3ff',
                     }
                   : {

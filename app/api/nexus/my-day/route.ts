@@ -94,7 +94,7 @@ export async function GET() {
       safe(
         supabase
           .from('todos')
-          .select('id, title, due_date, status, priority')
+          .select('id, title, due_date, status, priority, created_by, assigned_to')
           .lt('due_date', today)
           .in('status', ['open', 'in_progress'])
           .limit(20),
@@ -103,7 +103,7 @@ export async function GET() {
       safe(
         supabase
           .from('todos')
-          .select('id, title, due_date, status, priority')
+          .select('id, title, due_date, status, priority, created_by, assigned_to')
           .eq('due_date', today)
           .in('status', ['open', 'in_progress']),
         [] as Array<Record<string, any>>
@@ -119,7 +119,7 @@ export async function GET() {
       safe(
         supabase
           .from('crm_activities')
-          .select('id, subject, due_at, completed_at, opportunity_id')
+          .select('id, subject, due_at, completed_at, opportunity_id, dealer_org_id')
           .gte('due_at', startOfDayIso(now))
           .lte('due_at', endOfDayIso(now))
           .is('completed_at', null),
@@ -150,6 +150,12 @@ export async function GET() {
       ? todayTracker
       : todayTracker.filter(row => row.owner_user_id === user.id || row.org_id === user.org_id)
 
+    // Multi-tenant scope: todos by owner, CRM follow-ups by dealer org (service-role bypasses RLS).
+    const scopeTodo = (rows: Array<Record<string, any>>) => user.isCorporate ? rows : rows.filter(r => r.created_by === user.id || r.assigned_to === user.id)
+    const scopedOverdue = scopeTodo(overdueTodos)
+    const scopedTodayTodos = scopeTodo(todayTodos)
+    const scopedCrm = user.isCorporate ? todayCrm : todayCrm.filter(r => r.dealer_org_id === user.org_id)
+
     const events: DayEvent[] = [
       ...scopedEvents.map(row => ({
         id: String(row.id),
@@ -167,7 +173,7 @@ export async function GET() {
         time: row.scheduled_time ?? null,
         link: `/maintenance/${row.id}`,
       })),
-      ...todayCrm.map(row => ({
+      ...scopedCrm.map(row => ({
         id: String(row.id),
         type: 'crm_activity',
         title: row.subject ?? 'CRM Follow-Up',
@@ -179,11 +185,11 @@ export async function GET() {
     ].sort((a, b) => `${a.date ?? ''}T${a.time ?? '00:00'}`.localeCompare(`${b.date ?? ''}T${b.time ?? '00:00'}`))
 
     const topPool: TopItem[] = [
-      ...overdueTodos.map(row => {
+      ...scopedOverdue.map(row => {
         const score = 100 + scorePriority(row.priority)
         return { id: String(row.id), type: 'todo' as const, title: row.title ?? 'Overdue To-Do', reason: 'Overdue', urgency: urgency(score), score, date: row.due_date ?? null, link: '/todos' }
       }),
-      ...todayTodos.map(row => {
+      ...scopedTodayTodos.map(row => {
         const score = 80 + scorePriority(row.priority)
         return { id: String(row.id), type: 'todo' as const, title: row.title ?? 'To-Do due today', reason: 'Due today', urgency: urgency(score), score, date: row.due_date ?? null, link: '/todos' }
       }),
@@ -191,7 +197,7 @@ export async function GET() {
         const score = 75 + scorePriority(row.priority)
         return { id: String(row.id), type: 'work_order' as const, title: row.title ?? 'Work Order', reason: 'Scheduled today', urgency: urgency(score), score, date: row.scheduled_date ?? null, time: row.scheduled_time ?? null, link: `/maintenance/${row.id}` }
       }),
-      ...todayCrm.map(row => {
+      ...scopedCrm.map(row => {
         const score = 70
         return { id: String(row.id), type: 'crm_activity' as const, title: row.subject ?? 'CRM follow-up', reason: 'Follow-up due today', urgency: urgency(score), score, date: row.due_at ? String(row.due_at).split('T')[0] : null, time: row.due_at ? String(row.due_at).split('T')[1]?.slice(0, 5) : null, link: row.opportunity_id ? `/crm/opportunities/${row.opportunity_id}` : '/crm' }
       }),
@@ -212,10 +218,10 @@ export async function GET() {
         connected: !!settingsRow?.gcal_refresh_token,
       },
       counts: {
-        today_total: events.length + todayTodos.length + scopedTracker.length,
-        today_todos: todayTodos.length,
+        today_total: events.length + scopedTodayTodos.length + scopedTracker.length,
+        today_todos: scopedTodayTodos.length,
         today_work_orders: scopedWos.length,
-        today_crm_activities: todayCrm.length,
+        today_crm_activities: scopedCrm.length,
         today_tracker_tasks: scopedTracker.length,
         week_total: top10.length,
       },

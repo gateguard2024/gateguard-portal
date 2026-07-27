@@ -47,7 +47,7 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-not-allowed"
       style={muted
         ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
-        : { background: 'linear-gradient(135deg, rgba(0,124,255,0.22), rgba(0,200,255,0.10))', border: '1px solid rgba(0,200,255,0.26)', color: '#7dd3fc', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}
+        : { background: 'linear-gradient(135deg, rgba(95,184,224,0.22), rgba(95,184,224,0.10))', border: '1px solid rgba(95,184,224,0.26)', color: '#9FD8EC', boxShadow: '0 0 18px rgba(95,184,224,0.12)' }}
       title={muted ? 'Coming soon' : displayLabel}
     >
       {displayLabel}
@@ -97,10 +97,10 @@ export function MoneyDocsSurface() {
   const [activePanel, setActivePanel] = useState<MoneyDocsPanel>(null)
 
   const cards: MoneyDocsCard[] = [
-    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#00C8FF', glyph: 'quote' },
+    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#5FB8E0', glyph: 'quote' },
     { id: 'renewals', title: 'Renewals', subtitle: 'Find contracts, agreements, and services that are coming due.', hex: '#FBBF24', glyph: 'activity', badge: 'Dates' },
-    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#007CFF', glyph: 'todo', badge: 'Sign' },
-    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#8B5CF6', glyph: 'priority', badge: 'Review' },
+    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#5FB8E0', glyph: 'todo', badge: 'Sign' },
+    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#5FB8E0', glyph: 'priority', badge: 'Review' },
   ]
 
   return (
@@ -129,7 +129,7 @@ export function MoneyDocsSurface() {
           {cards.map(card => <MoneyDocsCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
         </div>
 
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
           Money/Docs stays simple: collect money, watch renewals, get documents signed, and stay compliant.
         </div>
       </div>

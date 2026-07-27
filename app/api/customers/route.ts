@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { TIER_LABELS } from '@/lib/tier-labels'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,16 +11,6 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 // Tier display labels — maps DB org_tier to UI display
-const TIER_LABELS: Record<string, string> = {
-  corporate:          'Corporate',
-  master_agent:       'Master Agent',
-  master_dealer:      'MSO — Master System Operator',
-  full_dealer:        'Dealer',
-  service_dealer:     'Service Partner',
-  install_contractor: 'Install Partner',
-  sales_partner:      'Sales Partner',
-  client:             'Client',
-}
 
 export async function GET(req: NextRequest) {
   try {

@@ -5,7 +5,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, isInScope } from '@/lib/org-scope'
+import { resolveOrgScope, isInScope, getProfileId } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,8 +17,14 @@ export async function opportunityInScope(id: string): Promise<boolean> {
   const user = await getCurrentUser()
   const scope = await resolveOrgScope(user)
   if (scope.all) return true
-  const { data } = await supabase.from('opportunities').select('dealer_org_id').eq('id', id).maybeSingle()
-  return isInScope(scope, (data as { dealer_org_id?: string | null } | null)?.dealer_org_id)
+  const { data } = await supabase.from('opportunities').select('dealer_org_id, rep_id').eq('id', id).maybeSingle()
+  const row = data as { dealer_org_id?: string | null; rep_id?: string | null } | null
+  if (!row) return false
+  if (row.rep_id) {
+    const profileId = await getProfileId(user.id)
+    if (profileId && row.rep_id === profileId) return true
+  }
+  return isInScope(scope, row.dealer_org_id)
 }
 
 // A lead is in scope if EITHER:

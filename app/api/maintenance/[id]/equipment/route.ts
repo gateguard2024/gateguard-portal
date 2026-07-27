@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +20,8 @@ async function withCatalogImages(rows: any[]): Promise<any[]> {
 }
 
 // GET — list equipment for a work order
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('wo_installed_equipment')
     .select('*')
@@ -32,6 +34,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 // POST — add equipment (management pre-loads or tech adds on-site)
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { name, make, model, sku, serial_number, location, qty = 1, condition, notes, added_by = 'management' } = body
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })

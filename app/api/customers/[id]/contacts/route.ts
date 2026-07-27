@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { guardOrg } from '@/lib/ops-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,7 @@ const supabase = createClient(
 
 // GET /api/customers/[id]/contacts
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('org_contacts')
     .select('*')
@@ -21,6 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 // POST /api/customers/[id]/contacts
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardOrg(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const { name, title, email, phone, is_primary, notes } = body
 

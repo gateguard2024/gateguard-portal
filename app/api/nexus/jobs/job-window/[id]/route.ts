@@ -253,9 +253,20 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (action === 'assign') {
     const technicianId = clean(body.technician_id) || null
     const assigneeName = clean(body.assignee_name) || null
+    // Resolve the tech → portal profile so the reassigned job appears in the new
+    // owner's "My Jobs" (which filters on assigned_to = profiles(id)).
+    let ownerProfileId: string | null = null
+    if (technicianId) {
+      const { data: tech } = await supabase.from('technicians').select('clerk_user_id').eq('id', technicianId).maybeSingle()
+      const clerkId = (tech as { clerk_user_id?: string } | null)?.clerk_user_id
+      if (clerkId) {
+        const { data: prof } = await supabase.from('profiles').select('id').eq('clerk_user_id', clerkId).maybeSingle()
+        ownerProfileId = (prof as { id?: string } | null)?.id ?? null
+      }
+    }
     const { error: assignErr } = await supabase
       .from('work_orders')
-      .update({ assignee_id: technicianId, assignee_name: assigneeName, updated_at: new Date().toISOString() })
+      .update({ assignee_id: technicianId, assigned_to: ownerProfileId, assignee_name: assigneeName, updated_at: new Date().toISOString() })
       .eq('id', job.id)
     if (assignErr) return NextResponse.json({ success: false, message: assignErr.message }, { status: 500 })
     return NextResponse.json({ success: true, message: assigneeName ? `Assigned to ${assigneeName}.` : 'Assignment cleared.' })

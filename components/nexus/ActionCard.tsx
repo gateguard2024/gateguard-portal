@@ -24,7 +24,7 @@ export interface ActionCardProps {
 }
 
 const STATUS_COLORS = {
-  blue:  { bg: 'rgba(107,126,255,0.18)', border: 'rgba(107,126,255,0.35)', text: '#93a3ff' },
+  blue:  { bg: 'rgba(95,184,224,0.18)', border: 'rgba(95,184,224,0.35)', text: '#93a3ff' },
   amber: { bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
   green: { bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.35)',  text: '#34d399' },
   red:   { bg: 'rgba(239,68,68,0.15)',   border: 'rgba(239,68,68,0.35)',   text: '#f87171' },
@@ -87,7 +87,7 @@ export function ActionCard({
             <div className="flex-1 min-w-0 pr-2">
               <p className="text-sm font-semibold truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</p>
               {subtitle && (
-                <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>{subtitle}</p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>{subtitle}</p>
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -109,7 +109,7 @@ export function ActionCard({
           </div>
 
           {/* AI context label */}
-          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(107,126,255,0.5)' }}>
+          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(95,184,224,0.5)' }}>
             {aiContext}
           </p>
 
@@ -130,12 +130,12 @@ export function ActionCard({
                 onClick={() => setPhase('confirm')}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{
-                  background: 'rgba(107,126,255,0.2)',
-                  border:     '1px solid rgba(107,126,255,0.4)',
+                  background: 'rgba(95,184,224,0.2)',
+                  border:     '1px solid rgba(95,184,224,0.4)',
                   color:      '#a5b4ff',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(107,126,255,0.3)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(107,126,255,0.2)')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(95,184,224,0.3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(95,184,224,0.2)')}
               >
                 {actionLabel}
               </button>

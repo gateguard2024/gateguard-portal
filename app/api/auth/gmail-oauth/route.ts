@@ -73,90 +73,86 @@ export async function GET(req: Request) {
 
   const supabase = createServiceClient();
 
-  // Upsert Gmail channel
+  // Upsert Gmail channel — MUST be awaited: on Vercel the container freezes the
+  // moment we redirect, so a detached write would drop the OAuth tokens and the
+  // user sees "Connected!" with no token stored. (CLAUDE.md: confirmed data loss.)
   if (isGmail) {
-    void (async () => {
-      try {
-        const existing = await supabase
-          .from("message_channels")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("channel_type", "gmail")
-          .maybeSingle();
+    const { data: existing } = await supabase
+      .from("message_channels")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("channel_type", "gmail")
+      .maybeSingle();
 
-        if (existing.data?.id) {
-          await supabase
-            .from("message_channels")
-            .update({
-              oauth_access_token:  tokens.access_token,
-              oauth_refresh_token: tokens.refresh_token ?? null,
-              oauth_expiry:        expiry,
-              oauth_scope:         tokens.scope,
-              display_name:        emailAddress,
-              is_active:           true,
-            })
-            .eq("id", existing.data.id);
-        } else {
-          await supabase
-            .from("message_channels")
-            .insert({
-              user_id:             userId,
-              org_id:              orgId ?? null,
-              channel_type:        "gmail",
-              display_name:        emailAddress,
-              is_active:           true,
-              oauth_access_token:  tokens.access_token,
-              oauth_refresh_token: tokens.refresh_token ?? null,
-              oauth_expiry:        expiry,
-              oauth_scope:         tokens.scope,
-              config:              { email: emailAddress },
-            });
-        }
-      } catch (_) {}
-    })();
+    const { error: gmailErr } = existing?.id
+      ? await supabase
+          .from("message_channels")
+          .update({
+            oauth_access_token:  tokens.access_token,
+            oauth_refresh_token: tokens.refresh_token ?? null,
+            oauth_expiry:        expiry,
+            oauth_scope:         tokens.scope,
+            display_name:        emailAddress,
+            is_active:           true,
+          })
+          .eq("id", existing.id)
+      : await supabase
+          .from("message_channels")
+          .insert({
+            user_id:             userId,
+            org_id:              orgId ?? null,
+            channel_type:        "gmail",
+            display_name:        emailAddress,
+            is_active:           true,
+            oauth_access_token:  tokens.access_token,
+            oauth_refresh_token: tokens.refresh_token ?? null,
+            oauth_expiry:        expiry,
+            oauth_scope:         tokens.scope,
+            config:              { email: emailAddress },
+          });
+    if (gmailErr) {
+      return NextResponse.redirect(new URL(`/messages/settings?error=${encodeURIComponent("Could not save Gmail connection: " + gmailErr.message)}`, req.url));
+    }
   }
 
-  // Upsert CalDAV channel (uses same Google OAuth token)
+  // Upsert CalDAV channel (uses same Google OAuth token) — awaited for the same reason.
   if (isCalDAV) {
-    void (async () => {
-      try {
-        const existing = await supabase
-          .from("message_channels")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("channel_type", "caldav")
-          .maybeSingle();
+    const { data: existing } = await supabase
+      .from("message_channels")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("channel_type", "caldav")
+      .maybeSingle();
 
-        if (existing.data?.id) {
-          await supabase
-            .from("message_channels")
-            .update({
-              oauth_access_token:  tokens.access_token,
-              oauth_refresh_token: tokens.refresh_token ?? null,
-              oauth_expiry:        expiry,
-              is_active:           true,
-            })
-            .eq("id", existing.data.id);
-        } else {
-          await supabase
-            .from("message_channels")
-            .insert({
-              user_id:             userId,
-              org_id:              orgId ?? null,
-              channel_type:        "caldav",
-              display_name:        `Google Calendar (${emailAddress})`,
-              is_active:           true,
-              oauth_access_token:  tokens.access_token,
-              oauth_refresh_token: tokens.refresh_token ?? null,
-              oauth_expiry:        expiry,
-              config:              {
-                caldav_url:  "https://apidata.googleusercontent.com/caldav/v2/",
-                email:       emailAddress,
-              },
-            });
-        }
-      } catch (_) {}
-    })();
+    const { error: calErr } = existing?.id
+      ? await supabase
+          .from("message_channels")
+          .update({
+            oauth_access_token:  tokens.access_token,
+            oauth_refresh_token: tokens.refresh_token ?? null,
+            oauth_expiry:        expiry,
+            is_active:           true,
+          })
+          .eq("id", existing.id)
+      : await supabase
+          .from("message_channels")
+          .insert({
+            user_id:             userId,
+            org_id:              orgId ?? null,
+            channel_type:        "caldav",
+            display_name:        `Google Calendar (${emailAddress})`,
+            is_active:           true,
+            oauth_access_token:  tokens.access_token,
+            oauth_refresh_token: tokens.refresh_token ?? null,
+            oauth_expiry:        expiry,
+            config:              {
+              caldav_url:  "https://apidata.googleusercontent.com/caldav/v2/",
+              email:       emailAddress,
+            },
+          });
+    if (calErr) {
+      return NextResponse.redirect(new URL(`/messages/settings?error=${encodeURIComponent("Could not save Calendar connection: " + calErr.message)}`, req.url));
+    }
   }
 
   return NextResponse.redirect(new URL("/messages/settings?connected=gmail", req.url));

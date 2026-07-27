@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { TIER_LABELS } from '@/lib/tier-labels'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,15 +10,6 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 // Tier labels for display
-const TIER_LABELS: Record<string, string> = {
-  corporate:         'Corporate',
-  master_agent:      'Master Agent',
-  master_dealer:     'MSO',
-  full_dealer:       'Full Dealer',
-  service_dealer:    'Service Dealer',
-  install_contractor:'Install Contractor',
-  sales_partner:     'Sales Partner',
-}
 
 // Tier badge color class (for the frontend to use)
 const TIER_COLORS: Record<string, string> = {

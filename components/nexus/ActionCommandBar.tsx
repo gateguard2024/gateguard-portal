@@ -35,10 +35,10 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
         style={{
           background: 'rgba(255,255,255,0.04)',
           border: isFocused
-            ? '1px solid rgba(107,126,255,0.55)'
+            ? '1px solid rgba(95,184,224,0.55)'
             : '1px solid rgba(255,255,255,0.09)',
           boxShadow: isFocused
-            ? '0 0 0 1px rgba(107,126,255,0.15), 0 8px 32px rgba(107,126,255,0.12)'
+            ? '0 0 0 1px rgba(95,184,224,0.15), 0 8px 32px rgba(95,184,224,0.12)'
             : '0 4px 24px rgba(0,0,0,0.3)',
           backdropFilter: 'blur(12px)',
         }}
@@ -51,7 +51,7 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
           aria-hidden="true"
         >
           <path d="M9 1L10.2 6.8H16L11.4 10.2L13 16L9 12.6L5 16L6.6 10.2L2 6.8H7.8L9 1Z"
-            fill={isFocused ? '#6B7EFF' : 'rgba(107,126,255,0.5)'}
+            fill={isFocused ? '#6B7EFF' : 'rgba(95,184,224,0.5)'}
             style={{ transition: 'fill 0.2s' }}
           />
         </svg>
@@ -107,7 +107,7 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
             type="button"
             aria-label="Voice input"
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ background: 'rgba(107,126,255,0.12)' }}
+            style={{ background: 'rgba(95,184,224,0.12)' }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <rect x="4.5" y="1" width="5" height="7" rx="2.5" stroke="#6B7EFF" strokeWidth="1.2"/>
@@ -124,7 +124,7 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
             aria-label="Send"
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
             style={{
-              background: canSubmit ? '#6B7EFF' : 'rgba(107,126,255,0.15)',
+              background: canSubmit ? '#6B7EFF' : 'rgba(95,184,224,0.15)',
               opacity: canSubmit ? 1 : 0.4,
             }}
           >

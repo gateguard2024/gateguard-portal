@@ -111,7 +111,7 @@ function SitePicker({
 
   if (value) {
     return (
-      <div className="flex items-center gap-2 border border-brand-500/40 bg-brand-500/5 rounded-xl px-3 py-2.5">
+      <div className="flex items-center gap-2 border border-[#5FB8E0]/40 bg-[#2f7fb8]/5 rounded-xl px-3 py-2.5">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground truncate">{value.name}</p>
           {value.address && (
@@ -133,7 +133,7 @@ function SitePicker({
         onFocus={() => query && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Search properties…"
-        className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
+        className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background"
       />
       {loading && <RefreshCw size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />}
       {open && results.length > 0 && (
@@ -283,7 +283,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
               value={form.title}
               onChange={e => set("title", e.target.value)}
               placeholder="e.g. Camera offline — Main Gate"
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background"
             />
           </div>
 
@@ -299,7 +299,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
                 value={form.customer_name}
                 onChange={e => set("customer_name", e.target.value)}
                 placeholder="Or type customer name manually"
-                className="mt-2 w-full border border-dashed border-border rounded-xl px-3 py-2 text-sm text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background/50"
+                className="mt-2 w-full border border-dashed border-border rounded-xl px-3 py-2 text-sm text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background/50"
               />
             )}
           </div>
@@ -314,7 +314,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
                 <select
                   value={form.job_type}
                   onChange={e => set("job_type", e.target.value)}
-                  className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8"
+                  className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8"
                 >
                   {JOB_TYPES.map(jt => <option key={jt}>{jt}</option>)}
                 </select>
@@ -329,7 +329,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
                 <select
                   value={form.priority}
                   onChange={e => set("priority", e.target.value)}
-                  className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8"
+                  className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8"
                 >
                   {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
@@ -347,7 +347,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
               <select
                 value={form.status}
                 onChange={e => set("status", e.target.value)}
-                className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8"
+                className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8"
               >
                 {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
@@ -364,7 +364,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
               <select
                 value={form.assignee_id}
                 onChange={e => handleTechChange(e.target.value)}
-                className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8"
+                className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8"
               >
                 <option value="">— Unassigned —</option>
                 {techs.map(t => (
@@ -385,7 +385,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
                 type="date"
                 value={form.due_date}
                 onChange={e => set("due_date", e.target.value)}
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background"
               />
             </div>
             <div>
@@ -396,7 +396,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
                 type="date"
                 value={form.scheduled_date}
                 onChange={e => set("scheduled_date", e.target.value)}
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background"
               />
             </div>
           </div>
@@ -411,7 +411,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
               onChange={e => set("notes", e.target.value)}
               rows={3}
               placeholder="Details, access codes, parking notes…"
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background resize-none"
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background resize-none"
             />
           </div>
 
@@ -451,12 +451,24 @@ function toDateString(date: Date): string {
 }
 
 const calStatusChip: Record<WOStatus, { bg: string; text: string }> = {
-  open:        { bg: "bg-blue-100",    text: "text-blue-800"    },
-  in_progress: { bg: "bg-amber-100",   text: "text-amber-800"   },
-  scheduled:   { bg: "bg-violet-100",  text: "text-violet-800"  },
-  completed:   { bg: "bg-emerald-100", text: "text-emerald-800" },
-  cancelled:   { bg: "bg-slate-100",   text: "text-slate-500"   },
+  open:        { bg: "bg-[#5FB8E0]/15",  text: "text-[#9FD8EC]"  },
+  in_progress: { bg: "bg-amber-500/15",  text: "text-amber-300"  },
+  scheduled:   { bg: "bg-violet-500/15", text: "text-violet-300" },
+  completed:   { bg: "bg-emerald-500/15",text: "text-emerald-300"},
+  cancelled:   { bg: "bg-slate-500/15",  text: "text-slate-300"  },
 };
+
+// Steel palette scoped to this page — flips shadcn CSS-var tokens to dark steel.
+const STEEL_SCOPE = {
+  '--background': '212 33% 13%', '--foreground': '210 30% 92%',
+  '--card': '213 31% 17%', '--card-foreground': '210 30% 92%',
+  '--popover': '213 31% 15%', '--popover-foreground': '210 30% 92%',
+  '--muted': '211 26% 24%', '--muted-foreground': '208 16% 66%',
+  '--accent': '212 28% 27%', '--accent-foreground': '210 30% 92%',
+  '--secondary': '212 26% 24%', '--secondary-foreground': '210 30% 92%',
+  '--border': '210 19% 31%', '--input': '210 19% 29%', '--ring': '199 58% 62%',
+  background: 'linear-gradient(180deg,#16202c,#111a24)', minHeight: '100%',
+} as unknown as React.CSSProperties
 
 const priorityDot: Record<WOPriority, string> = {
   urgent: "bg-red-500",
@@ -469,7 +481,7 @@ const priorityDot: Record<WOPriority, string> = {
 
 export default function MaintenancePageWrapper() {
   return (
-    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
+    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#5FB8E0'}}>Loading...</div></div>}>
       <MaintenancePage />
     </Suspense>
   );
@@ -572,7 +584,7 @@ function MaintenancePage() {
   };
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-full" style={STEEL_SCOPE}>
       <TopBar title="Work Orders" subtitle="Jobs, Scheduling & Service History" />
 
       <WorkOrderSlideOver
@@ -598,7 +610,7 @@ function MaintenancePage() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
                 viewMode === "list"
-                  ? "bg-brand-500 text-white"
+                  ? "bg-[#2f7fb8] text-white"
                   : "bg-card text-muted-foreground hover:bg-accent"
               )}
             >
@@ -609,7 +621,7 @@ function MaintenancePage() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
                 viewMode === "calendar"
-                  ? "bg-brand-500 text-white"
+                  ? "bg-[#2f7fb8] text-white"
                   : "bg-card text-muted-foreground hover:bg-accent"
               )}
             >
@@ -625,7 +637,7 @@ function MaintenancePage() {
           </button>
           <button
             onClick={() => { setEditing(null); setSlideOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors shadow-lg shadow-brand-500/20"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium transition-colors shadow-lg shadow-[#5FB8E0]/20"
           >
             <Plus size={16} /> New Work Order
           </button>
@@ -646,7 +658,7 @@ function MaintenancePage() {
                 onClick={() => setFilterStatus(filterStatus === s.key ? "all" : s.key)}
                 className={cn(
                   "bg-card border border-border rounded-xl p-4 flex items-center gap-3 transition-all text-left",
-                  filterStatus === s.key ? "ring-2 ring-brand-500/40 border-brand-500/40" : "hover:border-border/60"
+                  filterStatus === s.key ? "ring-2 ring-[#5FB8E0]/40 border-[#5FB8E0]/40" : "hover:border-border/60"
                 )}
               >
                 <div className={`p-2.5 rounded-lg ${s.bg}`}>
@@ -668,12 +680,12 @@ function MaintenancePage() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <Wrench size={15} className="text-brand-400" />
+                <Wrench size={15} className="text-[#5FB8E0]" />
                 <h2 className="text-sm font-semibold">Work Orders</h2>
                 {filterStatus !== "all" && (
                   <button
                     onClick={() => setFilterStatus("all")}
-                    className="flex items-center gap-1 ml-1 text-[11px] text-brand-400 hover:text-brand-500"
+                    className="flex items-center gap-1 ml-1 text-[11px] text-[#5FB8E0] hover:text-[#5FB8E0]"
                   >
                     <span className="capitalize">{filterStatus.replace("_", " ")}</span>
                     <X size={10} />
@@ -714,13 +726,13 @@ function MaintenancePage() {
                         onClick={() => router.push(`/maintenance/${wo.id}`)}
                         className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer group"
                       >
-                        <td className="px-4 py-3 font-mono text-brand-400">{wo.wo_number}</td>
+                        <td className="px-4 py-3 font-mono text-[#5FB8E0]">{wo.wo_number}</td>
                         <td className="px-4 py-3 font-medium text-foreground max-w-[200px] truncate">{wo.title}</td>
                         <td className="px-4 py-3 text-muted-foreground">{wo.customer_name}</td>
                         <td className="px-4 py-3">
                           {wo.assignee_name ? (
                             <div className="flex items-center gap-1.5">
-                              <div className="w-5 h-5 rounded-full bg-brand-900 flex items-center justify-center text-[10px] text-brand-300 font-semibold">
+                              <div className="w-5 h-5 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[10px] text-[#9FD8EC] font-semibold">
                                 {wo.assignee_name.split(" ").map(n => n[0]).join("")}
                               </div>
                               <span className="text-muted-foreground">{wo.assignee_name}</span>
@@ -757,7 +769,7 @@ function MaintenancePage() {
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={e => { e.stopPropagation(); setEditing(wo); setSlideOpen(true); }}
-                              className="p-1.5 rounded-lg hover:bg-brand-500/10 text-brand-400 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-[#2f7fb8]/10 text-[#5FB8E0] transition-colors"
                               title="Edit"
                             >
                               <Edit2 size={13} />
@@ -770,7 +782,7 @@ function MaintenancePage() {
                             >
                               <Trash2 size={13} />
                             </button>
-                            <span className="ml-1 text-xs text-brand-400 font-medium flex items-center gap-0.5">
+                            <span className="ml-1 text-xs text-[#5FB8E0] font-medium flex items-center gap-0.5">
                               View <ChevronRight size={12} />
                             </span>
                           </div>
@@ -813,7 +825,7 @@ function MaintenancePage() {
                 {/* Calendar toolbar */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                   <div className="flex items-center gap-2">
-                    <Calendar size={15} className="text-brand-400" />
+                    <Calendar size={15} className="text-[#5FB8E0]" />
                     <h2 className="text-sm font-semibold">Week of {rangeLabel}</h2>
                   </div>
                   <div className="flex items-center gap-2">
@@ -858,17 +870,17 @@ function MaintenancePage() {
                             {/* Day header */}
                             <div className={cn(
                               "px-2 py-2 text-center border-b border-border",
-                              isToday ? "bg-brand-500/10" : "bg-background/30"
+                              isToday ? "bg-[#2f7fb8]/10" : "bg-background/30"
                             )}>
                               <p className={cn(
                                 "text-[10px] font-semibold uppercase tracking-wider",
-                                isToday ? "text-brand-400" : "text-muted-foreground"
+                                isToday ? "text-[#5FB8E0]" : "text-muted-foreground"
                               )}>
                                 {DAY_NAMES[i]}
                               </p>
                               <p className={cn(
                                 "text-base font-bold leading-tight",
-                                isToday ? "text-brand-500" : "text-foreground"
+                                isToday ? "text-[#5FB8E0]" : "text-foreground"
                               )}>
                                 {day.getDate()}
                               </p>

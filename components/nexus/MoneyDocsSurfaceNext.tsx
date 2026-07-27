@@ -3,13 +3,14 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MoneyDocsDocumentsBoard } from '@/components/nexus/MoneyDocsDocumentsBoard'
+import { DocumentLibrary } from '@/components/nexus/DocumentLibrary'
 import InvoicesBoard from '@/components/nexus/InvoicesBoard'
 import { MoneyDocsRenewalsBoard } from '@/components/nexus/MoneyDocsRenewalsBoard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 
-type Panel = 'invoices' | 'renewals' | 'documents' | 'compliance' | null
+type Panel = 'invoices' | 'renewals' | 'documents' | 'compliance' | 'library' | null
 
 type Card = {
   id: Exclude<Panel, null>
@@ -40,7 +41,7 @@ function CardButton({ card, onClick }: { card: Card; onClick: () => void }) {
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
   const displayLabel = muted ? `${label} — Coming Soon` : label
-  return <button type="button" onClick={onClick} className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0" style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(251,191,36,0.06))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : { background: 'linear-gradient(135deg, rgba(0,124,255,0.22), rgba(0,200,255,0.10))', border: '1px solid rgba(0,200,255,0.26)', color: '#7dd3fc', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }} aria-label={displayLabel} title={displayLabel}>{displayLabel}</button>
+  return <button type="button" onClick={onClick} className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0" style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(251,191,36,0.06))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : { background: 'linear-gradient(135deg, rgba(95,184,224,0.22), rgba(95,184,224,0.10))', border: '1px solid rgba(95,184,224,0.26)', color: '#9FD8EC', boxShadow: '0 0 18px rgba(95,184,224,0.12)' }} aria-label={displayLabel} title={displayLabel}>{displayLabel}</button>
 }
 
 function Shell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
@@ -71,21 +72,23 @@ export function MoneyDocsSurfaceNext() {
   const router = useRouter()
   const [activePanel, setActivePanel] = useState<Panel>(null)
   const cards: Card[] = [
-    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#00C8FF', glyph: 'quote' },
+    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#5FB8E0', glyph: 'quote' },
     { id: 'renewals', title: 'Renewals', subtitle: 'Find contracts, agreements, and services that are coming due.', hex: '#FBBF24', glyph: 'activity', badge: 'Dates' },
-    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#007CFF', glyph: 'todo', badge: 'Sign' },
-    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#8B5CF6', glyph: 'priority', badge: 'Review' },
+    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#5FB8E0', glyph: 'todo', badge: 'Sign' },
+    { id: 'library', title: 'Document Library', subtitle: 'Browse the shared document database, upload, and send for e-signature.', hex: '#34D399', glyph: 'research', badge: 'Docs' },
+    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#5FB8E0', glyph: 'priority', badge: 'Review' },
   ]
   return (
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(251,191,36,0.13), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(251,191,36,0.16)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(251,191,36,0.09), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(251,191,36,0.82)' }}>Money/Docs</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(251,191,36,0.16)' }}>What money or paperwork needs attention?</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Invoices, renewals, signatures, and compliance items all start here.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(251,191,36,0.12)', color: 'rgba(253,230,138,0.96)', border: '1px solid rgba(251,191,36,0.26)', boxShadow: '0 0 18px rgba(251,191,36,0.10)' }}>Back Office</div></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <CardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}</div>
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Money/Docs stays simple: collect money, watch renewals, get documents signed, and stay compliant.</div>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Money/Docs stays simple: collect money, watch renewals, get documents signed, and stay compliant.</div>
       </div>
       {activePanel === 'invoices' && <Shell title="Invoices" subtitle="Money that is due, past due, recently paid, or needs follow-up." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Billing" onClick={() => router.push('/billing')} /><ActionButton label="Open Revenue" onClick={() => router.push('/revenue')} muted /></>}><InvoicesBoard /></Shell>}
       {activePanel === 'renewals' && <Shell title="Renewals" subtitle="Contracts, agreements, subscriptions, and services that are coming due." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted /></>}><MoneyDocsRenewalsBoard /></Shell>}
       {activePanel === 'documents' && <Shell title="Documents to Sign" subtitle="Paperwork that needs signature, review, or customer approval." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Documents" onClick={() => router.push('/documents')} /><ActionButton label="Open Agreements" onClick={() => router.push('/dealer-agreements')} muted /></>}><MoneyDocsDocumentsBoard /></Shell>}
+      {activePanel === 'library' && <DocumentLibrary />}
       {activePanel === 'compliance' && <Shell title="Compliance" subtitle="Missing, expired, or required paperwork that needs review." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Compliance" onClick={() => router.push('/compliance')} /><ActionButton label="Open Vendor Compliance" onClick={() => router.push('/vendor-compliance')} muted /></>}><Placeholder copy="The first compliance API is in place. The UI board will be added in a smaller follow-up patch after this build is green." /></Shell>}
     </section>
   )

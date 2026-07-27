@@ -1,12 +1,12 @@
 'use client'
 
-// NexusConsoleRail — collapsible right-side console (July 2026 mockup, §6 of
-// docs/nexus/COSMETIC_GUIDE_2026-07_MOCKUP.md).
+// NexusConsoleRail — collapsible "launch pad" console. Per Russel's July 2026
+// direction it lives on the LEFT edge and pops in/out; the RIGHT edge carries
+// the actions/to-dos/follow-ups pop-out (NexusActionsRail).
 //
-// COSMETIC ONLY: the items are the EXISTING Nexus destinations (the same tabs
-// as the bottom nav, plus Help / Admin). No new IA. The rail pops in and out
-// via the edge tab; state persists in localStorage. Desktop-only (lg+) — on
-// mobile the bottom nav carries navigation and the rail would fight it.
+// COSMETIC / IA-ONLY: the items are the EXISTING Nexus destinations (the same
+// tabs as the bottom nav, plus Help / Admin). No new IA — just a launch pad.
+// State persists in localStorage. Desktop-only (lg+).
 
 import { useEffect, useState } from 'react'
 import {
@@ -14,46 +14,60 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Home } = require('lucide-react') as any
+const { Home, Megaphone } = require('lucide-react') as any
 
 export interface RailItem {
   id: string
   label: string
-  icon: 'home' | 'sales' | 'ops' | 'design' | 'catalog' | 'systems' | 'help' | 'admin'
+  icon: 'home' | 'sales' | 'ops' | 'design' | 'catalog' | 'systems' | 'help' | 'admin' | 'events'
 }
 
 const ICONS = {
   home: Home, sales: TrendingUp, ops: Wrench, design: Layers,
-  catalog: Package, systems: Activity, help: Info, admin: Shield,
+  catalog: Package, systems: Activity, help: Info, admin: Shield, events: Megaphone,
 } as const
-
-const OPEN_KEY = 'gg_nexus_rail_open'
 
 export function NexusConsoleRail({
   items,
   activeId,
   onSelect,
+  side = 'left',
+  open: openProp,
+  onToggle,
 }: {
   items: RailItem[]
   activeId?: string
   onSelect: (id: string) => void
+  side?: 'left' | 'right'
+  open?: boolean
+  onToggle?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const controlled = openProp !== undefined
+  const [openState, setOpenState] = useState(false)
   const [hydrated, setHydrated] = useState(false)
+  const OPEN_KEY = `gg_nexus_rail_open_${side}`
+  const isLeft = side === 'left'
+  const open = controlled ? !!openProp : openState
 
   useEffect(() => {
-    try {
-      setOpen(localStorage.getItem(OPEN_KEY) === '1')
-    } catch { /* default closed */ }
+    if (!controlled) {
+      try { setOpenState(localStorage.getItem(OPEN_KEY) === '1') } catch { /* default closed */ }
+    }
     setHydrated(true)
-  }, [])
+  }, [OPEN_KEY, controlled])
 
   function toggle() {
-    setOpen((v) => {
+    if (controlled) { onToggle?.(); return }
+    setOpenState((v) => {
       try { localStorage.setItem(OPEN_KEY, v ? '0' : '1') } catch { /* ignore */ }
       return !v
     })
   }
+
+  // Chevron points "outward-to-close" when open, "inward-to-open" when closed.
+  const chevron = isLeft
+    ? (open ? <ChevronLeft size={14} /> : <ChevronRight size={14} />)
+    : (open ? <ChevronRight size={14} /> : <ChevronLeft size={14} />)
 
   return (
     <div className="hidden lg:block">
@@ -61,37 +75,37 @@ export function NexusConsoleRail({
       <button
         type="button"
         onClick={toggle}
-        aria-label={open ? 'Hide console' : 'Show console'}
-        className="fixed top-1/2 z-40 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-xl transition-all duration-300"
+        aria-label={open ? 'Hide launch pad' : 'Show launch pad'}
+        className={`fixed top-1/2 z-40 flex h-16 w-6 -translate-y-1/2 items-center justify-center transition-all duration-300 ${isLeft ? 'rounded-r-xl' : 'rounded-l-xl'}`}
         style={{
-          right: open ? 232 : 0,
-          background: 'linear-gradient(180deg, rgba(10,20,38,0.95), rgba(4,10,24,0.95))',
-          border: '1px solid rgba(0,200,255,0.28)',
-          borderRight: 'none',
-          color: '#7DE5FF',
-          boxShadow: '0 0 18px rgba(0,124,255,0.18)',
+          ...(isLeft ? { left: open ? 232 : 0 } : { right: open ? 232 : 0 }),
+          background: 'linear-gradient(180deg,#1d2a39,#141d28)',
+          border: '1px solid rgba(140,170,200,0.28)',
+          ...(isLeft ? { borderLeft: 'none' } : { borderRight: 'none' }),
+          color: '#9FD8EC',
+          boxShadow: '0 0 18px rgba(95,184,224,0.16)',
         }}
       >
-        {open ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        {chevron}
       </button>
 
       {/* The rail itself — slides in/out. */}
       <aside
         aria-hidden={!open}
-        className="fixed bottom-0 right-0 top-0 z-30 flex w-[232px] flex-col pt-6 transition-transform duration-300"
+        className={`fixed bottom-0 top-0 z-30 flex w-[232px] flex-col pt-6 transition-transform duration-300 ${isLeft ? 'left-0' : 'right-0'}`}
         style={{
-          transform: hydrated && open ? 'translateX(0)' : 'translateX(100%)',
-          background: 'linear-gradient(180deg, rgba(8,18,34,0.94), rgba(3,9,22,0.96))',
-          borderLeft: '1px solid rgba(0,200,255,0.16)',
-          boxShadow: '-18px 0 60px rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(24px)',
+          transform: hydrated && open ? 'translateX(0)' : `translateX(${isLeft ? '-100%' : '100%'})`,
+          background: 'linear-gradient(180deg,#1d2a39,#141d28)',
+          ...(isLeft
+            ? { borderRight: '1px solid rgba(140,170,200,0.22)', boxShadow: '18px 0 60px rgba(0,0,0,0.45)' }
+            : { borderLeft: '1px solid rgba(140,170,200,0.22)', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }),
         }}
       >
         <div className="px-5 pb-5">
-          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: 'rgba(125,229,255,0.72)' }}>
-            Management
+          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: '#5FB8E0' }}>
+            Launch
             <br />
-            Console
+            Pad
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
@@ -105,10 +119,10 @@ export function NexusConsoleRail({
                 onClick={() => onSelect(item.id)}
                 className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-all"
                 style={active
-                  ? { background: 'rgba(0,124,255,0.16)', border: '1px solid rgba(0,200,255,0.30)', color: 'rgba(255,255,255,0.95)' }
-                  : { border: '1px solid transparent', color: 'rgba(255,255,255,0.60)' }}
+                  ? { background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.32)', color: '#eaf2fb' }
+                  : { border: '1px solid transparent', color: '#c3d3e2' }}
               >
-                <Icon size={15} style={{ color: active ? '#7DE5FF' : 'rgba(125,229,255,0.55)' }} />
+                <Icon size={15} style={{ color: active ? '#5FB8E0' : 'rgba(159,216,236,0.55)' }} />
                 {item.label}
               </button>
             )

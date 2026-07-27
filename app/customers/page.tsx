@@ -10,6 +10,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import type { Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SlideOver, SlideOverFooter } from "@/components/ui/SlideOver";
+import { TIER_SHORT } from '@/lib/tier-labels'
 
 
 type OrgTier =
@@ -48,14 +49,14 @@ interface HierarchySummary {
 }
 
 const TIER_CONFIG: Record<OrgTier, { label: string; cls: string; icon: string }> = {
-  corporate:          { label: "Corporate",    cls: "tier-corporate", icon: "🏢" },
-  master_agent:       { label: "Master Agent", cls: "tier-mso",       icon: "⭐" },
-  master_dealer:      { label: "MSO",          cls: "tier-mso",       icon: "🌐" },
-  full_dealer:        { label: "Dealer",        cls: "tier-dealer",    icon: "🔧" },
-  service_dealer:     { label: "Svc Partner",  cls: "tier-partner",   icon: "🛠️" },
-  install_contractor: { label: "Installer",    cls: "tier-partner",   icon: "🔩" },
-  sales_partner:      { label: "Sales Partner",cls: "tier-partner",   icon: "🤝" },
-  client:             { label: "Client",        cls: "tier-client",    icon: "🏘️" },
+  corporate:          { label: TIER_SHORT.corporate,    cls: "tier-corporate", icon: "🏢" },
+  master_agent:       { label: TIER_SHORT.master_agent, cls: "tier-mso",       icon: "⭐" },
+  master_dealer:      { label: TIER_SHORT.master_dealer,          cls: "tier-mso",       icon: "🌐" },
+  full_dealer:        { label: TIER_SHORT.full_dealer,        cls: "tier-dealer",    icon: "🔧" },
+  service_dealer:     { label: TIER_SHORT.service_dealer, cls: "tier-partner",   icon: "🛠️" },
+  install_contractor: { label: TIER_SHORT.install_contractor, cls: "tier-partner",   icon: "🔩" },
+  sales_partner:      { label: TIER_SHORT.sales_partner, cls: "tier-partner",   icon: "🤝" },
+  client:             { label: TIER_SHORT.client,        cls: "tier-client",    icon: "🏘️" },
 };
 
 const FILTER_TABS: { label: string; value: FilterTier }[] = [
