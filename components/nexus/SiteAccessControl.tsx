@@ -250,9 +250,11 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
   const { user } = useUser();
   const meta = (user?.publicMetadata as Any) ?? {};
   const canManage = meta.org_tier === 'corporate' || meta.role === 'admin' || meta.role === 'supervisor';
-  const [detail, setDetail] = useState<{ user: Any; credentials: Any[]; activity: Any[] } | null>(null);
+  const [detail, setDetail] = useState<{ user: Any; credentials: Any[]; groups: Any[]; activity: Any[] } | null>(null);
   const [form, setForm] = useState({ firstName: listUser?.firstName ?? '', lastName: listUser?.lastName ?? '', email: listUser?.email ?? '', phone: listUser?.phone ?? '' });
   const [busy, setBusy] = useState('');
+  const [fobOpen, setFobOpen] = useState(false);
+  const [fobNum, setFobNum] = useState('');
 
   useEffect(() => {
     fetch(`/api/brivo/users/${userId}?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json())
@@ -269,15 +271,33 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
       notify('User saved'); onChanged();
     } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', false); } finally { setBusy(''); }
   }
-  async function cred(action: 'resend-pass' | 'revoke-pass') {
-    setBusy(action);
-    try { await post(`/api/brivo/users/${userId}/${action}`, { site_id: siteId, email: form.email || null, name: `${form.firstName} ${form.lastName}`.trim() }); notify(action === 'resend-pass' ? 'Pass sent' : 'Pass revoked'); const j = await fetch(`/api/brivo/users/${userId}?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()); setDetail(j); }
-    catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
+  async function refreshDetail() {
+    const j = await fetch(`/api/brivo/users/${userId}?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+    if (j?.user) setDetail(j);
+  }
+  const nm = () => `${form.firstName} ${form.lastName}`.trim();
+  // Unified credential actions: issue-pass (additive) | assign-fob | revoke | reinstate
+  async function credAction(action: 'issue-pass' | 'assign-fob' | 'revoke' | 'reinstate', extra?: Any) {
+    setBusy(action + (extra?.credential_id ?? ''));
+    try {
+      await post(`/api/brivo/users/${userId}/credentials`, { site_id: siteId, action, name: nm(), email: form.email || null, ...extra });
+      notify(action === 'issue-pass' ? 'Mobile pass sent' : action === 'assign-fob' ? 'Fob assigned' : action === 'revoke' ? 'Credential revoked' : 'Credential reinstated');
+      if (action === 'assign-fob') { setFobNum(''); setFobOpen(false); }
+      await refreshDetail();
+    } catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
   }
   async function assignGroup(groupId: string, groupName: string) {
     if (!groupId) return; setBusy('group');
-    try { await post(`/api/brivo/users/${userId}/group`, { site_id: siteId, group_id: groupId, group_name: groupName, name: `${form.firstName} ${form.lastName}`.trim() }); notify(`Added to ${groupName}`); onChanged(); }
+    try { await post(`/api/brivo/users/${userId}/group`, { site_id: siteId, group_id: groupId, group_name: groupName, name: nm() }); notify(`Added to ${groupName}`); await refreshDetail(); onChanged(); }
     catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
+  }
+  async function removeGroup(groupId: string, groupName: string) {
+    setBusy('rmgroup' + groupId);
+    try {
+      const r = await fetch(`/api/brivo/users/${userId}/group`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site_id: siteId, group_id: groupId, group_name: groupName, name: nm() }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Failed');
+      notify(`Removed from ${groupName}`); await refreshDetail(); onChanged();
+    } catch (e) { notify(e instanceof Error ? e.message : 'Failed', false); } finally { setBusy(''); }
   }
 
   const roStyle = { ...INPUT, opacity: canManage ? 1 : 0.7 } as const;
@@ -300,40 +320,75 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
         </div>
         {canManage && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}><button onClick={save} disabled={busy === 'save'} style={{ ...GO, opacity: busy === 'save' ? 0.5 : 1 }}>{busy === 'save' ? 'Saving…' : 'Save changes'}</button></div>}
 
-        {/* Groups */}
-        <div style={{ ...TILE, marginBottom: 8 }}>
-          <Lbl>Groups (access)</Lbl>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-            {(listUser?.groupNames ?? []).length ? listUser!.groupNames.map((g: string, i: number) => <span key={i} style={{ fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 999, padding: '3px 9px' }}>{g}</span>) : <span style={{ fontSize: 11, color: '#7f96ab' }}>No groups</span>}
-          </div>
-          {canManage && (
-            <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '6px 7px', marginTop: 8 }}>
-              <option value="" style={{ background: '#111a24' }}>+ Add to group…</option>
-              {groups.map(g => <option key={g.id} value={g.id} style={{ background: '#111a24' }}>{g.name}</option>)}
-            </select>
-          )}
-        </div>
+        {/* Groups — actual assignments from Brivo (id-bearing so they're removable) */}
+        {(() => {
+          const assigned: Any[] = detail?.groups
+            ?? (listUser?.groupNames ?? []).map((n: string) => ({ id: '', name: n }));
+          const assignedIds = new Set(assigned.map((g: Any) => String(g.id)));
+          const addable = groups.filter(g => !assignedIds.has(String(g.id)));
+          return (
+            <div style={{ ...TILE, marginBottom: 8 }}>
+              <Lbl>Groups (access)</Lbl>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                {detail == null ? <span style={{ fontSize: 11, color: '#7f96ab' }}>Loading…</span>
+                  : assigned.length === 0 ? <span style={{ fontSize: 11, color: '#7f96ab' }}>No groups</span>
+                  : assigned.map((g: Any, i: number) => (
+                    <span key={g.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 999, padding: '3px 9px' }}>
+                      {g.name}
+                      {canManage && g.id && (
+                        <button onClick={() => removeGroup(g.id, g.name)} disabled={busy === 'rmgroup' + g.id} title={`Remove from ${g.name}`} style={{ background: 'none', border: 'none', color: '#f2637e', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, opacity: busy === 'rmgroup' + g.id ? 0.4 : 0.85 }}>✕</button>
+                      )}
+                    </span>
+                  ))}
+              </div>
+              {canManage && (
+                <select value="" onChange={e => { const g = addable.find(x => x.id === e.target.value); if (g) assignGroup(g.id, g.name); }} style={{ ...INPUT, padding: '6px 7px', marginTop: 8 }}>
+                  <option value="" style={{ background: '#111a24' }}>+ Add to group…</option>
+                  {addable.map(g => <option key={g.id} value={g.id} style={{ background: '#111a24' }}>{g.name}</option>)}
+                </select>
+              )}
+            </div>
+          );
+        })()}
 
-        {/* Credentials */}
+        {/* Credentials — issue a mobile pass or a fob; revoke/reinstate each one */}
         <div style={{ ...TILE, marginBottom: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Lbl>Credentials</Lbl>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => cred('resend-pass')} disabled={!!busy} style={{ ...ICE, opacity: busy ? 0.5 : 1 }}>Send / resend pass</button>
-              <button onClick={() => cred('revoke-pass')} disabled={!!busy} style={{ ...WARN, opacity: busy ? 0.5 : 1 }}>Revoke</button>
-            </div>
+            {canManage && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => credAction('issue-pass')} disabled={busy === 'issue-pass'} style={{ ...ICE, opacity: busy === 'issue-pass' ? 0.5 : 1 }}>＋ Mobile pass</button>
+                <button onClick={() => setFobOpen(v => !v)} disabled={!!busy} style={{ ...ICE, opacity: busy ? 0.5 : 1 }}>＋ Assign fob</button>
+              </div>
+            )}
           </div>
-          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+          {canManage && fobOpen && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <input value={fobNum} onChange={e => setFobNum(e.target.value)} placeholder="Card / fob number" inputMode="numeric" style={{ ...INPUT, flex: 1, padding: '6px 8px' }} />
+              <button onClick={() => { if (fobNum.trim()) credAction('assign-fob', { card_number: fobNum.trim() }); }} disabled={!fobNum.trim() || busy === 'assign-fob'} style={{ ...GO, opacity: (!fobNum.trim() || busy === 'assign-fob') ? 0.5 : 1 }}>{busy === 'assign-fob' ? 'Assigning…' : 'Assign'}</button>
+              <button onClick={() => { setFobOpen(false); setFobNum(''); }} style={{ ...ICE }}>Cancel</button>
+            </div>
+          )}
+
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
             {detail == null ? <span style={{ fontSize: 11, color: '#7f96ab' }}>Loading…</span>
               : detail.credentials.length === 0 ? <span style={{ fontSize: 11, color: '#7f96ab' }}>No credentials issued.</span>
-              : detail.credentials.map(c => (
+              : detail.credentials.map((c: Any) => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f2637e' }} />
-                  <span style={{ color: '#e2ebf4' }}>{c.label}{c.isPass ? ' · Mobile Pass' : ''}</span>
-                  <span style={{ color: '#7f96ab', marginLeft: 'auto' }}>{c.active ? 'active' : 'inactive'}</span>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f2637e', flexShrink: 0 }} />
+                  <span style={{ color: '#e2ebf4' }}>{c.label}</span>
+                  <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#7f96ab', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 5, padding: '1px 5px' }}>{c.isPass ? 'Mobile Pass' : 'Card / Fob'}</span>
+                  <span style={{ color: c.active ? '#7ee0a8' : '#f2637e', marginLeft: 'auto', fontSize: 10.5 }}>{c.active ? 'active' : 'revoked'}</span>
+                  {canManage && (
+                    c.active
+                      ? <button onClick={() => credAction('revoke', { credential_id: c.id })} disabled={busy === 'revoke' + c.id} style={{ ...WARN, padding: '3px 8px', opacity: busy === 'revoke' + c.id ? 0.5 : 1 }}>Revoke</button>
+                      : <button onClick={() => credAction('reinstate', { credential_id: c.id })} disabled={busy === 'reinstate' + c.id} style={{ ...GO, padding: '3px 8px', opacity: busy === 'reinstate' + c.id ? 0.5 : 1 }}>Reinstate</button>
+                  )}
                 </div>
               ))}
           </div>
+          <div style={{ fontSize: 9.5, color: '#6f8397', marginTop: 8 }}>Mobile passes email a Brivo invite. Fobs assign a physical card number. Revoke turns a single credential off without deleting it — reinstate turns it back on.</div>
         </div>
 
         {/* Activity */}

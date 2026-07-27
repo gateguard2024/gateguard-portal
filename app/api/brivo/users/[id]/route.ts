@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { canOperate } from '@/lib/system-access'
 import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
-import { getOrgBrivoToken, getSiteBrivoToken, getBrivoUser, updateBrivoUser, setBrivoUserSuspended, getBrivoUserCredentialSummary, listSiteBrivoEvents } from '@/lib/brivo'
+import { getOrgBrivoToken, getSiteBrivoToken, getBrivoUser, updateBrivoUser, setBrivoUserSuspended, getBrivoUserCredentialSummary, getBrivoUserGroups, listSiteBrivoEvents } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,9 +35,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const ctx = await resolve(String(req.nextUrl.searchParams.get('site_id') ?? ''), String(req.nextUrl.searchParams.get('org_id') ?? ''))
     if (!ctx) return NextResponse.json({ error: 'That site is outside your access (or you lack door-user permission).' }, { status: 403 })
-    const [raw, credentials] = await Promise.all([
+    const [raw, credentials, groups] = await Promise.all([
       getBrivoUser(ctx.token, ctx.apiKey, params.id).catch(() => ({})),
       getBrivoUserCredentialSummary(ctx.token, ctx.apiKey, params.id).catch(() => []),
+      getBrivoUserGroups(ctx.token, ctx.apiKey, params.id).catch(() => []),
     ])
     let activity: unknown[] = []
     if (ctx.siteId) {
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       activity = (events as any[]).filter(e => name && String(e.actor ?? '').toLowerCase().includes(name)).slice(0, 20)
     }
-    return NextResponse.json({ user: raw, credentials, activity })
+    return NextResponse.json({ user: raw, credentials, groups, activity })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Brivo user fetch failed' }, { status: 502 })
   }

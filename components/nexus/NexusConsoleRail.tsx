@@ -79,11 +79,11 @@ export function NexusConsoleRail({
         className={`fixed top-1/2 z-40 flex h-16 w-6 -translate-y-1/2 items-center justify-center transition-all duration-300 ${isLeft ? 'rounded-r-xl' : 'rounded-l-xl'}`}
         style={{
           ...(isLeft ? { left: open ? 232 : 0 } : { right: open ? 232 : 0 }),
-          background: '#0e1e38',
-          border: '1px solid rgba(45,212,191,0.30)',
+          background: 'linear-gradient(180deg,#1d2a39,#141d28)',
+          border: '1px solid rgba(140,170,200,0.28)',
           ...(isLeft ? { borderLeft: 'none' } : { borderRight: 'none' }),
-          color: '#7DE5FF',
-          boxShadow: '0 0 18px rgba(45,212,191,0.20)',
+          color: '#9FD8EC',
+          boxShadow: '0 0 18px rgba(95,184,224,0.16)',
         }}
       >
         {chevron}
@@ -95,14 +95,14 @@ export function NexusConsoleRail({
         className={`fixed bottom-0 top-0 z-30 flex w-[232px] flex-col pt-6 transition-transform duration-300 ${isLeft ? 'left-0' : 'right-0'}`}
         style={{
           transform: hydrated && open ? 'translateX(0)' : `translateX(${isLeft ? '-100%' : '100%'})`,
-          background: '#0e1e38',
+          background: 'linear-gradient(180deg,#1d2a39,#141d28)',
           ...(isLeft
-            ? { borderRight: '1px solid rgba(45,212,191,0.22)', boxShadow: '18px 0 60px rgba(0,0,0,0.45)' }
-            : { borderLeft: '1px solid rgba(45,212,191,0.22)', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }),
+            ? { borderRight: '1px solid rgba(140,170,200,0.22)', boxShadow: '18px 0 60px rgba(0,0,0,0.45)' }
+            : { borderLeft: '1px solid rgba(140,170,200,0.22)', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }),
         }}
       >
         <div className="px-5 pb-5">
-          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: 'rgba(125,229,255,0.72)' }}>
+          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: '#5FB8E0' }}>
             Launch
             <br />
             Pad
@@ -119,10 +119,10 @@ export function NexusConsoleRail({
                 onClick={() => onSelect(item.id)}
                 className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-all"
                 style={active
-                  ? { background: 'rgba(45,212,191,0.14)', border: '1px solid rgba(45,212,191,0.32)', color: 'rgba(255,255,255,0.95)' }
-                  : { border: '1px solid transparent', color: 'rgba(255,255,255,0.60)' }}
+                  ? { background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.32)', color: '#eaf2fb' }
+                  : { border: '1px solid transparent', color: '#98abbd' }}
               >
-                <Icon size={15} style={{ color: active ? '#7DE5FF' : 'rgba(125,229,255,0.55)' }} />
+                <Icon size={15} style={{ color: active ? '#5FB8E0' : 'rgba(159,216,236,0.55)' }} />
                 {item.label}
               </button>
             )
