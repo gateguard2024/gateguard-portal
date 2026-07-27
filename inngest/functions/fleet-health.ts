@@ -23,6 +23,22 @@ import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 
 type Asset = { id: string; mac_address: string | null; serial_number: string | null; product_name: string | null; product_category: string | null; status: string | null }
 
+// Bucket an asset into an incident category so a machine-raised fault uses the
+// same taxonomy codes as a manually-filed one (lib/incident-taxonomy.ts).
+// Order matters: camera is checked before network because an NVR reads as both.
+function categoryForAsset(cat: string | null, name: string | null): 'network' | 'camera' | 'gate' | 'access' | 'other' {
+  const s = `${cat ?? ''} ${name ?? ''}`.toLowerCase()
+  if (/camera|nvr|dvr|\bcam\b/.test(s)) return 'camera'
+  if (/gate|operator|slide|swing|barrier/.test(s)) return 'gate'
+  if (/reader|access|controller|panel|brivo|credential|keypad|intercom/.test(s)) return 'access'
+  if (/switch|router|access point|\bap\b|network|unifi|gateway|firewall/.test(s)) return 'network'
+  return 'other'
+}
+
+const CATEGORY_SEVERITY: Record<string, string> = {
+  network: 'high', camera: 'medium', gate: 'high', access: 'medium', other: 'medium',
+}
+
 export const fleetHealth = inngest.createFunction(
   {
     id: 'nexus-fleet-health',
@@ -30,7 +46,8 @@ export const fleetHealth = inngest.createFunction(
     retries: 1,
     timeouts: { finish: '600s' },
     triggers: [
-      { cron: '0 5 * * *' },              // nightly 05:00 UTC
+      { cron: '*/10 * * * *' },           // every 10 min — near-real-time outage detection
+      { cron: '0 5 * * *' },              // nightly full sweep (safety net / catches drift)
       { event: 'operations/fleet.sync' }, // on-demand (admin "refresh now" or single site)
     ],
   },
@@ -56,16 +73,68 @@ export const fleetHealth = inngest.createFunction(
       }
 
       let sitesChecked = 0, matched = 0, online = 0, offline = 0, errors = 0
+      let incidentsOpened = 0, incidentsResolved = 0
 
-      // Apply one device's live state to its matched asset.
-      const applyStatus = async (asset: Asset, isOnline: boolean) => {
+      // Auto-file a fault into the SAME ledger a human uses (source: 'monitor').
+      // Dedup guard: only open if this asset has no already-open monitor incident,
+      // so a device that stays down doesn't spawn a new row every 10-minute poll.
+      const openMonitorIncident = async (asset: Asset, siteId: string) => {
+        const category = categoryForAsset(asset.product_category, asset.product_name)
+        const { data: existing } = await supabase
+          .from('incidents')
+          .select('id')
+          .eq('asset_id', asset.id)
+          .eq('source', 'monitor')
+          .in('status', ['open', 'investigating'])
+          .limit(1)
+        if (existing && existing.length) return
+        const label = category.charAt(0).toUpperCase() + category.slice(1)
+        const nm = asset.product_name || asset.mac_address || asset.serial_number || 'device'
+        const { error } = await supabase.from('incidents').insert({
+          site_id:     siteId,
+          title:       `${label} offline — ${nm}`,
+          description: 'Auto-detected: device stopped responding to the monitoring poll.',
+          severity:    CATEGORY_SEVERITY[category] ?? 'medium',
+          status:      'open',
+          category,
+          cause:       'unknown',
+          asset_id:    asset.id,
+          source:      'monitor',
+          started_at:  now,  // this poll is the moment we first saw it stop responding
+        })
+        if (error) { errors++; return }
+        incidentsOpened++
+      }
+
+      // Device recovered → auto-resolve any open monitor incidents for it. Manual /
+      // ai / ggsoc incidents are left alone — a person closes those deliberately.
+      const resolveMonitorIncidents = async (asset: Asset) => {
+        const { data, error } = await supabase
+          .from('incidents')
+          .update({ status: 'resolved', resolved_at: now })
+          .eq('asset_id', asset.id)
+          .eq('source', 'monitor')
+          .in('status', ['open', 'investigating'])
+          .select('id')
+        if (error) { errors++; return }
+        incidentsResolved += (data?.length ?? 0)
+      }
+
+      // Apply one device's live state to its matched asset, and bridge the flip
+      // into the incident ledger (down → open a monitor incident, up → resolve it).
+      const applyStatus = async (asset: Asset, siteId: string, isOnline: boolean) => {
         matched++; isOnline ? online++ : offline++
+        const wasOffline = asset.status === 'offline'
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const patch: Record<string, any> = { status: isOnline ? 'active' : 'offline', updated_at: now }
         if (isOnline) { patch.last_seen_at = now; patch.offline_since = null }
-        else if (asset.status !== 'offline') { patch.offline_since = now }
+        else if (!wasOffline) { patch.offline_since = now }
         const { error } = await supabase.from('site_assets').update(patch).eq('id', asset.id)
-        if (error) errors++
+        if (error) { errors++; return }
+
+        // Transition-driven so it's self-deduping: only act on an actual flip.
+        if (!isOnline && !wasOffline)      await openMonitorIncident(asset, siteId)
+        else if (isOnline && wasOffline)   await resolveMonitorIncidents(asset)
       }
 
       for (const [siteId, vendors] of bySite) {
@@ -92,7 +161,7 @@ export const fleetHealth = inngest.createFunction(
                 const asset = assets.find(a => (a.mac_address ?? '').toLowerCase() === mac)
                 if (!asset) continue
                 const isOnline = (d.state ?? d.status) === 'online' || d.state === 1 || d.connected === true
-                await applyStatus(asset, isOnline)
+                await applyStatus(asset, siteId, isOnline)
               }
             }
           } catch { errors++ }
@@ -111,13 +180,13 @@ export const fleetHealth = inngest.createFunction(
                 (esn && assets.find(a => (a.serial_number ?? '').toLowerCase() === esn)) ||
                 assets.find(a => /camera|nvr|dvr/i.test(`${a.product_category ?? ''} ${a.product_name ?? ''}`) && (a.product_name ?? '').toLowerCase() === nm)
               if (!asset) continue
-              await applyStatus(asset, cam.online)
+              await applyStatus(asset, siteId, cam.online)
             }
           } catch { errors++ }
         }
       }
 
-      return { sitesChecked, matched, online, offline, errors, at: now }
+      return { sitesChecked, matched, online, offline, incidentsOpened, incidentsResolved, errors, at: now }
     })
   },
 )

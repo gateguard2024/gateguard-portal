@@ -41,7 +41,14 @@ export function AdminReportConsole({ onOpenTab }: { onOpenTab?: (tab: string) =>
     Promise.all([
       fetch('/api/nexus/admin/rollup', { cache: 'no-store' }).then(x => x.json()).catch(() => null),
       fetch('/api/nexus/operations/dashboard', { cache: 'no-store' }).then(x => x.json()).catch(() => null),
-    ]).then(([rollup, opsData]) => { if (!alive) return; setR(rollup); setOps(opsData); setLoading(false) })
+    ]).then(([rollup, opsData]) => {
+      if (!alive) return
+      // Coerce error-shaped / malformed responses to null so the nested reads
+      // below (r.leads.total, ops.fleet.health) can't crash the console.
+      setR(rollup && rollup.leads && rollup.opps && rollup.jobs ? rollup : null)
+      setOps(opsData && opsData.fleet ? opsData : null)
+      setLoading(false)
+    })
     return () => { alive = false }
   }, [])
 

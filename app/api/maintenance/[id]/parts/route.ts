@@ -232,22 +232,21 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
     .single()
   if (!part) return NextResponse.json({ error: 'Part not found on this job' }, { status: 404 })
 
+  // Restore stock BEFORE deleting the part row — awaited so it actually lands in
+  // serverless (a detached write would leave inventory drifting low over time).
   if (part?.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
-    void (async () => {
-      try {
-        const { data: inv } = await supabase
-          .from('inventory_items')
-          .select('on_hand')
-          .eq('id', part.inventory_item_id)
-          .single()
-        if (inv) {
-          await supabase
-            .from('inventory_items')
-            .update({ on_hand: inv.on_hand + part.qty, updated_at: new Date().toISOString() })
-            .eq('id', part.inventory_item_id)
-        }
-      } catch (_) { /* non-blocking */ }
-    })()
+    const { data: inv } = await supabase
+      .from('inventory_items')
+      .select('on_hand')
+      .eq('id', part.inventory_item_id)
+      .single()
+    if (inv) {
+      const { error: restockErr } = await supabase
+        .from('inventory_items')
+        .update({ on_hand: (Number(inv.on_hand) || 0) + (Number(part.qty) || 0), updated_at: new Date().toISOString() })
+        .eq('id', part.inventory_item_id)
+      if (restockErr) console.warn('[wo parts] inventory restock failed:', restockErr.message)
+    }
   }
 
   const { error } = await supabase.from('work_order_parts').delete().eq('id', partId).eq('work_order_id', params.id)

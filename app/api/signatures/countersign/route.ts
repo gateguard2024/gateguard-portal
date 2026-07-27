@@ -108,6 +108,10 @@ async function storeExecutedCertificate(sig: any, html: string) {
 export async function POST(req: NextRequest) {
   try {
     const caller = await getCurrentUser()
+    // Countersigning executes the document AS Gate Guard — corporate only.
+    if (!caller?.isCorporate) {
+      return NextResponse.json({ error: 'Only Gate Guard corporate can countersign a document.' }, { status: 403 })
+    }
     const { signature_id, countersigned_name, countersigned_title } = await req.json()
 
     if (!signature_id || !countersigned_name?.trim()) {
@@ -167,11 +171,8 @@ export async function POST(req: NextRequest) {
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
     if (sig.advance_stage && sig.opportunity_id) {
-      void (async () => {
-        try {
-          await supabase.from('opportunities').update({ stage: sig.advance_stage, updated_at: now }).eq('id', sig.opportunity_id)
-        } catch {}
-      })()
+      const { error: stageErr } = await supabase.from('opportunities').update({ stage: sig.advance_stage, updated_at: now }).eq('id', sig.opportunity_id)
+      if (stageErr) console.warn('[countersign] opportunity stage advance failed:', stageErr.message)
     }
 
     const execDate = new Date(now).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
