@@ -398,7 +398,18 @@ export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId?
 
 /** Remotely unlock / pulse a door. Sensitive action — callers must confirm. */
 export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string): Promise<{ success: true }> {
-  await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, {})
+  try {
+    await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, {})
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // Brivo returns 403 "Invalid user" when the authenticated admin can READ the
+    // account but lacks remote door-control rights (or the door isn't in scope).
+    // Reads work; unlock doesn't. That's a Brivo role/permission config, not a bug.
+    if (/\b403\b/.test(msg) && /invalid user/i.test(msg)) {
+      throw new Error('Brivo rejected the unlock: the Brivo admin account set for this site can read the system but does not have remote unlock permission. In Brivo Access → Administrators, give that account a role with door control (e.g. Super Administrator), enable Remote Access under Account Settings, and confirm this door’s group is in the account’s scope.')
+    }
+    throw e
+  }
   return { success: true }
 }
 
