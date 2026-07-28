@@ -6,7 +6,8 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 export const dynamic = 'force-dynamic'
 
 // SHA-256 of the passcode. Slug-independent so renaming a portal keeps its PIN.
-export function hashPortalPin(pin: string): string {
+// NOTE: not exported — Next.js route files may only export HTTP handlers + config.
+function hashPortalPin(pin: string): string {
   return createHash('sha256').update(`gg-portal:${pin.trim()}`).digest('hex')
 }
 
