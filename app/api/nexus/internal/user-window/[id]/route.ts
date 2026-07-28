@@ -306,17 +306,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         return NextResponse.json({ success: false, message: 'You cannot delete your own account.' }, { status: 400 })
       }
       const client = await clerkClient()
+      // Best-effort: the Clerk account may already be gone from a prior attempt.
+      // Either way we MUST clean up the portal rows, or the user keeps showing in
+      // the list and every retry fails with "no user in clerk". Don't block on it.
+      let clerkNote: string | null = null
       try {
         await client.users.deleteUser(target.clerk_user_id)
       } catch (e) {
-        return NextResponse.json({ success: false, message: `Could not delete the Clerk account: ${e instanceof Error ? e.message : 'unknown error'}` }, { status: 502 })
+        clerkNote = e instanceof Error ? e.message : 'Clerk account was already gone'
       }
-      // Clean up the portal rows keyed by their Clerk id (best-effort per table).
+      // Clean up the portal rows keyed by their Clerk id (this is what removes them
+      // from the list). Always runs, even if the Clerk delete above no-op'd.
       for (const table of ['user_permissions', 'user_feature_access', 'member_system_access', 'site_members']) {
         await supabase.from(table).delete().eq('clerk_user_id', target.clerk_user_id)
       }
       await supabase.from('profiles').delete().eq('clerk_user_id', target.clerk_user_id)
-      return NextResponse.json({ success: true, deleted: true })
+      return NextResponse.json({ success: true, deleted: true, clerkNote })
     }
 
     // ── move to another org (hierarchy-gated) ──

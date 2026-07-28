@@ -97,7 +97,8 @@ export function UserGlassWindow({
       const res = await fetch(`/api/nexus/internal/user-window/${user.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_user' }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || json.success === false) throw new Error(json?.message ?? 'Delete failed.')
-      if (onRefresh) await onRefresh()
+      // Close only — the user no longer exists, so don't re-fetch the detail.
+      // The parent reloads the list on close, so the row disappears immediately.
       onBack()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Delete failed.')
