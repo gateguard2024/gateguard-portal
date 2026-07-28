@@ -46,6 +46,10 @@ function isBypassPath(pathname: string): boolean {
     // Public booking page (relocated from gateguard.co) — no login; books the sales calendar
     pathname.startsWith('/schedule') ||
     pathname.startsWith('/api/schedule') ||
+    // Customer-facing client portal — branded per property; handles its own login
+    // (the landing page) rather than the dealer /sign-in wall.
+    pathname.startsWith('/portal') ||
+    pathname.startsWith('/api/portal') ||
     // Public "find a dealer" directory — called from gateguard.co contact section
     pathname.startsWith('/api/dealers/locator') ||
     // Conference landing page — public lead capture
