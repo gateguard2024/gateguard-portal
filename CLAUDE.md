@@ -1,8 +1,8 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: June 3, 2026 (session 15). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last updated: July 2026 (session 16). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
-> **⚠️ BETA BRANCH:** All Nexus glass window work (Sprints A–C, Jobs Stage 1+2) is on `beta` only. Main has ARIA v8 engine fixes only. To work on Nexus: `git checkout beta`. Do not overwrite beta's Nexus files with main.
+> **⚠️ BRANCH MODEL (updated July 2026):** ALL development happens on `beta`. Commit and `git push origin beta` only — never push to `main`, never cherry-pick to main. Russel promotes `beta` → production himself through **Vercel** (Promote deployment). To work: `git checkout beta`.
 
 ---
 
@@ -10,8 +10,16 @@
 
 1. **Update PE Investor One-Sheet** at `/Users/russelfeldman/Desktop/Claude/GateGuard_PE_Investor_OneSheet.md` — check Traction section for new CRM numbers.
 2. **EOS Language** — Rocks (quarterly), Scorecard (weekly), Issues (IDS), To-Dos, L10 (Fridays 6am with Nicole Gagliardi).
-3. **Git push rule** — after every push: `git push origin main` then `git push origin main:beta`
+3. **Git rule (updated July 2026)** — ALL work on `beta`; `git push origin beta` ONLY. Russel promotes to prod via Vercel. Never push to `main` or cherry-pick to main. (Sandbox can't push/authenticate — always hand Russel the exact `git add … && git commit … && git push origin beta` command to run on his Mac.)
 4. **🔒 Systems "Setup & keys" is CORPORATE-ONLY.** The Site Systems credential vault (Brivo / Eagle Eye / UniFi / Shelly keys + connect/OAuth) may only be viewed, set, tested, or deleted by users in the **Gate Guard Corporate** org (`user.isCorporate` = `org_tier === 'corporate'`). Enforced server-side in `app/api/sites/[id]/integrations` (`canManageSite`), `app/api/eagle-eye/connect` + `/callback`, `app/api/unifi/cloud/sites`. UI gate: the ⚙ Setup & keys button + `SiteConnections` render only when `isCorporate`. **Never loosen this** — dealers/techs may *operate* systems (`canOperate`) but never see or edit the keys. Any new system-credential endpoint MUST start with `if (!user.isCorporate) return 403`.
+
+---
+
+## INTEGRATION GOTCHAS (hard-won)
+
+- **Brivo remote unlock = `POST /v1/api/access-points/{id}/activate`, NOT `/unlock`.** `/unlock` (`RequestUnlockAccessPoint`) opens the door *on behalf of a card holder* and REQUIRES a `credentialValue` in the body — without it Brivo returns `403 "Invalid user"`. For an operator/admin "open gate" button use **`/activate`** ("Access Point Activation" — *"Unlocks an Access Point at the Administrator's request"*): no body, no credentialValue. Requirements: the Brivo admin account has unlock permission AND the door has **"Control From Browser" checked** in Brivo's Account Config Tool (per-door). `unlockBrivoDoor()` in `lib/brivo.ts` uses `/activate`. Confirmed working July 2026. (The "Enable Remote Access" account toggle just grants the dealer Support-Administrator access — NOT the fix.)
+- **Brivo auth = `grant_type: password`** with the site's stored Brivo username/password (`getSiteBrivoToken`). Reads (doors/users/events) work with any admin.
+- **Shelly relays are matched by DEVICE NAME, not room.** `listSiteShellyRelays` only returns devices whose name contains the site name (or the `device_tag` field). If a relay is named "Front Gate" it won't match site "East Ponce Village" — set `device_tag` or rename the device. Server field = the account's API shard host (`shelly-12-eu.shelly.cloud`), not `control.shelly.cloud`.
 
 ---
 
@@ -448,6 +456,12 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 177 | `client_portals.access_pin` (customer portal PIN gate, sha256 hash) | ⏳ run on beta then prod |
+| 176 | `gate_reboots` (per-site camera-monitored power-cycle macros) + RLS + GRANT | ⏳ run on beta then prod |
+| 175 | Enable RLS + service_role policy on `client_portals` (fixes Supabase rls_disabled_in_public) | ⏳ run on beta then prod |
+| 174 | `qbo_connection` (OAuth token store) + `organizations.qbo_customer_id` + `invoices.source` + unique idx on `qb_invoice_id` | ⏳ run on beta then prod |
+| 173 | `client_portals` (customer portal config: slug, modules, cameras, branding, status) | ✅ beta (⏳ prod) |
+| 172 | `profiles` FK → ON DELETE SET NULL (6 FKs) so users can be deleted | ✅ beta + prod |
 | 106 | `tracker_items.data JSONB + priority TEXT + tags TEXT[]` + `tracker_dependencies` + `tracker_automations` + `tracker_activity` tables | ⏳ run on beta then prod |
 | 104 | `tracker_items.owner_user_id TEXT` + `due_date DATE` + indexes | ✅ beta + prod |
 | 103 | `tracker_groups.entity_type TEXT` + `entity_id UUID` + DROP NOT NULL org_id + index | ✅ beta + prod |
@@ -473,6 +487,19 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 ---
 
 ## PENDING TASKS (prioritized)
+
+### Completed — July 2026 (session 16) — Customer Portal + Systems + Sales fixes
+- ✅ **Brivo remote unlock FIXED** — switched `unlockBrivoDoor()` to `/access-points/{id}/activate` (admin activation, no credentialValue). Gate trigger confirmed working. See INTEGRATION GOTCHAS. Requires per-door "Control From Browser" in Brivo Account Config Tool.
+- ✅ **Customer portal foundation** — `client_portals` table (173) + `CustomerPortalTemplate.tsx` (single design source of truth, steel theme matching dealer shell) + `app/portal/[slug]/page.tsx` + corporate **Customer Portals admin tool** (`/admin/portals`, site-picker provisioning) + **Phase 1 PIN gate** (migration 177, `/api/portal/[slug]/verify`, `PinGate.tsx`, admin PIN field). Decisions: per-portal PIN auth + view + safe-actions (pay/request-service) only. **Phase 2 (read-only data sections via `/api/portal/[slug]/*`) + Phase 3 (Pay + Request Service) PENDING.**
+- ✅ **QBO two-way sync** — `lib/qbo.ts` (OAuth auto-refresh), connect/callback/customers/import routes, `qb-sync` uses refresh + `CustomerRef.value`; migration 174. Needs Intuit app env (`QBO_CLIENT_ID/SECRET/REDIRECT_URI`) + still owes a corporate connect UI.
+- ✅ **Gate re-boot macros** — `gate_reboots` table (176) + CRUD + `GateReboots.tsx` (camera-monitored power-cycle: relay off → wait → on → Brivo open or 2nd-relay pulse). Opened as a **popup from the "Open / reset gate" quick tool** (not a full section).
+- ✅ **Systems strip = live data** — `SiteCommand` now pulls Cameras (Eagle Eye), Doors/gates (Brivo), Events today (Brivo access), Site health (live camera ratio) via lazy client enrichment on top of the fast local `command-summary`. Emoji → lucide icons. `SiteCameraEvents` + `SiteActivity` auto-refresh every 20s (live).
+- ✅ **Systems view widened** — `SystemsExplorer` maxWidth 1160 → 1600 (both list + detail).
+- ✅ **Sales glass windows FIXED** — lead/opp windows were 500ing on a not-yet-migrated column in an explicit SELECT → popup silently never opened. Changed `lead-window` + `opportunity-window` GET to `select('*')`. Then **LeadGlassWindow action forms** (Create Opp, Add Note, Log Call, Change Status, Reassign, Follow-Up, Delete) moved from cramped inline (bottom-right of Actions column) to a **centered `fixed inset-0 z-[120]` popup**; wired the missing Log Call + Follow-Up forms. **OpportunityGlassWindow needs the same centered-popup pass (different structure).**
+- ✅ **To-Dos New Task modal** — added Assignee picker (defaults to self) + Notes field (were missing).
+- ✅ **User delete** — `delete_user` action + migration 172 (profiles FK ON DELETE SET NULL). Clerk is SHARED across beta+main (satellite): a user invited to main already exists on beta; run "Sync profiles" on beta to give them a profile row.
+- ✅ **Security** — migration 175 enables RLS on `client_portals`. NOTE: ~60 tables have `GRANT … TO anon` but no RLS (Supabase rls_disabled_in_public). Only `sites`, `organizations`, a few `aria_*` are anon-touched; the rest are service-role-only and safe to lock. Broader RLS sweep still PENDING.
+- ⏳ **PENDING:** run migrations 173–177 on beta/prod · customer portal Phase 2/3 · OpportunityGlassWindow popup pass · QBO connect UI · broader RLS sweep · PDK + ButterflyMX access-control modules (parked) · remove now-unused Brivo `credential_value` vault field.
 
 ### Completed — May 26, 2026
 - ✅ NDA template (`lib/nda-template.ts`) — Mutual NDA with 4 merge vars, 3-year term, Trade Secrets survive in perpetuity
