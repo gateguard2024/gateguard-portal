@@ -315,12 +315,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       } catch (e) {
         clerkNote = e instanceof Error ? e.message : 'Clerk account was already gone'
       }
-      // Clean up the portal rows keyed by their Clerk id (this is what removes them
-      // from the list). Always runs, even if the Clerk delete above no-op'd.
+      // Clean up the portal rows keyed by their Clerk id.
       for (const table of ['user_permissions', 'user_feature_access', 'member_system_access', 'site_members']) {
         await supabase.from(table).delete().eq('clerk_user_id', target.clerk_user_id)
       }
-      await supabase.from('profiles').delete().eq('clerk_user_id', target.clerk_user_id)
+      // The profile can't be deleted while a lead/quote/WO/invoice still points at
+      // profiles.id (FK). Null those references first (migration 172 also makes
+      // these ON DELETE SET NULL, but this works even before it's run). The record
+      // survives, just unassigned.
+      for (const [table, col] of [['leads', 'assigned_to'], ['work_orders', 'assigned_to'], ['work_orders', 'created_by'], ['quotes', 'created_by'], ['invoices', 'created_by'], ['activity_log', 'actor_id']] as const) {
+        await supabase.from(table).update({ [col]: null }).eq(col, target.id)
+      }
+      const { error: profErr } = await supabase.from('profiles').delete().eq('clerk_user_id', target.clerk_user_id)
+      if (profErr) return NextResponse.json({ success: false, message: `Removed the login, but the profile is still referenced: ${profErr.message}` }, { status: 500 })
       return NextResponse.json({ success: true, deleted: true, clerkNote })
     }
 
