@@ -297,6 +297,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ success: true, deactivated: !active })
     }
 
+    // ── delete user (permanent) ──────────────────────────────────────────────
+    // Removes the Clerk account AND this user's portal rows. Their historical
+    // records (leads/opps they were assigned) are left intact but unassigned.
+    // Corporate/admin only (gated above), org-scoped (gated above), never self.
+    if (action === 'delete_user') {
+      if (target.clerk_user_id === caller.id) {
+        return NextResponse.json({ success: false, message: 'You cannot delete your own account.' }, { status: 400 })
+      }
+      const client = await clerkClient()
+      try {
+        await client.users.deleteUser(target.clerk_user_id)
+      } catch (e) {
+        return NextResponse.json({ success: false, message: `Could not delete the Clerk account: ${e instanceof Error ? e.message : 'unknown error'}` }, { status: 502 })
+      }
+      // Clean up the portal rows keyed by their Clerk id (best-effort per table).
+      for (const table of ['user_permissions', 'user_feature_access', 'member_system_access', 'site_members']) {
+        await supabase.from(table).delete().eq('clerk_user_id', target.clerk_user_id)
+      }
+      await supabase.from('profiles').delete().eq('clerk_user_id', target.clerk_user_id)
+      return NextResponse.json({ success: true, deleted: true })
+    }
+
     // ── move to another org (hierarchy-gated) ──
     if (action === 'move_org') {
       const destOrgId = body.dest_org_id as string
