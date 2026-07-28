@@ -15,6 +15,7 @@ import { SiteActivity } from '@/components/nexus/SiteActivity';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SiteAccessControl } from '@/components/nexus/SiteAccessControl';
+import { GateReboots } from '@/components/nexus/GateReboots';
 import { SiteCameraEvents } from '@/components/nexus/SiteCameraEvents';
 import { SiteNetworkDevices } from '@/components/nexus/SiteNetworkDevices';
 
@@ -104,6 +105,9 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
 
       {/* Live access & control — gate reset, door unlock, passes, door activity */}
       <div id="sec-access"><SiteAccessControl siteId={siteId} /></div>
+
+      {/* Gate re-boot — camera-monitored power-cycle macros */}
+      <div id="sec-reboot"><GateReboots siteId={siteId} isCorporate={isCorporate} /></div>
 
       {/* Faults & uptime (built) */}
       <div id="sec-faults"><SiteIncidents siteId={siteId} /></div>
