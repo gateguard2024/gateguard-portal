@@ -35,20 +35,12 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const scope = await resolveOrgScope(user)
   const oppId = params.id
 
-  // Fetch opportunity scoped by dealer_org_id
+  // Fetch opportunity scoped by dealer_org_id.
+  // select('*') — naming a not-yet-migrated column makes the SELECT 500 and the
+  // window silently never opens. '*' returns whatever columns exist and can't break.
   let oppQuery = supabase
     .from('opportunities')
-    .select(`
-      id, dealer_org_id, lead_id, contact_id, company_id, property_id,
-      rep_id, quote_id, name, stage, est_setup, est_mrr, amount,
-      close_date, lost_reason, notes, won_at, lost_at, created_at, updated_at,
-      opp_type, probability, forecast_cat, next_step, description,
-      owner_name, owner_initials, account_name, management_co, owner_entity,
-      property_address, property_city, property_state, property_zip,
-      site_contact_name, site_contact_title, site_contact_phone, site_contact_email,
-      units, source, assigned_from_lead, site_id, site_counts, interests, property_type,
-      unit_automation, contact_email, contact_phone
-    `)
+    .select('*')
     .eq('id', oppId)
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
 

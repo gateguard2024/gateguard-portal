@@ -94,9 +94,12 @@ async function getScopedLead(
 ): Promise<{ lead: LeadRecord | null; error?: string }> {
   const scope = await resolveOrgScope(user)
 
+  // select('*') — NOT an explicit column list. Naming a column that isn't migrated
+  // on an environment makes the whole SELECT fail (42703), which 500s the window and
+  // it silently never opens. '*' returns whatever columns exist and can't break.
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id, converted_at, lead_type, entry_points, cameras, mrr, pcr, visited_at, contacted_at, sent_info_at, assigned_to_name, lost_at')
+    .select('*')
     .eq('id', leadId)
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
