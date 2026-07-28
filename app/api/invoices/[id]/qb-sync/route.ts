@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { getQboAuth, qboApi } from '@/lib/qbo'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,10 +17,9 @@ export const dynamic = 'force-dynamic'
 //   POST https://quickbooks.api.intuit.com/v3/company/{realmId}/invoice
 //   Headers: Authorization: Bearer {access_token}, Content-Type: application/json, Accept: application/json
 //
-// PRODUCTION NOTE: QB access tokens expire after 1 hour. A full OAuth2 refresh flow is needed
-// for production. The QBO_ACCESS_TOKEN env var is a long-lived token for development/staging.
-// Implement token refresh using QBO_REFRESH_TOKEN + QBO_CLIENT_ID + QBO_CLIENT_SECRET before
-// going live.
+// Token handling lives in lib/qbo.ts (getQboAuth) — it auto-refreshes the QBO
+// access token from the stored connection, so this route never touches env tokens
+// directly. CustomerRef.value comes from organizations.qbo_customer_id (mapping).
 export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -45,22 +45,31 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Check QB env vars — don't block invoice flow if not configured
-  const { QBO_ACCESS_TOKEN, QBO_REALM_ID } = process.env
-  if (!QBO_ACCESS_TOKEN || !QBO_REALM_ID) {
-    console.warn('[qb-sync] QB not configured — skipping sync')
-    return NextResponse.json({ skipped: true, reason: 'QB not configured' })
+  // Resolve a valid access token (auto-refreshes) + realm. Falls back to the
+  // legacy QBO_ACCESS_TOKEN/QBO_REALM_ID env inside getQboAuth if not connected.
+  const auth = await getQboAuth()
+  if (!auth.ok) {
+    return NextResponse.json({ skipped: true, reason: auth.reason })
   }
 
-  // Fetch client org name for QB CustomerRef
+  // QBO requires CustomerRef.value (the QBO Customer Id). Resolve it from the
+  // client org's stored mapping — a name alone is not reliable.
+  let customerId: string | null = null
   let customerName = 'GateGuard Client'
   if (invoice.client_org_id) {
     const { data: org } = await supabase
       .from('organizations')
-      .select('name')
+      .select('name, qbo_customer_id')
       .eq('id', invoice.client_org_id)
       .single()
     customerName = org?.name ?? customerName
+    customerId = org?.qbo_customer_id ?? null
+  }
+  if (!customerId) {
+    return NextResponse.json({
+      skipped: true,
+      reason: 'This client is not linked to a QuickBooks customer yet. Link it in QuickBooks settings, then retry.',
+    })
   }
 
   // Build QB invoice payload
@@ -89,22 +98,15 @@ export async function POST(
     DocNumber:     invoice.invoice_number,
     TxnDate:       invoice.issue_date,
     DueDate:       invoice.due_date,
-    CustomerRef:   { name: customerName },
+    CustomerRef:   { value: customerId, name: customerName },
     Line:          lineItems,
     CustomerMemo:  invoice.notes ? { value: invoice.notes } : undefined,
   }
 
   try {
-    const qbUrl = `https://quickbooks.api.intuit.com/v3/company/${QBO_REALM_ID}/invoice`
-    const method = invoice.qb_invoice_id ? 'POST' : 'POST' // QB uses POST for both create + update (with sparse update)
-
-    const response = await fetch(qbUrl, {
-      method,
-      headers: {
-        'Authorization': `Bearer ${QBO_ACCESS_TOKEN}`,
-        'Content-Type':  'application/json',
-        'Accept':        'application/json',
-      },
+    // POST /invoice handles both create and sparse update; token + realm come from auth.
+    const response = await qboApi(auth, '/invoice', {
+      method: 'POST',
       body: JSON.stringify(qbInvoice),
     })
 
