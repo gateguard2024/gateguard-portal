@@ -1,7 +1,7 @@
 # Intern task: move 4 people from beta to main (with their data)
 
 **Goal:** four people currently use **beta**. Make their login work on **main**, and
-bring their work data (leads, opportunities, notes, to-dos, tasks) with them.
+bring their work data (leads, notes, to-dos, tasks) with them.
 
 **Why it's two steps:** beta and main are two separate systems — a separate login
 book (Clerk) *and* a separate database. So you do two things: (A) give each person
@@ -43,9 +43,8 @@ Do this for all four first.
 
 ## Part B — Bring their data over
 
-You'll run one script. You need five secret values (get them from [DEVELOPER NAME]):
-the **beta** database URL + key, the **main** database URL + key, and the **main**
-Clerk secret key (starts with `sk_live_`).
+You'll run one script. You need four secret values (get them from [DEVELOPER NAME]):
+the **beta** database URL + key, and the **main** database URL + key.
 
 1. Open a terminal in the project folder.
 2. Paste in the secrets (replace the `…`):
@@ -55,7 +54,6 @@ Clerk secret key (starts with `sk_live_`).
    export BETA_SERVICE_ROLE_KEY="…"
    export PROD_SUPABASE_URL="https://<MAIN>.supabase.co"
    export PROD_SERVICE_ROLE_KEY="…"
-   export CLERK_SECRET_KEY="sk_live_…"
    ```
 
 3. **Preview first** (changes nothing) — put the four emails in, comma-separated:
@@ -64,9 +62,9 @@ Clerk secret key (starts with `sk_live_`).
    node scripts/migrate-beta-user.mjs --emails "person1@x.com,person2@x.com,person3@x.com,person4@x.com"
    ```
 
-4. Read the preview. For each person it prints how many leads, opportunities, notes,
-   to-dos, and tasks it will copy. If someone shows **"NOT in production Clerk yet"**,
-   they haven't finished Part A — go finish it, then re-run the preview.
+4. Read the preview. For each person it prints how many leads, notes, to-dos, and
+   tasks it will copy. If someone shows **"NOT on main yet"**, they haven't finished
+   Part A (invite → accept → appear on main once) — go finish it, then re-run.
 
 5. If the preview looks right, run it **for real**:
 
@@ -88,7 +86,7 @@ Clerk secret key (starts with `sk_live_`).
 
 ## What "counts" as their data
 
-Leads and opportunities assigned to them, the notes/calls logged on those, their
+Leads assigned to them, the notes/calls logged on those, their
 to-dos, and their tracker tasks. Links to things that don't exist on main yet (like a
 specific site record) are left blank on purpose — the names still show, nothing breaks.
 If they need something beyond this list, tell [DEVELOPER NAME].
