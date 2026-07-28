@@ -29,16 +29,23 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 function LiveCam({ siteId, cameraId, alt }: { siteId: string; cameraId: string; alt: string }) {
   const [tick, setTick] = useState(0)
-  const [failed, setFailed] = useState(false)
-  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 1500); return () => clearInterval(t) }, [])
-  if (!cameraId || failed) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.ink2, fontSize: 12 }}>📹 {alt}<br />live preview unavailable</div>
-  }
+  const [err, setErr] = useState(false)
+  // Reset the error each tick so a transient failure retries instead of giving up.
+  useEffect(() => { const t = setInterval(() => { setErr(false); setTick(x => x + 1) }, 1500); return () => clearInterval(t) }, [])
+  const fallback = (msg: string, sub: string) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.ink2, fontSize: 12, textAlign: 'center', gap: 4 }}>
+      <div>{msg}</div><div style={{ fontSize: 10 }}>{sub}</div>
+    </div>
+  )
+  if (!cameraId) return fallback('📷 No camera selected', 'Edit this re-boot to choose the gate camera')
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} onError={() => setFailed(true)}
-      src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(cameraId)}&t=${tick}`}
-      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt={alt} onError={() => setErr(true)}
+        src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(cameraId)}&t=${tick}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: err ? 'none' : 'block' }} />
+      {err && fallback(`📹 ${alt}`, 'waiting for camera…')}
+    </>
   )
 }
 
@@ -85,8 +92,11 @@ export function GateReboots({ siteId, isCorporate }: { siteId: string; isCorpora
           {reboots.map(rb => (
             <div key={rb.id} style={{ background: C.tile, border: `1px solid ${C.border}`, borderRadius: 11, padding: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{rb.name}</div>
-              <div style={{ fontSize: 10.5, color: C.ink2, marginTop: 3, marginBottom: 10 }}>
+              <div style={{ fontSize: 10.5, color: C.ink2, marginTop: 3 }}>
                 {(rb.power_relay_name || 'power relay')} · off {rb.wait_seconds}s · then {rb.actuation_type === 'brivo' ? (rb.actuation_door_name || 'open door') : rb.actuation_type === 'shelly' ? (rb.actuation_relay_name || 'pulse relay') : 'no open'}
+              </div>
+              <div style={{ fontSize: 10.5, marginTop: 2, marginBottom: 10, color: rb.camera_id ? C.ink2 : C.warn }}>
+                {rb.camera_id ? `📷 ${rb.camera_name || 'camera set'}` : '⚠ No camera — click Edit to add one'}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => setRun(rb)} style={{ ...btn(C.warn), flex: 1 }}>▶ Run reset</button>

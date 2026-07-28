@@ -46,7 +46,7 @@ export function SystemsExplorer() {
   // A site is selected → show its full widget dashboard inside the steel frame.
   if (openSite) {
     return (
-      <section style={{ width: '100%', maxWidth: 1160, margin: '0 auto', padding: '24px 12px 140px' }}>
+      <section style={{ width: '100%', maxWidth: 1600, margin: '0 auto', padding: '24px 12px 140px' }}>
         <div style={FRAME_STYLE}>
           <button onClick={() => setOpenSite(null)} style={{ ...steelBtn, marginBottom: 14 }}>
             <ArrowLeft size={15} /> All locations
