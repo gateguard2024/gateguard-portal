@@ -397,15 +397,18 @@ export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId?
 }
 
 /** Remotely unlock / pulse a door. Sensitive action — callers must confirm. */
-export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string, credentialValue?: string): Promise<{ success: true }> {
+export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string, _credentialValue?: string): Promise<{ success: true }> {
   try {
-    // Brivo unlocks a door ON BEHALF OF a card holder — the body must carry the
-    // credentialValue of a digital-credential user who has access to this door.
-    await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, credentialValue ? { credentialValue } : {})
+    // Administrative remote unlock: /activate opens the door "at the Administrator's
+    // request" and takes NO body. (The /unlock endpoint is a card-holder action that
+    // requires a credentialValue and returns "Invalid user" without one — wrong tool
+    // for an operator open.) The door must have "Control From Browser" enabled in
+    // Brivo's Account Config Tool, and the admin account must have unlock permission.
+    await brivoPost(token, apiKey, `/access-points/${doorId}/activate`, {})
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    if (/\b403\b/.test(msg) && /invalid user/i.test(msg)) {
-      throw new Error('Brivo rejected the unlock (403 “Invalid user”). Brivo opens the door on behalf of a card holder, so the request needs a "credentialValue" for a Brivo user with access to this door. Add a “Remote-unlock credential value” on this site’s Brivo connection (a digital-credential user who can open these doors).')
+    if (/\b40[13]\b/.test(msg) || /not allowed|invalid|permission|activat/i.test(msg)) {
+      throw new Error('Brivo would not open this door. In Brivo’s Account Config Tool, open this Door and check “Control From Browser” (remote activation), and confirm your admin account can unlock it — then retry.')
     }
     throw e
   }
