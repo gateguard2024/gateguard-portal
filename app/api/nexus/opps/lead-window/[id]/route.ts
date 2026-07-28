@@ -573,6 +573,18 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if ((bucket === 'contacted' || bucket === 'sentInfo') && !Lrec.contacted_at) updates.contacted_at = nowIso
     if (bucket === 'sentInfo' && !Lrec.sent_info_at) updates.sent_info_at = nowIso
 
+    // Moving BACKWARD must reset the milestone bar so it reflects the new stage
+    // (the bar is timestamp-driven; without this, "contacted → new" looks stuck).
+    const RANK: Record<string, number> = { prospect: 0, new: 0, contacted: 1, qualified: 1, qualifying: 1, proposal: 2, negotiation: 2, converted: 4, won: 5 }
+    const curRank = RANK[String(Lrec.stage ?? '').toLowerCase()] ?? 0
+    const tgtRank = RANK[stage] ?? 0
+    if (tgtRank < curRank && stage !== 'lost' && stage !== 'dead') {
+      if (tgtRank < 1) updates.contacted_at = null
+      if (tgtRank < 2) updates.sent_info_at = null
+      if (tgtRank < 3) updates.visited_at = null
+      if (tgtRank < 4) updates.converted_at = null
+    }
+
     const { data, error: updateError } = await supabase
       .from('leads')
       .update(updates)

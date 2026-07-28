@@ -297,6 +297,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ success: true, deactivated: !active })
     }
 
+    // ── delete user (permanent) ──────────────────────────────────────────────
+    // Removes the Clerk account AND this user's portal rows. Their historical
+    // records (leads/opps they were assigned) are left intact but unassigned.
+    // Corporate/admin only (gated above), org-scoped (gated above), never self.
+    if (action === 'delete_user') {
+      if (target.clerk_user_id === caller.id) {
+        return NextResponse.json({ success: false, message: 'You cannot delete your own account.' }, { status: 400 })
+      }
+      const client = await clerkClient()
+      // Best-effort: the Clerk account may already be gone from a prior attempt.
+      // Either way we MUST clean up the portal rows, or the user keeps showing in
+      // the list and every retry fails with "no user in clerk". Don't block on it.
+      let clerkNote: string | null = null
+      try {
+        await client.users.deleteUser(target.clerk_user_id)
+      } catch (e) {
+        clerkNote = e instanceof Error ? e.message : 'Clerk account was already gone'
+      }
+      // Clean up the portal rows keyed by their Clerk id.
+      for (const table of ['user_permissions', 'user_feature_access', 'member_system_access', 'site_members']) {
+        await supabase.from(table).delete().eq('clerk_user_id', target.clerk_user_id)
+      }
+      // The profile can't be deleted while a lead/quote/WO/invoice still points at
+      // profiles.id (FK). Null those references first (migration 172 also makes
+      // these ON DELETE SET NULL, but this works even before it's run). The record
+      // survives, just unassigned.
+      for (const [table, col] of [['leads', 'assigned_to'], ['work_orders', 'assigned_to'], ['work_orders', 'created_by'], ['quotes', 'created_by'], ['invoices', 'created_by'], ['activity_log', 'actor_id']] as const) {
+        await supabase.from(table).update({ [col]: null }).eq(col, target.id)
+      }
+      const { error: profErr } = await supabase.from('profiles').delete().eq('clerk_user_id', target.clerk_user_id)
+      if (profErr) return NextResponse.json({ success: false, message: `Removed the login, but the profile is still referenced: ${profErr.message}` }, { status: 500 })
+      return NextResponse.json({ success: true, deleted: true, clerkNote })
+    }
+
     // ── move to another org (hierarchy-gated) ──
     if (action === 'move_org') {
       const destOrgId = body.dest_org_id as string

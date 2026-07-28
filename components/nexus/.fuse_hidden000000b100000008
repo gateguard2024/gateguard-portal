@@ -14,7 +14,7 @@ const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 const BTN = { borderRadius: 8, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' } as const;
 const ICE = { ...BTN, background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
 const GO = { ...BTN, background: 'rgba(126,224,168,0.14)', border: '1px solid rgba(126,224,168,0.4)', color: '#7ee0a8' } as const;
-const WARN = { ...BTN, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' } as const;
+const WARN = { ...BTN, background: 'rgba(242,99,126,0.12)', border: '1px solid rgba(242,99,126,0.4)', color: '#f2637e' } as const;
 const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,7 +64,7 @@ export function SiteAccessControl({ siteId }: { siteId: string }) {
           <div style={{ color: '#9FD8EC', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access &amp; control</div>
           <div style={{ color: '#c3d3e2', fontSize: 12 }}>Reset a gate, unlock a door, manage users &amp; passes, read door activity.</div>
         </div>
-        {flash && <span style={{ fontSize: 11.5, fontWeight: 600, color: flash.ok ? '#7ee0a8' : '#f87171' }}>{flash.msg}</span>}
+        {flash && <span style={{ fontSize: 11.5, fontWeight: 600, color: flash.ok ? '#7ee0a8' : '#f2637e' }}>{flash.msg}</span>}
       </div>
 
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', background: '#16232f', border: '1px solid rgba(140,170,200,0.18)', borderRadius: 12, padding: 3, marginBottom: 12 }}>
@@ -224,7 +224,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
           {shown.map(u => (
             <div key={u.id} style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <button onClick={() => setCardUser(String(u.id))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, textDecoration: 'underline', textDecorationColor: 'rgba(95,184,224,0.4)' }}>{name(u)}</button>{u.active === false && <span style={{ color: '#f87171', fontSize: 9.5, fontWeight: 700 }}> · SUSPENDED</span>}
+                <button onClick={() => setCardUser(String(u.id))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, textDecoration: 'underline', textDecorationColor: 'rgba(95,184,224,0.4)' }}>{name(u)}</button>{u.active === false && <span style={{ color: '#f2637e', fontSize: 9.5, fontWeight: 700 }}> · SUSPENDED</span>}
                 <div style={{ color: '#c3d3e2', fontSize: 10.5 }}>{u.email ?? 'no email'}{u.phone ? ` · ${u.phone}` : ''}{u.unitNumber ? ` · Unit ${u.unitNumber}` : ''}{(u.groupNames?.length ? ` · ${u.groupNames.slice(0, 2).join(', ')}` : '')}</div>
               </div>
               <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(u, g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '5px 6px', fontSize: 11 }} title="Assign to group">
@@ -336,7 +336,7 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
                     <span key={g.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 999, padding: '3px 9px' }}>
                       {g.name}
                       {canManage && g.id && (
-                        <button onClick={() => removeGroup(g.id, g.name)} disabled={busy === 'rmgroup' + g.id} title={`Remove from ${g.name}`} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, opacity: busy === 'rmgroup' + g.id ? 0.4 : 0.85 }}>✕</button>
+                        <button onClick={() => removeGroup(g.id, g.name)} disabled={busy === 'rmgroup' + g.id} title={`Remove from ${g.name}`} style={{ background: 'none', border: 'none', color: '#f2637e', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, opacity: busy === 'rmgroup' + g.id ? 0.4 : 0.85 }}>✕</button>
                       )}
                     </span>
                   ))}
@@ -376,10 +376,10 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
               : detail.credentials.length === 0 ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>No credentials issued.</span>
               : detail.credentials.map((c: Any) => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f87171', flexShrink: 0 }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f2637e', flexShrink: 0 }} />
                   <span style={{ color: '#e2ebf4' }}>{c.label}</span>
                   <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9FD8EC', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 5, padding: '1px 5px' }}>{c.isPass ? 'Mobile Pass' : 'Card / Fob'}</span>
-                  <span style={{ color: c.active ? '#7ee0a8' : '#f87171', marginLeft: 'auto', fontSize: 10.5 }}>{c.active ? 'active' : 'revoked'}</span>
+                  <span style={{ color: c.active ? '#7ee0a8' : '#f2637e', marginLeft: 'auto', fontSize: 10.5 }}>{c.active ? 'active' : 'revoked'}</span>
                   {canManage && (
                     c.active
                       ? <button onClick={() => credAction('revoke', { credential_id: c.id })} disabled={busy === 'revoke' + c.id} style={{ ...WARN, padding: '3px 8px', opacity: busy === 'revoke' + c.id ? 0.5 : 1 }}>Revoke</button>
@@ -476,7 +476,7 @@ function Activity({ siteId, userFilter, setUserFilter }: { siteId: string; userF
           <option value="" style={{ background: '#111a24' }}>All events</option>
           {types.map(t => <option key={t} value={t} style={{ background: '#111a24' }}>{t}</option>)}
         </select>
-        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(248,113,113,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(248,113,113,0.5)' : 'rgba(140,170,200,0.22)'}`, color: deniedOnly ? '#f87171' : '#9FD8EC' }}>Denied only</button>
+        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(242,99,126,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(242,99,126,0.5)' : 'rgba(140,170,200,0.22)'}`, color: deniedOnly ? '#f2637e' : '#9FD8EC' }}>Denied only</button>
         {(userFilter || type || deniedOnly) && <button onClick={() => { setUserFilter(''); setType(''); setDeniedOnly(false); }} style={{ ...BTN, background: 'transparent', border: 'none', color: '#8ba0b4' }}>Clear</button>}
       </div>
       {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>No events match.</div> : (
@@ -486,7 +486,7 @@ function Activity({ siteId, userFilter, setUserFilter }: { siteId: string; userF
             const denied = /denied|reject|fail/i.test(label(e));
             return (
               <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: denied ? '#f87171' : '#7ee0a8', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: denied ? '#f2637e' : '#7ee0a8', flexShrink: 0 }} />
                 <span style={{ color: '#e2ebf4' }}>{label(e)}</span>
                 {who(e) && <span style={{ color: '#c3d3e2' }}>· {who(e)}</span>}
                 {device(e) && <span style={{ color: '#9FD8EC' }}>· {device(e)}</span>}

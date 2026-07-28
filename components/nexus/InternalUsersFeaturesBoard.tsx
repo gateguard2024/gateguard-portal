@@ -117,7 +117,7 @@ export function InternalUsersFeaturesBoard() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-28">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add a person, then tap a platform user to set role &amp; access.</div>
         <div className="flex flex-wrap gap-2">
@@ -224,7 +224,7 @@ export function InternalUsersFeaturesBoard() {
       {userWindow && (
         <UserGlassWindow
           data={userWindow}
-          onBack={() => { setUserWindow(null); setOpenUserId(null) }}
+          onBack={() => { setUserWindow(null); setOpenUserId(null); void load() }}
           onRefresh={async () => { if (openUserId) await openUser(openUserId) }}
         />
       )}

@@ -14,7 +14,7 @@ const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 const BTN = { borderRadius: 8, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' } as const;
 const ICE = { ...BTN, background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
 const GO = { ...BTN, background: 'rgba(126,224,168,0.14)', border: '1px solid rgba(126,224,168,0.4)', color: '#7ee0a8' } as const;
-const WARN = { ...BTN, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' } as const;
+const WARN = { ...BTN, background: 'rgba(242,99,126,0.12)', border: '1px solid rgba(242,99,126,0.4)', color: '#f87171' } as const;
 const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -476,7 +476,7 @@ function Activity({ siteId, userFilter, setUserFilter }: { siteId: string; userF
           <option value="" style={{ background: '#111a24' }}>All events</option>
           {types.map(t => <option key={t} value={t} style={{ background: '#111a24' }}>{t}</option>)}
         </select>
-        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(248,113,113,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(248,113,113,0.5)' : 'rgba(140,170,200,0.22)'}`, color: deniedOnly ? '#f87171' : '#9FD8EC' }}>Denied only</button>
+        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(242,99,126,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(242,99,126,0.5)' : 'rgba(140,170,200,0.22)'}`, color: deniedOnly ? '#f87171' : '#9FD8EC' }}>Denied only</button>
         {(userFilter || type || deniedOnly) && <button onClick={() => { setUserFilter(''); setType(''); setDeniedOnly(false); }} style={{ ...BTN, background: 'transparent', border: 'none', color: '#8ba0b4' }}>Clear</button>}
       </div>
       {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>No events match.</div> : (

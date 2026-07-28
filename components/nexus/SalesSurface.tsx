@@ -74,8 +74,8 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
         <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Sales</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.64)' }}>{subtitle}</p>
+          <h2 className="mt-1 text-2xl font-semibold" style={{ color: '#eaf2fb' }}>{title}</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
         <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -144,7 +144,10 @@ export function SalesSurface() {
   const stageN = (k: string) => stageRecords(k).length
   const counts = opp.counts ?? { total: 0, open: 0, won: 0 }
   const lostN = stageN('lost')
-  const winRate = (counts.won + lostN) > 0 ? Math.round((counts.won / (counts.won + lostN)) * 100) : 0
+  // Count won from the API count OR the grouped records — whichever is populated
+  // (they can diverge if the stage value normalizes differently in one path).
+  const wonN = counts.won || stageN('won')
+  const winRate = (wonN + lostN) > 0 ? Math.round((wonN / (wonN + lostN)) * 100) : 0
   const avgDeal = (counts.open > 0 && opp.pipelineTotal != null) ? Math.round(opp.pipelineTotal / counts.open) : null
 
   const stageBar = ['meet_present', 'survey', 'propose', 'negotiate', 'contract', 'deposit', 'won']
@@ -184,8 +187,15 @@ export function SalesSurface() {
                     <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(15,26,38,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#f87171' : '#5FB8E0' }} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px]" style={{ color: '#dbeaf7' }}>{a.subject || a.type}</div>
-                        <div className="truncate text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div>
+                        <div className="truncate text-[12px]" style={{ color: '#eaf2fb' }}>{a.subject || a.type}</div>
+                        <div className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>
+                          {a.opportunity_name || 'General'}
+                          {(() => {
+                            const [status, time] = timeLabel(a.due_at).split(' · ')
+                            const overdue = status === 'Overdue'
+                            return <> · <span style={overdue ? { color: '#f87171', fontWeight: 600 } : undefined}>{status}</span>{time ? ` · ${time}` : ''}</>
+                          })()}
+                        </div>
                       </div>
                     </button>
                   ))}

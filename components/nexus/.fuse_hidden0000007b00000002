@@ -36,7 +36,7 @@ const EVENT_TYPES = [
   { id: 'other', label: 'Other' },
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(EVENT_TYPES.map(t => [t.id, t.label]))
-const STATUS_LABEL: Record<string, string> = { planning: 'Planning', promoting: 'Promoting', confirmed: 'Confirmed', held: 'Held', follow_up: 'Follow-up', complete: 'Complete', delayed: 'Delayed', cancelled: 'Cancelled' }
+const STATUS_LABEL: Record<string, string> = { planning: 'Planning', promoting: 'Promoting', confirmed: 'Confirmed', held: 'Held', follow_up: 'Follow-up', complete: 'Complete', cancelled: 'Cancelled' }
 const STAGES = ['Plan', 'Supplies', 'Campaign', 'Checklist', 'Confirm', 'Ops', 'Held', 'Follow-up']
 const STATUS_STAGE: Record<string, number> = { planning: 0, promoting: 2, confirmed: 4, held: 6, follow_up: 7, complete: 7 }
 
@@ -45,7 +45,6 @@ const BUCKETS: { key: string; label: string; statuses: string[]; accent: string 
   { key: 'promo', label: 'Planning & Promo', statuses: ['planning', 'promoting'], accent: '#9FD8EC' },
   { key: 'confirmed', label: 'Confirmed', statuses: ['confirmed'], accent: '#5FB8E0' },
   { key: 'wrap', label: 'Held & Wrap-up', statuses: ['held', 'follow_up', 'complete'], accent: '#7ee0a8' },
-  { key: 'hold', label: 'Delayed / Cancelled', statuses: ['delayed', 'cancelled'], accent: '#fbbf24' },
 ]
 
 function fmtDate(d?: string | null) { if (!d) return 'No date'; const dt = new Date(`${d}T00:00:00`); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) }
@@ -315,7 +314,7 @@ const STATUS_OPTIONS: { id: string; label: string }[] = [
   { id: 'planning', label: 'Planning' }, { id: 'promoting', label: 'Promoting' },
   { id: 'confirmed', label: 'Confirmed' }, { id: 'held', label: 'Held' },
   { id: 'follow_up', label: 'Follow-up' }, { id: 'complete', label: 'Complete' },
-  { id: 'delayed', label: 'Delayed' }, { id: 'cancelled', label: 'Cancelled' },
+  { id: 'cancelled', label: 'Cancelled' },
 ]
 const CHECK_NEXT: Record<string, string> = { open: 'done', done: 'open' }
 const SUPPLY_CYCLE: Record<string, string> = { needed: 'ordered', ordered: 'received', received: 'needed' }
@@ -379,7 +378,7 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px]" style={{ color: '#9FD8EC' }}>{saving ? 'Saving…' : 'Saved'}</span>
-                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' }}>Delete</button>
+                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(242,99,126,0.14)', border: '1px solid rgba(242,99,126,0.4)', color: '#f87171' }}>Delete</button>
                 <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
               </div>
             </div>

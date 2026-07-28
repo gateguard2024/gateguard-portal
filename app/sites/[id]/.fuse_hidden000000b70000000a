@@ -2079,7 +2079,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
   }
   const catRows = Array.from(cats.entries()).sort((a, b) => b[1].total - a[1].total)
   const uptime = s.uptimePct ?? 100
-  const uptimeColor = uptime >= 99 ? '#7ee0a8' : uptime >= 95 ? '#fbbf24' : '#f87171'
+  const uptimeColor = uptime >= 99 ? '#7ee0a8' : uptime >= 95 ? '#fbbf24' : '#f2637e'
 
   const KPI = ({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) => (
     <div className="bg-[#14202c] rounded-xl border border-[#2b3d50] p-4">
@@ -2093,7 +2093,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPI label={`Uptime · ${s.windowDays ?? 90}d`} value={`${uptime}%`} color={uptimeColor} sub={`${dur(s.downtimeMs)} total downtime`} />
-        <KPI label="Open incidents" value={String(s.openCount ?? 0)} color={(s.openCount ?? 0) > 0 ? '#f87171' : '#7ee0a8'} sub={s.currentDowntimeMs ? `${dur(s.currentDowntimeMs)} longest active` : 'all clear'} />
+        <KPI label="Open incidents" value={String(s.openCount ?? 0)} color={(s.openCount ?? 0) > 0 ? '#f2637e' : '#7ee0a8'} sub={s.currentDowntimeMs ? `${dur(s.currentDowntimeMs)} longest active` : 'all clear'} />
         <KPI label="Mean time to resolve" value={dur(s.mttrMs)} sub={`${s.resolvedCount ?? 0} resolved`} />
         <KPI label="Time since last" value={dur(s.timeSinceLastMs)} sub={`${inc.length} total logged`} />
       </div>
@@ -2112,7 +2112,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
                   <div className="flex-1 h-2 rounded-full bg-[#14202c] overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#5FB8E0' }} />
                   </div>
-                  <div className="w-24 shrink-0 text-right text-xs text-[#eaf2fb]">{e.total}{e.open > 0 && <span className="text-[#f87171]"> · {e.open} open</span>}</div>
+                  <div className="w-24 shrink-0 text-right text-xs text-[#eaf2fb]">{e.total}{e.open > 0 && <span className="text-[#f2637e]"> · {e.open} open</span>}</div>
                 </div>
               )
             })}
@@ -2130,7 +2130,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
               const open = i.status === 'open' || i.status === 'investigating'
               return (
                 <div key={i.id ?? k} className="flex items-center gap-3 text-xs">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: open ? '#f87171' : '#7ee0a8' }} />
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: open ? '#f2637e' : '#7ee0a8' }} />
                   <span className="min-w-0 flex-1 truncate text-[#eaf2fb]">{i.title ?? 'Incident'}</span>
                   <span className="shrink-0 capitalize text-[#9FD8EC]">{String(i.category ?? '')}</span>
                   <span className="shrink-0 text-[#c3d3e2]">{i.source === 'monitor' ? 'auto' : (i.source ?? 'manual')}</span>

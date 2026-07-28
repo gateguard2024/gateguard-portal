@@ -199,10 +199,16 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
         );
       })()}
 
-      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", marginBottom: 8 }}>Doors</div>
-      {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
-        : doors.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>No doors for this site (connect Brivo + link cameras in the Doors card).</div>
-        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>{doors.map(d => <DoorTile key={d.id} door={d} cam={cams[d.id]} siteId={siteId} tick={tick} busy={busy} onUnlock={unlock} events={events} setClip={setClip} noPreview={noPreview} bumpTick={bumpTick} />)}</div>}
+      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", marginBottom: 8 }}>Doors with a camera</div>
+      {(() => {
+        // This box is the "watch while you unlock" view — only doors that have a
+        // camera linked belong here. Every door (camera or not) lives in the Doors
+        // (Brivo) box below, so this stays purposeful instead of duplicating it.
+        const camDoors = doors.filter(d => cams[d.id]?.camera_id);
+        if (loading) return <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>;
+        if (camDoors.length === 0) return <div style={{ fontSize: 13, color: "#9FD8EC" }}>No doors have a camera linked yet — link a camera to a door in the Doors box below and it will appear here.</div>;
+        return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>{camDoors.map(d => <DoorTile key={d.id} door={d} cam={cams[d.id]} siteId={siteId} tick={tick} busy={busy} onUnlock={unlock} events={events} setClip={setClip} noPreview={noPreview} bumpTick={bumpTick} />)}</div>;
+      })()}
       {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fca5a5", marginTop: 10 }}>{msg}</div>}
 
       {clip && (

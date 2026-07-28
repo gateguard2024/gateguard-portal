@@ -47,7 +47,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
   const gear = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: '7px 14px', cursor: 'pointer', background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
   const camerasDown = s ? Math.max(0, s.devices.camera - s.devices.camerasOnline) : 0;
   const hs = s?.healthScore ?? null;
-  const hsColor = hs == null ? '#9FD8EC' : hs >= 85 ? '#7ee0a8' : hs >= 60 ? '#fbbf24' : '#f87171';
+  const hsColor = hs == null ? '#9FD8EC' : hs >= 85 ? '#7ee0a8' : hs >= 60 ? '#fbbf24' : '#f2637e';
   const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
 
   const tools: { label: string; icon: string; color: string; onClick: () => void }[] = [
@@ -55,7 +55,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
     { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => jump('sec-access') },
     { label: 'Cameras', icon: '📹', color: '#9FD8EC', onClick: () => jump('sec-cameras') },
     { label: 'Access & passes', icon: '🔑', color: '#fbbf24', onClick: () => jump('sec-access') },
-    { label: 'Report a fault', icon: '⚠', color: '#f87171', onClick: () => jump('sec-faults') },
+    { label: 'Report a fault', icon: '⚠', color: '#f2637e', onClick: () => jump('sec-faults') },
     { label: 'Activity log', icon: '📜', color: '#8FD3EC', onClick: () => jump('sec-access') },
   ];
 
@@ -83,7 +83,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
             <div style={{ color: '#9FD8EC', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
           </div>
         </div>
-        <StripTile icon="📹" label="Cameras" value={s ? `${s.devices.camerasOnline}/${s.devices.camera}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
+        <StripTile icon="📹" label="Cameras" value={s ? `${s.devices.camerasOnline}/${s.devices.camera}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f2637e' : '#7ee0a8'} />
         <StripTile icon="🚪" label="Doors / gates" value={s ? String(s.doors.total || s.devices.gate) : '—'} sub={s ? `${s.doors.panelsLive} controllers live` : ''} subColor="#c3d3e2" />
         <StripTile icon="📈" label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={s ? `${s.devices.online}/${s.devices.total} devices online` : ''} subColor="#c3d3e2" />
         <StripTile icon="⚡" label="Events today" value={s ? String(s.eventsToday) : '—'} sub="access + system" subColor="#9FD8EC" />

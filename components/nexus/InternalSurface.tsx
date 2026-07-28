@@ -130,9 +130,9 @@ export function InternalSurface() {
       <div className="rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Internal</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: '#152535' }}>What internal work are we managing?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#37485c' }}>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#5FB8E0' }}>Internal</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: '#eaf2fb' }}>What internal work are we managing?</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>
               Product tracking, platform settings, playbooks, dealer onboarding, and team training live here.
             </p>
           </div>
@@ -143,7 +143,7 @@ export function InternalSurface() {
             + operations, scoped to the admin's whole hierarchy. */}
         <AdminReportConsole onOpenTab={(tab) => window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: tab }))} />
 
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#2f4a63' }}>Admin tools</div>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#5FB8E0' }}>Admin tools</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {cards.map(card => <SteelCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
         </div>

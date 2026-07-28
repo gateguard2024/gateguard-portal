@@ -90,6 +90,23 @@ export function UserGlassWindow({
     }
   }
 
+  async function deleteUserAccount() {
+    if (!window.confirm(`Permanently delete ${user.name}? This removes their login and portal access. Their past records stay but become unassigned. This cannot be undone.`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const res = await fetch(`/api/nexus/internal/user-window/${user.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_user' }) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.success === false) throw new Error(json?.message ?? 'Delete failed.')
+      // Close only — the user no longer exists, so don't re-fetch the detail.
+      // The parent reloads the list on close, so the row disappears immediately.
+      onBack()
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Delete failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function changeRole(next: SimpleRole) {
     if (next === role) return
     const prev = role
@@ -176,6 +193,14 @@ export function UserGlassWindow({
                   {user.deactivated ? 'Reactivate user' : 'Deactivate user'}
                 </button>
                 <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{user.deactivated ? 'They cannot sign in until reactivated.' : 'Blocks sign-in. Reversible at any time.'}</div>
+                <div className="mt-3 border-t pt-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <button type="button" disabled={busy} onClick={deleteUserAccount}
+                    className="w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                    style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.45)', color: '#fca5a5' }}>
+                    Delete user permanently
+                  </button>
+                  <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Removes their login for good. Use Deactivate instead if you might restore them.</div>
+                </div>
               </div>
               {/* Move org */}
               <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
