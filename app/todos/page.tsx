@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useUser } from "@clerk/nextjs";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   Plus, Check, Trash2, Calendar, User, ChevronDown, ChevronRight,
@@ -952,6 +953,27 @@ export default function TodosPage() {
   const [createPriority, setCreatePriority] = useState<Todo['priority']>('normal');
   const [createDue,    setCreateDue]    = useState('');
   const [createSaving, setCreateSaving] = useState(false);
+  const [createNotes,  setCreateNotes]  = useState('');
+  const [createAssignId,   setCreateAssignId]   = useState('');
+  const [createAssignName, setCreateAssignName] = useState('');
+  const [assignables, setAssignables] = useState<{ id: string; name: string }[]>([]);
+  const { user: clerkUser } = useUser();
+
+  // Org users for the assignee picker (reps see their own org). Falls back to
+  // just "me" if the list can't load — the API self-assigns by default anyway.
+  useEffect(() => {
+    fetch('/api/admin/users').then(r => r.ok ? r.json() : { users: [] })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(j => setAssignables((j.users ?? []).map((u: any) => ({ id: u.id, name: (u.full_name || u.email || 'User').trim() }))))
+      .catch(() => {});
+  }, []);
+  // Default the assignee to the signed-in user ("assign to myself").
+  useEffect(() => {
+    if (clerkUser && !createAssignId) {
+      setCreateAssignId(clerkUser.id);
+      setCreateAssignName(clerkUser.fullName || clerkUser.primaryEmailAddress?.emailAddress || 'Me');
+    }
+  }, [clerkUser, createAssignId]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -990,6 +1012,9 @@ export default function TodosPage() {
         title:    createTitle.trim(),
         priority: createPriority,
         due_date: createDue || null,
+        body:             createNotes.trim() || null,
+        assigned_to:      createAssignId || undefined,
+        assigned_to_name: createAssignName || undefined,
       }),
     });
     const data = await res.json();
@@ -1265,6 +1290,31 @@ export default function TodosPage() {
                     className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#6B7EFF]"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Assign to</label>
+                <select
+                  value={createAssignId}
+                  onChange={e => { const u = assignables.find(a => a.id === e.target.value); setCreateAssignId(e.target.value); setCreateAssignName(u?.name ?? createAssignName); }}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#6B7EFF] bg-white"
+                >
+                  {clerkUser && !assignables.some(a => a.id === clerkUser.id) && (
+                    <option value={clerkUser.id}>{clerkUser.fullName || 'Me'} (me)</option>
+                  )}
+                  {assignables.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}{clerkUser && a.id === clerkUser.id ? ' (me)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Notes</label>
+                <textarea
+                  value={createNotes}
+                  onChange={e => setCreateNotes(e.target.value)}
+                  placeholder="Add any details…"
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#6B7EFF] placeholder-slate-400 resize-none"
+                />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 bg-slate-50">
