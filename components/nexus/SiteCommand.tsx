@@ -6,6 +6,8 @@
 // Reuses every existing widget as-is (no rewrites) so nothing regresses.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Settings } from 'lucide-react';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Camera, DoorOpen, TrendingUp, Zap, LockOpen, Key, AlertTriangle, History, Wifi, Cpu, RotateCcw } = require('lucide-react') as any;
 import { SiteSecurity } from '@/components/nexus/SiteSecurity';
 import { SiteDoors } from '@/components/nexus/SiteDoors';
 import { SiteRelays } from '@/components/nexus/SiteRelays';
@@ -90,13 +92,14 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
   const hsColor = hs == null ? '#9FD8EC' : hs >= 85 ? '#7ee0a8' : hs >= 60 ? '#fbbf24' : '#f87171';
   const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
 
-  const tools: { label: string; icon: string; color: string; onClick: () => void }[] = [
-    { label: 'Unlock door', icon: '🔓', color: '#7ee0a8', onClick: () => jump('sec-access') },
-    { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => setShowReboot(true) },
-    { label: 'Cameras', icon: '📹', color: '#9FD8EC', onClick: () => jump('sec-cameras') },
-    { label: 'Access & passes', icon: '🔑', color: '#fbbf24', onClick: () => jump('sec-access') },
-    { label: 'Report a fault', icon: '⚠', color: '#f87171', onClick: () => jump('sec-faults') },
-    { label: 'Activity log', icon: '📜', color: '#8FD3EC', onClick: () => jump('sec-access') },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tools: { label: string; icon: any; color: string; onClick: () => void }[] = [
+    { label: 'Unlock door', icon: LockOpen, color: '#7ee0a8', onClick: () => jump('sec-access') },
+    { label: 'Open / reset gate', icon: RotateCcw, color: '#5FB8E0', onClick: () => setShowReboot(true) },
+    { label: 'Cameras', icon: Camera, color: '#9FD8EC', onClick: () => jump('sec-cameras') },
+    { label: 'Access & passes', icon: Key, color: '#fbbf24', onClick: () => jump('sec-access') },
+    { label: 'Report a fault', icon: AlertTriangle, color: '#f87171', onClick: () => jump('sec-faults') },
+    { label: 'Activity log', icon: History, color: '#8FD3EC', onClick: () => jump('sec-access') },
   ];
 
   return (
@@ -123,10 +126,10 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
             <div style={{ color: '#9FD8EC', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
           </div>
         </div>
-        <StripTile icon="📹" label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
-        <StripTile icon="🚪" label="Doors / gates" value={doorCount != null ? String(doorCount) : '—'} sub={live.doors != null ? 'live · Brivo' : (s ? `${s.doors.panelsLive} controllers live` : '')} subColor="#c3d3e2" />
-        <StripTile icon="📈" label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={live.cameras ? `${live.cameras.online} cam online${live.doors != null ? ` · ${live.doors} doors` : ''}` : (s ? `${s.devices.online}/${s.devices.total} devices online` : '')} subColor="#c3d3e2" />
-        <StripTile icon="⚡" label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#9FD8EC" />
+        <StripTile icon={Camera} label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
+        <StripTile icon={DoorOpen} label="Doors / gates" value={doorCount != null ? String(doorCount) : '—'} sub={live.doors != null ? 'live · Brivo' : (s ? `${s.doors.panelsLive} controllers live` : '')} subColor="#c3d3e2" />
+        <StripTile icon={TrendingUp} label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={live.cameras ? `${live.cameras.online} cam online${live.doors != null ? ` · ${live.doors} doors` : ''}` : (s ? `${s.devices.online}/${s.devices.total} devices online` : '')} subColor="#c3d3e2" />
+        <StripTile icon={Zap} label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#9FD8EC" />
       </div>
 
       {/* Quick tools */}
@@ -135,7 +138,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8 }}>
           {tools.map(t => (
             <button key={t.label} onClick={t.onClick} style={{ ...TILE, textAlign: 'center', cursor: 'pointer' }}>
-              <div style={{ fontSize: 17, color: t.color }} aria-hidden>{t.icon}</div>
+              <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden><t.icon size={19} style={{ color: t.color }} /></div>
               <div style={{ color: '#e2ebf4', fontSize: 11.5, marginTop: 4 }}>{t.label}</div>
             </button>
           ))}
@@ -150,36 +153,36 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
 
       {/* Widgets — reused as-is, each under a defining section header. */}
       <div id="sec-cameras">
-        <SectionHead icon="📹" title="Cameras" desc="Live security — Eagle Eye" />
+        <SectionHead icon={Camera} title="Cameras" desc="Live security — Eagle Eye" />
         <SiteSecurity siteId={siteId} />
         <SiteCameraEvents siteId={siteId} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
         <div id="sec-doors">
-          <SectionHead icon="🚪" title="Doors" desc="Access points — Brivo" />
+          <SectionHead icon={DoorOpen} title="Doors" desc="Access points — Brivo" />
           <SiteDoors siteId={siteId} />
         </div>
         <div id="sec-activity">
-          <SectionHead icon="📜" title="Activity" desc="Recent access events" />
+          <SectionHead icon={History} title="Activity" desc="Recent access events" />
           <SiteActivity siteId={siteId} />
         </div>
       </div>
 
       {/* Network — UniFi. Own defining section per request. */}
       <div id="sec-network">
-        <SectionHead icon="📡" title="Network" desc="Internet, clients & gear health — UniFi" accent="#5FB8E0" />
+        <SectionHead icon={Wifi} title="Network" desc="Internet, clients & gear health — UniFi" accent="#5FB8E0" />
         <SiteNetwork siteId={siteId} />
         <SiteNetworkDevices siteId={siteId} />
       </div>
 
       <div id="sec-relays">
-        <SectionHead icon="⚡" title="Relays & power" desc="Gate relays & smart switches — Shelly" />
+        <SectionHead icon={Zap} title="Relays & power" desc="Gate relays & smart switches — Shelly" />
         <SiteRelays siteId={siteId} />
       </div>
 
       <div id="sec-panels">
-        <SectionHead icon="🎛" title="Controllers & doors" desc="Panels, door programming & provisioning" />
+        <SectionHead icon={Cpu} title="Controllers & doors" desc="Panels, door programming & provisioning" />
         <SitePanels siteId={siteId} isCorporate={isCorporate} />
       </div>
 
@@ -196,10 +199,11 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
   );
 }
 
-function SectionHead({ icon, title, desc, accent = '#9FD8EC' }: { icon: string; title: string; desc: string; accent?: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SectionHead({ icon: Icon, title, desc, accent = '#9FD8EC' }: { icon: any; title: string; desc: string; accent?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 10, background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderLeft: `3px solid ${accent}`, borderRadius: 12 }}>
-      <span style={{ fontSize: 16 }} aria-hidden>{icon}</span>
+      <Icon size={16} style={{ color: accent }} aria-hidden />
       <div>
         <div style={{ color: '#eaf2fb', fontSize: 13, fontWeight: 700, letterSpacing: '0.01em' }}>{title}</div>
         <div style={{ color: '#c3d3e2', fontSize: 10.5 }}>{desc}</div>
@@ -208,10 +212,11 @@ function SectionHead({ icon, title, desc, accent = '#9FD8EC' }: { icon: string; 
   );
 }
 
-function StripTile({ icon, label, value, sub, subColor }: { icon: string; label: string; value: string; sub: string; subColor: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function StripTile({ icon: Icon, label, value, sub, subColor }: { icon: any; label: string; value: string; sub: string; subColor: string }) {
   return (
     <div style={TILE}>
-      <div style={{ color: '#9FD8EC', fontSize: 11 }}><span aria-hidden>{icon}</span> {label}</div>
+      <div style={{ color: '#9FD8EC', fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}><Icon size={13} aria-hidden /> {label}</div>
       <div style={{ color: '#eaf2fb', fontSize: 22, fontWeight: 700, lineHeight: 1.1, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ color: subColor, fontSize: 10, marginTop: 1 }}>{sub}</div>}
     </div>

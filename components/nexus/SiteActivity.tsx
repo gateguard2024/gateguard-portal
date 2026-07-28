@@ -25,10 +25,10 @@ export function SiteActivity({ siteId }: { siteId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setBrivoNote(null);
+    const run = (initial: boolean) => {
+    if (initial) { setLoading(true); setBrivoNote(null); }
     // Internal site_events + live Brivo access events, merged newest-first.
-    Promise.all([
+    return Promise.all([
       fetch(`/api/sites/${siteId}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/brivo/events?site_id=${siteId}`).then(async r => ({ ok: r.ok, body: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, body: {} as Ev })),
     ]).then(([s, bRes]) => {
@@ -48,8 +48,11 @@ export function SiteActivity({ siteId }: { siteId: string }) {
       }
       const merged = [...internal, ...brivo].sort((a, x) => new Date(x.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setEvents(merged);
-    }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    }).finally(() => { if (!cancelled && initial) setLoading(false); });
+    };
+    run(true);
+    const id = setInterval(() => run(false), 20000); // live refresh
+    return () => { cancelled = true; clearInterval(id); };
   }, [siteId]);
 
   const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 16 } as const;

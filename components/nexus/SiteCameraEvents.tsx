@@ -29,10 +29,15 @@ export function SiteCameraEvents({ siteId }: { siteId: string }) {
   const [hours, setHours] = useState(24);
 
   useEffect(() => {
+    let cancelled = false;
     setEvents(null); setErr(false);
-    fetch(`/api/eagle-eye/events?site_id=${siteId}&hours=${hours}`, { cache: 'no-store' }).then(r => r.json())
-      .then(j => { if (Array.isArray(j.events)) setEvents(j.events); else { setEvents([]); setErr(true); } })
-      .catch(() => { setEvents([]); setErr(true); });
+    // Live: fetch now, then refresh every 20s in place (no loading flash).
+    const run = () => fetch(`/api/eagle-eye/events?site_id=${siteId}&hours=${hours}`, { cache: 'no-store' }).then(r => r.json())
+      .then(j => { if (cancelled) return; if (Array.isArray(j.events)) { setEvents(j.events); setErr(false); } else { setEvents(e => e ?? []); setErr(true); } })
+      .catch(() => { if (!cancelled) { setEvents(e => e ?? []); setErr(true); } });
+    run();
+    const id = setInterval(run, 20000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [siteId, hours]);
 
   const types = useMemo(() => Array.from(new Set((events ?? []).map(e => e.label))).slice(0, 20), [events]);
