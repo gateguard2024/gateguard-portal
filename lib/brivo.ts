@@ -120,7 +120,7 @@ export async function getOrgBrivoToken(orgId: string): Promise<BrivoToken> {
 // ─── Per-SITE token (from the site_integrations vault) ───────────────────────
 // Each property site can hold its OWN Brivo login in the encrypted vault. This
 // is the per-site path; getOrgBrivoToken remains for the legacy per-org setup.
-export interface SiteBrivoToken { token: string; apiKey: string; brivoSiteId: string }
+export interface SiteBrivoToken { token: string; apiKey: string; brivoSiteId: string; credentialValue?: string }
 
 export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken> {
   // Imported lazily to avoid a cycle (site-integrations → crypto only).
@@ -149,7 +149,7 @@ export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken>
   })
   if (!res.ok) throw new Error(`Brivo auth failed (${res.status})`)
   const tokens = await res.json()
-  return { token: tokens.access_token, apiKey, brivoSiteId: String(creds.site_id ?? '') }
+  return { token: tokens.access_token, apiKey, brivoSiteId: String(creds.site_id ?? ''), credentialValue: creds.credential_value || undefined }
 }
 
 // ─── Master account token (sees all sites) ──────────────────────────────────
@@ -397,16 +397,15 @@ export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId?
 }
 
 /** Remotely unlock / pulse a door. Sensitive action — callers must confirm. */
-export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string): Promise<{ success: true }> {
+export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string, credentialValue?: string): Promise<{ success: true }> {
   try {
-    await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, {})
+    // Brivo unlocks a door ON BEHALF OF a card holder — the body must carry the
+    // credentialValue of a digital-credential user who has access to this door.
+    await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, credentialValue ? { credentialValue } : {})
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    // Brivo returns 403 "Invalid user" when the authenticated admin can READ the
-    // account but lacks remote door-control rights (or the door isn't in scope).
-    // Reads work; unlock doesn't. That's a Brivo role/permission config, not a bug.
     if (/\b403\b/.test(msg) && /invalid user/i.test(msg)) {
-      throw new Error('Brivo rejected the unlock: the Brivo admin account set for this site can read the system but does not have remote unlock permission. In Brivo Access → Administrators, give that account a role with door control (e.g. Super Administrator), enable Remote Access under Account Settings, and confirm this door’s group is in the account’s scope.')
+      throw new Error('Brivo rejected the unlock (403 “Invalid user”). Brivo opens the door on behalf of a card holder, so the request needs a "credentialValue" for a Brivo user with access to this door. Add a “Remote-unlock credential value” on this site’s Brivo connection (a digital-credential user who can open these doors).')
     }
     throw e
   }

@@ -182,6 +182,7 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: {
   const [accent, setAccent] = useState(portal?.branding?.accent || '')
   const [cameras, setCameras] = useState((portal?.camera_ids || []).join(', '))
   const [status, setStatus] = useState<Portal['status']>(portal?.status || 'draft')
+  const [pin, setPin] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -208,6 +209,7 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: {
       camera_ids: cameras.split(',').map(c => c.trim()).filter(Boolean),
       branding: { display_name: displayName || site?.name, ...(accent ? { accent } : {}) },
       status,
+      ...(pin.trim() ? { access_pin: pin.trim() } : {}),
     }
 
     const res = await fetch(
@@ -315,6 +317,12 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: {
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">Draft &amp; Disabled return 404 to visitors. Flip to Live when you&apos;re ready.</p>
+          </Field>
+
+          <Field label="Access code (PIN)">
+            <input value={pin} onChange={e => setPin(e.target.value)} placeholder={portal ? 'Leave blank to keep current code' : 'Passcode customers enter to view'}
+              className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:border-brand-400/60 focus:outline-none bg-background" />
+            <p className="text-[11px] text-muted-foreground mt-1">Gate the portal before it shows live cameras, billing, or events. Share it with the property manager.</p>
           </Field>
 
           {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{err}</div>}

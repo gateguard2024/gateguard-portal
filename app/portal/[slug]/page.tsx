@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { CustomerPortalTemplate, type PortalConfig } from '@/components/portal/CustomerPortalTemplate'
+import { PinGate } from '@/components/portal/PinGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +21,12 @@ export default async function ClientPortalPage({ params }: { params: { slug: str
   if (!portal || portal.status === 'disabled') notFound()
 
   const branding = (portal.branding ?? {}) as { display_name?: string; accent?: string; logo_url?: string }
+
+  // PIN gate — if a passcode is set, require a matching cookie before showing anything.
+  if (portal.access_pin) {
+    const verified = cookies().get(`pp_${params.slug}`)?.value === portal.access_pin
+    if (!verified) return <PinGate slug={params.slug} displayName={branding.display_name || 'Community portal'} />
+  }
   const config: PortalConfig = {
     display_name: branding.display_name || 'Community portal',
     accent: branding.accent || null,

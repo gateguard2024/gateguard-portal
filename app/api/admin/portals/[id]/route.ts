@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { createHash } from 'crypto'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 export const dynamic = 'force-dynamic'
+const hashPin = (p: string) => createHash('sha256').update(`gg-portal:${p.trim()}`).digest('hex')
 
 const ALL_MODULES = ['gate', 'cameras', 'passes', 'activity', 'billing', 'service']
 
@@ -28,6 +30,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if ('camera_ids' in body) update.camera_ids = Array.isArray(body.camera_ids) && body.camera_ids.length ? body.camera_ids : null
   if (body.branding && typeof body.branding === 'object') update.branding = body.branding
   if (['draft', 'live', 'disabled'].includes(body.status)) update.status = body.status
+  // Only touch the PIN when a non-empty value is sent; blank on edit keeps the current code.
+  if (typeof body.access_pin === 'string' && body.access_pin.trim()) update.access_pin = hashPin(body.access_pin)
 
   const { data, error } = await supabase
     .from('client_portals')

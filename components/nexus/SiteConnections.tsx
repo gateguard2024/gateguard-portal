@@ -13,7 +13,7 @@ const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
   { vendor: "brivo", label: "Brivo · Access Control", fields: [
     { key: "username", label: "Brivo username" }, { key: "password", label: "Brivo password", secret: true },
     { key: "api_key", label: "Brivo API key", secret: true }, { key: "client_id", label: "Brivo client ID" }, { key: "client_secret", label: "Brivo client secret", secret: true },
-    { key: "site_id", label: "Brivo site ID", placeholder: "e.g. 123456" } ] },
+    { key: "site_id", label: "Brivo site ID", placeholder: "e.g. 123456" }, { key: "credential_value", label: "Remote-unlock credential value", secret: true, placeholder: "digital credential of a user who can open these doors" } ] },
   { vendor: "eagle_eye", label: "Eagle Eye · Cameras", fields: [
     { key: "client_id", label: "EEN client ID" }, { key: "client_secret", label: "EEN client secret", secret: true } ] },
   { vendor: "shelly", label: "Shelly · Relays / Power", fields: [

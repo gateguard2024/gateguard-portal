@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { createHash } from 'crypto'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,7 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 const ALL_MODULES = ['gate', 'cameras', 'passes', 'activity', 'billing', 'service']
+const hashPin = (p: string) => createHash('sha256').update(`gg-portal:${p.trim()}`).digest('hex')
 
 function slugify(s: string): string {
   return (s || '')
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
     camera_ids: cameraIds,
     branding,
     status: ['draft', 'live', 'disabled'].includes(body.status) ? body.status : 'draft',
+    access_pin: body.access_pin ? hashPin(String(body.access_pin)) : null,
     created_by: user.id,
   }
 

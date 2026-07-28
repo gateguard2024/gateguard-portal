@@ -25,11 +25,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const siteId = String(body.site_id ?? '')
     const orgId = String(body.org_id ?? '')
     let token: string, apiKey: string
+    let credentialValue: string | undefined
     if (siteId) {
       const site = await getAllowedVaultBrivoSite(user, siteId)
       if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
       if (!(await canOperate(user, siteId, 'doors'))) return NextResponse.json({ error: 'You don’t have door access for this site.' }, { status: 403 })
-      ;({ token, apiKey } = await getSiteBrivoToken(siteId))
+      ;({ token, apiKey, credentialValue } = await getSiteBrivoToken(siteId))
     } else if (orgId) {
       const site = await getAllowedBrivoSite(user, orgId)
       if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'site_id or org_id is required' }, { status: 400 })
     }
 
-    await unlockBrivoDoor(token, apiKey, params.id)
+    await unlockBrivoDoor(token, apiKey, params.id, credentialValue)
 
     // Audit trail — also shows in the site activity timeline. If a camera is
     // mapped to this door, record it so footage can be pulled for the moment.

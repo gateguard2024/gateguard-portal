@@ -27,6 +27,7 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
     { key: 'client_id', label: 'Brivo client ID' },
     { key: 'client_secret', label: 'Brivo client secret', secret: true },
     { key: 'site_id', label: 'Brivo site ID', placeholder: 'e.g. 123456' },
+    { key: 'credential_value', label: 'Remote-unlock credential value', secret: true, placeholder: 'digital credential of a user who can open these doors' },
   ] },
   eagle_eye: { label: 'Eagle Eye (Cameras)', fields: [
     { key: 'client_id', label: 'EEN client ID' },

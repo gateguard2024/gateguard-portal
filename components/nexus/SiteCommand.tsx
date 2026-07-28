@@ -39,21 +39,60 @@ function jump(id: string) {
 export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorporate: boolean }) {
   const [showSetup, setShowSetup] = useState(false);
   const [s, setS] = useState<Summary | null>(null);
+  const [showReboot, setShowReboot] = useState(false);
+  // Live vendor truth for the strip (lazy — after the fast local summary paints).
+  const [live, setLive] = useState<{ cameras?: { online: number; total: number }; doors?: number; eventsToday?: number }>({});
 
   const load = useCallback(async () => {
     try { const j = await fetch(`/api/sites/${siteId}/command-summary`, { cache: 'no-store' }).then(r => r.json()); if (j && j.devices) setS(j); } catch { /* ignore */ }
   }, [siteId]);
   useEffect(() => { void load(); }, [load]);
 
+  // Pull REAL counts from Eagle Eye (cameras) + Brivo (doors, today's events).
+  // Each is independent and failure-tolerant — a card just keeps the local value.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [camR, doorR, evR] = await Promise.allSettled([
+        fetch(`/api/eagle-eye/cameras?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
+        fetch(`/api/brivo/doors?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
+        fetch(`/api/brivo/events?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
+      ]);
+      if (cancelled) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const next: { cameras?: { online: number; total: number }; doors?: number; eventsToday?: number } = {};
+      if (camR.status === 'fulfilled' && Array.isArray(camR.value?.cameras)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cams = camR.value.cameras as any[];
+        next.cameras = { total: cams.length, online: cams.filter(c => c.online !== false).length };
+      }
+      if (doorR.status === 'fulfilled' && Array.isArray(doorR.value?.doors)) next.doors = doorR.value.doors.length;
+      if (evR.status === 'fulfilled' && Array.isArray(evR.value?.events)) {
+        const today = new Date().toDateString();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        next.eventsToday = (evR.value.events as any[]).filter(e => e.occurred && new Date(e.occurred).toDateString() === today).length;
+      }
+      setLive(next);
+    })();
+    return () => { cancelled = true; };
+  }, [siteId]);
+
   const gear = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: '7px 14px', cursor: 'pointer', background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
-  const camerasDown = s ? Math.max(0, s.devices.camera - s.devices.camerasOnline) : 0;
-  const hs = s?.healthScore ?? null;
+  // Prefer LIVE vendor counts; fall back to the fast local summary until they land.
+  const camOnline = live.cameras ? live.cameras.online : (s ? s.devices.camerasOnline : null);
+  const camTotal  = live.cameras ? live.cameras.total  : (s ? s.devices.camera : null);
+  const camerasDown = (camOnline != null && camTotal != null) ? Math.max(0, camTotal - camOnline) : 0;
+  const doorCount = live.doors != null ? live.doors : (s ? (s.doors.total || s.devices.gate) : null);
+  const eventsTodayVal = live.eventsToday != null ? live.eventsToday : (s ? s.eventsToday : null);
+  const hs = (live.cameras && live.cameras.total > 0)
+    ? Math.max(0, Math.round((live.cameras.online / live.cameras.total) * 100 - (s?.faults.open ?? 0) * 4))
+    : (s?.healthScore ?? null);
   const hsColor = hs == null ? '#9FD8EC' : hs >= 85 ? '#7ee0a8' : hs >= 60 ? '#fbbf24' : '#f87171';
   const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
 
   const tools: { label: string; icon: string; color: string; onClick: () => void }[] = [
     { label: 'Unlock door', icon: '🔓', color: '#7ee0a8', onClick: () => jump('sec-access') },
-    { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => jump('sec-access') },
+    { label: 'Open / reset gate', icon: '⛩', color: '#5FB8E0', onClick: () => setShowReboot(true) },
     { label: 'Cameras', icon: '📹', color: '#9FD8EC', onClick: () => jump('sec-cameras') },
     { label: 'Access & passes', icon: '🔑', color: '#fbbf24', onClick: () => jump('sec-access') },
     { label: 'Report a fault', icon: '⚠', color: '#f87171', onClick: () => jump('sec-faults') },
@@ -84,10 +123,10 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
             <div style={{ color: '#9FD8EC', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
           </div>
         </div>
-        <StripTile icon="📹" label="Cameras" value={s ? `${s.devices.camerasOnline}/${s.devices.camera}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
-        <StripTile icon="🚪" label="Doors / gates" value={s ? String(s.doors.total || s.devices.gate) : '—'} sub={s ? `${s.doors.panelsLive} controllers live` : ''} subColor="#c3d3e2" />
-        <StripTile icon="📈" label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={s ? `${s.devices.online}/${s.devices.total} devices online` : ''} subColor="#c3d3e2" />
-        <StripTile icon="⚡" label="Events today" value={s ? String(s.eventsToday) : '—'} sub="access + system" subColor="#9FD8EC" />
+        <StripTile icon="📹" label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
+        <StripTile icon="🚪" label="Doors / gates" value={doorCount != null ? String(doorCount) : '—'} sub={live.doors != null ? 'live · Brivo' : (s ? `${s.doors.panelsLive} controllers live` : '')} subColor="#c3d3e2" />
+        <StripTile icon="📈" label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={live.cameras ? `${live.cameras.online} cam online${live.doors != null ? ` · ${live.doors} doors` : ''}` : (s ? `${s.devices.online}/${s.devices.total} devices online` : '')} subColor="#c3d3e2" />
+        <StripTile icon="⚡" label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#9FD8EC" />
       </div>
 
       {/* Quick tools */}
@@ -105,9 +144,6 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
 
       {/* Live access & control — gate reset, door unlock, passes, door activity */}
       <div id="sec-access"><SiteAccessControl siteId={siteId} /></div>
-
-      {/* Gate re-boot — camera-monitored power-cycle macros */}
-      <div id="sec-reboot"><GateReboots siteId={siteId} isCorporate={isCorporate} /></div>
 
       {/* Faults & uptime (built) */}
       <div id="sec-faults"><SiteIncidents siteId={siteId} /></div>
@@ -146,6 +182,16 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
         <SectionHead icon="🎛" title="Controllers & doors" desc="Panels, door programming & provisioning" />
         <SitePanels siteId={siteId} isCorporate={isCorporate} />
       </div>
+
+      {/* Gate re-boot — opened from the “Open / reset gate” quick tool */}
+      {showReboot && (
+        <div onClick={() => setShowReboot(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(4,10,20,0.62)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 16px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(760px, 96vw)', position: 'relative' }}>
+            <button onClick={() => setShowReboot(false)} style={{ position: 'absolute', top: -34, right: 0, background: 'transparent', border: 'none', color: '#c3d3e2', fontSize: 13, cursor: 'pointer' }}>✕ Close</button>
+            <GateReboots siteId={siteId} isCorporate={isCorporate} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -65,7 +65,7 @@ export function SystemsExplorer() {
   const card: React.CSSProperties = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)', borderRadius: 16, padding: 14, cursor: 'pointer', textAlign: 'left', color: 'white' };
 
   return (
-    <section style={{ width: '100%', maxWidth: 1160, margin: '0 auto', padding: '24px 12px 140px' }}>
+    <section style={{ width: '100%', maxWidth: 1600, margin: '0 auto', padding: '24px 12px 140px' }}>
       <div style={FRAME_STYLE}>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: '#2f4a63' }}>Systems</div>
