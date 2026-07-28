@@ -60,10 +60,23 @@ export function CustomerPortalTemplate({
   const primaryCam = cams[activeCam] ?? cams[0]
 
   const font = { fontFamily: "'DM Sans', var(--font-dm-sans, system-ui), sans-serif" }
-  const tile = { background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14 } as const
+  // Raised steel panel — matches the dealer Command Center cards: gradient face,
+  // 1px steel border, a hairline top highlight and a soft drop so tiles read as
+  // lifted off the page rather than flat black.
+  const tile = {
+    background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14,
+    boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06), 0 10px 24px -18px rgba(0,0,0,0.8)',
+  } as const
+  // Small-caps cyan section eyebrow — the dealer shell's label style.
+  const eyebrow = {
+    fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase',
+    color: THEME.label, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+  } as const
+  // Ambient top glow behind all content — the faint cyan bloom the dealer shell has.
+  const pageBg = `radial-gradient(1100px 460px at 50% -8%, rgba(95,184,224,0.10), transparent 62%), ${THEME.bg}`
 
   return (
-    <div style={{ ...font, minHeight: '100dvh', background: THEME.bg, color: THEME.ink, display: 'grid', gridTemplateColumns: '58px 1fr' }}>
+    <div style={{ ...font, minHeight: '100dvh', background: pageBg, color: THEME.ink, display: 'grid', gridTemplateColumns: '58px 1fr' }}>
       <nav style={{ background: THEME.nav, borderRight: `1px solid rgba(140,170,200,0.14)`, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '14px 0', gap: 6 }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', color: THEME.bg, marginBottom: 10 }}><ShieldCheck size={18} /></div>
         {NAV.filter(n => !n.module || has(n.module)).map((n, i) => (
@@ -87,8 +100,9 @@ export function CustomerPortalTemplate({
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 14 }}>
           <div>
             {(has('cameras') || has('gate')) && (
-              <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid rgba(140,170,200,0.2)`, background: `radial-gradient(circle at 50% 40%, #1c2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Camera size={34} style={{ color: '#3a4f63' }} />
+              <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${THEME.border}`, boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)', background: `radial-gradient(120% 90% at 50% 8%, rgba(95,184,224,0.10), transparent 55%), radial-gradient(circle at 50% 42%, #1b2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Camera size={32} style={{ color: '#46617a' }} />
+                <span style={{ fontSize: 11, color: THEME.label, letterSpacing: '0.04em' }}>Live view</span>
                 <span style={{ position: 'absolute', top: 10, left: 12, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 6, padding: '3px 8px' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: THEME.alarm }} />LIVE · {primaryCam?.name ?? 'Front gate'}</span>
                 {has('gate') && <button onClick={onOpenGate} style={{ position: 'absolute', bottom: 12, left: 12, background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '11px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', ...font, display: 'inline-flex', alignItems: 'center', gap: 6 }}><LockOpen size={16} /> Open gate</button>}
                 <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
@@ -122,7 +136,7 @@ export function CustomerPortalTemplate({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {has('activity') && (
               <div style={{ ...tile, padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><ListChecks size={15} style={{ color: THEME.label }} /> Live activity</div>
+                <div style={eyebrow}><ListChecks size={14} style={{ color: THEME.label }} /> Live activity</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {(activity.length ? activity : DEMO_ACTIVITY).slice(0, 4).map(a => (
                     <div key={a.id} style={{ display: 'flex', gap: 9, alignItems: 'center' }}>

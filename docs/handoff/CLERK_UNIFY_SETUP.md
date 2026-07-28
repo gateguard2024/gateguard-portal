@@ -13,7 +13,7 @@ The app code is already done: beta reads three env vars and runs as a Clerk
 ## 1. Clerk dashboard (production instance)
 
 1. Open the **production** Clerk instance (the one main uses, `pk_live_` / `sk_live_`).
-2. **Domains → add a satellite domain:** `beta.portal.gateguard.co`.
+2. **Domains → add a satellite domain:** `gateguard-portal-git-beta-gate-guard.vercel.app`.
 3. Confirm the primary domain is `portal.gateguard.co`.
 4. Add beta to allowed origins / redirect URLs if prompted.
 
@@ -29,7 +29,7 @@ Set these on the beta project/branch (and **redeploy beta**):
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = pk_live_…      # SAME as main (production)
 CLERK_SECRET_KEY                  = sk_live_…      # SAME as main (production)
 NEXT_PUBLIC_CLERK_IS_SATELLITE    = true
-NEXT_PUBLIC_CLERK_DOMAIN          = beta.portal.gateguard.co
+NEXT_PUBLIC_CLERK_DOMAIN          = gateguard-portal-git-beta-gate-guard.vercel.app
 NEXT_PUBLIC_CLERK_SIGN_IN_URL     = https://portal.gateguard.co/sign-in
 ```
 
