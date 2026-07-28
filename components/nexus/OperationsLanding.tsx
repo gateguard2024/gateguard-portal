@@ -158,8 +158,9 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
           <span><span style={{ color: '#fbbf24' }}>●</span> <b style={{ color: '#eaf2fb' }}>LIVE ONLINE</b> — arrives in Phase 2 (UniFi / Eagle Eye)</span>
         </div>
 
-        {/* 3-column cockpit */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.25fr_1fr]">
+        {/* 3-column cockpit — minmax(0,…) so columns SHRINK to fit instead of
+            overflowing the panel to the right (raw 1fr defaults to min-width:auto). */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)]">
 
           {/* ===== COL 1 · FLEET ===== */}
           <div className="flex flex-col gap-3">
