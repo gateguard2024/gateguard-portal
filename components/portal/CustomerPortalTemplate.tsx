@@ -88,6 +88,8 @@ export function CustomerPortalTemplate({
 
   const effCameras = live.cameras && live.cameras.length ? live.cameras : cameras
   const effActivity = live.activity && live.activity.length ? live.activity : activity
+  // On a real (slug'd) portal never show demo activity — show real or an empty state.
+  const activityRows = effActivity.length ? effActivity : (config.slug ? [] : DEMO_ACTIVITY)
   const effBalance = live.balanceDue !== undefined ? live.balanceDue : balanceDue
 
   const cams = effCameras.slice(0, 4)
@@ -175,7 +177,9 @@ export function CustomerPortalTemplate({
               <div style={{ ...tile, padding: 14 }}>
                 <div style={eyebrow}><ListChecks size={14} style={{ color: THEME.label }} /> Live activity</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  {(effActivity.length ? effActivity : DEMO_ACTIVITY).slice(0, 4).map(a => (
+                  {activityRows.length === 0 ? (
+                    <div style={{ fontSize: 12, color: THEME.ink2, padding: '4px 0' }}>No recent activity yet.</div>
+                  ) : activityRows.slice(0, 4).map(a => (
                     <div key={a.id} style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
                       <div style={{ width: 34, height: 26, borderRadius: 6, background: THEME.well, border: `1px solid rgba(140,170,200,0.2)`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3a4f63' }}><Camera size={12} /></div>
                       <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 11.5 }}>{a.label}</div><div style={{ fontSize: 10, color: THEME.label }}>{a.where} · {a.time}</div></div>
