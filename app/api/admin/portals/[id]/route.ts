@@ -31,7 +31,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.branding && typeof body.branding === 'object') update.branding = body.branding
   if (['draft', 'live', 'disabled'].includes(body.status)) update.status = body.status
   // Only touch the PIN when a non-empty value is sent; blank on edit keeps the current code.
-  if (typeof body.access_pin === 'string' && body.access_pin.trim()) update.access_pin = hashPin(body.access_pin)
+  if (typeof body.access_pin === 'string' && body.access_pin.trim()) {
+    if (body.access_pin.trim().length < 6) return NextResponse.json({ error: 'Access code must be at least 6 digits.' }, { status: 400 })
+    update.access_pin = hashPin(body.access_pin)
+  }
 
   const { data, error } = await supabase
     .from('client_portals')

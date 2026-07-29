@@ -32,6 +32,7 @@ export default async function ClientPortalPage({ params }: { params: { slug: str
     accent: branding.accent || null,
     modules: (portal.modules as string[]) ?? ['gate', 'cameras', 'passes', 'activity', 'billing', 'service'],
     login_type: portal.login_type,
+    slug: params.slug,
   }
 
   // Live data (real cameras, activity, balance) is wired in the next pass — for now

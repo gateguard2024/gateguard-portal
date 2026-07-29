@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { site_id } = body
   if (!site_id) return NextResponse.json({ error: 'site_id is required' }, { status: 400 })
+  if (body.access_pin != null && String(body.access_pin).trim() && String(body.access_pin).trim().length < 6) {
+    return NextResponse.json({ error: 'Access code must be at least 6 digits.' }, { status: 400 })
+  }
 
   // Resolve the owning org + name from the site so the portal is tenant-stamped.
   const { data: site, error: siteErr } = await supabase

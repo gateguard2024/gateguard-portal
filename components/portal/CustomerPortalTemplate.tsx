@@ -7,7 +7,7 @@
 // in only as `config` (branding, which modules, which cameras) + live `data` —
 // never as design forks. Steel theme, DM Sans (inherited from the app font).
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Home, Video, Ticket, ListChecks, Users, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Mic, Maximize2, Camera } = require('lucide-react') as any
 
@@ -23,6 +23,7 @@ export type PortalConfig = {
   accent?: string | null
   modules: string[]
   login_type?: 'property' | 'resident'
+  slug?: string            // when set, the template pulls live read-only data from /api/portal/<slug>/summary
 }
 export type PortalCamera = { id: string; name: string }
 export type PortalActivity = { id: string; label: string; where: string; time: string }
@@ -55,7 +56,24 @@ export function CustomerPortalTemplate({
 }) {
   const accent = config.accent || THEME.accent
   const has = (m: string) => config.modules.includes(m)
-  const cams = cameras.slice(0, 4)
+
+  // Live read-only data behind the PIN — fetched after mount, falls back to props/demo.
+  const [live, setLive] = useState<{ cameras?: PortalCamera[]; activity?: PortalActivity[]; balanceDue?: number | null }>({})
+  useEffect(() => {
+    if (!config.slug) return
+    let cancelled = false
+    fetch(`/api/portal/${config.slug}/summary`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!cancelled && j) setLive({ cameras: j.cameras, activity: j.activity, balanceDue: j.balanceDue }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [config.slug])
+
+  const effCameras = live.cameras && live.cameras.length ? live.cameras : cameras
+  const effActivity = live.activity && live.activity.length ? live.activity : activity
+  const effBalance = live.balanceDue !== undefined ? live.balanceDue : balanceDue
+
+  const cams = effCameras.slice(0, 4)
   const [activeCam, setActiveCam] = useState(0)
   const primaryCam = cams[activeCam] ?? cams[0]
 
@@ -138,7 +156,7 @@ export function CustomerPortalTemplate({
               <div style={{ ...tile, padding: 14 }}>
                 <div style={eyebrow}><ListChecks size={14} style={{ color: THEME.label }} /> Live activity</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  {(activity.length ? activity : DEMO_ACTIVITY).slice(0, 4).map(a => (
+                  {(effActivity.length ? effActivity : DEMO_ACTIVITY).slice(0, 4).map(a => (
                     <div key={a.id} style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
                       <div style={{ width: 34, height: 26, borderRadius: 6, background: THEME.well, border: `1px solid rgba(140,170,200,0.2)`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3a4f63' }}><Camera size={12} /></div>
                       <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 11.5 }}>{a.label}</div><div style={{ fontSize: 10, color: THEME.label }}>{a.where} · {a.time}</div></div>
@@ -152,7 +170,7 @@ export function CustomerPortalTemplate({
               <div style={{ ...tile, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 10.5, color: THEME.label, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Balance due</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{balanceDue != null ? `$${balanceDue.toLocaleString()}` : '$0'}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{effBalance != null ? `$${effBalance.toLocaleString()}` : '$0'}</div>
                 </div>
                 <button onClick={onPay} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: '10px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', ...font }}>Pay</button>
               </div>
