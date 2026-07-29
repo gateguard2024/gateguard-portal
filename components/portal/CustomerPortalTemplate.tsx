@@ -58,13 +58,14 @@ export function CustomerPortalTemplate({
   const has = (m: string) => config.modules.includes(m)
 
   // Live read-only data behind the PIN — fetched after mount, falls back to props/demo.
-  const [live, setLive] = useState<{ cameras?: PortalCamera[]; activity?: PortalActivity[]; balanceDue?: number | null }>({})
+  const [live, setLive] = useState<{ cameras?: PortalCamera[]; activity?: PortalActivity[]; balanceDue?: number | null; payables?: { id: string; number: string; balance: number; link: string | null }[] }>({})
+  const [payOpen, setPayOpen] = useState(false)
   useEffect(() => {
     if (!config.slug) return
     let cancelled = false
     fetch(`/api/portal/${config.slug}/summary`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
-      .then(j => { if (!cancelled && j) setLive({ cameras: j.cameras, activity: j.activity, balanceDue: j.balanceDue }) })
+      .then(j => { if (!cancelled && j) setLive({ cameras: j.cameras, activity: j.activity, balanceDue: j.balanceDue, payables: j.payables }) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [config.slug])
@@ -190,7 +191,7 @@ export function CustomerPortalTemplate({
                   <div style={{ fontSize: 10.5, color: THEME.label, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Balance due</div>
                   <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{effBalance != null ? `$${effBalance.toLocaleString()}` : '$0'}</div>
                 </div>
-                <button onClick={onPay} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: '10px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', ...font }}>Pay</button>
+                <button onClick={() => { const p = (live.payables ?? []).filter(x => x.link); if (p.length === 1) window.open(p[0].link!, '_blank'); else if (p.length > 1) setPayOpen(true); else onPay?.() }} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: '10px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', ...font }}>Pay</button>
               </div>
             )}
 
@@ -241,6 +242,24 @@ export function CustomerPortalTemplate({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {payOpen && (
+        <div onClick={() => setPayOpen(false)} style={{ ...font, position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(4,10,20,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(420px, 96vw)', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 16 }}>
+            <div style={{ color: THEME.ink, fontSize: 15, fontWeight: 600 }}>Pay an invoice</div>
+            <div style={{ color: THEME.ink2, fontSize: 12, marginBottom: 12 }}>Opens the QuickBooks payment page in a new tab.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(live.payables ?? []).filter(p => p.link).map(p => (
+                <button key={p.id} onClick={() => window.open(p.link!, '_blank')} style={{ ...tile, padding: 12, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: THEME.ink, fontSize: 13 }}>{p.number}</span>
+                  <span style={{ color: accent, fontSize: 14, fontWeight: 700 }}>${p.balance.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}><button onClick={() => setPayOpen(false)} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 10, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>Close</button></div>
           </div>
         </div>
       )}

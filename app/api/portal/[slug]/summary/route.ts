@@ -3,10 +3,23 @@ import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 import { getSiteBrivoToken, listBrivoDoors, listBrivoEvents } from '@/lib/brivo'
+import { getQboAuth, qboApi } from '@/lib/qbo'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+// Lazily fetch a QBO invoice's "View and Pay" link (then cached on the invoice row).
+async function fetchQboPayLink(qbInvoiceId: string): Promise<string | null> {
+  try {
+    const auth = await getQboAuth()
+    if (!auth.ok) return null
+    const res = await qboApi(auth, `/invoice/${qbInvoiceId}?include=invoiceLink&minorversion=73`)
+    if (!res.ok) return null
+    const body = await res.json()
+    return body?.Invoice?.InvoiceLink ?? null
+  } catch { return null }
+}
 
 // GET /api/portal/[slug]/summary — read-only site data for the customer portal.
 // PIN-gated. Uses the SITE's stored vendor creds server-side (same feeds as the
@@ -49,18 +62,25 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     } catch { /* events optional */ }
   } catch { /* Brivo not connected */ }
 
-  // ── Open balance (portal + QBO-imported invoices) ────────────────────────
-  const balanceDue = await (async () => {
-    try {
-      const { data } = await supabase
-        .from('invoices')
-        .select('balance_due, status')
-        .eq('site_id', siteId)
-      if (!data) return null
-      const open = data.filter(i => i.status !== 'void' && Number(i.balance_due) > 0)
-      return open.reduce((s, i) => s + Number(i.balance_due || 0), 0)
-    } catch { return null }
-  })()
+  // ── Open balance + QBO "View and Pay" links ──────────────────────────────
+  let balanceDue: number | null = null
+  const payables: { id: string; number: string; balance: number; link: string | null }[] = []
+  try {
+    const { data } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, balance_due, status, qb_invoice_id, qbo_invoice_link')
+      .eq('site_id', siteId)
+    const open = (data ?? []).filter(i => i.status !== 'void' && Number(i.balance_due) > 0)
+    balanceDue = open.reduce((s, i) => s + Number(i.balance_due || 0), 0)
+    for (const inv of open) {
+      let link = (inv.qbo_invoice_link as string | null) ?? null
+      if (!link && inv.qb_invoice_id) {
+        link = await fetchQboPayLink(String(inv.qb_invoice_id))
+        if (link) await supabase.from('invoices').update({ qbo_invoice_link: link }).eq('id', inv.id)
+      }
+      payables.push({ id: inv.id, number: inv.invoice_number, balance: Number(inv.balance_due || 0), link })
+    }
+  } catch { /* billing optional */ }
 
-  return NextResponse.json({ cameras, doors, activity, balanceDue })
+  return NextResponse.json({ cameras, doors, activity, balanceDue, payables })
 }
