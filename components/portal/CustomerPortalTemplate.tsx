@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from 'react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Home, Video, Ticket, ListChecks, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Maximize2, Camera, Users, Search, UserPlus, X, Mail, Phone } = require('lucide-react') as any
+const { Home, Video, Ticket, ListChecks, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Maximize2, Camera, Users, Search, UserPlus, X, Mail, Phone, Zap, RotateCcw } = require('lucide-react') as any
 
 const THEME = {
   bg: '#0f1822', nav: '#141d28', panel: 'linear-gradient(180deg,#1d2a39,#141d28)',
@@ -163,7 +163,7 @@ export function CustomerPortalTemplate({
   const activityRows = effActivity.length ? effActivity : (config.slug ? [] : DEMO_ACTIVITY)
   const effBalance = live.balanceDue !== undefined ? live.balanceDue : balanceDue
 
-  const cams = effCameras.slice(0, 4)
+  const cams = effCameras
   const [activeCam, setActiveCam] = useState(0)
   const primaryCam = cams[activeCam] ?? cams[0]
 
@@ -231,9 +231,9 @@ export function CustomerPortalTemplate({
 
             {has('cameras') && cams.length > 0 && activeNav === 'home' && (
               <>
-                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 6, marginTop: 10 }}>
                   {cams.map((c, i) => (
-                    <button key={c.id} onClick={() => setActiveCam(i)} style={{ flex: 1, aspectRatio: '16 / 10', borderRadius: 8, background: THEME.well, border: i === activeCam ? `2px solid ${accent}` : `1px solid rgba(140,170,200,0.2)`, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}>
+                    <button key={c.id} onClick={() => setActiveCam(i)} onDoubleClick={() => setEnlarge({ id: c.id, name: c.name })} title="Click to view · double-click to enlarge" style={{ aspectRatio: '16 / 10', borderRadius: 8, background: THEME.well, border: i === activeCam ? `2px solid ${accent}` : `1px solid rgba(140,170,200,0.2)`, position: 'relative', overflow: 'hidden', cursor: 'pointer', padding: 0 }}>
                       {config.slug && c.id && <PortalCamImg slug={config.slug} cameraId={c.id} alt={c.name} intervalMs={4500} />}
                       <span style={{ position: 'absolute', bottom: 3, left: 5, fontSize: 8, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '0 3px', zIndex: 1 }}>{c.name}</span>
                     </button>
@@ -267,16 +267,11 @@ export function CustomerPortalTemplate({
               </div>
             )}
 
-            {has('passes') && show('passes') && (
-              <div id="sec-passes" style={{ marginTop: activeNav === 'home' ? 12 : 0, scrollMarginTop: 12 }}>
-                {config.slug && activeNav === 'passes' ? (
-                  <AccessManager slug={config.slug} accent={accent} onUnlock={() => setUnlockOpen(true)} onGuest={() => setPassOpen(true)} />
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <button onClick={() => config.slug ? setPassOpen(true) : onIssuePass?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><Ticket size={20} style={{ color: THEME.ok }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Issue a pass</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Visitor, vendor, or delivery</div></button>
-                    <button onClick={() => config.slug ? setUnlockOpen(true) : onUnlock?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><LockOpen size={20} style={{ color: accent }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Unlock a door</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Any entry, unit, or amenity</div></button>
-                  </div>
-                )}
+            {/* Access tab (full manager) renders in the left column at full width.
+                Home's quick pass/unlock/gate buttons now live in the RIGHT column. */}
+            {has('passes') && activeNav === 'passes' && config.slug && (
+              <div id="sec-passes" style={{ scrollMarginTop: 12 }}>
+                <AccessManager slug={config.slug} accent={accent} onUnlock={() => setUnlockOpen(true)} onGuest={() => setPassOpen(true)} />
               </div>
             )}
           </div>
@@ -288,6 +283,28 @@ export function CustomerPortalTemplate({
                 <LifeBuoy size={20} style={{ color: accent }} />
                 <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
               </button>
+            )}
+
+            {/* Quick actions — below Request Service, above Live activity. */}
+            {(has('passes') || has('gate')) && show('activity') && (
+              <div style={{ ...tile, padding: 12 }}>
+                <div style={{ ...eyebrow, marginBottom: 8 }}><Zap size={13} style={{ color: THEME.label }} /> Quick actions</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {has('passes') && (
+                    <button onClick={() => config.slug ? setPassOpen(true) : onIssuePass?.()} style={{ background: THEME.tile, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '10px 8px', cursor: 'pointer', ...font, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: THEME.ink }}><Ticket size={17} style={{ color: THEME.ok }} /><span style={{ fontSize: 11.5, fontWeight: 600 }}>Issue pass</span></button>
+                  )}
+                  {has('passes') && (
+                    <button onClick={() => config.slug ? setUnlockOpen(true) : onUnlock?.()} style={{ background: THEME.tile, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '10px 8px', cursor: 'pointer', ...font, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: THEME.ink }}><LockOpen size={17} style={{ color: accent }} /><span style={{ fontSize: 11.5, fontWeight: 600 }}>Unlock door</span></button>
+                  )}
+                  {has('gate') && (() => {
+                    const gate = doors.find(d => /gate|entry|entrance/i.test(d.name)) || doors[0]
+                    const busy = gate ? busyDoor === gate.id : false
+                    return (
+                      <button onClick={() => { if (config.slug && gate) doUnlock(gate.id, gate.name); else onOpenGate?.() }} disabled={busy} style={{ gridColumn: has('passes') ? '1 / -1' : 'auto', background: THEME.tile, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '10px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, ...font, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: THEME.ink }}><RotateCcw size={17} style={{ color: THEME.warn }} /><span style={{ fontSize: 11.5, fontWeight: 600 }}>{busy ? 'Opening…' : 'Reset gate'}</span></button>
+                    )
+                  })()}
+                </div>
+              </div>
             )}
             {has('activity') && show('activity') && (
               <div id="sec-activity" style={{ ...tile, padding: 14, scrollMarginTop: 12 }}>
