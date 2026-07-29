@@ -492,29 +492,13 @@ export function CustomerPortalTemplate({
   )
 }
 
-// ── Global preview concurrency limiter ──────────────────────────────────────
-// Eagle Eye's /feeds preview is a LIVE multipart stream; opening one per camera
-// and holding it (up to 8s on a slow/offline cam) quickly exhausts the account's
-// concurrent-preview capacity, so all but the first tile go dark. We cap the
-// WHOLE grid at 2 in-flight preview fetches at once and let the rest queue —
-// every camera then gets its turn instead of a few starving the others.
-let eePreviewActive = 0
-const eePreviewQueue: (() => void)[] = []
-const EE_PREVIEW_MAX = 2
-function acquirePreviewSlot(): Promise<void> {
-  if (eePreviewActive < EE_PREVIEW_MAX) { eePreviewActive++; return Promise.resolve() }
-  return new Promise<void>(resolve => eePreviewQueue.push(() => { eePreviewActive++; resolve() }))
-}
-function releasePreviewSlot() {
-  eePreviewActive = Math.max(0, eePreviewActive - 1)
-  const next = eePreviewQueue.shift()
-  if (next) next()
-}
-
-// Live preview: fetch→blob→objectURL (the internal LiveCam pattern) + steady
-// interval refresh, all gated by the global limiter above. Keeps the last good
-// frame while a refresh is pending; never overlaps its own fetches.
-function PortalCamImg({ slug, cameraId, alt, intervalMs = 4000 }: { slug: string; cameraId: string; alt: string; intervalMs?: number }) {
+// Live preview — mirrors the internal Systems `LiveCam` exactly, which reliably
+// streams every camera: fetch→blob→objectURL on a steady interval, all tiles
+// refreshing independently (no global limiter — Eagle Eye is fine with the whole
+// grid polling at once; the Systems page proves it). An `inFlight` guard prevents
+// a tile from overlapping its own fetch; the last good frame stays until the next
+// one lands. Indoor cameras emit preview frames slowly, so we just keep retrying.
+function PortalCamImg({ slug, cameraId, alt, intervalMs = 5000 }: { slug: string; cameraId: string; alt: string; intervalMs?: number }) {
   const [url, setUrl] = useState<string | null>(null)
   const urlRef = useRef<string | null>(null)
   const mounted = useRef(true)
@@ -526,7 +510,6 @@ function PortalCamImg({ slug, cameraId, alt, intervalMs = 4000 }: { slug: string
     const load = async () => {
       if (inFlight.current || !mounted.current) return
       inFlight.current = true
-      await acquirePreviewSlot()
       try {
         const r = await fetch(`${endpoint}&t=${Date.now()}`, { cache: 'no-store' })
         if (r.ok) {
@@ -540,7 +523,7 @@ function PortalCamImg({ slug, cameraId, alt, intervalMs = 4000 }: { slug: string
           }
         }
       } catch { /* keep last good frame */ }
-      finally { releasePreviewSlot(); inFlight.current = false }
+      finally { inFlight.current = false }
     }
     load()
     const timer = setInterval(load, intervalMs)

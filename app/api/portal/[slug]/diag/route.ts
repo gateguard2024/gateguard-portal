@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame } from '@/lib/eagle-eye'
-import { getSiteBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
+import { getSiteBrivoToken, getOrgBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
 import { getQboAuth } from '@/lib/qbo'
 
 export const dynamic = 'force-dynamic'
@@ -40,35 +40,44 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
 
   if (!siteId) { out.note = 'Portal not linked to a site.'; return NextResponse.json(out) }
 
-  // Eagle Eye — cameras list + a single preview frame
-  let firstCam: string | null = null
+  // Eagle Eye — cameras list + a preview frame for EVERY camera (which stream?)
+  let allCams: { id: string; name: string; online: boolean | null }[] = []
   await probe('eagle_eye_cameras', async () => {
     const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
     const cams = await listEagleEyeCameras(token, baseHost)
-    firstCam = cams[0]?.id ?? null
-    return { count: cams.length, baseHost, sample: cams.slice(0, 3).map(c => ({ id: c.id, name: c.name, online: c.online })) }
+    allCams = cams.map(c => ({ id: c.id, name: c.name, online: c.online }))
+    return { count: cams.length, baseHost }
   })
-  await probe('eagle_eye_preview', async () => {
-    if (!firstCam) return { skipped: 'no camera id' }
+  await probe('eagle_eye_preview_all', async () => {
     const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
-    const frame = await eagleEyePreviewFrame(token, baseHost, firstCam)
-    return { camera_id: firstCam, frame_bytes: frame ? frame.length : 0, got_frame: !!frame }
+    const results = []
+    for (const c of allCams) {
+      const t0 = Date.now()
+      const frame = await eagleEyePreviewFrame(token, baseHost, c.id).catch(() => null)
+      results.push({ name: c.name, online: c.online, ms: Date.now() - t0, bytes: frame ? frame.length : 0, streams: !!frame })
+    }
+    return { cameras: results, streaming: results.filter(r => r.streams).length, total: results.length }
   })
 
-  // Brivo — token + doors + events + users (users needs the Brivo Site ID)
-  await probe('brivo', async () => {
+  // Brivo — SITE token vs ORG token, so we can see if it's a scope/creds issue
+  await probe('brivo_site_token', async () => {
     const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
     const doors = await listBrivoDoors(token, apiKey, brivoSiteId).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
     const events = await listBrivoEvents(token, apiKey, 5).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
     const users = brivoSiteId
       ? await listBrivoUsers(token, apiKey, brivoSiteId).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
-      : '(no brivo_site_id saved — users cannot be listed)'
+      : '(no brivo_site_id saved)'
     return {
       has_brivo_site_id: !!brivoSiteId,
       doors: Array.isArray(doors) ? doors.length : doors,
       events: Array.isArray(events) ? events.length : events,
       users: Array.isArray(users) ? users.length : users,
     }
+  })
+  await probe('brivo_org_token', async () => {
+    const { token, apiKey } = await getOrgBrivoToken(v.portal.org_id)
+    const events = await listBrivoEvents(token, apiKey, 5).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
+    return { events: Array.isArray(events) ? events.length : events }
   })
 
   // QuickBooks — connection + invoices linked to this site
