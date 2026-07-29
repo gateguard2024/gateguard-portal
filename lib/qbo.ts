@@ -24,7 +24,7 @@ function db() {
   )
 }
 
-const OAUTH_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens'
+const OAUTH_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
 const AUTHORIZE_URL   = 'https://appcenter.intuit.com/connect/oauth2'
 export const QBO_SCOPE = 'com.intuit.quickbooks.accounting'
 
