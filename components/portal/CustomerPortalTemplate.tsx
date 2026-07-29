@@ -111,6 +111,27 @@ export function CustomerPortalTemplate({
 
   // Rewind clip player. (Live previews self-refresh inside PortalCamImg.)
   const [clip, setClip] = useState<{ camId: string; name: string } | null>(null)
+  // Cameras tab: enlarge (3/4 screen) + archive history browser.
+  const [enlarge, setEnlarge] = useState<{ id: string; name: string } | null>(null)
+  const enlargeRef = useRef<HTMLDivElement | null>(null)
+  const [hist, setHist] = useState<{ camId: string; name: string } | null>(null)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [histDate, setHistDate] = useState(todayStr)
+  const [histSegs, setHistSegs] = useState<{ start: string; end: string | null }[]>([])
+  const [histLoading, setHistLoading] = useState(false)
+  const [histPlayTs, setHistPlayTs] = useState<string | null>(null)
+  function openHistory(camId: string, name: string) { setHist({ camId, name }); setHistDate(todayStr); setHistPlayTs(null) }
+  useEffect(() => {
+    if (!hist || !config.slug) return
+    let cancelled = false
+    setHistLoading(true); setHistSegs([])
+    fetch(`/api/portal/${config.slug}/camera-history?camera_id=${encodeURIComponent(hist.camId)}&date=${histDate}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { segments: [] }))
+      .then(j => { if (!cancelled) setHistSegs(Array.isArray(j.segments) ? j.segments : []) })
+      .catch(() => { if (!cancelled) setHistSegs([]) })
+      .finally(() => { if (!cancelled) setHistLoading(false) })
+    return () => { cancelled = true }
+  }, [hist, histDate, config.slug])
   const [svc, setSvc] = useState<{ open: boolean; title: string; desc: string; contact: string; busy: boolean; done: boolean; err: string | null }>({ open: false, title: '', desc: '', contact: '', busy: false, done: false, err: null })
   async function submitService() {
     if (!config.slug || !svc.title.trim()) return
@@ -127,11 +148,13 @@ export function CustomerPortalTemplate({
   // (and highlights) each section. Genuinely useful on mobile where it stacks.
   const [activeNav, setActiveNav] = useState('home')
   const camViewRef = useRef<HTMLDivElement | null>(null)
+  // The rail is a view switcher: 'home' shows everything; any other key focuses
+  // that one section (full width). This makes every rail click visibly change the
+  // screen instead of scrolling within an already-visible single-screen layout.
+  const show = (key: string) => activeNav === 'home' || activeNav === key
   function goToSection(key: string) {
     setActiveNav(key)
-    if (key === 'home') { window.scrollTo({ top: 0, behavior: 'smooth' }); return }
-    const el = typeof document !== 'undefined' ? document.getElementById(`sec-${key}`) : null
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const effCameras = live.cameras && live.cameras.length ? live.cameras : cameras
@@ -185,9 +208,9 @@ export function CustomerPortalTemplate({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 14 }}>
-          <div>
-            {(has('cameras') || has('gate')) && (
+        <div style={{ display: 'grid', gridTemplateColumns: activeNav === 'home' ? '1.55fr 1fr' : '1fr', gap: 14 }}>
+          <div style={{ display: (show('cameras') || show('passes')) ? 'block' : 'none' }}>
+            {(has('cameras') || has('gate')) && activeNav === 'home' && (
               <div id="sec-cameras" ref={camViewRef} style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${THEME.border}`, boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)', background: `radial-gradient(120% 90% at 50% 8%, rgba(95,184,224,0.10), transparent 55%), radial-gradient(circle at 50% 42%, #1b2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {config.slug && primaryCam?.id
                   ? <PortalCamImg slug={config.slug} cameraId={primaryCam.id} alt={primaryCam.name} intervalMs={2500} />
@@ -206,7 +229,7 @@ export function CustomerPortalTemplate({
               </div>
             )}
 
-            {has('cameras') && cams.length > 0 && (
+            {has('cameras') && cams.length > 0 && activeNav === 'home' && (
               <>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   {cams.map((c, i) => (
@@ -220,16 +243,40 @@ export function CustomerPortalTemplate({
               </>
             )}
 
-            {has('passes') && (
-              <div id="sec-passes" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12, scrollMarginTop: 12 }}>
+            {/* Cameras tab — every camera, live. Double-click a tile to enlarge. */}
+            {has('cameras') && activeNav === 'cameras' && (
+              <div>
+                <div style={{ ...eyebrow, marginBottom: 12 }}><Video size={14} style={{ color: THEME.label }} /> All cameras · {effCameras.length}</div>
+                {effCameras.length === 0 ? (
+                  <div style={{ ...tile, padding: 24, textAlign: 'center', color: THEME.ink2, fontSize: 13 }}>No cameras are available on this site yet.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                    {effCameras.map(c => (
+                      <div key={c.id} onDoubleClick={() => setEnlarge({ id: c.id, name: c.name })} title="Double-click to enlarge" style={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 12, overflow: 'hidden', border: `1px solid ${THEME.border}`, background: THEME.well, cursor: 'pointer' }}>
+                        {config.slug && c.id && <PortalCamImg slug={config.slug} cameraId={c.id} alt={c.name} intervalMs={3500} />}
+                        <span style={{ position: 'absolute', top: 8, left: 8, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 5, padding: '2px 7px', zIndex: 2 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: THEME.alarm }} />LIVE</span>
+                        <span style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 11, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 5, padding: '2px 7px', zIndex: 2 }}>{c.name}</span>
+                        <div style={{ position: 'absolute', bottom: 7, right: 7, display: 'flex', gap: 6, zIndex: 2 }}>
+                          <button aria-label="Enlarge" title="Enlarge" onClick={e => { e.stopPropagation(); setEnlarge({ id: c.id, name: c.name }) }} style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8, padding: '6px 8px', cursor: 'pointer' }}><Maximize2 size={13} /></button>
+                          <button aria-label="History" title="Archive history" onClick={e => { e.stopPropagation(); openHistory(c.id, c.name) }} style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8, padding: '6px 8px', cursor: 'pointer' }}><History size={13} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {has('passes') && show('passes') && (
+              <div id="sec-passes" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: activeNav === 'home' ? 12 : 0, scrollMarginTop: 12 }}>
                 <button onClick={() => config.slug ? setPassOpen(true) : onIssuePass?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><Ticket size={20} style={{ color: THEME.ok }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Issue a pass</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Visitor, vendor, or delivery</div></button>
                 <button onClick={() => config.slug ? setUnlockOpen(true) : onUnlock?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><LockOpen size={20} style={{ color: accent }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Unlock a door</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Any entry, unit, or amenity</div></button>
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {has('activity') && (
+          <div style={{ display: (show('activity') || show('billing')) ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
+            {has('activity') && show('activity') && (
               <div id="sec-activity" style={{ ...tile, padding: 14, scrollMarginTop: 12 }}>
                 <div style={eyebrow}><ListChecks size={14} style={{ color: THEME.label }} /> Live activity</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -245,7 +292,7 @@ export function CustomerPortalTemplate({
               </div>
             )}
 
-            {has('billing') && (
+            {has('billing') && show('billing') && (
               <div id="sec-billing" style={{ ...tile, padding: 14, display: 'flex', alignItems: 'center', gap: 12, scrollMarginTop: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 10.5, color: THEME.label, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Balance due</div>
@@ -255,7 +302,7 @@ export function CustomerPortalTemplate({
               </div>
             )}
 
-            {has('service') && (
+            {has('service') && (show('billing') || show('activity')) && (
               <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
                 <LifeBuoy size={20} style={{ color: THEME.label }} />
                 <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
@@ -274,6 +321,68 @@ export function CustomerPortalTemplate({
             </div>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video controls autoPlay style={{ width: '100%', display: 'block', background: '#000', aspectRatio: '16 / 9' }} src={`/api/portal/${config.slug}/camera-clip?camera_id=${encodeURIComponent(clip.camId)}&ts=${encodeURIComponent(new Date(Date.now() - 120000).toISOString())}`} />
+          </div>
+        </div>
+      )}
+
+      {/* Enlarge — 3/4-screen live view, expandable to fullscreen. */}
+      {enlarge && config.slug && (
+        <div onClick={() => setEnlarge(null)} style={{ ...font, position: 'fixed', inset: 0, zIndex: 92, background: 'rgba(4,10,20,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div ref={enlargeRef} onClick={e => e.stopPropagation()} style={{ width: '76vw', height: '76vh', maxWidth: '100%', maxHeight: '100%', background: '#050b13', border: `1px solid ${THEME.border}`, borderRadius: 14, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: `1px solid ${THEME.border}`, background: THEME.nav }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: THEME.ink, display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: THEME.alarm }} />{enlarge.name} · live</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => openHistory(enlarge.id, enlarge.name)} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 8, padding: '6px 11px', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><History size={13} /> History</button>
+                <button onClick={() => { try { enlargeRef.current?.requestFullscreen?.() } catch { /* unsupported */ } }} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 8, padding: '6px 11px', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Maximize2 size={13} /> Fullscreen</button>
+                <button onClick={() => setEnlarge(null)} style={{ background: 'transparent', border: 'none', color: THEME.ink2, cursor: 'pointer', fontSize: 13 }}>✕ Close</button>
+              </div>
+            </div>
+            <div style={{ position: 'relative', flex: 1, background: '#000' }}>
+              <PortalCamImg slug={config.slug} cameraId={enlarge.id} alt={enlarge.name} intervalMs={2000} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive history browser — pick a day, see available recordings, play them. */}
+      {hist && config.slug && (
+        <div onClick={() => { setHist(null); setHistPlayTs(null) }} style={{ ...font, position: 'fixed', inset: 0, zIndex: 93, background: 'rgba(4,10,20,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(1000px, 96vw)', maxHeight: '92vh', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: `1px solid ${THEME.border}`, background: THEME.nav }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: THEME.ink, display: 'inline-flex', alignItems: 'center', gap: 6 }}><History size={14} /> {hist.name} · archive</div>
+              <button onClick={() => { setHist(null); setHistPlayTs(null) }} style={{ background: 'transparent', border: 'none', color: THEME.ink2, cursor: 'pointer', fontSize: 13 }}>✕ Close</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', flex: 1, minHeight: 0 }}>
+              {/* Left: date + segment list */}
+              <div style={{ borderRight: `1px solid ${THEME.border}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: THEME.label, marginBottom: 4 }}>Date</label>
+                  <input type="date" value={histDate} max={todayStr} onChange={e => { setHistDate(e.target.value); setHistPlayTs(null) }} style={{ width: '100%', background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '8px 10px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ fontSize: 10.5, color: THEME.label, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{histLoading ? 'Loading…' : `${histSegs.length} recording${histSegs.length === 1 ? '' : 's'}`}</div>
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
+                  {!histLoading && histSegs.length === 0 && <div style={{ fontSize: 12, color: THEME.ink2 }}>No archived video found for this day.</div>}
+                  {histSegs.map(s => {
+                    const active = histPlayTs === s.start
+                    return (
+                      <button key={s.start} onClick={() => setHistPlayTs(s.start)} style={{ ...tile, padding: '9px 11px', textAlign: 'left', cursor: 'pointer', border: active ? `1px solid ${accent}` : `1px solid ${THEME.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <History size={13} style={{ color: active ? accent : THEME.label }} />
+                        <span style={{ fontSize: 12.5, color: THEME.ink }}>{fmtClock(s.start)}{s.end ? ` – ${fmtClock(s.end)}` : ''}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              {/* Right: player */}
+              <div style={{ background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+                {histPlayTs ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video key={histPlayTs} controls autoPlay style={{ width: '100%', height: '100%', maxHeight: '78vh', background: '#000' }} src={`/api/portal/${config.slug}/camera-clip?camera_id=${encodeURIComponent(hist.camId)}&ts=${encodeURIComponent(histPlayTs)}`} />
+                ) : (
+                  <div style={{ color: THEME.ink2, fontSize: 13, textAlign: 'center', padding: 20 }}><History size={26} style={{ color: '#46617a' }} /><div style={{ marginTop: 8 }}>Select a recording to play.</div></div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -377,50 +486,70 @@ export function CustomerPortalTemplate({
   )
 }
 
-// Self-scheduling live preview: fetches the next JPEG only AFTER the current one
-// finishes loading (or errors), then waits intervalMs. This is the fix for "only
-// one camera pulls feeds" — the old shared 2s tick reassigned every <img> src on
-// a fixed timer, so any camera slower than 2s never finished a frame. Each tile
-// now advances at its own pace and keeps the last good frame until the next lands.
+// Live preview using the fetch→blob→objectURL pattern — the SAME approach the
+// internal Systems page (LiveCam) uses, which streams every camera reliably. The
+// old direct `<img src=API_URL>` polling stalled all but one tile: native <img>
+// loads of a slow, no-store, same-host endpoint across many tiles get serialized
+// by the browser and never complete. Fetching to a blob sidesteps that. We only
+// swap to a frame once it's fully downloaded, and schedule the next fetch only
+// after the current one settles, so slow cameras keep their last good frame.
 function PortalCamImg({ slug, cameraId, alt, intervalMs = 3000 }: { slug: string; cameraId: string; alt: string; intervalMs?: number }) {
-  const [src, setSrc] = useState<string>('')
-  const [everLoaded, setEverLoaded] = useState(false)
+  const [url, setUrl] = useState<string | null>(null)
+  const urlRef = useRef<string | null>(null)
   const mounted = useRef(true)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     mounted.current = true
-    setEverLoaded(false)
-    setSrc(`/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(cameraId)}&t=${Date.now()}`)
-    return () => { mounted.current = false; if (timer.current) clearTimeout(timer.current) }
-  }, [slug, cameraId])
+    const endpoint = `/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(cameraId)}`
+    const schedule = () => {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(() => { if (mounted.current) load() }, intervalMs)
+    }
+    const load = () => {
+      fetch(`${endpoint}&t=${Date.now()}`, { cache: 'no-store' })
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.blob() })
+        .then(blob => {
+          if (!mounted.current) return
+          if (blob.size > 0) {
+            const next = URL.createObjectURL(blob)
+            const prev = urlRef.current
+            urlRef.current = next
+            setUrl(next)
+            if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000)
+          }
+          schedule()
+        })
+        .catch(() => { if (mounted.current) schedule() })
+    }
+    load()
+    return () => {
+      mounted.current = false
+      if (timer.current) clearTimeout(timer.current)
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+    }
+  }, [slug, cameraId, intervalMs])
 
-  const scheduleNext = () => {
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => {
-      if (mounted.current) setSrc(`/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(cameraId)}&t=${Date.now()}`)
-    }, intervalMs)
+  if (!url) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#46617a' }}>
+        <Camera size={26} /><span style={{ fontSize: 10, color: THEME.label }}>Connecting…</span>
+      </div>
+    )
   }
-
   return (
-    <>
-      {!everLoaded && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#46617a' }}>
-          <Camera size={26} /><span style={{ fontSize: 10, color: THEME.label }}>Connecting…</span>
-        </div>
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={alt} src={src || undefined}
-        onLoad={() => { if (mounted.current) { setEverLoaded(true); scheduleNext() } }}
-        onError={() => { if (mounted.current) scheduleNext() }}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: everLoaded ? 1 : 0, transition: 'opacity 0.3s' }} />
-    </>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt} src={url} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
   )
 }
 
 function greeting() {
   const h = new Date().getHours()
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+}
+
+function fmtClock(iso: string) {
+  try { return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }) } catch { return iso }
 }
 
 const DEMO_ACTIVITY: PortalActivity[] = [

@@ -142,6 +142,30 @@ export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, de
   } catch { return null }
 }
 
+export interface EagleEyeSegment { start: string; end: string | null; mp4Url: string | null }
+
+/** List recorded video segments for a camera within a time window (for an archive
+ * browser). EEN v3 /media returns rows with startTimestamp; include=mp4Url adds a
+ * playable URL per row. Newest first. */
+export async function eagleEyeListRecordedSegments(
+  token: string, baseHost: string, deviceId: string, startISO: string, endISO: string
+): Promise<EagleEyeSegment[]> {
+  try {
+    const res = await fetch(
+      `https://${baseHost}/api/v3.0/media?deviceId=${encodeURIComponent(deviceId)}&type=main&mediaType=video&startTimestamp__gte=${encodeURIComponent(startISO)}&startTimestamp__lte=${encodeURIComponent(endISO)}&include=mp4Url&pageSize=200`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
+    )
+    if (!res.ok) return []
+    const j = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (j.results ?? j.data ?? []) as any[]
+    return rows
+      .map(r => ({ start: r.startTimestamp ?? r.start ?? null, end: r.endTimestamp ?? r.end ?? null, mp4Url: r.mp4Url ?? null }))
+      .filter(r => r.start)
+      .sort((a, b) => (a.start < b.start ? 1 : -1))
+  } catch { return [] }
+}
+
 /** Fetch the bytes of a recorded MP4 url (token auth) for proxying to <video>. */
 export async function eagleEyeFetchMp4(token: string, mp4Url: string): Promise<{ buf: Buffer; type: string } | null> {
   try {
