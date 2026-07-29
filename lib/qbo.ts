@@ -16,12 +16,31 @@
  * expire hourly — the OAuth connect flow is the durable path).
  */
 import { createClient } from '@supabase/supabase-js'
+import { encryptJson, decryptJson, credsKeyConfigured } from '@/lib/crypto-creds'
 
 function db() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+// ── Token encryption at rest ────────────────────────────────────────────────
+// QBO access/refresh tokens are encrypted with the shared CREDENTIALS_ENC_KEY
+// (same AES-256-GCM scheme protecting Brivo/Eagle Eye keys) before they touch
+// the DB. Reads are backward-compatible: any legacy plaintext row still works,
+// and gets re-encrypted the next time it's written (connect or refresh).
+function encTok(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  if (!credsKeyConfigured()) return raw // no key configured → store as-is (fallback)
+  return encryptJson({ t: raw })
+}
+function decTok(stored: string | null | undefined): string | null {
+  if (!stored) return null
+  if (stored.startsWith('v1:') && stored.split(':').length === 4) {
+    try { return decryptJson<{ t: string }>(stored).t } catch { return null }
+  }
+  return stored // legacy plaintext row
 }
 
 const OAUTH_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
@@ -96,8 +115,8 @@ export async function exchangeCodeAndSave(
     const { error } = await db().from('qbo_connection').upsert({
       realm_id: realmId,
       environment: qboEnvironment(),
-      access_token: tok.access_token,
-      refresh_token: tok.refresh_token,
+      access_token: encTok(tok.access_token),
+      refresh_token: encTok(tok.refresh_token),
       access_expires_at: new Date(now + tok.expires_in * 1000).toISOString(),
       refresh_expires_at: new Date(now + tok.x_refresh_token_expires_in * 1000).toISOString(),
       connected_by: connectedBy,
@@ -150,14 +169,16 @@ export async function getQboAuth(): Promise<QboAuth> {
   }
 
   const env = (conn.environment === 'sandbox' ? 'sandbox' : 'production') as 'production' | 'sandbox'
+  const accessToken = decTok(conn.access_token)
+  const refreshToken = decTok(conn.refresh_token)
   const expiresAt = conn.access_expires_at ? new Date(conn.access_expires_at).getTime() : 0
-  const needsRefresh = !conn.access_token || Date.now() > expiresAt - 120_000
+  const needsRefresh = !accessToken || Date.now() > expiresAt - 120_000
 
-  if (!needsRefresh && conn.access_token) {
-    return { ok: true, token: conn.access_token, realmId: conn.realm_id, environment: env }
+  if (!needsRefresh && accessToken) {
+    return { ok: true, token: accessToken, realmId: conn.realm_id, environment: env }
   }
 
-  if (!conn.refresh_token) {
+  if (!refreshToken) {
     return { ok: false, reason: 'QuickBooks token expired and no refresh token is stored — reconnect QBO.' }
   }
   if (!process.env.QBO_CLIENT_ID || !process.env.QBO_CLIENT_SECRET) {
@@ -166,12 +187,12 @@ export async function getQboAuth(): Promise<QboAuth> {
 
   try {
     const tok = await postTokenEndpoint(new URLSearchParams({
-      grant_type: 'refresh_token', refresh_token: conn.refresh_token,
+      grant_type: 'refresh_token', refresh_token: refreshToken,
     }))
     const now = Date.now()
     const { error } = await db().from('qbo_connection').update({
-      access_token: tok.access_token,
-      refresh_token: tok.refresh_token, // QBO rotates the refresh token
+      access_token: encTok(tok.access_token),
+      refresh_token: encTok(tok.refresh_token), // QBO rotates the refresh token
       access_expires_at: new Date(now + tok.expires_in * 1000).toISOString(),
       refresh_expires_at: new Date(now + tok.x_refresh_token_expires_in * 1000).toISOString(),
       last_refreshed_at: new Date(now).toISOString(),

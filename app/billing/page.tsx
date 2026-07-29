@@ -253,6 +253,24 @@ export default function BillingPage() {
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
   useEffect(() => { fetchPayouts()  }, [fetchPayouts])
 
+  // Pull open invoices from QuickBooks and upsert them (mapped to each site via
+  // its linked QB customer). Refreshes the list so balances appear here + on the
+  // matching customer portal.
+  const [qboSyncing, setQboSyncing] = useState(false)
+  async function syncFromQuickBooks() {
+    setQboSyncing(true)
+    try {
+      const res = await fetch('/api/integrations/quickbooks/import', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(json.error || 'QuickBooks import failed.'); return }
+      const parts = [`${json.processed ?? 0} invoice(s) imported`]
+      if (json.skippedNoMapping) parts.push(`${json.skippedNoMapping} skipped (no site/customer link)`)
+      alert(parts.join(' · '))
+      await fetchInvoices()
+    } catch { alert('QuickBooks import failed.') }
+    finally { setQboSyncing(false) }
+  }
+
   // Debounced invoice search
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current)
@@ -632,12 +650,21 @@ export default function BillingPage() {
         title="Billing"
         subtitle="Invoices · Commissions · QuickBooks"
         actions={
-          <button
-            onClick={() => { setNewInvOpen(true); fetchSites() }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white text-sm font-medium transition-colors shadow-lg shadow-[#6B7EFF]/20"
-          >
-            <Plus size={15} /> New Invoice
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={syncFromQuickBooks}
+              disabled={qboSyncing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={15} className={qboSyncing ? 'animate-spin' : ''} /> {qboSyncing ? 'Syncing…' : 'Sync from QuickBooks'}
+            </button>
+            <button
+              onClick={() => { setNewInvOpen(true); fetchSites() }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white text-sm font-medium transition-colors shadow-lg shadow-[#6B7EFF]/20"
+            >
+              <Plus size={15} /> New Invoice
+            </button>
+          </div>
         }
       />
 
