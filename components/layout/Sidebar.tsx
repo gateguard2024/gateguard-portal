@@ -159,7 +159,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Nexus Tracker",     href: "/tracker",        icon: ClipboardList, description: "Bug & enhancement tracker", badge: "Beta" },
       { label: "Co-Op Pool",       href: "/marketing/coop", icon: Users,    description: "Shared lead pool" },
-      { label: "Customer Portals", href: "/portal",         icon: Globe,    description: "Property manager view" },
+      { label: "Customer Portals", href: "/admin/portals",  icon: Globe,    description: "Provision & manage site portals" },
     ],
   },
 ];
@@ -304,7 +304,7 @@ export function Sidebar() {
     "/tracker":                "nexus.tracker",
     "/playbooks":              "internal.playbooks",
     "/marketing/coop":         "internal.coop",
-    "/portal":                 "internal.portals",
+    "/admin/portals":          "internal.portals",
     // AI Agents
     "/aria":                   "ai.aria",
     "/trinity":                "ai.trinity",

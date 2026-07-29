@@ -98,6 +98,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (
+    <>
     <div style={card}>
       <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Connections</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>This property&apos;s own Brivo, Eagle Eye, Shelly, and UniFi logins. Stored encrypted — never shown again.</div>
@@ -161,6 +162,58 @@ export function SiteConnections({ siteId }: { siteId: string }) {
               </div>
             );
           })}
+        </div>
+      )}
+      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
+    </div>
+    <SiteQuickBooks siteId={siteId} />
+    </>
+  );
+}
+
+// QuickBooks lives in Systems too: one Gate Guard QBO company, each site linked to
+// its Customer record. From that link, invoices + the customer portal (balance, Pay
+// links) all resolve — no re-entering anything.
+function SiteQuickBooks({ siteId }: { siteId: string }) {
+  const [data, setData] = useState<{ connected: boolean; current: { id: string; name: string } | null; customers: { id: string; name: string }[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pick, setPick] = useState("");
+  const load = React.useCallback(() => {
+    fetch(`/api/sites/${siteId}/qbo-customer`).then(r => r.json()).then(d => { setData(d); setPick(d?.current?.id ?? ""); }).catch(() => {});
+  }, [siteId]);
+  useEffect(() => { load(); }, [load]);
+  async function save() {
+    const cust = data?.customers.find(c => c.id === pick);
+    setBusy(true); setMsg(null);
+    const r = await fetch(`/api/sites/${siteId}/qbo-customer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ qbo_customer_id: pick || null, qbo_customer_name: cust?.name ?? null }) }).then(x => x.json()).catch(() => null);
+    setBusy(false);
+    if (r?.ok) { setMsg("Linked ✓"); load(); } else setMsg(r?.error || "Couldn't save.");
+  }
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18, marginTop: 12 } as const;
+  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}>QuickBooks · Billing</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Link this property to its Customer in your Gate Guard QuickBooks. Invoices, portal balance &amp; Pay all resolve from here.</div>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: data?.connected ? "#7ee0a8" : "#fbbf24", whiteSpace: "nowrap" }}>{data?.connected ? "Connected" : "Not connected"}</span>
+      </div>
+      {data && !data.connected && (
+        <button onClick={() => { window.location.href = "/api/integrations/quickbooks/connect"; }} style={{ marginTop: 12, fontSize: 12, fontWeight: 600, background: "rgba(45,127,184,0.2)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "8px 14px", cursor: "pointer" }}>Connect QuickBooks →</button>
+      )}
+      {data?.connected && (
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          <select value={pick} onChange={e => setPick(e.target.value)} style={input}>
+            <option value="">— link this site to a QuickBooks customer —</option>
+            {(data.customers ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save link"}</button>
+            {data.current && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Currently: {data.current.name}</span>}
+          </div>
         </div>
       )}
       {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fbbf24", marginTop: 10 }}>{msg}</div>}

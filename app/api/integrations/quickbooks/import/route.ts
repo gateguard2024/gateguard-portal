@@ -35,7 +35,15 @@ export async function POST() {
   const q = await qboQuery<QBInvoice>(auth, "select * from Invoice where Balance > '0' maxresults 1000")
   if (!q.ok) return NextResponse.json({ error: q.error }, { status: 502 })
 
-  // Map QBO Customer Id → portal org id.
+  // Map QBO Customer Id → SITE (preferred, so the customer portal finds it by
+  // site_id) and → org (fallback / owning tenant).
+  const { data: sitesData } = await supabase
+    .from('sites')
+    .select('id, org_id, qbo_customer_id')
+    .not('qbo_customer_id', 'is', null)
+  const siteByCustomer = new Map<string, { site_id: string; org_id: string | null }>()
+  for (const s of sitesData ?? []) if (s.qbo_customer_id) siteByCustomer.set(String(s.qbo_customer_id), { site_id: s.id, org_id: s.org_id })
+
   const { data: orgs } = await supabase
     .from('organizations')
     .select('id, qbo_customer_id')
@@ -50,8 +58,9 @@ export async function POST() {
 
   for (const inv of q.rows) {
     const custId = inv.CustomerRef?.value
-    const orgId = custId ? orgByCustomer.get(custId) : undefined
-    if (!orgId) { skippedNoMapping++; continue }
+    const siteMatch = custId ? siteByCustomer.get(custId) : undefined
+    const orgId = siteMatch?.org_id ?? (custId ? orgByCustomer.get(custId) : undefined) ?? null
+    if (!siteMatch && !orgId) { skippedNoMapping++; continue }
 
     const total = Number(inv.TotalAmt ?? 0)
     const balance = Number(inv.Balance ?? 0)
@@ -61,6 +70,7 @@ export async function POST() {
     const row = {
       org_id: orgId,
       client_org_id: orgId,
+      site_id: siteMatch?.site_id ?? null,   // per-site link → the customer portal finds it
       invoice_number: `QB-${inv.DocNumber || inv.Id}`,
       status,
       issue_date: inv.TxnDate || today,
