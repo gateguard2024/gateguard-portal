@@ -50,6 +50,9 @@ function isBypassPath(pathname: string): boolean {
     // (the landing page) rather than the dealer /sign-in wall.
     pathname.startsWith('/portal') ||
     pathname.startsWith('/api/portal') ||
+    // Public legal pages — Privacy Policy + Terms/EULA (linked from the Intuit app, no login)
+    pathname.startsWith('/privacy') ||
+    pathname.startsWith('/terms') ||
     // Public "find a dealer" directory — called from gateguard.co contact section
     pathname.startsWith('/api/dealers/locator') ||
     // Conference landing page — public lead capture

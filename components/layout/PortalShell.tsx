@@ -33,9 +33,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isDesignStudio = pathname.startsWith('/design/studio') // rebuilt design tool — glass, full-screen
   const isDesignCanvas = pathname.startsWith('/design/floor-plans') // evolved design tool — full-screen, own rail
   const isPortal     = pathname.startsWith('/portal') // customer-facing client portal — branded, standalone
+  const isLegal      = pathname.startsWith('/privacy') || pathname.startsWith('/terms') // public legal pages
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
   const isFullGlass = isAria || isDesignStudio || isDesignCanvas  // 100dvh flex-column, own internal scroll
 
