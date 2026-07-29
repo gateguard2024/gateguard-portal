@@ -73,6 +73,17 @@ export function CustomerPortalTemplate({
   const [tick, setTick] = useState(0)
   useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 2000); return () => clearInterval(t) }, [])
   const [clip, setClip] = useState<{ camId: string; name: string } | null>(null)
+  const [svc, setSvc] = useState<{ open: boolean; title: string; desc: string; contact: string; busy: boolean; done: boolean; err: string | null }>({ open: false, title: '', desc: '', contact: '', busy: false, done: false, err: null })
+  async function submitService() {
+    if (!config.slug || !svc.title.trim()) return
+    setSvc(s => ({ ...s, busy: true, err: null }))
+    try {
+      const r = await fetch(`/api/portal/${config.slug}/request-service`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: svc.title, description: svc.desc, contact_name: svc.contact }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setSvc(s => ({ ...s, busy: false, err: j.error || 'Could not send.' })); return }
+      setSvc(s => ({ ...s, busy: false, done: true, title: '', desc: '' }))
+    } catch { setSvc(s => ({ ...s, busy: false, err: 'Could not send.' })) }
+  }
 
   const effCameras = live.cameras && live.cameras.length ? live.cameras : cameras
   const effActivity = live.activity && live.activity.length ? live.activity : activity
@@ -184,7 +195,7 @@ export function CustomerPortalTemplate({
             )}
 
             {has('service') && (
-              <button onClick={onRequestService} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
+              <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
                 <LifeBuoy size={20} style={{ color: THEME.label }} />
                 <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
               </button>
@@ -202,6 +213,34 @@ export function CustomerPortalTemplate({
             </div>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video controls autoPlay style={{ width: '100%', display: 'block', background: '#000', aspectRatio: '16 / 9' }} src={`/api/portal/${config.slug}/camera-clip?camera_id=${encodeURIComponent(clip.camId)}&ts=${encodeURIComponent(new Date(Date.now() - 120000).toISOString())}`} />
+          </div>
+        </div>
+      )}
+
+      {svc.open && (
+        <div onClick={() => setSvc(s => ({ ...s, open: false }))} style={{ ...font, position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(4,10,20,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(440px, 96vw)', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 18 }}>
+            {svc.done ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 30 }}>✅</div>
+                <div style={{ color: THEME.ink, fontSize: 16, fontWeight: 600, marginTop: 6 }}>Request sent</div>
+                <div style={{ color: THEME.ink2, fontSize: 12.5, marginTop: 4 }}>Gate Guard will follow up shortly.</div>
+                <button onClick={() => setSvc(s => ({ ...s, open: false }))} style={{ marginTop: 14, background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', ...font }}>Done</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ color: THEME.ink, fontSize: 15, fontWeight: 600 }}>Request service</div>
+                <div style={{ color: THEME.ink2, fontSize: 12, marginBottom: 12 }}>Report a broken gate, camera, or lock.</div>
+                <input value={svc.title} onChange={e => setSvc(s => ({ ...s, title: e.target.value }))} placeholder="What's wrong?" style={{ width: '100%', background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 10, padding: '10px 12px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+                <textarea value={svc.desc} onChange={e => setSvc(s => ({ ...s, desc: e.target.value }))} placeholder="Any details (optional)…" rows={3} style={{ width: '100%', background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 10, padding: '10px 12px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', resize: 'none', marginBottom: 8 }} />
+                <input value={svc.contact} onChange={e => setSvc(s => ({ ...s, contact: e.target.value }))} placeholder="Your name (optional)" style={{ width: '100%', background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 10, padding: '10px 12px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                {svc.err && <div style={{ color: THEME.alarm, fontSize: 12, marginTop: 8 }}>{svc.err}</div>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setSvc(s => ({ ...s, open: false }))} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 10, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={submitService} disabled={svc.busy || !svc.title.trim()} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: svc.busy || !svc.title.trim() ? 0.5 : 1 }}>{svc.busy ? 'Sending…' : 'Send request'}</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
