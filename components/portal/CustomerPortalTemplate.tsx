@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from 'react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Home, Video, Ticket, ListChecks, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Maximize2, Camera } = require('lucide-react') as any
+const { Home, Video, Ticket, ListChecks, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Maximize2, Camera, Users, Search, UserPlus, X, Mail, Phone } = require('lucide-react') as any
 
 const THEME = {
   bg: '#0f1822', nav: '#141d28', panel: 'linear-gradient(180deg,#1d2a39,#141d28)',
@@ -268,14 +268,27 @@ export function CustomerPortalTemplate({
             )}
 
             {has('passes') && show('passes') && (
-              <div id="sec-passes" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: activeNav === 'home' ? 12 : 0, scrollMarginTop: 12 }}>
-                <button onClick={() => config.slug ? setPassOpen(true) : onIssuePass?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><Ticket size={20} style={{ color: THEME.ok }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Issue a pass</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Visitor, vendor, or delivery</div></button>
-                <button onClick={() => config.slug ? setUnlockOpen(true) : onUnlock?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><LockOpen size={20} style={{ color: accent }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Unlock a door</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Any entry, unit, or amenity</div></button>
+              <div id="sec-passes" style={{ marginTop: activeNav === 'home' ? 12 : 0, scrollMarginTop: 12 }}>
+                {config.slug && activeNav === 'passes' ? (
+                  <AccessManager slug={config.slug} accent={accent} onUnlock={() => setUnlockOpen(true)} onGuest={() => setPassOpen(true)} />
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <button onClick={() => config.slug ? setPassOpen(true) : onIssuePass?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><Ticket size={20} style={{ color: THEME.ok }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Issue a pass</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Visitor, vendor, or delivery</div></button>
+                    <button onClick={() => config.slug ? setUnlockOpen(true) : onUnlock?.()} style={{ ...tile, padding: 14, textAlign: 'left', cursor: 'pointer', ...font }}><LockOpen size={20} style={{ color: accent }} /><div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Unlock a door</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Any entry, unit, or amenity</div></button>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           <div style={{ display: (show('activity') || show('billing')) ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
+            {/* Request service — pinned to the TOP of the events column, above the feed. */}
+            {has('service') && (show('billing') || show('activity')) && (
+              <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
+                <LifeBuoy size={20} style={{ color: accent }} />
+                <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
+              </button>
+            )}
             {has('activity') && show('activity') && (
               <div id="sec-activity" style={{ ...tile, padding: 14, scrollMarginTop: 12 }}>
                 <div style={eyebrow}><ListChecks size={14} style={{ color: THEME.label }} /> Live activity</div>
@@ -300,13 +313,6 @@ export function CustomerPortalTemplate({
                 </div>
                 <button onClick={() => { const p = (live.payables ?? []).filter(x => x.link); if (p.length === 1) window.open(p[0].link!, '_blank'); else if (p.length > 1) setPayOpen(true); else onPay?.() }} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: '10px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', ...font }}>Pay</button>
               </div>
-            )}
-
-            {has('service') && (show('billing') || show('activity')) && (
-              <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
-                <LifeBuoy size={20} style={{ color: THEME.label }} />
-                <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
-              </button>
             )}
           </div>
         </div>
@@ -486,46 +492,61 @@ export function CustomerPortalTemplate({
   )
 }
 
-// Live preview using the fetch→blob→objectURL pattern — the SAME approach the
-// internal Systems page (LiveCam) uses, which streams every camera reliably. The
-// old direct `<img src=API_URL>` polling stalled all but one tile: native <img>
-// loads of a slow, no-store, same-host endpoint across many tiles get serialized
-// by the browser and never complete. Fetching to a blob sidesteps that. We only
-// swap to a frame once it's fully downloaded, and schedule the next fetch only
-// after the current one settles, so slow cameras keep their last good frame.
-function PortalCamImg({ slug, cameraId, alt, intervalMs = 3000 }: { slug: string; cameraId: string; alt: string; intervalMs?: number }) {
+// ── Global preview concurrency limiter ──────────────────────────────────────
+// Eagle Eye's /feeds preview is a LIVE multipart stream; opening one per camera
+// and holding it (up to 8s on a slow/offline cam) quickly exhausts the account's
+// concurrent-preview capacity, so all but the first tile go dark. We cap the
+// WHOLE grid at 2 in-flight preview fetches at once and let the rest queue —
+// every camera then gets its turn instead of a few starving the others.
+let eePreviewActive = 0
+const eePreviewQueue: (() => void)[] = []
+const EE_PREVIEW_MAX = 2
+function acquirePreviewSlot(): Promise<void> {
+  if (eePreviewActive < EE_PREVIEW_MAX) { eePreviewActive++; return Promise.resolve() }
+  return new Promise<void>(resolve => eePreviewQueue.push(() => { eePreviewActive++; resolve() }))
+}
+function releasePreviewSlot() {
+  eePreviewActive = Math.max(0, eePreviewActive - 1)
+  const next = eePreviewQueue.shift()
+  if (next) next()
+}
+
+// Live preview: fetch→blob→objectURL (the internal LiveCam pattern) + steady
+// interval refresh, all gated by the global limiter above. Keeps the last good
+// frame while a refresh is pending; never overlaps its own fetches.
+function PortalCamImg({ slug, cameraId, alt, intervalMs = 4000 }: { slug: string; cameraId: string; alt: string; intervalMs?: number }) {
   const [url, setUrl] = useState<string | null>(null)
   const urlRef = useRef<string | null>(null)
   const mounted = useRef(true)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inFlight = useRef(false)
 
   useEffect(() => {
     mounted.current = true
     const endpoint = `/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(cameraId)}`
-    const schedule = () => {
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => { if (mounted.current) load() }, intervalMs)
-    }
-    const load = () => {
-      fetch(`${endpoint}&t=${Date.now()}`, { cache: 'no-store' })
-        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.blob() })
-        .then(blob => {
-          if (!mounted.current) return
-          if (blob.size > 0) {
+    const load = async () => {
+      if (inFlight.current || !mounted.current) return
+      inFlight.current = true
+      await acquirePreviewSlot()
+      try {
+        const r = await fetch(`${endpoint}&t=${Date.now()}`, { cache: 'no-store' })
+        if (r.ok) {
+          const blob = await r.blob()
+          if (mounted.current && blob.size > 0) {
             const next = URL.createObjectURL(blob)
             const prev = urlRef.current
             urlRef.current = next
             setUrl(next)
             if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000)
           }
-          schedule()
-        })
-        .catch(() => { if (mounted.current) schedule() })
+        }
+      } catch { /* keep last good frame */ }
+      finally { releasePreviewSlot(); inFlight.current = false }
     }
     load()
+    const timer = setInterval(load, intervalMs)
     return () => {
       mounted.current = false
-      if (timer.current) clearTimeout(timer.current)
+      clearInterval(timer)
       if (urlRef.current) URL.revokeObjectURL(urlRef.current)
     }
   }, [slug, cameraId, intervalMs])
@@ -540,6 +561,207 @@ function PortalCamImg({ slug, cameraId, alt, intervalMs = 3000 }: { slug: string
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} src={url} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+  )
+}
+
+// ── Access manager — the Ticket tab. Mirrors the internal Systems "Site users"
+// surface (look up, edit, issue/revoke pass, suspend/reactivate, add user, guest
+// pass) but in a larger two-pane interface. All calls PIN-gated server-side.
+type BrivoU = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; unitNumber: string | null; active: boolean; groupIds?: string[]; groupNames?: string[] }
+type BrivoCred = { id: string; label: string; type: string; isPass: boolean; active: boolean; effectiveFrom: string | null; effectiveTo: string | null }
+
+function AccessManager({ slug, accent, onUnlock, onGuest }: { slug: string; accent: string; onUnlock: () => void; onGuest: () => void }) {
+  const font = { fontFamily: "'DM Sans', var(--font-dm-sans, system-ui), sans-serif" } as const
+  const tileS = { background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 12 } as const
+  const inp: React.CSSProperties = { background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '9px 11px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', width: '100%' }
+
+  const [users, setUsers] = useState<BrivoU[]>([])
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [selId, setSelId] = useState<string | null>(null)
+  const [creds, setCreds] = useState<BrivoCred[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [edit, setEdit] = useState({ firstName: '', lastName: '', email: '', phone: '' })
+  const [addOpen, setAddOpen] = useState(false)
+  useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(null), 3500); return () => clearTimeout(t) }, [notice])
+
+  const load = () => {
+    setLoading(true); setErr(null)
+    fetch(`/api/portal/${slug}/users?groups=1`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { setUsers(Array.isArray(j.users) ? j.users : []); setGroups(Array.isArray(j.groups) ? j.groups : []); if (j.error) setErr(j.error) })
+      .catch(() => setErr('Could not load users.'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [slug])
+
+  const sel = users.find(u => u.id === selId) || null
+  function selectUser(u: BrivoU) {
+    setSelId(u.id); setEdit({ firstName: u.firstName, lastName: u.lastName, email: u.email || '', phone: u.phone || '' })
+    setCreds([]); setDetailLoading(true)
+    fetch(`/api/portal/${slug}/users/${u.id}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { if (j.credentials) setCreds(j.credentials); if (j.user) setEdit(e => ({ ...e, email: j.user.email ?? e.email, phone: j.user.phone ?? e.phone })) })
+      .catch(() => {})
+      .finally(() => setDetailLoading(false))
+  }
+
+  async function patch(id: string, bodyObj: Record<string, unknown>, okMsg: string, busyKey: string) {
+    setBusy(busyKey); setErr(null)
+    try {
+      const r = await fetch(`/api/portal/${slug}/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyObj) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(j.error || 'Action failed.'); return false }
+      setNotice(okMsg)
+      return true
+    } catch { setErr('Action failed.'); return false }
+    finally { setBusy(null) }
+  }
+
+  const filtered = q.trim()
+    ? users.filter(u => `${u.firstName} ${u.lastName} ${u.email ?? ''} ${u.unitNumber ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+    : users
+
+  return (
+    <div style={{ ...font }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: THEME.label, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Access · site users {users.length ? `· ${users.length}` : ''}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setAddOpen(true)} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: '8px 13px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><UserPlus size={14} /> Add user</button>
+          <button onClick={onGuest} style={{ ...tileS, color: THEME.ink, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ticket size={14} style={{ color: THEME.ok }} /> Guest pass</button>
+          <button onClick={onUnlock} style={{ ...tileS, color: THEME.ink, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><LockOpen size={14} style={{ color: accent }} /> Unlock door</button>
+        </div>
+      </div>
+
+      {err && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: THEME.alarm }}>{err}</div>}
+      {notice && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(126,224,168,0.12)', border: '1px solid rgba(126,224,168,0.35)', color: THEME.ok }}>{notice}</div>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: sel ? 'minmax(280px, 1fr) minmax(300px, 1fr)' : '1fr', gap: 12 }}>
+        {/* Directory */}
+        <div>
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <Search size={14} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: THEME.label }} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name, email, or unit…" style={{ ...inp, paddingLeft: 32 }} />
+          </div>
+          {loading ? (
+            <div style={{ ...tileS, padding: 16, fontSize: 12.5, color: THEME.ink2 }}>Loading users…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ ...tileS, padding: 16, fontSize: 12.5, color: THEME.ink2 }}>{q ? 'No users match your search.' : 'No users at this site yet.'}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 460, overflowY: 'auto' }}>
+              {filtered.map(u => (
+                <button key={u.id} onClick={() => selectUser(u)} style={{ ...tileS, border: selId === u.id ? `1px solid ${accent}` : `1px solid ${THEME.border}`, padding: '10px 12px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: THEME.ink }}>{`${u.firstName} ${u.lastName}`.trim() || 'Unnamed'}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', borderRadius: 999, padding: '2px 7px', ...(u.active ? { background: 'rgba(126,224,168,0.14)', color: THEME.ok, border: '1px solid rgba(126,224,168,0.35)' } : { background: 'rgba(248,113,113,0.14)', color: THEME.alarm, border: '1px solid rgba(248,113,113,0.35)' }) }}>{u.active ? 'Active' : 'Suspended'}</span>
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 11, color: THEME.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[u.unitNumber ? `Unit ${u.unitNumber}` : null, u.email, u.phone].filter(Boolean).join(' · ') || 'No contact info'}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: accent, flexShrink: 0 }}>Manage →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Detail / edit */}
+        {sel && (
+          <div style={{ ...tileS, padding: 16, alignSelf: 'start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: THEME.ink }}>{`${sel.firstName} ${sel.lastName}`.trim() || 'Unnamed'}</div>
+              <button onClick={() => setSelId(null)} style={{ background: 'transparent', border: 'none', color: THEME.ink2, cursor: 'pointer' }}><X size={16} /></button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <input value={edit.firstName} onChange={e => setEdit(x => ({ ...x, firstName: e.target.value }))} placeholder="First name" style={inp} />
+              <input value={edit.lastName} onChange={e => setEdit(x => ({ ...x, lastName: e.target.value }))} placeholder="Last name" style={inp} />
+            </div>
+            <div style={{ position: 'relative', marginBottom: 8 }}><Mail size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: THEME.label }} /><input value={edit.email} onChange={e => setEdit(x => ({ ...x, email: e.target.value }))} placeholder="Email" style={{ ...inp, paddingLeft: 32 }} /></div>
+            <div style={{ position: 'relative', marginBottom: 10 }}><Phone size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: THEME.label }} /><input value={edit.phone} onChange={e => setEdit(x => ({ ...x, phone: e.target.value }))} placeholder="Phone" style={{ ...inp, paddingLeft: 32 }} /></div>
+            <button disabled={busy === 'save'} onClick={() => patch(sel.id, { action: 'update', ...edit }, 'Saved.', 'save').then(ok => ok && load())} style={{ width: '100%', background: accent, border: 'none', color: THEME.bg, borderRadius: 9, padding: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy === 'save' ? 0.6 : 1 }}>{busy === 'save' ? 'Saving…' : 'Save changes'}</button>
+
+            {/* Credentials */}
+            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: THEME.label, margin: '14px 0 6px' }}>Credentials</div>
+            {detailLoading ? (
+              <div style={{ fontSize: 12, color: THEME.ink2 }}>Loading…</div>
+            ) : creds.length === 0 ? (
+              <div style={{ fontSize: 12, color: THEME.ink2 }}>No active credentials.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {creds.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: THEME.well, borderRadius: 8, padding: '7px 10px', fontSize: 12 }}>
+                    <span style={{ color: THEME.ink, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{c.isPass ? <Ticket size={13} style={{ color: THEME.ok }} /> : <ShieldCheck size={13} style={{ color: THEME.label }} />}{c.label}</span>
+                    <span style={{ color: c.active ? THEME.ok : THEME.ink2, fontSize: 10.5 }}>{c.active ? 'Active' : 'Off'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <button disabled={busy === 'pass'} onClick={() => patch(sel.id, { action: 'issue_pass', email: edit.email || sel.email }, 'Mobile pass sent.', 'pass').then(ok => ok && selectUser(sel))} style={{ ...tileS, color: THEME.ink, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', flex: '1 1 auto' }}>{busy === 'pass' ? '…' : 'Issue mobile pass'}</button>
+              <button disabled={busy === 'revoke'} onClick={() => patch(sel.id, { action: 'revoke_pass' }, 'Pass revoked.', 'revoke').then(ok => ok && selectUser(sel))} style={{ ...tileS, color: THEME.ink2, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{busy === 'revoke' ? '…' : 'Revoke pass'}</button>
+              <button disabled={busy === 'susp'} onClick={() => patch(sel.id, { action: sel.active ? 'suspend' : 'reactivate' }, sel.active ? 'User suspended.' : 'User reactivated.', 'susp').then(ok => ok && load())} style={{ ...tileS, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: sel.active ? THEME.alarm : THEME.ok, border: `1px solid ${sel.active ? 'rgba(248,113,113,0.35)' : 'rgba(126,224,168,0.35)'}` }}>{busy === 'susp' ? '…' : sel.active ? 'Suspend' : 'Reactivate'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {addOpen && (
+        <AddUserModal slug={slug} accent={accent} groups={groups} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); setNotice('User added.'); load() }} />
+      )}
+    </div>
+  )
+}
+
+function AddUserModal({ slug, accent, groups, onClose, onAdded }: { slug: string; accent: string; groups: { id: string; name: string }[]; onClose: () => void; onAdded: () => void }) {
+  const font = { fontFamily: "'DM Sans', var(--font-dm-sans, system-ui), sans-serif" } as const
+  const inp: React.CSSProperties = { background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '9px 11px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', width: '100%' }
+  const [f, setF] = useState({ firstName: '', lastName: '', email: '', unit: '', groupId: '' })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  async function submit() {
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch(`/api/portal/${slug}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(j.error || 'Could not add user.'); return }
+      onAdded()
+    } catch { setErr('Could not add user.') } finally { setBusy(false) }
+  }
+  return (
+    <div onClick={onClose} style={{ ...font, position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(4,10,20,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px, 96vw)', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ color: THEME.ink, fontSize: 15, fontWeight: 700 }}>Add user</div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: THEME.ink2, cursor: 'pointer' }}><X size={16} /></button>
+        </div>
+        {err && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: THEME.alarm }}>{err}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <input value={f.firstName} onChange={e => setF(x => ({ ...x, firstName: e.target.value }))} placeholder="First name" style={inp} />
+          <input value={f.lastName} onChange={e => setF(x => ({ ...x, lastName: e.target.value }))} placeholder="Last name" style={inp} />
+        </div>
+        <input value={f.email} onChange={e => setF(x => ({ ...x, email: e.target.value }))} type="email" placeholder="Email (optional)" style={{ ...inp, marginBottom: 8 }} />
+        <input value={f.unit} onChange={e => setF(x => ({ ...x, unit: e.target.value }))} placeholder="Unit (optional)" style={{ ...inp, marginBottom: 8 }} />
+        {groups.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: THEME.label, marginBottom: 4 }}>Access group (grants entry)</div>
+            <select value={f.groupId} onChange={e => setF(x => ({ ...x, groupId: e.target.value }))} style={{ ...inp }}>
+              <option value="" style={{ background: '#0b1424' }}>No group yet</option>
+              {groups.map(g => <option key={g.id} value={g.id} style={{ background: '#0b1424' }}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 10, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button disabled={busy || !f.firstName.trim() || !f.lastName.trim()} onClick={submit} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy || !f.firstName.trim() || !f.lastName.trim() ? 0.5 : 1 }}>{busy ? 'Adding…' : 'Add user'}</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

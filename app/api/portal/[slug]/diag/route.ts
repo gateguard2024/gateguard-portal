@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { verifyPortal } from '@/lib/portal-auth'
+import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame } from '@/lib/eagle-eye'
+import { getSiteBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
+import { getQboAuth } from '@/lib/qbo'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+// GET /api/portal/[slug]/diag — PIN-gated health check. Runs every vendor call the
+// portal depends on and reports ok/count/error for each, so we can see exactly
+// what's failing (creds missing, timeout, wrong site, etc.) instead of the silent
+// empty states the data routes return. Never throws; each probe is isolated.
+export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
+  const v = await verifyPortal(req, params.slug)
+  if (!v.ok) return NextResponse.json({ authed: false, status: v.status, error: v.error }, { status: v.status })
+
+  const siteId = v.portal.site_id
+  const out: Record<string, unknown> = {
+    authed: true,
+    slug: params.slug,
+    site_id: siteId,
+    org_id: v.portal.org_id,
+    modules: v.portal.modules,
+    camera_ids_whitelist: v.portal.camera_ids?.length ?? 0,
+  }
+
+  const probe = async (name: string, fn: () => Promise<unknown>) => {
+    const t0 = Date.now()
+    try {
+      const r = await fn()
+      out[name] = { ok: true, ms: Date.now() - t0, ...(typeof r === 'object' && r ? r : { value: r }) }
+    } catch (e) {
+      out[name] = { ok: false, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  if (!siteId) { out.note = 'Portal not linked to a site.'; return NextResponse.json(out) }
+
+  // Eagle Eye — cameras list + a single preview frame
+  let firstCam: string | null = null
+  await probe('eagle_eye_cameras', async () => {
+    const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
+    const cams = await listEagleEyeCameras(token, baseHost)
+    firstCam = cams[0]?.id ?? null
+    return { count: cams.length, baseHost, sample: cams.slice(0, 3).map(c => ({ id: c.id, name: c.name, online: c.online })) }
+  })
+  await probe('eagle_eye_preview', async () => {
+    if (!firstCam) return { skipped: 'no camera id' }
+    const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
+    const frame = await eagleEyePreviewFrame(token, baseHost, firstCam)
+    return { camera_id: firstCam, frame_bytes: frame ? frame.length : 0, got_frame: !!frame }
+  })
+
+  // Brivo — token + doors + events + users (users needs the Brivo Site ID)
+  await probe('brivo', async () => {
+    const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+    const doors = await listBrivoDoors(token, apiKey, brivoSiteId).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
+    const events = await listBrivoEvents(token, apiKey, 5).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
+    const users = brivoSiteId
+      ? await listBrivoUsers(token, apiKey, brivoSiteId).catch(e => ({ __err: e instanceof Error ? e.message : String(e) }))
+      : '(no brivo_site_id saved — users cannot be listed)'
+    return {
+      has_brivo_site_id: !!brivoSiteId,
+      doors: Array.isArray(doors) ? doors.length : doors,
+      events: Array.isArray(events) ? events.length : events,
+      users: Array.isArray(users) ? users.length : users,
+    }
+  })
+
+  // QuickBooks — connection + invoices linked to this site
+  await probe('quickbooks', async () => {
+    const auth = await getQboAuth()
+    const { data: siteRow } = await supabase.from('sites').select('qbo_customer_id, qbo_customer_name').eq('id', siteId).maybeSingle()
+    const { data: invs } = await supabase.from('invoices').select('id, status, balance_due').eq('site_id', siteId)
+    const open = (invs ?? []).filter(i => i.status !== 'void' && Number(i.balance_due) > 0)
+    return {
+      qbo_connected: auth.ok,
+      qbo_reason: auth.ok ? undefined : auth.reason,
+      site_linked_to_customer: !!siteRow?.qbo_customer_id,
+      qbo_customer_name: siteRow?.qbo_customer_name ?? null,
+      invoices_for_site: (invs ?? []).length,
+      open_invoices: open.length,
+    }
+  })
+
+  return NextResponse.json(out)
+}
