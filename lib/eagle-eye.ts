@@ -91,40 +91,22 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
 export interface EagleEyeCamera { id: string; name: string; tags: string[]; esn: string | null; online: boolean | null }
 
 /** Grab a single preview JPEG frame for a camera (server-side, so the token
- * never reaches the browser). Returns null if unavailable. */
+ * never reaches the browser). Returns null if unavailable.
+ *
+ * Uses EEN v3 `/media/liveImage.jpeg?deviceId=X&type=preview` (Accept: image/jpeg),
+ * which returns a single current JPEG and — per the docs — "waits until the image
+ * is available." That's far more reliable than the old approach of opening the
+ * `/feeds` MJPEG multipart stream and scanning bytes for one frame, which timed
+ * out on slow-updating cameras (indoor/low-motion) and returned nothing. */
 export async function eagleEyePreviewFrame(token: string, baseHost: string, deviceId: string): Promise<Buffer | null> {
   try {
-    const feed = await fetch(`https://${baseHost}/api/v3.0/feeds?deviceId=${encodeURIComponent(deviceId)}&type=preview&include=multipartUrl`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(8000),
-    })
-    if (!feed.ok) return null
-    const fj = await feed.json()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const url = fj.multipartUrl ?? (fj.results ?? [])[0]?.multipartUrl
-    if (!url) return null
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000) })
-    if (!res.ok || !res.body) return null
-    // Read the MJPEG stream until we have one complete JPEG (FFD8…FFD9).
-    const reader = res.body.getReader()
-    const chunks: number[] = []
-    let start = -1
-    const cap = 3_000_000
-    for (let i = 0; i < 600; i++) {
-      const { value, done } = await reader.read()
-      if (done) break
-      for (let b = 0; b < value.length; b++) {
-        chunks.push(value[b])
-        const n = chunks.length
-        if (start < 0 && n >= 2 && chunks[n - 2] === 0xff && chunks[n - 1] === 0xd8) start = n - 2
-        else if (start >= 0 && n >= 2 && chunks[n - 2] === 0xff && chunks[n - 1] === 0xd9) {
-          reader.cancel().catch(() => {})
-          return Buffer.from(chunks.slice(start, n))
-        }
-      }
-      if (chunks.length > cap) break
-    }
-    reader.cancel().catch(() => {})
-    return null
+    const res = await fetch(
+      `https://${baseHost}/api/v3.0/media/liveImage.jpeg?deviceId=${encodeURIComponent(deviceId)}&type=preview`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'image/jpeg' }, signal: AbortSignal.timeout(12000) }
+    )
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return buf.length > 0 ? buf : null
   } catch { return null }
 }
 

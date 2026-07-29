@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame } from '@/lib/eagle-eye'
 import { getSiteBrivoToken, getOrgBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
-import { getQboAuth } from '@/lib/qbo'
+import { getQboAuth, qboApi } from '@/lib/qbo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -80,15 +80,27 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     return { events: Array.isArray(events) ? events.length : events }
   })
 
-  // QuickBooks — connection + invoices linked to this site
+  // QuickBooks — connection source + a REAL test query (reproduces the 401)
   await probe('quickbooks', async () => {
-    const auth = await getQboAuth()
+    const { data: conn } = await supabase.from('qbo_connection').select('realm_id, environment, access_expires_at, refresh_expires_at, is_active, last_refreshed_at').eq('is_active', true).order('updated_at', { ascending: false }).limit(1).maybeSingle()
     const { data: siteRow } = await supabase.from('sites').select('qbo_customer_id, qbo_customer_name').eq('id', siteId).maybeSingle()
     const { data: invs } = await supabase.from('invoices').select('id, status, balance_due').eq('site_id', siteId)
     const open = (invs ?? []).filter(i => i.status !== 'void' && Number(i.balance_due) > 0)
+
+    const auth = await getQboAuth()
+    let live_query: string | { rows: number } = 'not attempted'
+    if (auth.ok) {
+      const r = await qboApi(auth, `/query?query=${encodeURIComponent('select * from CompanyInfo')}&minorversion=73`)
+      if (r.ok) { const j = await r.json().catch(() => ({})); live_query = { rows: (j?.QueryResponse?.CompanyInfo ?? []).length } }
+      else live_query = `HTTP ${r.status}: ${(await r.text()).slice(0, 180)}`
+    }
+
     return {
-      qbo_connected: auth.ok,
-      qbo_reason: auth.ok ? undefined : auth.reason,
+      token_source: conn ? 'stored_oauth_connection' : (process.env.QBO_ACCESS_TOKEN ? 'legacy_env_var (stale!)' : 'none'),
+      stored_connection: conn ? { realm_id: conn.realm_id, access_expires_at: conn.access_expires_at, refresh_expires_at: conn.refresh_expires_at, last_refreshed_at: conn.last_refreshed_at } : null,
+      getQboAuth_ok: auth.ok,
+      getQboAuth_reason: auth.ok ? undefined : auth.reason,
+      live_query,
       site_linked_to_customer: !!siteRow?.qbo_customer_id,
       qbo_customer_name: siteRow?.qbo_customer_name ?? null,
       invoices_for_site: (invs ?? []).length,
