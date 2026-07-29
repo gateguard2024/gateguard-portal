@@ -102,14 +102,14 @@ export async function eagleEyePreviewFrame(token: string, baseHost: string, devi
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const url = fj.multipartUrl ?? (fj.results ?? [])[0]?.multipartUrl
     if (!url) return null
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000) })
     if (!res.ok || !res.body) return null
     // Read the MJPEG stream until we have one complete JPEG (FFD8…FFD9).
     const reader = res.body.getReader()
     const chunks: number[] = []
     let start = -1
     const cap = 3_000_000
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 600; i++) {
       const { value, done } = await reader.read()
       if (done) break
       for (let b = 0; b < value.length; b++) {

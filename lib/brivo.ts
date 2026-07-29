@@ -122,7 +122,21 @@ export async function getOrgBrivoToken(orgId: string): Promise<BrivoToken> {
 // is the per-site path; getOrgBrivoToken remains for the legacy per-org setup.
 export interface SiteBrivoToken { token: string; apiKey: string; brivoSiteId: string; credentialValue?: string }
 
+// Cache site Brivo tokens so a burst of calls (portal load fires doors + events +
+// users at once) reuses ONE token instead of minting a fresh one per call. Brivo
+// invalidates rapidly re-minted password-grant tokens — that's why, without this,
+// the first call in a burst works and the next returns 401 "Access token expired".
+// The org path already caches (brivo_access_token/brivo_token_expires); this brings
+// the per-site path to parity. In-memory (per warm instance) is enough: the burst
+// that triggers the bug happens inside a single invocation.
+const siteBrivoTokenCache = new Map<string, { token: string; apiKey: string; brivoSiteId: string; credentialValue?: string; exp: number }>()
+
 export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken> {
+  const cached = siteBrivoTokenCache.get(siteId)
+  if (cached && cached.exp - Date.now() > 60_000) {
+    return { token: cached.token, apiKey: cached.apiKey, brivoSiteId: cached.brivoSiteId, credentialValue: cached.credentialValue }
+  }
+
   // Imported lazily to avoid a cycle (site-integrations → crypto only).
   const { getSiteVendorCreds } = await import('@/lib/site-integrations')
   const creds = await getSiteVendorCreds(siteId, 'brivo')
@@ -149,7 +163,14 @@ export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken>
   })
   if (!res.ok) throw new Error(`Brivo auth failed (${res.status})`)
   const tokens = await res.json()
-  return { token: tokens.access_token, apiKey, brivoSiteId: String(creds.site_id ?? ''), credentialValue: creds.credential_value || undefined }
+  const brivoSiteId = String(creds.site_id ?? '')
+  const credentialValue = creds.credential_value || undefined
+  const ttlSec = Number(tokens.expires_in) > 0 ? Number(tokens.expires_in) : 900
+  siteBrivoTokenCache.set(siteId, {
+    token: tokens.access_token, apiKey, brivoSiteId, credentialValue,
+    exp: Date.now() + ttlSec * 1000,
+  })
+  return { token: tokens.access_token, apiKey, brivoSiteId, credentialValue }
 }
 
 // ─── Master account token (sees all sites) ──────────────────────────────────
