@@ -69,6 +69,11 @@ export function CustomerPortalTemplate({
     return () => { cancelled = true }
   }, [config.slug])
 
+  // Camera preview refresh + rewind clip player.
+  const [tick, setTick] = useState(0)
+  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 2000); return () => clearInterval(t) }, [])
+  const [clip, setClip] = useState<{ camId: string; name: string } | null>(null)
+
   const effCameras = live.cameras && live.cameras.length ? live.cameras : cameras
   const effActivity = live.activity && live.activity.length ? live.activity : activity
   const effBalance = live.balanceDue !== undefined ? live.balanceDue : balanceDue
@@ -119,8 +124,9 @@ export function CustomerPortalTemplate({
           <div>
             {(has('cameras') || has('gate')) && (
               <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${THEME.border}`, boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)', background: `radial-gradient(120% 90% at 50% 8%, rgba(95,184,224,0.10), transparent 55%), radial-gradient(circle at 50% 42%, #1b2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <Camera size={32} style={{ color: '#46617a' }} />
-                <span style={{ fontSize: 11, color: THEME.label, letterSpacing: '0.04em' }}>Live view</span>
+                {config.slug && primaryCam?.id
+                  ? <PortalCamImg slug={config.slug} cameraId={primaryCam.id} alt={primaryCam.name} tick={tick} />
+                  : (<><Camera size={32} style={{ color: '#46617a' }} /><span style={{ fontSize: 11, color: THEME.label, letterSpacing: '0.04em' }}>Live view</span></>)}
                 <span style={{ position: 'absolute', top: 10, left: 12, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 6, padding: '3px 8px' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: THEME.alarm }} />LIVE · {primaryCam?.name ?? 'Front gate'}</span>
                 {has('gate') && <button onClick={onOpenGate} style={{ position: 'absolute', bottom: 12, left: 12, background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '11px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', ...font, display: 'inline-flex', alignItems: 'center', gap: 6 }}><LockOpen size={16} /> Open gate</button>}
                 <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
@@ -134,12 +140,13 @@ export function CustomerPortalTemplate({
               <>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   {cams.map((c, i) => (
-                    <button key={c.id} onClick={() => setActiveCam(i)} style={{ flex: 1, aspectRatio: '16 / 10', borderRadius: 8, background: THEME.well, border: i === activeCam ? `2px solid ${accent}` : `1px solid rgba(140,170,200,0.2)`, position: 'relative', cursor: 'pointer' }}>
-                      <span style={{ position: 'absolute', bottom: 3, left: 5, fontSize: 8, color: THEME.ink2 }}>{c.name}</span>
+                    <button key={c.id} onClick={() => setActiveCam(i)} style={{ flex: 1, aspectRatio: '16 / 10', borderRadius: 8, background: THEME.well, border: i === activeCam ? `2px solid ${accent}` : `1px solid rgba(140,170,200,0.2)`, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}>
+                      {config.slug && c.id && <PortalCamImg slug={config.slug} cameraId={c.id} alt={c.name} tick={tick} />}
+                      <span style={{ position: 'absolute', bottom: 3, left: 5, fontSize: 8, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '0 3px', zIndex: 1 }}>{c.name}</span>
                     </button>
                   ))}
                 </div>
-                <button onClick={onRewind} style={{ width: '100%', marginTop: 8, background: THEME.tile, border: `1px solid ${THEME.border}`, color: THEME.label, borderRadius: 9, padding: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', ...font, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><History size={14} /> Rewind — review the last 30 days</button>
+                <button onClick={() => (config.slug && primaryCam?.id) ? setClip({ camId: primaryCam.id, name: primaryCam.name }) : onRewind?.()} style={{ width: '100%', marginTop: 8, background: THEME.tile, border: `1px solid ${THEME.border}`, color: THEME.label, borderRadius: 9, padding: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', ...font, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><History size={14} /> Rewind — review the last 30 days</button>
               </>
             )}
 
@@ -185,7 +192,36 @@ export function CustomerPortalTemplate({
           </div>
         </div>
       </div>
+
+      {clip && config.slug && (
+        <div onClick={() => setClip(null)} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(4,10,20,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(880px, 96vw)', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: `1px solid ${THEME.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: THEME.ink }}><History size={14} style={{ verticalAlign: -2, marginRight: 6 }} />{clip.name} · recent recording</div>
+              <button onClick={() => setClip(null)} style={{ background: 'transparent', border: 'none', color: THEME.ink2, cursor: 'pointer', fontSize: 13 }}>✕ Close</button>
+            </div>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video controls autoPlay style={{ width: '100%', display: 'block', background: '#000', aspectRatio: '16 / 9' }} src={`/api/portal/${config.slug}/camera-clip?camera_id=${encodeURIComponent(clip.camId)}&ts=${encodeURIComponent(new Date(Date.now() - 120000).toISOString())}`} />
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function PortalCamImg({ slug, cameraId, alt, tick }: { slug: string; cameraId: string; alt: string; tick: number }) {
+  const [err, setErr] = useState(false)
+  useEffect(() => { setErr(false) }, [tick])
+  if (err) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#46617a' }}>
+        <Camera size={26} /><span style={{ fontSize: 10, color: THEME.label }}>Connecting…</span>
+      </div>
+    )
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt} onError={() => setErr(true)} src={`/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(cameraId)}&t=${tick}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
   )
 }
 
