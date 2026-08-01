@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getSiteBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser, issueBrivoMobilePass, assignBrivoFob, assignBrivoPin } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -47,15 +47,34 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   const body = await req.json().catch(() => ({}))
   const firstName = String(body.firstName ?? '').trim()
   const lastName = String(body.lastName ?? '').trim()
+  const email = body.email ? String(body.email).trim() : null
+  const phone = body.phone ? String(body.phone).trim() : null
   if (!firstName || !lastName) return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 })
 
   try {
     const { token, apiKey } = await getSiteBrivoToken(siteId)
     const created = await createBrivoUser(token, apiKey, {
-      firstName, lastName,
-      email: body.email ? String(body.email).trim() : null,
+      firstName, lastName, email, phone,
+      externalId: body.unit ? String(body.unit).trim() : null,
       groupId: body.groupId ? String(body.groupId) : null,
     })
+
+    // Optional credentials issued on creation. Each is best-effort + reported so
+    // the UI can show which succeeded (a fob failing shouldn't undo the user).
+    const credentials: Record<string, string> = {}
+    if (body.mobilePass) {
+      try { await issueBrivoMobilePass(token, apiKey, created.id, email); credentials.mobile_pass = 'issued' }
+      catch (e) { credentials.mobile_pass = `failed: ${e instanceof Error ? e.message : 'error'}` }
+    }
+    if (body.fobCardNumber) {
+      try { await assignBrivoFob(token, apiKey, created.id, String(body.fobCardNumber), body.fobFacilityCode ? String(body.fobFacilityCode) : null); credentials.fob = 'assigned' }
+      catch (e) { credentials.fob = `failed: ${e instanceof Error ? e.message : 'error'}` }
+    }
+    if (body.pin) {
+      try { await assignBrivoPin(token, apiKey, created.id, String(body.pin)); credentials.pin = 'assigned' }
+      catch (e) { credentials.pin = `failed: ${e instanceof Error ? e.message : 'error'}` }
+    }
+
     supabase.from('site_events').insert({
       site_id: siteId, event_type: 'access_admin', event_source: 'brivo',
       title: `User added: ${firstName} ${lastName}`,
@@ -64,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       metadata: { brivo_user_id: created.id, via: 'customer_portal', portal_slug: params.slug } as any,
     }).then(() => {}, () => {})
-    return NextResponse.json({ ok: true, user_id: created.id })
+    return NextResponse.json({ ok: true, user_id: created.id, credentials })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not add user' }, { status: 502 })
   }

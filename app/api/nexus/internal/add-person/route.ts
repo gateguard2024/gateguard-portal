@@ -84,7 +84,12 @@ export async function POST(req: NextRequest) {
         redirectUrl: `${APP_URL}/sign-up`,
         publicMetadata: { role, org_id: targetOrgId, org_tier: orgTier, invited_by: caller.id },
       })
-      return NextResponse.json({ success: true, kind, invitation_id: invitation.id, message: `Invite sent to ${email}.` })
+      const message = invitation.alreadyExisted === 'user'
+        ? `${email} already has a Gate Guard login — updated their access.`
+        : invitation.alreadyExisted === 'invitation'
+          ? `${email} already has a pending invite — resent details.`
+          : `Invite sent to ${email}.`
+      return NextResponse.json({ success: true, kind, invitation_id: invitation.id, already_existed: invitation.alreadyExisted ?? null, message })
     }
 
     // ── Technician / Contractor ───────────────────────────────────────────

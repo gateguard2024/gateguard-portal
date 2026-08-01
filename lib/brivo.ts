@@ -364,10 +364,15 @@ export async function listBrivoUsers(
 export async function createBrivoUser(
   token: string,
   apiKey: string,
-  input: { firstName: string; lastName: string; email?: string | null; externalId?: string | null; groupId?: string | null },
+  input: { firstName: string; lastName: string; email?: string | null; phone?: string | null; externalId?: string | null; groupId?: string | null },
 ): Promise<{ id: string }> {
+  // Brivo's user schema takes emails/phoneNumbers as ARRAYS of objects — NOT a
+  // top-level `email` string. Sending `email: "x"` makes Brivo reject the whole
+  // request as 400 "bad request" (this was the add-user bug). Mirror the exact
+  // shape updateBrivoUser uses, which Brivo accepts.
   const body: Record<string, any> = { firstName: input.firstName, lastName: input.lastName }
-  if (input.email) body.email = input.email
+  if (input.email) body.emails = [{ address: input.email, email: true }]
+  if (input.phone) body.phoneNumbers = [{ number: input.phone }]
   if (input.externalId) body.externalId = input.externalId  // we use this for unit number
 
   const created = await brivoPost(token, apiKey, '/users', body)
@@ -527,6 +532,21 @@ export async function assignBrivoFob(token: string, apiKey: string, userId: stri
   const body: Record<string, unknown> = { credentialFormat: { id: CARD_FORMAT_ID }, cardNumber: String(cardNumber).trim() }
   if (facilityCode) body.facilityCode = String(facilityCode).trim()
   const created = await brivoPost(token, apiKey, '/credentials', body)
+  const credId = String(created.id ?? '')
+  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  return { credentialId: credId }
+}
+
+// PIN credential. Brivo represents a keypad PIN as a credential with the account's
+// PIN format id. Set BRIVO_PIN_FORMAT_ID to the value in your Brivo account (the
+// default 108 is Brivo's common "Unknown Format (PIN)" but varies per account).
+const PIN_FORMAT_ID = process.env.BRIVO_PIN_FORMAT_ID ? Number(process.env.BRIVO_PIN_FORMAT_ID) : 108
+export async function assignBrivoPin(token: string, apiKey: string, userId: string, pin: string): Promise<{ credentialId: string }> {
+  const created = await brivoPost(token, apiKey, '/credentials', {
+    credentialFormat: { id: PIN_FORMAT_ID },
+    referenceId: `pin-${userId}`,
+    encodedCredential: String(pin).trim(),
+  })
   const credId = String(created.id ?? '')
   if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
   return { credentialId: credId }

@@ -721,7 +721,7 @@ function AccessManager({ slug, accent, onUnlock, onGuest }: { slug: string; acce
 function AddUserModal({ slug, accent, groups, onClose, onAdded }: { slug: string; accent: string; groups: { id: string; name: string }[]; onClose: () => void; onAdded: () => void }) {
   const font = { fontFamily: "'DM Sans', var(--font-dm-sans, system-ui), sans-serif" } as const
   const inp: React.CSSProperties = { background: THEME.well, border: `1px solid ${THEME.border}`, borderRadius: 9, padding: '9px 11px', color: THEME.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', width: '100%' }
-  const [f, setF] = useState({ firstName: '', lastName: '', email: '', unit: '', groupId: '' })
+  const [f, setF] = useState({ firstName: '', lastName: '', email: '', phone: '', unit: '', groupId: '', mobilePass: false, fobCardNumber: '', pin: '' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   async function submit() {
@@ -730,9 +730,13 @@ function AddUserModal({ slug, accent, groups, onClose, onAdded }: { slug: string
       const r = await fetch(`/api/portal/${slug}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setErr(j.error || 'Could not add user.'); return }
+      // Surface any credential that failed even though the user was created.
+      const failed = Object.entries((j.credentials ?? {}) as Record<string, string>).filter(([, v]) => v.startsWith('failed'))
+      if (failed.length) { setErr(`User created, but: ${failed.map(([k, v]) => `${k} ${v}`).join('; ')}`); setBusy(false); return }
       onAdded()
     } catch { setErr('Could not add user.') } finally { setBusy(false) }
   }
+  const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: THEME.label, marginBottom: 4 }
   return (
     <div onClick={onClose} style={{ ...font, position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(4,10,20,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px, 96vw)', background: THEME.panel, border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 18 }}>
@@ -745,17 +749,34 @@ function AddUserModal({ slug, accent, groups, onClose, onAdded }: { slug: string
           <input value={f.firstName} onChange={e => setF(x => ({ ...x, firstName: e.target.value }))} placeholder="First name" style={inp} />
           <input value={f.lastName} onChange={e => setF(x => ({ ...x, lastName: e.target.value }))} placeholder="Last name" style={inp} />
         </div>
-        <input value={f.email} onChange={e => setF(x => ({ ...x, email: e.target.value }))} type="email" placeholder="Email (optional)" style={{ ...inp, marginBottom: 8 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <input value={f.email} onChange={e => setF(x => ({ ...x, email: e.target.value }))} type="email" placeholder="Email" style={inp} />
+          <input value={f.phone} onChange={e => setF(x => ({ ...x, phone: e.target.value }))} type="tel" placeholder="Phone" style={inp} />
+        </div>
         <input value={f.unit} onChange={e => setF(x => ({ ...x, unit: e.target.value }))} placeholder="Unit (optional)" style={{ ...inp, marginBottom: 8 }} />
         {groups.length > 0 && (
-          <div style={{ marginBottom: 4 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: THEME.label, marginBottom: 4 }}>Access group (grants entry)</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={lbl}>Access group (grants entry)</div>
             <select value={f.groupId} onChange={e => setF(x => ({ ...x, groupId: e.target.value }))} style={{ ...inp }}>
               <option value="" style={{ background: '#0b1424' }}>No group yet</option>
               {groups.map(g => <option key={g.id} value={g.id} style={{ background: '#0b1424' }}>{g.name}</option>)}
             </select>
           </div>
         )}
+
+        {/* Credentials — issued on creation. All optional. */}
+        <div style={{ borderTop: `1px solid ${THEME.border}`, paddingTop: 10, marginBottom: 4 }}>
+          <div style={lbl}>Credentials (optional)</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: THEME.ink, cursor: 'pointer', marginBottom: 8 }}>
+            <input type="checkbox" checked={f.mobilePass} onChange={e => setF(x => ({ ...x, mobilePass: e.target.checked }))} style={{ accentColor: accent, width: 16, height: 16 }} />
+            <Ticket size={15} style={{ color: THEME.ok }} /> Email a mobile pass {f.mobilePass && !f.email.trim() && <span style={{ color: THEME.warn, fontSize: 11 }}>(needs email)</span>}
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <input value={f.fobCardNumber} onChange={e => setF(x => ({ ...x, fobCardNumber: e.target.value }))} placeholder="Fob / card number" style={inp} />
+            <input value={f.pin} onChange={e => setF(x => ({ ...x, pin: e.target.value }))} placeholder="Keypad PIN" inputMode="numeric" style={inp} />
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
           <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${THEME.border}`, color: THEME.ink2, borderRadius: 10, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button disabled={busy || !f.firstName.trim() || !f.lastName.trim()} onClick={submit} style={{ background: accent, border: 'none', color: THEME.bg, borderRadius: 10, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy || !f.firstName.trim() || !f.lastName.trim() ? 0.5 : 1 }}>{busy ? 'Adding…' : 'Add user'}</button>

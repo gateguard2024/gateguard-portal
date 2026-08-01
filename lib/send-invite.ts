@@ -21,30 +21,69 @@ export interface InviteOpts {
   orgName?: string
 }
 
-export async function sendClerkInvite(opts: InviteOpts) {
-  const clerk = await clerkClient()
-  const invitation = await clerk.invitations.createInvitation({
-    emailAddress: opts.emailAddress,
-    publicMetadata: opts.publicMetadata,
-    redirectUrl: opts.redirectUrl ?? `${APP_URL}/sign-up`,
-  })
-
+// Returned by sendClerkInvite. `alreadyExisted` tells the caller the person
+// wasn't newly invited: 'user' = they already have a login (we re-stamped their
+// org/role), 'invitation' = an invite was already pending (left as-is).
+export type InviteResult = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const url = (invitation as any).url as string | undefined
-  if (resend && url) {
-    try {
-      await resend.emails.send({
-        from: FROM,
-        to: opts.emailAddress,
-        replyTo: 'rfeldman@gateguard.co',
-        subject: "You're invited to Gate Guard",
-        html: inviteHtml(url, opts),
-      })
-    } catch (e) {
-      console.error('[sendClerkInvite] Resend delivery failed:', (e as Error).message)
+  id: string; url?: string; alreadyExisted?: 'user' | 'invitation'; userId?: string; [k: string]: any
+}
+
+export async function sendClerkInvite(opts: InviteOpts): Promise<InviteResult> {
+  const clerk = await clerkClient()
+
+  // Clerk is SHARED across beta + main (satellite domain), so the invitee may
+  // already exist as a user, or already have a pending invitation. In both cases
+  // createInvitation THROWS — which used to bubble up as a raw 500 ("it won't let
+  // me add a user"). Create the invite, and on an "already exists" failure fall
+  // back to updating the existing user / returning the pending invite.
+  try {
+    const invitation = await clerk.invitations.createInvitation({
+      emailAddress: opts.emailAddress,
+      publicMetadata: opts.publicMetadata,
+      redirectUrl: opts.redirectUrl ?? `${APP_URL}/sign-up`,
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const url = (invitation as any).url as string | undefined
+    if (resend && url) {
+      try {
+        await resend.emails.send({
+          from: FROM, to: opts.emailAddress, replyTo: 'rfeldman@gateguard.co',
+          subject: "You're invited to Gate Guard", html: inviteHtml(url, opts),
+        })
+      } catch (e) {
+        console.error('[sendClerkInvite] Resend delivery failed:', (e as Error).message)
+      }
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return invitation as any
+  } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyErr = err as any
+    const detail = String(anyErr?.errors?.[0]?.message ?? anyErr?.message ?? '').toLowerCase()
+    const alreadyExists = ['already', 'taken', 'duplicate', 'exists'].some(k => detail.includes(k))
+    if (!alreadyExists) throw err
+
+    // (a) Already a Clerk user → re-stamp org/role so their access is correct,
+    // and report success. No new invite needed; they already have a login.
+    const found = await clerk.users.getUserList({ emailAddress: [opts.emailAddress] })
+    const existing = found?.data?.[0]
+    if (existing) {
+      await clerk.users.updateUserMetadata(existing.id, {
+        publicMetadata: { ...(existing.publicMetadata ?? {}), ...opts.publicMetadata },
+      })
+      return { id: `existing-user-${existing.id}`, alreadyExisted: 'user', userId: existing.id }
+    }
+
+    // (b) A pending invitation already exists → return it (idempotent).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const invs = await clerk.invitations.getInvitationList({ status: 'pending' } as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pending = (invs?.data ?? []).find((i: any) => i.emailAddress === opts.emailAddress)
+    if (pending) return { ...(pending as object), id: String((pending as { id: string }).id), alreadyExisted: 'invitation' }
+
+    throw err
   }
-  return invitation
 }
 
 function inviteHtml(url: string, opts: InviteOpts): string {
