@@ -818,6 +818,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `NINJAPEAR_API_KEY` — ARIA Deep: Employee API (formerly ProxyCurl/Nubela → NinjaPear). Person validation via name + employer_website. $50/2500 credits at nubela.co. Env var was previously PROXYCURL_API_KEY — rename in Vercel.
 - `PDL_API_KEY` — ARIA Deep: behavioral/psychographic enrichment
 - `SERPER_API_KEY` — ARIA Deep + web search: Google Search API via serper.dev
+- `YARDI_MATRIX_*` — **PLANNED (session 16 note):** add **Yardi Matrix** as an ARIA data source. Yardi Matrix = multifamily CRE intel (unit count, ownership entity, management company, financials/NOI/cap-rate, last-sale, occupancy) — directly fills ARIA's `units`, `owner_entity`, `management_company`, financial + "no data found" gaps. Integration path depends on access method (Yardi Matrix has NO public REST API): (a) enterprise **data feed / API** → wire into `app/api/aria/research/deep/route.ts` like Apollo/Tavily behind graceful fallback + a new step; (b) **portal login only** → Chrome-automation fetch or a manual CSV export → `aria_properties` upsert. CONFIRM access method before building. Add step + `aria_test` probe once wired.
 
 ### Feature backlog
 - **"Pencil In" / Draft Calendar Placeholder** — lightweight way to block time on the calendar without triggering formal workflows or sending any communications. Applies to todos, work orders (jobs), and calendar events. Key behaviors:

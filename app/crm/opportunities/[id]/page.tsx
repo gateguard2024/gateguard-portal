@@ -1344,7 +1344,12 @@ export default function OpportunityDetailPage() {
                 </div>
 
                 {showLogActivity && (
-                  <div className="bg-slate-50 border border-border rounded-xl p-4 space-y-3 mb-4">
+                  <div onClick={() => setShowLogActivity(false)} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+                  <div onClick={e => e.stopPropagation()} className="bg-white border border-border rounded-xl p-5 space-y-3 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-foreground">Log activity</h4>
+                      <button onClick={() => setShowLogActivity(false)} className="p-0.5 hover:bg-accent rounded text-muted-foreground"><X size={14} /></button>
+                    </div>
                     {/* Type pills */}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(["call", "email", "meeting", "note", "task"] as ActivityType[]).map(t => (
@@ -1427,6 +1432,7 @@ export default function OpportunityDetailPage() {
                         {logActSaving ? "Saving…" : "Log It"}
                       </button>
                     </div>
+                  </div>
                   </div>
                 )}
               </div>
@@ -3157,14 +3163,16 @@ function ActivityFormCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-[#6B7EFF]/30 p-4 space-y-3">
-      <div className="flex items-center justify-between mb-1">
-        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-        <button onClick={onClose} className="p-0.5 hover:bg-accent rounded text-muted-foreground">
-          <X size={14} />
-        </button>
+    <div onClick={onClose} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl border border-[#6B7EFF]/30 p-5 space-y-3 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+          <button onClick={onClose} className="p-0.5 hover:bg-accent rounded text-muted-foreground">
+            <X size={14} />
+          </button>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   );
 }
