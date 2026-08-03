@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 
 type AnyRecord = Record<string, any>
-const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
+const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1b2836,#0f1822)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 26px 54px rgba(0,0,0,0.55), inset 0 1px 0 rgba(190,215,240,0.10), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 
 type OpportunityGlassData = {
   opportunity?: AnyRecord | null
@@ -101,6 +101,46 @@ export function OpportunityGlassWindow({
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const oppIdStr = opp.id as string | undefined
+
+  // ── File upload (signed URL → PUT → record via add_attachment) ──────────────
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [fileBusy, setFileBusy] = useState(false)
+  async function uploadFile(file: File) {
+    if (!oppIdStr) return
+    setFileBusy(true); setMsg(null)
+    try {
+      const urlRes = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name }) })
+      const u = await urlRes.json()
+      if (!urlRes.ok) { setMsg({ ok: false, text: u.error || 'Could not start upload.' }); return }
+      const put = await fetch(u.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+      if (!put.ok) { setMsg({ ok: false, text: 'Upload failed.' }); return }
+      const rec = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: u.publicUrl, file_type: file.type || null, size_bytes: file.size }) })
+      const rj = await rec.json().catch(() => ({}))
+      if (!rec.ok || rj.success === false) { setMsg({ ok: false, text: rj.message || 'Could not save file.' }); return }
+      setMsg({ ok: true, text: 'File attached ✓' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Upload failed.' }) }
+    finally { setFileBusy(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  // ── Schedule follow-up (popup) ──────────────────────────────────────────────
+  const [followupOpen, setFollowupOpen] = useState(false)
+  const [fu, setFu] = useState({ title: '', due_date: '', notes: '' })
+  const [fuBusy, setFuBusy] = useState(false)
+  async function submitFollowup() {
+    if (!oppIdStr) return
+    setFuBusy(true)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'schedule_followup', title: fu.title || `Follow up: ${opp.name || opp.account_name || 'opportunity'}`, due_date: fu.due_date || null, notes: fu.notes || null }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not schedule.' }); return }
+      setFollowupOpen(false); setFu({ title: '', due_date: '', notes: '' })
+      setMsg({ ok: true, text: 'Follow-up scheduled ✓' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not schedule.' }) }
+    finally { setFuBusy(false) }
+  }
 
   // Local overrides so edits show immediately (and persist on save).
   const [ov, setOv] = useState<AnyRecord>({})
@@ -222,7 +262,31 @@ export function OpportunityGlassWindow({
   return (
     <>
     <NexusGlassBackButton label="Back to workbench" onClick={onBack} />
-    <div className="space-y-4 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
+
+    {/* Schedule follow-up popup */}
+    {followupOpen && (
+      <div onClick={() => setFollowupOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Schedule follow-up</h4>
+            <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <div className="space-y-3">
+            <input value={fu.title} onChange={e => setFu({ ...fu, title: e.target.value })} placeholder={`Follow up: ${String(opp.name || opp.account_name || 'opportunity')}`} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <div>
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Due date</label>
+              <input type="date" value={fu.due_date} onChange={e => setFu({ ...fu, due_date: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            </div>
+            <textarea value={fu.notes} onChange={e => setFu({ ...fu, notes: e.target.value })} placeholder="Notes (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
+            <button type="button" disabled={fuBusy} onClick={submitFollowup} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{fuBusy ? 'Scheduling…' : 'Schedule'}</button>
+          </div>
+        </div>
+      </div>
+    )}
+    <div className="space-y-4 pb-28 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
@@ -419,7 +483,7 @@ export function OpportunityGlassWindow({
                   <button
                     key={action.action}
                     type="button"
-                    onClick={() => handleAction(action.action)}
+                    onClick={() => action.action === 'schedule_followup' ? setFollowupOpen(true) : handleAction(action.action)}
                     disabled={busy !== null}
                     className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
                     style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.86)' }}
@@ -463,6 +527,17 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Files" count={attachments.length}>
+            <input ref={fileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f) }} />
+            <button
+              type="button"
+              disabled={fileBusy}
+              onClick={() => fileRef.current?.click()}
+              className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
+              style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}
+            >
+              <div className="text-xs font-semibold">{fileBusy ? 'Uploading…' : '+ Attach a file'}</div>
+              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>PDF, image, or document</div>
+            </button>
             <ListBlock
               records={attachments}
               emptyText="No files attached yet."
