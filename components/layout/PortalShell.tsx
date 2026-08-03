@@ -78,7 +78,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Main content — full width on mobile, offset by sidebar on md+ */}
-        <main className="portal-main flex-1 flex flex-col md:ml-0 overflow-y-auto min-w-0 transition-all duration-200 relative z-10 pb-16 md:pb-0">
+        {/* pb clears the fixed mobile bottom nav (MobileNav = 56px + safe-area
+            inset). A flat pb-16 ignored the home-indicator inset, so the last
+            rows hid behind the bar on notched phones. Include the inset. */}
+        <main className="portal-main flex-1 flex flex-col md:ml-0 overflow-y-auto min-w-0 transition-all duration-200 relative z-10 pb-[calc(4rem_+_env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </main>
 
