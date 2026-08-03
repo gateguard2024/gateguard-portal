@@ -11,6 +11,7 @@ import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeat
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { PricingConsoleBody } from '@/components/admin/PricingConsoleBody'
 import { CostSheetBody } from '@/components/admin/CostSheetBody'
+import { AriaCapsBody } from '@/components/admin/AriaCapsBody'
 import { AdminReportConsole } from '@/components/nexus/AdminReportConsole'
 
 // ---- Console tokens (identical to Operations / Sales / My Day steel) ----
@@ -19,7 +20,7 @@ const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,tr
 const TILE_STYLE = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
-type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'playbooks' | 'training' | null
+type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -121,6 +122,7 @@ export function InternalSurface() {
     { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', accent: '#7EE0A8', glyph: 'priority', badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', accent: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
     ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', accent: '#F2637E', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
+    ...(isCorporate ? [{ id: 'aria-caps', title: 'ARIA Save Caps', subtitle: 'Cap how many properties each dealer can save to the Intel DB per month.', accent: '#9FD8EC', glyph: 'research', badge: 'Corporate' } as InternalCard] : []),
     { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', accent: '#8FD3EC', glyph: 'research' },
     { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', accent: '#7EE0A8', glyph: 'todo' },
   ]
@@ -214,6 +216,17 @@ export function InternalSurface() {
           </>}
         >
           <CostSheetBody />
+        </InternalDetailShell>
+      )}
+
+      {activePanel === 'aria-caps' && isCorporate && (
+        <InternalDetailShell
+          title="ARIA Save Caps"
+          subtitle="Cap how many new properties each dealer can save to the Intel DB per calendar month. Blank = unlimited. Re-researching a property already saved does not count."
+          onClose={() => setActivePanel(null)}
+          actions={<><ActionButton label="Open Full Page" onClick={() => router.push('/admin/aria-caps')} /></>}
+        >
+          <AriaCapsBody />
         </InternalDetailShell>
       )}
 

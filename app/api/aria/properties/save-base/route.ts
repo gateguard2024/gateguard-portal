@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { getSaveCapStatus } from '@/lib/aria-save-cap'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const properties: BaseIn[] = Array.isArray(body.properties) ? body.properties : []
     if (!properties.length) return NextResponse.json({ saved: 0, failed: 0, errors: [] })
+
+    // G5 — corporate monthly per-dealer save cap. Corporate/no-cap = unlimited.
+    const cap = await getSaveCapStatus(user.org_id)
+    if (!cap.allowed) {
+      return NextResponse.json({
+        error: `Monthly save limit reached (${cap.used}/${cap.limit}). Ask your Gate Guard admin to raise it.`,
+        saved: 0, failed: properties.length, cap,
+      }, { status: 402 })
+    }
 
     let saved = 0
     const errors: string[] = []
@@ -88,7 +98,7 @@ export async function POST(req: NextRequest) {
       // plain column conflict target; that silently failed every write).
       const { data: existingRows } = await supabase
         .from('aria_properties')
-        .select('id, facts')
+        .select('id, facts, org_id')
         .ilike('property_name', name)
         .order('last_researched_at', { ascending: false, nullsFirst: false })
         .limit(1)
@@ -99,6 +109,9 @@ export async function POST(req: NextRequest) {
         (fresh === null || fresh === undefined || fresh === '' ? (prev ?? null) : fresh)
 
       const row: Record<string, unknown> = {
+        // Stamp the saver's org so the monthly save-cap count (G5) can see it.
+        // Never overwrite an existing owner org on a re-save.
+        org_id: (existing as Record<string, unknown> | null)?.org_id ?? user.org_id ?? null,
         property_name: name,
         address: p.address ?? '',
         city: p.city ?? null,

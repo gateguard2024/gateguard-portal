@@ -32,7 +32,10 @@ Hero image + steel theme already there. Missing: an embedded **map** in the deta
 
 ## Progress
 - **v9.1 (done this pass):** G1 first tranche — added Yardi Matrix / LoopNet / CoStar / CBRE / Crexi as a 6th parallel data-source search in Phase 1A, plus a dedicated occupancy/class/type/owner sweep. G2 first tranche — Phase 1A now extracts **manager email, class (A/B/C/D — D added), building type, and occupancy %** in the first pass and threads them into the `aria_properties` upsert with **source priority** (Apts/Yardi value wins; Sonnet only fills gaps). "Never guess class/occupancy" rules enforced in the extractor.
-- **Still open:** G3 (owner POC + contact mailing addresses), G4 (per-field found-vs-assumed accuracy % on all core facts, not just inferred proptech), G5 (corporate monthly per-dealer save cap), G6 (popup map embed + larger fonts + width).
+- **G4 (done):** per-field `found` vs `assumed` accuracy % (`field_confidence`) computed in the deep route, persisted into `facts.field_confidence` (merge upgrades assumed→found, never downgrades), and surfaced in the UI as `cfBadge` chips (green ≥90 found / blue found / amber `~%` assumed) on ISP, Video, Bulk, Phone, Units.
+- **G3 (done):** owner point-of-contact + contact **mailing addresses** — `StepContact.address` + `role_type: 'owner'` extraction from EDGAR/LLC/registration; flows through `decision_makers` JSONB; UI contact cards show `📍 address` + amber `OWNER` badge.
+- **G5 (done):** corporate monthly per-dealer save cap. Migration **181** (`aria_dealer_save_caps`), `lib/aria-save-cap.ts` (`getSaveCapStatus`), enforcement in `save-base` (402 over cap; stamps `org_id` so the count sees the row), corporate-only `GET/PATCH /api/aria/save-caps`, and admin UI at `/admin/aria-caps` + a card in the Internal hub.
+- **Still open:** G6 (popup map embed + larger fonts + width).
 
 ## Suggested order (highest value first)
 1. **G2 + G4** (core facts + accuracy labels) — the foundation everything else reads.
