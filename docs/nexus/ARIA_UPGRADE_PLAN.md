@@ -35,7 +35,8 @@ Hero image + steel theme already there. Missing: an embedded **map** in the deta
 - **G4 (done):** per-field `found` vs `assumed` accuracy % (`field_confidence`) computed in the deep route, persisted into `facts.field_confidence` (merge upgrades assumed→found, never downgrades), and surfaced in the UI as `cfBadge` chips (green ≥90 found / blue found / amber `~%` assumed) on ISP, Video, Bulk, Phone, Units.
 - **G3 (done):** owner point-of-contact + contact **mailing addresses** — `StepContact.address` + `role_type: 'owner'` extraction from EDGAR/LLC/registration; flows through `decision_makers` JSONB; UI contact cards show `📍 address` + amber `OWNER` badge.
 - **G5 (done):** corporate monthly per-dealer save cap. Migration **181** (`aria_dealer_save_caps`), `lib/aria-save-cap.ts` (`getSaveCapStatus`), enforcement in `save-base` (402 over cap; stamps `org_id` so the count sees the row), corporate-only `GET/PATCH /api/aria/save-caps`, and admin UI at `/admin/aria-caps` + a card in the Internal hub.
-- **Still open:** G6 (popup map embed + larger fonts + width).
+- **G6 (done):** ARIA detail popup rethemed to the dashboard's brushed-steel tokens (`STEEL_FRAME` / `STEEL_TILE` / `STEEL_HEADER` / `STEEL_ACCENT`, matching the Opportunity Hub / windows). Widened to `max-w-6xl`; two-pane hero (property photo + live Mapbox **satellite map**, geocoded on open); big warm header banner; fonts bumped throughout (title 28px, rows 13px, buttons 15px, gauges larger); verdict + insight cards + sub-popups all steel. Fortune-500 clean, 5th-grader simple, same font/colors as the main dashboard.
+- **All ARIA plan gaps (G1–G6) complete.**
 
 ## Suggested order (highest value first)
 1. **G2 + G4** (core facts + accuracy labels) — the foundation everything else reads.

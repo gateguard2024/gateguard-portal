@@ -20,6 +20,21 @@ import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
 
+// ── Steel design tokens — identical to the Nexus dashboard / Opportunity Hub so
+// the ARIA detail popup reads as the same product (brushed light-steel frame,
+// dark steel tiles inside, one blue accent). Fortune-500 clean, no glass. ──
+const STEEL_FRAME = {
+  background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)',
+  border: '1px solid rgba(10,16,24,0.45)',
+  boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -2px 2px rgba(0,0,0,0.40)',
+} as const
+const STEEL_TILE = {
+  background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)',
+  border: '1px solid rgba(140,170,200,0.22)',
+} as const
+const STEEL_HEADER = 'linear-gradient(180deg,#33465e,#1e2a3a)'
+const STEEL_ACCENT = '#5FB8E0'
+
 type Category = 'properties' | 'listings' | 'contacts'
 type ViewMode = 'list' | 'map'
 
@@ -911,6 +926,13 @@ export default function AriaExplorePage() {
   const openDetail = useCallback(async (it: PropItem) => {
     setDetail(it); setDetailReport(null); setOpenCard(null); setScoutMsg(null)
     setDetailBusy(true)
+    // Make sure the popup can draw its satellite map: geocode in the background
+    // if we don't already have coordinates, then patch them onto the open detail.
+    if ((it.lat == null || it.lng == null) && MAPBOX_TOKEN) {
+      void geocode(it).then(g => {
+        if (g) setDetail(prev => (prev && prev.id === it.id ? { ...prev, lat: g.lat, lng: g.lng } : prev))
+      }).catch(() => {})
+    }
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)
       // Saved rows carry the real id → load by id (fastest path).
@@ -1570,50 +1592,73 @@ export default function AriaExplorePage() {
       {detail && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-8" onClick={() => setDetail(null)}>
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
-          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl" style={{ background: '#141E29', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
-            {/* Hero — the community's own photo (from the base find or the saved
-                record). Satellite is only the fallback when there's no real shot. */}
-            {(detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng)) && (
-              <div className="relative h-44 w-full bg-[#1A2532]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 700, 300)!}
-                  alt={detail.name}
-                  onError={e => {
-                    const fb = staticThumb(detail.lat, detail.lng, 700, 300)
-                    const el = e.currentTarget as HTMLImageElement
-                    if (fb && el.src !== fb) el.src = fb
-                  }}
-                  className="w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(11,23,40,0.1) 30%,rgba(11,23,40,0.95) 100%)' }} />
-                <button onClick={() => setDetail(null)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70"><X size={15} /></button>
+          <div className="relative w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-[1.75rem]" style={{ ...STEEL_FRAME, background: 'linear-gradient(180deg,#22303f 0%, #16232f 100%)' }} onClick={e => e.stopPropagation()}>
+            {/* Close — always reachable, top-right of the whole popup. */}
+            <button onClick={() => setDetail(null)} aria-label="Close"
+              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-white transition-colors"
+              style={{ background: 'rgba(8,14,22,0.55)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.18)' }}>
+              <X size={17} />
+            </button>
+
+            {/* Hero band — the community's own photo AND a live satellite map,
+                side by side on wide screens so it feels rich and real. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5 rounded-t-[1.6rem] overflow-hidden" style={{ background: 'rgba(140,170,200,0.18)' }}>
+              {(() => {
+                const photo = detail.photo_url || detailReport?.property?.photo_url || staticThumb(detail.lat, detail.lng, 760, 380)
+                const sat = staticThumb(detail.lat, detail.lng, 760, 380)
+                return (
+                  <>
+                    <div className="relative h-52 sm:h-60 bg-[#16232f]">
+                      {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photo} alt={detail.name}
+                          onError={e => { const fb = sat; const el = e.currentTarget as HTMLImageElement; if (fb && el.src !== fb) el.src = fb }}
+                          className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"><Building2 size={30} className="text-slate-600" /></div>
+                      )}
+                    </div>
+                    <div className="relative h-52 sm:h-60 bg-[#16232f] hidden md:block">
+                      {sat ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={sat} alt={`${detail.name} — satellite view`} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-500"><MapPin size={26} /><span className="text-[11px]">Map loading…</span></div>
+                      )}
+                      <span className="absolute bottom-2.5 left-2.5 text-[10px] font-bold px-2 py-1 rounded-md text-slate-100 inline-flex items-center gap-1"
+                        style={{ background: 'rgba(8,14,22,0.6)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.14)' }}>
+                        <MapPin size={11} /> Satellite view
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+
+            {/* Header banner — big, warm, confident. Same steel as the dashboard. */}
+            <div className="px-6 py-5" style={{ background: STEEL_HEADER, borderBottom: '1px solid rgba(140,170,200,0.20)' }}>
+              <div className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: STEEL_ACCENT }}>ARIA Property Brief</div>
+              <h2 className="mt-1 text-2xl sm:text-[28px] font-extrabold leading-tight" style={{ color: '#f2f7fc' }}>{detail.name}</h2>
+              <p className="text-sm flex items-center gap-1.5 mt-1" style={{ color: '#aebfd2' }}><MapPin size={14} /> {[detail.address, detail.city, detail.state].filter(Boolean).join(', ') || '—'}</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {detail.units ? <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg text-slate-100" style={STEEL_TILE}>{detail.units} units</span> : null}
+                {detail.management_company && <span className="text-[12px] font-semibold px-2.5 py-1 rounded-lg text-slate-200 inline-flex items-center gap-1.5" style={STEEL_TILE}><Building2 size={13} />{detail.management_company}</span>}
+                {triggerFlags(detail).map(f => <span key={f.label} className={`text-[12px] font-bold px-2.5 py-1 rounded-lg border ${toneClass(f.tone)}`}>{f.label}</span>)}
               </div>
-            )}
-            <div className="flex items-start gap-3 p-5 border-b border-white/10">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-bold text-slate-100">{detail.name}</h2>
-                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><MapPin size={11} /> {[detail.address, detail.city, detail.state].filter(Boolean).join(', ') || '—'}</p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {detail.units ? <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#1E2A3A] text-slate-300 border border-white/10">{detail.units} units</span> : null}
-                  {detail.management_company && <span className="text-[10px] px-2 py-0.5 rounded bg-[#1E2A3A] text-slate-400 border border-white/10 inline-flex items-center gap-1"><Building2 size={10} />{detail.management_company}</span>}
-                  {triggerFlags(detail).map(f => <span key={f.label} className={`text-[10px] font-bold px-2 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
-                </div>
-              </div>
-              <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-slate-200"><X size={18} /></button>
             </div>
 
             {/* What the base find already told us — shown before any deep run. */}
             {detail.systems && (
-              <div className="px-5 pt-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">What we found (base)</p>
-                <div className="flex flex-wrap items-center gap-1.5">
+              <div className="px-6 pt-5">
+                <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-300 mb-2">What we found so far</p>
+                <div className="flex flex-wrap items-center gap-2">
                   {SYSTEM_LABELS.map(sl => {
                     const on = !!detail.systems?.[sl.key]
                     return (
                       <span key={sl.key}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
-                          on ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
-                             : 'bg-white/[0.03] text-slate-600 border-white/10'}`}>
+                        className={`text-[12px] font-bold px-3 py-1.5 rounded-lg border ${
+                          on ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+                             : 'bg-white/[0.03] text-slate-500 border-white/10'}`}>
                         {on ? '✓' : '—'} {sl.label}
                       </span>
                     )
@@ -1622,46 +1667,46 @@ export default function AriaExplorePage() {
               </div>
             )}
 
-            {/* Three clear actions */}
-            <div className="p-5 space-y-2.5">
+            {/* Clear, friendly actions */}
+            <div className="p-6 space-y-3">
               {/* Save the base find first — cheap, instant, and it's what makes
                   this property viewable later without paying for a search. */}
               {!detail.researched && detail.systems && (
                 <button onClick={() => saveToDb([detail])} disabled={saveBusy}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: '#5FB8E0' }}>
-                  {saveBusy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-[15px] font-bold disabled:opacity-60 transition-transform hover:brightness-110 active:scale-[0.99]" style={{ background: STEEL_ACCENT }}>
+                  {saveBusy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                   {saveBusy ? 'Saving…' : 'Save to database'}
                 </button>
               )}
               {detailBusy && !detailReport && (
-                <div className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Checking your database…</div>
+                <div className="w-full flex items-center justify-center gap-2 py-3.5 text-slate-300 text-sm"><Loader2 size={16} className="animate-spin" /> Checking your database…</div>
               )}
               {/* Deep research is always an explicit, deliberate choice — never automatic.
                   A base report (community-only, not yet deep-researched) still offers it. */}
               {!detailBusy && (!detailReport || detailReport._base) && (
                 <button onClick={() => researchDetail(detail)}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}>
-                  <Zap size={14} /> Deep research this property <span className="opacity-60 text-[11px]">· runs a full search</span>
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-[15px] font-bold transition-transform hover:brightness-110 active:scale-[0.99]" style={{ background: 'linear-gradient(135deg,#22303F,#2B3C52 45%,#5FB8E0)' }}>
+                  <Zap size={16} /> Deep research this property <span className="opacity-60 text-[12px]">· runs a full search</span>
                 </button>
               )}
               <button onClick={() => addToLeads([detail])} disabled={busy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#1E2A3A] disabled:opacity-60">
-                <Star size={14} /> Add to Leads
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-slate-100 text-[15px] font-bold disabled:opacity-60 transition-transform hover:brightness-110 active:scale-[0.99]" style={STEEL_TILE}>
+                <Star size={16} /> Add to Leads
               </button>
               {detailReport && !detailReport._base && (
                 <button onClick={() => researchDetail(detail)} disabled={detailBusy}
-                  className="w-full text-center text-[11px] font-semibold text-slate-500 hover:text-slate-300 py-1 disabled:opacity-60">
+                  className="w-full text-center text-[12px] font-semibold text-slate-400 hover:text-slate-200 py-1 disabled:opacity-60">
                   {detailBusy ? 'Refreshing…' : '↻ Refresh data (runs a new search)'}
                 </button>
               )}
               {scoutLeadIds.length > 0 && (
                 <button onClick={launchScout} disabled={busy}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(to right,#10B981,#059669)' }}>
-                  <Zap size={14} /> Start SCOUT outreach
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-[15px] font-bold disabled:opacity-60 transition-transform hover:brightness-110 active:scale-[0.99]" style={{ background: 'linear-gradient(to right,#10B981,#059669)' }}>
+                  <Zap size={16} /> Start SCOUT outreach
                 </button>
               )}
-              {msg && <p className="text-[11px] text-emerald-300 font-semibold text-center">{msg}</p>}
-              {scoutMsg && <p className="text-[11px] text-emerald-300 font-semibold text-center">{scoutMsg}</p>}
+              {msg && <p className="text-[13px] text-emerald-300 font-semibold text-center">{msg}</p>}
+              {scoutMsg && <p className="text-[13px] text-emerald-300 font-semibold text-center">{scoutMsg}</p>}
             </div>
 
             {/* Report */}
@@ -1683,12 +1728,12 @@ export default function AriaExplorePage() {
                 const c = fieldConf[key]
                 if (!c || c.source === 'none' || !c.pct) return null
                 const color = c.source === 'found' ? (c.pct >= 90 ? '#34d399' : '#5FB8E0') : '#fbbf24'
-                return <span title={c.source === 'found' ? 'Found in a source' : 'Assumed / inferred'} className="ml-1.5 rounded px-1 py-0.5 text-[8px] font-bold align-middle" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>{c.source === 'found' ? '' : '~'}{c.pct}%</span>
+                return <span title={c.source === 'found' ? 'Found in a source' : 'Assumed / inferred'} className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold align-middle" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>{c.source === 'found' ? '' : '~'}{c.pct}%</span>
               }
               const Row = ({ k, val, cf }: { k: string; val: string; cf?: string }) => (
-                <div className="flex gap-2 py-1.5 border-b border-white/5 last:border-0">
-                  <span className="text-[11px] text-slate-500 w-28 shrink-0">{k}</span>
-                  <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}{cfBadge(cf)}</span>
+                <div className="flex gap-3 py-2.5 border-b border-white/5 last:border-0">
+                  <span className="text-[13px] text-slate-400 w-32 shrink-0">{k}</span>
+                  <span className={`text-[13px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-100'}`}>{val}{cfBadge(cf)}</span>
                 </div>
               )
               // Normalize any 0-100 style score (e.g. buy_score from freshness) to 0-10.
@@ -1734,37 +1779,39 @@ export default function AriaExplorePage() {
                 : `${detail?.name} is a ${detail?.units ? `${detail.units}-unit ` : ''}property${rep.property?.bulk_agreements?.length ? ' with an existing bulk internet deal worth displacing' : ''}${found.length === 0 ? '. Low proptech saturation signals strong upgrade potential' : ''}. ${buy >= 8 ? 'Hot lead — prioritize.' : buy >= 5 ? 'Warm — worth a call.' : 'Cold for now.'}`
               const Card = ({ id, Icon, title, summary }: { id: typeof openCard; Icon: any; title: string; summary: string }) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                 <button onClick={() => setOpenCard(openCard === id ? null : id)}
-                  className={`text-left rounded-xl border p-3.5 transition-all ${openCard === id ? 'border-[#5FB8E0] bg-[#1E2A3A] shadow-[0_0_20px_rgba(95,184,224,0.15)]' : 'border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50'}`}>
-                  <Icon size={20} className="text-[#5FB8E0] mb-2" />
-                  <p className="text-[12px] font-bold text-slate-100 leading-tight uppercase tracking-wide">{title}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{summary}</p>
-                  <p className="text-[9px] font-bold text-[#5FB8E0] mt-2 uppercase tracking-wide">Click for detailed report</p>
+                  className="text-left rounded-2xl p-4 transition-all hover:brightness-110 active:scale-[0.99]"
+                  style={{ ...STEEL_TILE, ...(openCard === id ? { borderColor: STEEL_ACCENT, boxShadow: '0 0 24px rgba(95,184,224,0.22)' } : {}) }}>
+                  <Icon size={22} className="mb-2" style={{ color: STEEL_ACCENT }} />
+                  <p className="text-[14px] font-bold text-slate-100 leading-tight">{title}</p>
+                  <p className="text-[12px] text-slate-400 mt-1 leading-snug">{summary}</p>
+                  <p className="text-[11px] font-bold mt-2.5" style={{ color: STEEL_ACCENT }}>View detailed report →</p>
                 </button>
               )
               return (
                 <div className="pb-10">
                   {/* Top speedometers */}
-                  <div className="grid grid-cols-3 gap-1 px-4 pt-2 items-end">
-                    <SemiGauge label="Buy score" val={buy} size={92} />
-                    <SemiGauge label="Opportunity" val={Math.round((buy + fit) / 2)} size={108} />
-                    <SemiGauge label="Contactability" val={dm} size={92} />
+                  <div className="grid grid-cols-3 gap-1 px-5 pt-3 items-end">
+                    <SemiGauge label="Buy score" val={buy} size={104} />
+                    <SemiGauge label="Opportunity" val={Math.round((buy + fit) / 2)} size={122} />
+                    <SemiGauge label="Contactability" val={dm} size={104} />
                   </div>
                   {/* ARIA's opportunity verdict */}
-                  <div className="px-5 pt-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">ARIA&apos;s opportunity verdict</p>
-                    <p className="text-xl font-extrabold text-center mt-0.5" style={{ color: verdictColor }}>{verdictLabel}</p>
-                    <p className="text-[12px] text-slate-300 leading-relaxed mt-2">{verdictText}</p>
+                  <div className="mx-6 mt-3 rounded-2xl px-5 py-4" style={STEEL_TILE}>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 text-center">ARIA&apos;s opportunity verdict</p>
+                    <p className="text-2xl font-extrabold text-center mt-1" style={{ color: verdictColor }}>{verdictLabel}</p>
+                    <p className="text-[14px] text-slate-200 leading-relaxed mt-2.5 text-center">{verdictText}</p>
                   </div>
                   {/* Second gauge row */}
-                  <div className="grid grid-cols-2 gap-2 px-5 pt-4 border-t border-white/10 mt-4">
-                    <SemiGauge label="Pro-Tech fit" val={fit} size={100} />
-                    <SemiGauge label="Team contactability" val={dm} size={100} />
+                  <div className="grid grid-cols-2 gap-3 px-6 pt-5">
+                    <SemiGauge label="Pro-Tech fit" val={fit} size={112} />
+                    <SemiGauge label="Team contactability" val={dm} size={112} />
                   </div>
                   {/* Insight cards */}
-                  <div className="grid grid-cols-2 gap-2.5 px-5 pt-4">
-                    <Card id="network" Icon={Wifi} title="Network overview" summary="Comprehensive Wi-Fi & TV audit." />
-                    <Card id="community" Icon={Users} title="Community insights" summary="Resident feedback & engagement." />
-                    <Card id="proptech" Icon={Cpu} title="Proptech ops" summary="Hardware & software stack." />
+                  <div className="mt-2 mb-1 px-6 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400 pt-5">Dig deeper</div>
+                  <div className="grid grid-cols-2 gap-3 px-6">
+                    <Card id="network" Icon={Wifi} title="Network overview" summary="Wi-Fi, internet & TV audit." />
+                    <Card id="community" Icon={Users} title="Community insights" summary="Resident feedback & reviews." />
+                    <Card id="proptech" Icon={Cpu} title="Proptech stack" summary="Hardware & software in place." />
                     <Card id="ai" Icon={Zap} title="Deep AI audit" summary="Analysis & recommendations." />
                   </div>
                   {/* Detailed report — opens as its own POPUP on top, so nothing
@@ -1772,19 +1819,19 @@ export default function AriaExplorePage() {
                   {openCard && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setOpenCard(null)}>
                       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-                      <div className="relative w-full max-w-xl max-h-[82vh] flex flex-col rounded-2xl shadow-2xl"
-                        style={{ background: '#141E29', border: '1px solid rgba(255,255,255,0.10)' }} onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
-                          <h3 className="text-[13px] font-bold text-slate-100 uppercase tracking-wide">
-                            {openCard === 'network' ? 'Network overview' : openCard === 'community' ? 'Community insights' : openCard === 'proptech' ? 'Proptech ops' : 'Deep AI audit'}
+                      <div className="relative w-full max-w-2xl max-h-[82vh] flex flex-col rounded-[1.5rem]"
+                        style={{ ...STEEL_FRAME, background: 'linear-gradient(180deg,#22303f 0%, #16232f 100%)' }} onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 px-5 py-4 shrink-0 rounded-t-[1.5rem]" style={{ background: STEEL_HEADER, borderBottom: '1px solid rgba(140,170,200,0.20)' }}>
+                          <h3 className="text-[16px] font-extrabold text-slate-100">
+                            {openCard === 'network' ? 'Network overview' : openCard === 'community' ? 'Community insights' : openCard === 'proptech' ? 'Proptech stack' : 'Deep AI audit'}
                           </h3>
-                          {openCard === 'community' && communityBusy && <Loader2 size={13} className="animate-spin text-[#5FB8E0]" />}
+                          {openCard === 'community' && communityBusy && <Loader2 size={14} className="animate-spin" style={{ color: STEEL_ACCENT }} />}
                           <button onClick={() => setOpenCard(null)} aria-label="Close"
-                            className="ml-auto w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10">
-                            <X size={15} />
+                            className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10">
+                            <X size={17} />
                           </button>
                         </div>
-                        <div className="overflow-y-auto p-4">
+                        <div className="overflow-y-auto p-5">
                       {openCard === 'network' && (() => {
                         // Three honest states, never conflated:
                         //   brand known → name it
