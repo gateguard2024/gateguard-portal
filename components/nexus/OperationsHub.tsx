@@ -153,7 +153,7 @@ function printWorkOrder(wo: any, equip: any[]) {
 // each task is a clear, focused step (easy enough for a 5th grader).
 function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(95,184,224,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid rgba(140,170,200,0.28)", borderRadius: 18, padding: 18, paddingBottom: "calc(96px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ fontSize: 17, margin: 0 }}>{title}</h2>
         <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "white", borderRadius: 9, width: 30, height: 30, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
@@ -1064,7 +1064,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
     if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
   }
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(95,184,224,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid rgba(140,170,200,0.28)", borderRadius: 18, padding: 20, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
       <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
@@ -1939,7 +1939,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0a1228,#05091a)", border: "1px solid rgba(95,184,224,0.22)", borderRadius: 18, padding: 24, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid rgba(140,170,200,0.28)", borderRadius: 18, padding: 24, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
         <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
         {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
@@ -1952,7 +1952,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         </div>
 
         {/* Tabs — keep every feature one click away in a clean console */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "linear-gradient(180deg,#0c1530,#0c1530ee)", paddingBottom: 4 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "linear-gradient(180deg,#22303f,#22303fee)", paddingBottom: 4 }}>
           {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => (
             <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(95,184,224,0.5)" : "1px solid rgba(255,255,255,0.1)", background: tab === tb ? "rgba(95,184,224,0.16)" : "rgba(255,255,255,0.04)", color: tab === tb ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{tb}</button>
           ))}
