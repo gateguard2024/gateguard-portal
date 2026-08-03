@@ -210,7 +210,7 @@ export default function NexusHomeClient() {
     <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
       <NexusBackdropLayers variant="hero" />
 
-      <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
+      <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-48 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
         {/* Slim brand band — small NEXUS mark + narrow Ask bar. Greeting now
             lives centered above the My Day summary. */}
         <NexusMark />

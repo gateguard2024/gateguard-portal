@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
+import { PIPELINE_STAGES, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
 type AnyRecord = Record<string, any>
 const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1b2836,#0f1822)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 26px 54px rgba(0,0,0,0.55), inset 0 1px 0 rgba(190,215,240,0.10), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
@@ -92,6 +93,16 @@ function fmtDate(v: unknown): string {
   if (isNaN(d.getTime())) return String(v)
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
+// Aging — whole days since a timestamp, as a short label.
+function agingLabel(v: unknown): string {
+  if (!v) return '—'
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return '—'
+  const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86_400_000))
+  if (days === 0) return 'Today'
+  if (days === 1) return '1 day'
+  return `${days} days`
+}
 
 export function OpportunityGlassWindow({
   data,
@@ -141,16 +152,17 @@ export function OpportunityGlassWindow({
 
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
   const [followupOpen, setFollowupOpen] = useState(false)
-  const [fu, setFu] = useState({ title: '', due_date: '', notes: '' })
+  const [fu, setFu] = useState({ title: '', due_date: '', notes: '', assigned_to: '', assigned_to_name: '' })
+  function openFollowup() { setFollowupOpen(true); void loadAssignees() }
   const [fuBusy, setFuBusy] = useState(false)
   async function submitFollowup() {
     if (!oppIdStr) return
     setFuBusy(true)
     try {
-      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'schedule_followup', title: fu.title || `Follow up: ${opp.name || opp.account_name || 'opportunity'}`, due_date: fu.due_date || null, notes: fu.notes || null }) })
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'schedule_followup', title: fu.title || `Follow up: ${opp.name || opp.account_name || 'opportunity'}`, due_date: fu.due_date || null, notes: fu.notes || null, assigned_to: fu.assigned_to || null, assigned_to_name: fu.assigned_to_name || null }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not schedule.' }); return }
-      setFollowupOpen(false); setFu({ title: '', due_date: '', notes: '' })
+      setFollowupOpen(false); setFu({ title: '', due_date: '', notes: '', assigned_to: '', assigned_to_name: '' })
       setMsg({ ok: true, text: 'Follow-up scheduled ✓' })
       await onRefresh?.()
     } catch { setMsg({ ok: false, text: 'Could not schedule.' }) }
@@ -309,18 +321,17 @@ export function OpportunityGlassWindow({
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignUsers, setAssignUsers] = useState<Array<{ id: string; full_name?: string; email: string }>>([])
-  async function openReassign() {
-    setAssignOpen(true)
-    if (assignUsers.length === 0) {
-      setAssignLoading(true)
-      try {
-        const r = await fetch('/api/admin/users')
-        const j = await r.json().catch(() => ({}))
-        const list: AnyRecord[] = Array.isArray(j?.users) ? j.users : Array.isArray(j) ? j : []
-        setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '' })).filter(u => u.id))
-      } catch { /* ignore */ } finally { setAssignLoading(false) }
-    }
+  async function loadAssignees() {
+    if (assignUsers.length > 0) return
+    setAssignLoading(true)
+    try {
+      const r = await fetch('/api/admin/users')
+      const j = await r.json().catch(() => ({}))
+      const list: AnyRecord[] = Array.isArray(j?.users) ? j.users : Array.isArray(j) ? j : []
+      setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '' })).filter(u => u.id))
+    } catch { /* ignore */ } finally { setAssignLoading(false) }
   }
+  async function openReassign() { setAssignOpen(true); await loadAssignees() }
   async function doReassign(assigneeId: string, name: string) {
     const oppId = opp.id as string | undefined
     if (!oppId) return
@@ -423,6 +434,43 @@ export function OpportunityGlassWindow({
 
   const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' } as const
 
+  // ── Health + probability model ──────────────────────────────────────────────
+  // Health = how long the deal has sat idle (time since last update). Estimated
+  // win % = a base probability per stage, decayed the longer it sits idle. A
+  // stored `probability` (if set) seeds the base so manual overrides still count.
+  const idleDays = (() => {
+    const v = opp.updated_at ?? opp.created_at
+    if (!v) return 0
+    const d = new Date(String(v))
+    return isNaN(d.getTime()) ? 0 : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86_400_000))
+  })()
+  // Base % = the app's CANONICAL per-stage probability (lib/pipeline STAGE_PROB),
+  // resolved through normalizeStage so any stored alias maps correctly. A manually
+  // set `probability` seeds the fallback. Then deteriorate with aging: full base
+  // for the first 7 idle days, linear decay over the next ~45 to a 35% floor.
+  const normStage = normalizeStage(String(opp.stage ?? ''))
+  const baseProb = STAGE_PROB[normStage] ?? (opp.probability != null ? Number(opp.probability) : 20)
+  const isClosed = ['won', 'lost', 'dead'].includes(normStage)
+  const decay = Math.min(1, Math.max(0.35, 1 - Math.max(0, idleDays - 7) / 45))
+  const estProb = isClosed ? baseProb : Math.max(2, Math.round(baseProb * decay))
+  // Per-stage stall thresholds [amber, red] — earlier stages may sit longer.
+  const STAGE_STALL: Record<string, [number, number]> = { meet_present: [21, 45], survey: [21, 45], propose: [14, 30], negotiate: [10, 21], contract: [7, 14], deposit: [5, 10] }
+  const [amberT, redT] = STAGE_STALL[normStage] ?? [10, 21]
+  const health = isClosed
+    ? { color: normStage === 'won' ? '#34d399' : '#f87171', label: normStage === 'won' ? 'Won' : 'Closed' }
+    : idleDays <= amberT ? { color: '#34d399', label: 'On track' }
+    : idleDays <= redT ? { color: '#fbbf24', label: 'Aging' }
+    : { color: '#f87171', label: 'Stalled' }
+
+  // ── Deal value model → MRR + install fee → TCV → weighted forecast ──────────
+  // TCV = (MRR × contract term months) + one-time install/setup fee. Weighted
+  // forecast = TCV × estimated win %. Fields fall back gracefully if not stored.
+  const mrrVal = Number(show('est_mrr') ?? opp.est_mrr ?? 0) || 0
+  const installVal = Number(show('install_fee') ?? opp.install_fee ?? opp.setup_fee ?? 0) || 0
+  const termVal = Number(show('contract_term') ?? opp.contract_term ?? opp.term_months ?? 36) || 36
+  const tcv = mrrVal * termVal + installVal
+  const weightedTcv = Math.round(tcv * (estProb / 100))
+
   return (
     <>
     <NexusGlassBackButton label="Back to workbench" onClick={onBack} />
@@ -442,6 +490,13 @@ export function OpportunityGlassWindow({
               <input type="date" value={fu.due_date} onChange={e => setFu({ ...fu, due_date: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             </div>
             <textarea value={fu.notes} onChange={e => setFu({ ...fu, notes: e.target.value })} placeholder="Notes (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <div>
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Assign to {assignLoading && <span style={{ color: 'rgba(255,255,255,0.4)' }}>· loading…</span>}</label>
+              <select value={fu.assigned_to} onChange={e => { const u = assignUsers.find(x => x.id === e.target.value); setFu({ ...fu, assigned_to: e.target.value, assigned_to_name: u ? (u.full_name || u.email) : '' }) }} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }}>
+                <option value="" style={{ background: '#0b1424' }}>Me (default)</option>
+                {assignUsers.map(u => <option key={u.id} value={u.id} style={{ background: '#0b1424' }}>{u.full_name || u.email}</option>)}
+              </select>
+            </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
@@ -508,7 +563,7 @@ export function OpportunityGlassWindow({
         </div>
       </div>
     )}
-    <div className="space-y-4 pb-28 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
+    <div className="space-y-4 pb-44 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
@@ -559,26 +614,26 @@ export function OpportunityGlassWindow({
           </div>
           <div className="rounded-2xl px-4 py-3 text-right" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Stage</div>
-            <div className="mt-1 text-sm font-semibold" style={{ color: stageColor }}>{val(opp.stage, 'inquiry')}</div>
+            <div className="mt-1 text-sm font-semibold" style={{ color: stageColor }}>{val(show('stage') ?? opp.stage, 'inquiry')}</div>
+            <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${health.color}22`, border: `1px solid ${health.color}55`, color: health.color }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: health.color }} />{health.label} · {estProb}%
+            </div>
           </div>
         </div>
 
-        {/* Stage path — click any stage to move the deal there. */}
+        {/* Stage path — the real pipeline (Meet & Present → … → Won). Click to move. */}
         {(() => {
-          const STAGES = ['inquiry', 'qualified', 'proposal', 'negotiation', 'won']
-          const cur = String(show('stage') ?? 'inquiry').toLowerCase()
-          const isLost = ['lost', 'dead'].includes(cur)
-          const curIdx = STAGES.findIndex(s => cur.includes(s) || s.includes(cur))
+          const curIdx = PIPELINE_STAGES.findIndex(s => s.key === normStage)
           return (
-            <div className="mt-4 flex items-stretch gap-1">
-              {STAGES.map((s, i) => {
-                const done = !isLost && curIdx >= 0 && i < curIdx
-                const active = !isLost && i === curIdx
+            <div className="mt-4 flex items-stretch gap-1 overflow-x-auto">
+              {PIPELINE_STAGES.map((s, i) => {
+                const done = !isClosed && curIdx >= 0 && i < curIdx
+                const active = !isClosed && s.key === normStage
                 return (
-                  <button key={s} type="button" disabled={stageBusy !== null} onClick={() => setStage(s)}
-                    className="flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide capitalize transition-colors disabled:opacity-60"
+                  <button key={s.key} type="button" disabled={stageBusy !== null} onClick={() => setStage(s.key)}
+                    className="min-w-[70px] flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-60"
                     style={{ background: active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.16)' : 'rgba(255,255,255,0.05)', border: `1px solid ${active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.4)' : 'rgba(140,170,200,0.24)'}`, color: active ? 'white' : done ? '#6ee7b7' : 'rgba(255,255,255,0.62)' }}>
-                    {stageBusy === s ? '…' : s}
+                    {stageBusy === s.key ? '…' : s.label}
                   </button>
                 )
               })}
@@ -591,6 +646,36 @@ export function OpportunityGlassWindow({
           {renderEditStat('amount', 'Amount', (show('amount') ?? opp.amount) ? formatMoney(show('amount') ?? opp.amount) : 'Not set', 'number', show('amount') ?? opp.amount)}
           {renderEditStat('close_date', 'Close Date', (show('close_date') ?? opp.close_date) ? fmtDate(show('close_date') ?? opp.close_date) : 'Not set', 'date', show('close_date') ?? opp.close_date)}
           <MiniStat label="Updated"     value={fmtWhen(opp.updated_at ?? opp.created_at) || 'Unknown'} />
+        </div>
+
+        {/* At-a-glance — assigned rep, manager, units, health (time-in-stage) + est win %. */}
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
+          <MiniStat label="Manager"     value={val(show('management_co') ?? opp.management_co, 'Not set')} />
+          <MiniStat label="Units"       value={val(show('units') ?? opp.units, 'Unknown')} />
+          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: `1px solid ${health.color}55` }}>
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Idle · {health.label}</div>
+            <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: health.color }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: health.color }} />{agingLabel(opp.updated_at ?? opp.created_at)}</div>
+          </div>
+          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Est. win %</div>
+            <div className="mt-1 text-xs font-semibold" style={{ color: estProb >= 60 ? '#34d399' : estProb >= 30 ? '#fbbf24' : '#f87171' }}>{estProb}%</div>
+          </div>
+        </div>
+
+        {/* Deal value → Total Contract Value → weighted forecast. */}
+        <div className="mt-3">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(159,216,236,0.9)' }}>Deal value · Total Contract Value</div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {renderEditStat('install_fee', 'Install fee', installVal ? formatMoney(installVal) : 'Not set', 'number', installVal || '')}
+            {renderEditStat('contract_term', 'Term (mo)', String(termVal), 'number', termVal)}
+            <MiniStat label="TCV" value={tcv ? formatMoney(tcv) : '—'} />
+            <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(95,184,224,0.3)' }}>
+              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Weighted · {estProb}%</div>
+              <div className="mt-1 text-xs font-semibold" style={{ color: '#9FD8EC' }}>{weightedTcv ? formatMoney(weightedTcv) : '—'}</div>
+            </div>
+          </div>
+          <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>TCV = MRR {formatMoney(mrrVal)} × {termVal} mo + install {formatMoney(installVal)}</div>
         </div>
       </div>
 
@@ -720,7 +805,7 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Tasks" count={todos.length}>
-            <button type="button" onClick={() => setFollowupOpen(true)} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+            <button type="button" onClick={openFollowup} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
               <div className="text-xs font-semibold">+ Add task</div>
               <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>With a due date and notes</div>
             </button>
@@ -737,7 +822,10 @@ export function OpportunityGlassWindow({
                         <div className="min-w-0">
                           <div className="text-xs font-semibold" style={{ color: done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)', textDecoration: done ? 'line-through' : 'none' }}>{val(t.title, 'Task')}</div>
                           {t.body && <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>{String(t.body)}</div>}
-                          {t.due_date && <div className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: '#9FD8EC' }}>Due {fmtDate(t.due_date)}</div>}
+                          <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] uppercase tracking-wide">
+                            {t.due_date && <span style={{ color: '#9FD8EC' }}>Due {fmtDate(t.due_date)}</span>}
+                            {(t.assigned_to_name || t.owner_name) && <span style={{ color: 'rgba(255,255,255,0.5)' }}>→ {String(t.assigned_to_name || t.owner_name)}</span>}
+                          </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <button type="button" disabled={taskBusy === tid} title={done ? 'Reopen' : 'Complete'} onClick={() => completeTask(tid, !done)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: done ? 'rgba(255,255,255,0.06)' : 'rgba(52,211,153,0.14)', border: `1px solid ${done ? 'rgba(255,255,255,0.14)' : 'rgba(52,211,153,0.4)'}`, color: done ? 'rgba(255,255,255,0.6)' : '#6ee7b7' }}>{taskBusy === tid ? '…' : done ? '↺' : '✓'}</button>
@@ -780,7 +868,7 @@ export function OpportunityGlassWindow({
                   <button
                     key={action.action}
                     type="button"
-                    onClick={() => action.action === 'schedule_followup' ? setFollowupOpen(true) : handleAction(action.action)}
+                    onClick={() => action.action === 'schedule_followup' ? openFollowup() : handleAction(action.action)}
                     disabled={busy !== null}
                     className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
                     style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.86)' }}

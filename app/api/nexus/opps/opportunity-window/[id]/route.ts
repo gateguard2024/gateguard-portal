@@ -264,6 +264,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (body.units !== undefined && body.units !== '') { const n = parseInt(String(body.units), 10); if (!isNaN(n)) map.units = n }
     if (body.amount !== undefined && body.amount !== '') { const n = Number(body.amount); if (!isNaN(n)) map.amount = n }
     if (body.est_mrr !== undefined && body.est_mrr !== '') { const n = Number(body.est_mrr); if (!isNaN(n)) map.est_mrr = n }
+    // Deal-value fields for TCV forecasting (drift-safe: stripped if not migrated).
+    if (body.install_fee !== undefined && body.install_fee !== '') { const n = Number(body.install_fee); if (!isNaN(n)) map.install_fee = n }
+    if (body.contract_term !== undefined && body.contract_term !== '') { const n = parseInt(String(body.contract_term), 10); if (!isNaN(n)) map.contract_term = n }
     if (Array.isArray(body.interests)) map.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
 
     if (Object.keys(map).length === 0) return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
@@ -317,7 +320,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // `todos` has `org_id` — NOT `dealer_org_id` — and has no `type` column at
     // all (migrations 023 + 024). Both were being inserted, so this route
     // returned 500 on every call with no drift-retry to save it.
-    const { data, error: tErr } = await supabase.from('todos').insert({
+    const todoRow: Record<string, unknown> = {
       org_id: (opp as Record<string, unknown>).dealer_org_id,
       created_by: user.id,
       title,
@@ -326,9 +329,21 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       due_date: dueDate || null,
       linked_type: 'opportunity',
       linked_id: oppId,
-    }).select('id, title, due_date').single()
-    if (tErr) return NextResponse.json({ success: false, message: tErr.message }, { status: 500 })
-    return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
+    }
+    // Assign the task to a teammate to assist (defaults to unassigned = creator).
+    if (clean(body.assigned_to)) todoRow.assigned_to = clean(body.assigned_to)
+    if (clean(body.assigned_to_name)) todoRow.assigned_to_name = clean(body.assigned_to_name)
+    // Drift-safe insert — strip a not-yet-migrated column and retry.
+    let todo: Record<string, unknown> | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await supabase.from('todos').insert(todoRow).select('id, title, due_date').single()
+      if (!res.error) { todo = res.data as Record<string, unknown>; break }
+      const m = res.error.message ?? ''
+      const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)'/)?.[1]) : null
+      if (missing && (missing in todoRow)) { delete todoRow[missing]; continue }
+      return NextResponse.json({ success: false, message: res.error.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo })
   }
 
   if (action === 'reassign_opp') {

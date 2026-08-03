@@ -688,9 +688,13 @@ export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { act
     ? 'All leads have been touched recently.'
     : 'Nothing found here yet.'
 
+  // When a detail window (lead/opportunity) is open it brings its own steel
+  // frame, so drop this surface's glassy card — otherwise the window reads as
+  // "glass" against the rest of the steel UI.
+  const detailWindowOpen = !!(selectedLeadId && leadWindowData) || !!(selectedOpportunityId && opportunityWindowData)
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(95,184,224,0.07), rgba(255,255,255,0.022))', border: '1px solid rgba(95,184,224,0.14)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(95,184,224,0.07), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
+      <div className={detailWindowOpen ? 'w-full' : 'rounded-[2rem] p-5 sm:p-6'} style={detailWindowOpen ? undefined : { background: 'linear-gradient(180deg, rgba(95,184,224,0.07), rgba(255,255,255,0.022))', border: '1px solid rgba(95,184,224,0.14)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(95,184,224,0.07), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
         {selectedLeadId && leadWindowData && (
           <LeadGlassWindow
             data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
