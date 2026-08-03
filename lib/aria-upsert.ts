@@ -240,6 +240,20 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
     const mEv       = mergeArr((exFacts?.proptech_found?.ev_chargers as string[] | undefined), pt.ev_chargers) ?? []
 
     const facts = {
+      // Per-field found-vs-assumed + accuracy % (G4). Merge so a later run that
+      // finds a value 'found' upgrades a prior 'assumed', but never downgrades.
+      field_confidence: (() => {
+        const ex = (exFacts?.field_confidence ?? {}) as Record<string, { source?: string; pct?: number }>
+        const fr = (prop.field_confidence ?? {}) as Record<string, { source?: string; pct?: number }>
+        const out: Record<string, { source: string; pct: number }> = {}
+        for (const k of new Set([...Object.keys(ex), ...Object.keys(fr)])) {
+          const a = ex[k], b = fr[k]
+          const rank = (s?: string) => (s === 'found' ? 2 : s === 'assumed' ? 1 : 0)
+          const best = rank(b?.source) >= rank(a?.source) ? b : a
+          out[k] = { source: String(best?.source ?? 'none'), pct: Number(best?.pct ?? 0) }
+        }
+        return out
+      })(),
       property: {
         name: propName, address: propAddr,
         city:  mergeVal(exFacts?.property?.city,  prop.city),

@@ -3290,9 +3290,35 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     const lastSalePrice = ((): string | null => { const s = normStr(p2Final.last_sale_price); return s && !/no data/i.test(s) ? s : null })()
     const lastSaleDate  = ((): string | null => { const s = normStr(p2Final.last_sale_date);  return s && !/no data/i.test(s) ? s : null })()
 
+    // ── G4: per-field found-vs-assumed + accuracy % ─────────────────────────
+    // "found"  = a source stated the value verbatim (Apts/Yardi first-pass wins →
+    //            highest %, then web synthesis, then a verified pool like FCC).
+    // "assumed"= value is inferred/derived, not stated → lower %.
+    // "none"   = no data. The UI renders a badge per fact from this map.
+    const cf = (foundHigh: boolean, hi: number, foundMed: boolean, med: number, assumed = false, ap = 0) =>
+      foundHigh ? { source: 'found' as const, pct: hi }
+      : foundMed ? { source: 'found' as const, pct: med }
+      : assumed ? { source: 'assumed' as const, pct: ap }
+      : { source: 'none' as const, pct: 0 }
+    const field_confidence: Record<string, { source: 'found' | 'assumed' | 'none'; pct: number }> = {
+      units:              cf(!!p1.confirmed_units, 96, !!normInt(rawData.property_details?.units ?? rawData.units), 82),
+      phone:              cf(!!normStr(p1.confirmed_phone), 95, !!normStr(rawData.property_phone), 78),
+      email:              cf(!!normStr(p1.confirmed_manager_email), 90, false, 0),
+      class:              cf(!!p1.confirmed_class, 90, !!normStr(rawData.property_details?.class ?? rawData.property_class), 72),
+      property_type:      cf(!!p1.confirmed_type, 88, !!normStr(rawData.property_details?.property_type), 66),
+      occupancy:          cf(!!p1.confirmed_occupancy, 90, !!normStr(rawData.property_details?.occupancy), 68),
+      year_built:         cf(!!p1.confirmed_year_built, 92, !!normInt(rawData.property_details?.year_built ?? rawData.year_built), 78),
+      owner_entity:       cf(false, 0, !!normStr(finalOwner || rawData.ownership?.owner_entity), 80),
+      management_company: cf(false, 0, !!normStr(mgmt || rawData.property_details?.management_company), 80),
+      isp:                cf(p2Final.fcc_providers.length > 0, 95, cleanIspProviders.length > 0, 78),
+      video:              cf(false, 0, cleanVideoProviders.length > 0, 78),
+      bulk:               cf(false, 0, cleanBulkAgreements.length > 0, 82, !!p2Final.roe_detected, 58),
+    }
+
     const prospectPayload = {
       property: {
         name: property_name,
+        field_confidence,
         address: normStr(address) || property_name,
         city: city || null,
         state: state || null,

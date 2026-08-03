@@ -248,6 +248,7 @@ function normalizeReport(raw: any): any {
         proptech: pt,
         inferred_proptech: pickArr(d.proptech_inferred),
       },
+      field_confidence: (f.field_confidence ?? {}) as Record<string, { source: string; pct: number }>,
       // What the base find proved EXISTS, even when deep hasn't named the brand.
       // "Present, brand unknown" and "no data found" are completely different
       // facts and must never be shown as the same thing.
@@ -285,6 +286,7 @@ function normalizeReport(raw: any): any {
       bulk_agreements: p.property?.bulk_agreements ?? [], roe_expiry_year: p.property?.roe_expiry_year,
       proptech: p.property?.proptech ?? {}, inferred_proptech: p.property?.inferred_proptech ?? [],
     },
+    field_confidence: (p.property?.field_confidence ?? {}) as Record<string, { source: string; pct: number }>,
     // Fresh deep result (raw payload, not yet re-read from DB): use the engine's
     // presence object if present, else derive from the brand arrays so unbranded-
     // but-present systems don't read as "No data found".
@@ -1672,10 +1674,20 @@ export default function AriaExplorePage() {
               const community: any[] = rep.community ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
               const plan = rep.scout?.outreach_plan ?? null
               const dm = dmScoreN(rep)
-              const Row = ({ k, val }: { k: string; val: string }) => (
+              // G4 — found-vs-assumed accuracy badge next to a fact.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const fieldConf = ((rep as any).field_confidence ?? {}) as Record<string, { source: string; pct: number }>
+              const cfBadge = (key?: string) => {
+                if (!key) return null
+                const c = fieldConf[key]
+                if (!c || c.source === 'none' || !c.pct) return null
+                const color = c.source === 'found' ? (c.pct >= 90 ? '#34d399' : '#5FB8E0') : '#fbbf24'
+                return <span title={c.source === 'found' ? 'Found in a source' : 'Assumed / inferred'} className="ml-1.5 rounded px-1 py-0.5 text-[8px] font-bold align-middle" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>{c.source === 'found' ? '' : '~'}{c.pct}%</span>
+              }
+              const Row = ({ k, val, cf }: { k: string; val: string; cf?: string }) => (
                 <div className="flex gap-2 py-1.5 border-b border-white/5 last:border-0">
                   <span className="text-[11px] text-slate-500 w-28 shrink-0">{k}</span>
-                  <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}</span>
+                  <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}{cfBadge(cf)}</span>
                 </div>
               )
               // Normalize any 0-100 style score (e.g. buy_score from freshness) to 0-10.
@@ -1787,12 +1799,12 @@ export default function AriaExplorePage() {
                         const bulks = (rep.property?.bulk_agreements ?? []).map((b: any) => b?.provider).filter(Boolean)
                         return (
                           <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
-                            <Row k="Internet (ISP)" val={vp(rep.property?.isp_providers, !!pz.internet)} />
-                            <Row k="TV / Video" val={vp(rep.property?.video_providers, !!pz.video)} />
-                            <Row k="Bulk deal" val={bulks.length ? `Yes — ${bulks.join(', ')}` : (pz.bulk ? 'Yes — provider not identified yet' : 'No data found')} />
+                            <Row k="Internet (ISP)" val={vp(rep.property?.isp_providers, !!pz.internet)} cf="isp" />
+                            <Row k="TV / Video" val={vp(rep.property?.video_providers, !!pz.video)} cf="video" />
+                            <Row k="Bulk deal" val={bulks.length ? `Yes — ${bulks.join(', ')}` : (pz.bulk ? 'Yes — provider not identified yet' : 'No data found')} cf="bulk" />
                             <Row k="Contract expiry" val={v(rep.property?.roe_expiry_year)} />
-                            <Row k="Phone" val={v(rep.property?.phone)} />
-                            <Row k="Units" val={v(rep.property?.units)} />
+                            <Row k="Phone" val={v(rep.property?.phone)} cf="phone" />
+                            <Row k="Units" val={v(rep.property?.units)} cf="units" />
                           </div>
                         )
                       })()}
