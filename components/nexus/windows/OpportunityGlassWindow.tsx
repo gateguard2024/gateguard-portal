@@ -28,7 +28,7 @@ function val(v: unknown, fallback = 'Not added yet') {
 
 function Section({ title, children, count }: { title: string; children: React.ReactNode; count?: number }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</div>
         {typeof count === 'number' && count > 0 && (
@@ -46,7 +46,7 @@ function Empty({ text }: { text: string }) {
 
 function MiniRow({ title, subtitle, meta }: { title: string; subtitle?: string; meta?: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>{title}</div>
         {meta && <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap' }}>{meta}</div>}
@@ -63,7 +63,7 @@ function ListBlock({ records, emptyText, render }: { records?: AnyRecord[]; empt
 
 function MiniStat({ label, value: v }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label}</div>
       <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{v}</div>
     </div>
@@ -443,7 +443,7 @@ export function OpportunityGlassWindow({
       )}
 
       {/* ── Header ── */}
-      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#1e2a3a)', border: '1px solid rgba(95,184,224,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px), linear-gradient(145deg,#1d2a39,#0f1822)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 20px 70px rgba(0,0,0,0.35), inset 0 1px 0 rgba(190,215,240,0.08)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
@@ -503,6 +503,12 @@ export function OpportunityGlassWindow({
               <div>Source: {val(opp.source, 'Unknown')}</div>
               <div>Probability: {opp.probability != null ? `${opp.probability}%` : 'Not set'}</div>
               <div>Forecast: {val(opp.forecast_cat, 'Not set')}</div>
+              {(() => {
+                const amt = Number(opp.amount ?? 0)
+                const prob = opp.probability != null ? Number(opp.probability) : null
+                if (!amt || prob == null) return null
+                return <div style={{ color: '#9FD8EC' }}>Expected revenue: {formatMoney(Math.round(amt * (prob / 100)))} <span style={{ color: 'rgba(255,255,255,0.45)' }}>({formatMoney(amt)} × {prob}%)</span></div>
+              })()}
             </div>
           </Section>
 
@@ -599,7 +605,7 @@ export function OpportunityGlassWindow({
                   const tid = String(t.id ?? i)
                   const done = String(t.status ?? '') === 'done'
                   return (
-                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold" style={{ color: done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)', textDecoration: done ? 'line-through' : 'none' }}>{val(t.title, 'Task')}</div>
@@ -710,7 +716,7 @@ export function OpportunityGlassWindow({
                   const fid = String(f.id ?? i)
                   const href = (f.url ?? f.public_url) as string | undefined
                   return (
-                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
                       <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
                         <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
                         <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>

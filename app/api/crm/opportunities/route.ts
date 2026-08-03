@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId, applyAssignedScope } from '@/lib/org-scope'
 import { STAGE_ORDER, STAGE_LABELS, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
+import { normalizeRole } from '@/lib/permissions'
 
 // Columns the drift-resilient insert retry must NEVER drop. Stripping a scoping
 // column doesn't fail — it silently writes an unscoped/orphaned row.
@@ -36,8 +37,8 @@ export async function GET(req: NextRequest) {
     // Normal: opps in your org subtree. PLUS any opp where you are the rep,
     // even if it belongs to another org (e.g. a Channel Sales Partner selling
     // a corporate or dealer deal assigned to them).
+    const profileId = await getProfileId(user.id)
     if (!scope.all) {
-      const profileId = await getProfileId(user.id)
       const parts: string[] = []
       if (scope.ids.length > 0) parts.push(`dealer_org_id.in.(${scope.ids.join(',')})`)
       if (profileId) parts.push(`rep_id.eq.${profileId}`)
@@ -45,6 +46,14 @@ export async function GET(req: NextRequest) {
         ? query.or(parts.join(','))
         : query.eq('id', '00000000-0000-0000-0000-000000000000') // fail closed
     }
+
+    // ── Axis 2: a plain "user" (rep) sees ONLY their own opps. Admins,
+    // supervisors, and corporate see all in-org (no-op here), so an admin gets
+    // "theirs + everyone's" by default. `?rep=<profileId>` then lets an admin
+    // narrow the view to one rep (ignored for plain users — already self-scoped).
+    query = applyAssignedScope(query, user.role, { clerkUserId: user.id, profileId }, 'opportunities')
+    const rep = searchParams.get('rep')
+    if (rep && (scope.all || normalizeRole(user.role) !== 'user')) query = query.eq('rep_id', rep)
 
     if (stage)   query = query.eq('stage', stage)
     if (type)    query = query.eq('opp_type', type)
