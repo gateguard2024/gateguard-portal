@@ -1657,14 +1657,14 @@ export default function DispatchPage() {
       if (!res.ok) {
         const msg = await res.text().catch(() => "");
         setJobs(prev => prev.map(j => j.id === jobId
-          ? { ...j, assignedTechId: prevJob?.assignedTechId, assignedTech: prevJob?.assignedTech, status: prevJob?.status ?? j.status }
+          ? { ...j, assignedTechId: prevJob ? prevJob.assignedTechId : j.assignedTechId, assignedTech: prevJob ? prevJob.assignedTech : j.assignedTech, status: prevJob ? prevJob.status : j.status }
           : j
         ));
         alert(`Couldn't assign this job (${res.status}). It was not saved, so it won't reach the tech. ${msg.slice(0, 140)}`);
       }
     } catch {
       setJobs(prev => prev.map(j => j.id === jobId
-        ? { ...j, assignedTechId: prevJob?.assignedTechId, assignedTech: prevJob?.assignedTech, status: prevJob?.status ?? j.status }
+        ? { ...j, assignedTechId: prevJob ? prevJob.assignedTechId : j.assignedTechId, assignedTech: prevJob ? prevJob.assignedTech : j.assignedTech, status: prevJob ? prevJob.status : j.status }
         : j
       ));
       alert("Network error assigning this job — it was not saved. Please try again.");
