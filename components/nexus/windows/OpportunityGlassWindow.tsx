@@ -588,6 +588,31 @@ export function OpportunityGlassWindow({
       </div>
     )}
 
+    {/* Rep / agent picker — any user in the organization */}
+    {assignOpen && (
+      <div onClick={() => setAssignOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-1 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign rep / agent</h4>
+            <button type="button" onClick={() => setAssignOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <p className="mb-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Anyone in this organization can own the deal.</p>
+          {assignLoading ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading team…</div>
+            : assignUsers.length === 0 ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>No teammates available.</div>
+            : (
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                {assignUsers.map(u => (
+                  <button key={u.id} type="button" disabled={busy === 'reassign_opp'} onClick={() => doReassign(u.id, u.full_name || u.email)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}{u.role ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(159,216,236,0.7)' }}>· {u.role}</span> : null}</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{u.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+      </div>
+    )}
+
     {/* Manager picker — org admins */}
     {managerOpen && (
       <div onClick={() => setManagerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
@@ -704,7 +729,14 @@ export function OpportunityGlassWindow({
 
         {/* At-a-glance — assigned rep, manager, units, health (time-in-stage) + est win %. */}
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
+          {canReassign ? (
+            <button type="button" onClick={openReassign} title="Assign a rep / agent" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Rep / Agent <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+              <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(show('owner_name') ?? opp.owner_name, 'Assign')}</div>
+            </button>
+          ) : (
+            <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
+          )}
           <button type="button" onClick={openManager} title="Assign a managing admin" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Manager <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
             <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(show('manager_name') ?? opp.manager_name, 'Assign')}</div>
@@ -811,17 +843,7 @@ export function OpportunityGlassWindow({
             )}
             {canReassign && (
               <div className="mt-2">
-                {!assignOpen ? (
-                  <button type="button" onClick={openReassign} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>⇄ Reassign rep</button>
-                ) : (
-                  <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.20)', border: '1px solid rgba(95,184,224,0.24)' }}>
-                    <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.6)' }}>Assign this deal to</div>
-                    {assignLoading ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading team…</div>
-                     : assignUsers.length === 0 ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>No teammates available.</div>
-                     : <div className="max-h-56 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>{assignUsers.map(u => <button key={u.id} type="button" disabled={busy === 'reassign_opp'} onClick={() => doReassign(u.id, u.full_name || u.email)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}><span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}</span><span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{u.email}</span></button>)}</div>}
-                    <div className="flex justify-end"><button type="button" onClick={() => setAssignOpen(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>Close</button></div>
-                  </div>
-                )}
+                <button type="button" onClick={openReassign} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>⇄ Reassign rep</button>
               </div>
             )}
           </Section>
