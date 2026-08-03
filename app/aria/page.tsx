@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users, Star, Settings, Globe } from 'lucide-react'
+import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus, Clock, Users, Star, Settings, Globe, Phone, Mail, Copy } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, LayoutGrid, Map: MapIcon, Cpu } = require('lucide-react') as any
 import { SearchHistoryPanel } from '@/components/aria/SearchHistoryPanel'
@@ -648,8 +648,15 @@ export default function AriaExplorePage() {
       }
       const sd = await r.json()
       if (sd?.social_posts?.length) {
+        // Guard against a race: if the rep opened a DIFFERENT property while this
+        // async social fetch was in flight, don't graft these posts onto it.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setDetailReport((prev: any) => prev ? { ...prev, community: sd.social_posts } : prev)
+        setDetailReport((prev: any) => {
+          if (!prev) return prev
+          const prevName = (prev.property?.name ?? '').toLowerCase().trim()
+          if (it.name && prevName && prevName !== it.name.toLowerCase().trim()) return prev
+          return { ...prev, community: sd.social_posts }
+        })
       }
     } catch (e) {
       setCommunityErr(e instanceof Error ? e.message : 'Couldn’t search resident posts.')
@@ -1096,49 +1103,53 @@ export default function AriaExplorePage() {
     // surfaces on top; only the page base changed.
     <div className="relative flex h-full" style={{ background: NEXUS_BG, height: '100dvh', minHeight: '100vh' }}>
       <NexusBackdropLayers variant="page" />
-      {/* Left icon nav */}
-      <aside className="w-14 shrink-0 flex flex-col items-center py-3 border-r border-white/[0.07]" style={{ background: '#10161F' }}>
-        {NAV.map((n, i) => n.href ? (
-          <a key={i} href={n.href} title={n.label}
-            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
-            <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
-          </a>
-        ) : (
-          <button key={i} onClick={n.onClick} title={n.label}
-            className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${n.active ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
-            <n.Icon size={18} /><span className="text-[8px] font-bold">{n.label}</span>
-          </button>
-        ))}
+      {/* Left steel rail — wider, brushed-steel, color-coded active state so it
+          reads as the same product as the dashboard sidebar. */}
+      <aside className="w-20 shrink-0 flex flex-col items-center py-4 gap-1.5" style={{ ...STEEL_FRAME, borderRadius: 0, background: 'linear-gradient(180deg,#33465e 0%, #1e2a3a 60%, #16212e 100%)' }}>
+        <div className="mb-2 flex flex-col items-center gap-1">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[13px] font-extrabold text-white" style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', boxShadow: '0 4px 14px rgba(95,184,224,0.35)' }}>AR</div>
+        </div>
+        {NAV.map((n, i) => {
+          const cls = `w-16 flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all ${n.active ? 'text-white' : 'text-slate-300 hover:text-white'}`
+          const st = n.active ? STEEL_TILE : undefined
+          const inner = <><n.Icon size={20} /><span className="text-[10px] font-bold tracking-tight">{n.label}</span></>
+          return n.href ? (
+            <a key={i} href={n.href} title={n.label} className={cls} style={st}>{inner}</a>
+          ) : (
+            <button key={i} onClick={n.onClick} title={n.label} className={cls} style={st}>{inner}</button>
+          )
+        })}
         <div className="flex-1" />
         <button onClick={() => setPanel('settings')} title="Settings"
-          className={`w-full flex flex-col items-center gap-0.5 py-2.5 transition-colors ${panel === 'settings' ? 'text-[#5FB8E0]' : 'text-slate-500 hover:text-slate-200'}`}>
-          <Settings size={18} /><span className="text-[8px] font-bold">Settings</span>
+          className={`w-16 flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all ${panel === 'settings' ? 'text-white' : 'text-slate-300 hover:text-white'}`}
+          style={panel === 'settings' ? STEEL_TILE : undefined}>
+          <Settings size={20} /><span className="text-[10px] font-bold">Settings</span>
         </button>
       </aside>
 
       {/* Main column */}
       <div className="flex flex-col flex-1 min-w-0 h-full" style={{ height: '100dvh' }}>
-      {/* Header */}
-      <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
-        <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#1E2A3A] transition-all">
-          <ArrowLeft size={13} /> Back to Dashboard
+      {/* Header — steel band matching the dashboard */}
+      <header className="h-[68px] shrink-0 flex items-center px-6 gap-4" style={{ background: STEEL_HEADER, borderBottom: '1px solid rgba(140,170,200,0.20)' }}>
+        <a href="/" className="flex items-center gap-1.5 text-[13px] font-bold px-3.5 py-2 rounded-xl text-slate-100 transition-all hover:brightness-110" style={STEEL_TILE}>
+          <ArrowLeft size={15} /> Back to Dashboard
         </a>
         <div className="min-w-0">
-          <h1 className="text-base font-bold text-slate-100 leading-tight">ARIA</h1>
-          <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">Find properties</p>
+          <h1 className="text-lg font-extrabold text-slate-100 leading-tight">ARIA <span className="text-[12px] font-semibold" style={{ color: STEEL_ACCENT }}>Lead Intelligence</span></h1>
+          <p className="text-[12px] text-slate-300 leading-tight hidden sm:block">Find & research properties to sell into</p>
         </div>
         <div className="flex-1" />
       </header>
 
       {/* Nav panels — History / Leads / Contacts / Settings (all derived from searches) */}
       {panel && (
-        <div className="fixed inset-y-0 right-0 z-40 flex" style={{ left: 56 }} onClick={() => setPanel(null)}>
-          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#141E29', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 sticky top-0 z-10" style={{ background: '#141E29' }}>
-              {panel === 'leads' ? <Star size={15} className="text-[#5FB8E0]" /> : panel === 'contacts' ? <Users size={15} className="text-[#5FB8E0]" /> : panel === 'history' ? <Clock size={15} className="text-[#5FB8E0]" /> : <Settings size={15} className="text-[#5FB8E0]" />}
-              <span className="text-base font-bold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : panel === 'history' ? 'Search history' : 'Search settings'}</span>
-              {(panel === 'leads' || panel === 'contacts') && <span className="text-[11px] font-semibold text-slate-500">{panelItems.length}</span>}
-              <button onClick={() => setPanel(null)} className="ml-auto text-slate-500 hover:text-slate-200"><X size={17} /></button>
+        <div className="fixed inset-y-0 right-0 z-40 flex" style={{ left: 80 }} onClick={() => setPanel(null)}>
+          <div className="relative w-full max-w-lg h-full overflow-y-auto" style={{ ...STEEL_FRAME, borderRadius: 0, background: 'linear-gradient(180deg,#22303f 0%, #16232f 100%)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-6 py-4 sticky top-0 z-10" style={{ background: STEEL_HEADER, borderBottom: '1px solid rgba(140,170,200,0.20)' }}>
+              {panel === 'leads' ? <Star size={17} style={{ color: STEEL_ACCENT }} /> : panel === 'contacts' ? <Users size={17} style={{ color: STEEL_ACCENT }} /> : panel === 'history' ? <Clock size={17} style={{ color: STEEL_ACCENT }} /> : <Settings size={17} style={{ color: STEEL_ACCENT }} />}
+              <span className="text-[17px] font-extrabold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : panel === 'history' ? 'Search history' : 'Search settings'}</span>
+              {(panel === 'leads' || panel === 'contacts') && <span className="text-[12px] font-bold text-slate-300 rounded-full px-2 py-0.5" style={STEEL_TILE}>{panelItems.length}</span>}
+              <button onClick={() => setPanel(null)} className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"><X size={18} /></button>
             </div>
 
             {panelLoading && <div className="flex items-center gap-2 px-5 py-6 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Loading…</div>}
@@ -1159,9 +1170,9 @@ export default function AriaExplorePage() {
                 {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No ARIA leads yet. Add properties to Leads from a search.</p>}
                 {panelItems.map((l, i) => (
                   <button key={i} onClick={() => { setPanel(null); openDetail({ id: l.property_name || l.id, name: l.property_name || l.contact_name || 'Property', address: l.location ?? '', city: l.city ?? '', state: l.state ?? '' }) }}
-                    className="w-full text-left rounded-xl border border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50 p-3 transition-all">
-                    <p className="text-[13px] font-bold text-slate-100 truncate">{l.property_name || l.contact_name || 'Untitled'}</p>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{[l.city, l.state].filter(Boolean).join(', ') || '—'}{l.unit_count ? ` · ${l.unit_count} units` : ''}</p>
+                    className="w-full text-left rounded-xl p-3.5 transition-all hover:brightness-110" style={STEEL_TILE}>
+                    <p className="text-[14px] font-bold text-slate-100 truncate">{l.property_name || l.contact_name || 'Untitled'}</p>
+                    <p className="text-[12px] text-slate-300 truncate mt-0.5">{[l.city, l.state].filter(Boolean).join(', ') || '—'}{l.unit_count ? ` · ${l.unit_count} units` : ''}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       {l.stage && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#5FB8E0]/10 text-[#9FD8EC] border border-[#5FB8E0]/25 capitalize">{l.stage}</span>}
                       {l.scout_status && l.scout_status !== 'queued' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">SCOUT {l.scout_status}</span>}
@@ -1177,11 +1188,11 @@ export default function AriaExplorePage() {
                 {panelItems.length === 0 && <p className="text-[12px] text-slate-500 px-1 py-6 text-center">No contacts yet. Research properties and their decision-makers show up here.</p>}
                 {panelItems.map((c, i) => (
                   <button key={i} onClick={() => { setPanel(null); openDetail({ id: c._property || '', name: c._property || '', address: '', city: '', state: '' }) }}
-                    className="w-full text-left rounded-xl border border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50 p-3 transition-all">
-                    <p className="text-[13px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span>{c.role_type === 'owner' && <span className="ml-1.5 rounded px-1 py-0.5 text-[8px] font-bold" style={{ background: 'rgba(251,191,36,0.16)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.4)' }}>OWNER</span>}</p>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{[c.email, c.phone].filter((x: string) => x && x !== 'No data found').join('  ·  ') || 'No email / phone'}</p>
-                    {c.address && c.address !== 'No data found' && <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.address}</p>}
-                    {c._property && <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1"><Building2 size={9} /> {c._property}</p>}
+                    className="w-full text-left rounded-xl p-3.5 transition-all hover:brightness-110" style={STEEL_TILE}>
+                    <p className="text-[14px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-400 font-normal text-[12px]">· {c.title || c.role_type || '—'}</span>{c.role_type === 'owner' && <span className="ml-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ background: 'rgba(251,191,36,0.16)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.4)' }}>OWNER</span>}</p>
+                    <p className="text-[12px] text-slate-300 truncate mt-0.5">{[c.email, c.phone].filter((x: string) => x && x !== 'No data found').join('  ·  ') || 'No email / phone'}</p>
+                    {c.address && c.address !== 'No data found' && <p className="text-[11px] text-slate-400 truncate mt-0.5">📍 {c.address}</p>}
+                    {c._property && <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1"><Building2 size={10} /> {c._property}</p>}
                   </button>
                 ))}
               </div>
@@ -1787,6 +1798,34 @@ export default function AriaExplorePage() {
                   <p className="text-[11px] font-bold mt-2.5" style={{ color: STEEL_ACCENT }}>View detailed report →</p>
                 </button>
               )
+              // One-line contact row: value + click-to-call/email + copy. Nothing
+              // is fabricated — "No data found" renders muted with no actions.
+              const digits = (s: string) => s.replace(/[^\d+]/g, '')
+              const ContactLine = ({ Icon, label, value, kind }: { Icon: any; label: string; value: string; kind?: 'tel' | 'mail' }) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                const has = value && value !== 'No data found'
+                const href = has && kind === 'tel' ? `tel:${digits(value)}` : has && kind === 'mail' ? `mailto:${value}` : undefined
+                return (
+                  <div className="flex items-center gap-2.5 py-2 border-b border-white/5 last:border-0">
+                    <Icon size={15} className="shrink-0" style={{ color: has ? STEEL_ACCENT : '#64748b' }} />
+                    <span className="text-[12px] text-slate-400 w-28 shrink-0">{label}</span>
+                    {href
+                      ? <a href={href} className="text-[13px] font-semibold text-slate-100 hover:underline truncate" style={{ color: STEEL_ACCENT }}>{value}</a>
+                      : <span className={`text-[13px] font-medium truncate ${has ? 'text-slate-100' : 'text-slate-500 italic'}`}>{value}</span>}
+                    {has && (
+                      <button onClick={() => { try { navigator.clipboard.writeText(value) } catch { /* */ } }} title="Copy"
+                        className="ml-auto shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"><Copy size={13} /></button>
+                    )}
+                  </div>
+                )
+              }
+              const primaryC = contacts[0] ?? null
+              const officePhone = v(rep.property?.phone)
+              const dmName = v(primaryC?.name || rep.decision_maker?.name)
+              const dmTitle = primaryC?.title || rep.decision_maker?.title || ''
+              const dmEmail = v(primaryC?.email || rep.decision_maker?.email)
+              const dmPhone = v(primaryC?.phone || rep.decision_maker?.phone)
+              const ownerEntity = v(rep.property?.owner_entity)
+              const mgmtCo = v(rep.property?.management_company)
               return (
                 <div className="pb-10">
                   {/* Top speedometers */}
@@ -1800,6 +1839,22 @@ export default function AriaExplorePage() {
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 text-center">ARIA&apos;s opportunity verdict</p>
                     <p className="text-2xl font-extrabold text-center mt-1" style={{ color: verdictColor }}>{verdictLabel}</p>
                     <p className="text-[14px] text-slate-200 leading-relaxed mt-2.5 text-center">{verdictText}</p>
+                  </div>
+                  {/* Contact this property — everything a rep needs to reach out,
+                      in ONE place, tap-to-call / tap-to-email. */}
+                  <div className="mx-6 mt-3 rounded-2xl overflow-hidden" style={STEEL_TILE}>
+                    <div className="px-5 py-2.5 flex items-center gap-2" style={{ background: STEEL_HEADER, borderBottom: '1px solid rgba(140,170,200,0.18)' }}>
+                      <Phone size={15} style={{ color: STEEL_ACCENT }} />
+                      <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-200">Contact this property</span>
+                    </div>
+                    <div className="px-5 py-3">
+                      <ContactLine Icon={Phone} label="Office phone" value={officePhone} kind="tel" />
+                      <ContactLine Icon={Users} label="Primary contact" value={dmName === 'No data found' ? 'No data found' : `${dmName}${dmTitle ? ` · ${dmTitle}` : ''}`} />
+                      <ContactLine Icon={Mail} label="Email" value={dmEmail} kind="mail" />
+                      <ContactLine Icon={Phone} label="Direct phone" value={dmPhone} kind="tel" />
+                      <ContactLine Icon={Building2} label="Owner" value={ownerEntity} />
+                      <ContactLine Icon={Building2} label="Management" value={mgmtCo} />
+                    </div>
                   </div>
                   {/* Second gauge row */}
                   <div className="grid grid-cols-2 gap-3 px-6 pt-5">

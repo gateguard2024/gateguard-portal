@@ -65,6 +65,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 })
     }
 
+    // Per-org isolation: a non-corporate caller may only edit a row owned by
+    // their own org. Without this, any CRM user could overwrite another org's
+    // sales stage, notes, DM corrections, and user-verified flags by id.
+    const { data: target, error: findErr } = await supabase
+      .from('aria_properties')
+      .select('id, org_id')
+      .eq('id', params.id)
+      .single()
+    if (findErr || !target) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+    if (!caller.isCorporate && target.org_id && target.org_id !== caller.org_id) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
     const body = await req.json()
 
     const allowed: Record<string, unknown> = { updated_at: new Date().toISOString() }

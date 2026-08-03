@@ -9,6 +9,7 @@
  * lives here now so callers invoke it directly, in-process, with no network hop.
  */
 import { createClient } from '@supabase/supabase-js'
+import { getSaveCapStatus } from '@/lib/aria-save-cap'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,6 +49,42 @@ function safeEnum(v: unknown, allowed: readonly string[]): string | null {
 }
 const URGENCY_VALUES   = ['critical', 'high', 'medium', 'low'] as const
 const TECH_GEN_VALUES  = ['legacy', 'modern', 'hybrid'] as const
+
+// ── Property identity (name + address) ───────────────────────────────────────
+// Two properties can share a name; only the address disambiguates them. Match
+// on a compatible address so a re-search enriches the SAME property and never
+// merges two different ones.
+
+/** First street-number token in an address, e.g. "123 Main St" → "123". */
+function streetNum(addr: string): string {
+  const m = (addr ?? '').trim().match(/^\s*(\d+)/)
+  return m ? m[1] : ''
+}
+const normAddr = (a: string) => (a ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/**
+ * From a set of same-name rows, pick the one that is the SAME property.
+ * Compatible = identical normalized address, OR same street number, OR either
+ * side has no address yet. Incompatible street numbers ⇒ null (new property).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function pickAddressMatch(rows: any[], addr: string): any | null {
+  if (!rows.length) return null
+  const want = normAddr(addr)
+  const wantNum = streetNum(addr)
+  // 1) exact normalized-address match wins
+  const exact = rows.find(r => normAddr(r.address ?? '') === want && want !== '')
+  if (exact) return exact
+  // 2) otherwise the most-recent row whose address is compatible
+  for (const r of rows) {
+    const rNum = streetNum(r.address ?? '')
+    const rEmpty = !normAddr(r.address ?? '')
+    if (!wantNum || !rNum || rEmpty) return r          // one side blank → assume same
+    if (rNum === wantNum) return r                      // same street number → same
+    // different street numbers → keep looking; if none compatible, insert new
+  }
+  return null
+}
 
 // ── Merge helpers (learning loop — never destroy confirmed data) ──────────────
 
@@ -111,6 +148,7 @@ export interface AriaUpsertResult {
   upserted: number
   failed: number
   errors: string[]
+  cap_blocked?: number
   tech_providers_seen: number
 }
 
@@ -123,6 +161,14 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
   let upserted = 0
   const writeErrors: string[] = []
   const techProviderUpdates: Map<string, { category: string; names: string[] }> = new Map()
+
+  // G5 cap net — this is the single choke point every save path flows through
+  // (deep research, background enrichment, the internal POST). Enriching an
+  // existing row is always free; only NEW rows count against a capped org's
+  // monthly limit, so deep research can no longer bypass the cap.
+  const cap = await getSaveCapStatus(orgId)
+  let newRoom: number | null = cap.limit == null ? null : cap.remaining
+  let capBlocked = 0
 
   for (const p of prospects) {
     // Robust fallbacks to prevent mapping errors from partial AI payloads
@@ -138,13 +184,27 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
     // NOTE: .maybeSingle() errors to null when 2+ rows share a name, which
     // silently wiped the learning-loop merge (existing → null) and re-emitted
     // empty facts. Take the most recently researched match instead.
-    const { data: existingRows } = await supabase
+    //
+    // CRITICAL: match on NAME **and** address, not name alone. The DB identity
+    // is the unique index (lower(trim(name)), lower(trim(address))). Two real
+    // properties can share a name ("The Metropolitan" in Atlanta vs Dallas);
+    // a name-only match merged them into one row and cross-contaminated ISP /
+    // proptech / contacts. We pull the name matches and pick one whose address
+    // is COMPATIBLE (same street number, or one side blank). Incompatible
+    // address ⇒ treat as a new property (insert), never merge.
+    const { data: nameMatches } = await supabase
       .from('aria_properties')
       .select('*')
-      .ilike('property_name', propName)
+      .ilike('property_name', propName.replace(/[%_]/g, ''))
       .order('last_researched_at', { ascending: false, nullsFirst: false })
-      .limit(1)
-    const existing = existingRows?.[0] ?? null
+      .limit(10)
+    const existing = pickAddressMatch(nameMatches ?? [], propAddr)
+
+    // Cap net: block creation of a NEW row once the org is out of monthly room.
+    if (!existing && newRoom !== null) {
+      if (newRoom <= 0) { capBlocked++; continue }
+      newRoom--
+    }
 
     // Collect new tech providers discovered (for auto-catalog growth)
     const techCategories: [string, string[]][] = [
@@ -338,7 +398,9 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
       // Stamp the researching org, but never overwrite an org already on the row.
       org_id:                existing?.org_id ?? orgId ?? null,
       property_name:         propName,
-      address:               propAddr,
+      // Never blank out a known address with an empty re-search value — the
+      // address is half the row's identity. Merge, don't clobber.
+      address:               mergeVal(existing?.address, propAddr) ?? propAddr,
       // city/state were READ in 4 places but never WRITTEN — a phantom column.
       // That left every saved row with city = NULL, which silently disabled the
       // Community/social lookup (it requires a city). Always write them.
@@ -426,10 +488,11 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
       // 23505 = someone inserted the same identity concurrently → update it.
       if (error?.code === '23505') {
         const { data: raced } = await supabase
-          .from('aria_properties').select('id')
-          .ilike('property_name', propName).limit(1)
-        if (raced?.[0]?.id) {
-          const { error: e2 } = await supabase.from('aria_properties').update(upsertData).eq('id', raced[0].id)
+          .from('aria_properties').select('*')
+          .ilike('property_name', propName.replace(/[%_]/g, '')).limit(10)
+        const racedRow = pickAddressMatch(raced ?? [], propAddr)
+        if (racedRow?.id) {
+          const { error: e2 } = await supabase.from('aria_properties').update(upsertData).eq('id', racedRow.id)
           upsertErr = e2
         } else { upsertErr = error }
       } else {
@@ -465,12 +528,13 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
         },
         { onConflict: 'slug', ignoreDuplicates: false }
       )
-    // Increment detection count
-    void (async () => {
-      try {
-        await supabase.rpc('increment_aria_tech_provider_count', { p_slug: slug })
-      } catch (_) {}
-    })()
+    // Increment detection count — AWAIT it. A detached promise in a serverless
+    // function is abandoned the moment the response returns (Vercel freezes the
+    // container), so the counter never advanced. It's non-critical, so we still
+    // swallow its error, but we no longer race it against response teardown.
+    try {
+      await supabase.rpc('increment_aria_tech_provider_count', { p_slug: slug })
+    } catch { /* counter is non-critical */ }
   }
 
   return {
@@ -478,5 +542,6 @@ export async function upsertAriaProperties(prospects: any[], orgId?: string | nu
     failed: writeErrors.length,
     errors: writeErrors,
     tech_providers_seen: techProviderUpdates.size,
+    ...(capBlocked > 0 ? { cap_blocked: capBlocked } : {}),
   }
 }

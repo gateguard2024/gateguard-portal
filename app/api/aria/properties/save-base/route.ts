@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { getSaveCapStatus } from '@/lib/aria-save-cap'
+import { pickAddressMatch } from '@/lib/aria-upsert'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
     if (!properties.length) return NextResponse.json({ saved: 0, failed: 0, errors: [] })
 
     // G5 — corporate monthly per-dealer save cap. Corporate/no-cap = unlimited.
+    // `remaining` bounds how many NEW rows this whole request may create — a
+    // dealer at 9/10 must not be able to POST 100 properties and save them all.
     const cap = await getSaveCapStatus(user.org_id)
     if (!cap.allowed) {
       return NextResponse.json({
@@ -53,6 +56,8 @@ export async function POST(req: NextRequest) {
         saved: 0, failed: properties.length, cap,
       }, { status: 402 })
     }
+    let newRoom = cap.remaining          // null = unlimited; number = new rows still allowed
+    let capBlocked = 0                   // how many we had to skip for the cap
 
     let saved = 0
     const errors: string[] = []
@@ -96,13 +101,21 @@ export async function POST(req: NextRequest) {
       // Resolve the row ourselves — never rely on ON CONFLICT here (the only
       // unique index is an expression index, which Postgres cannot match to a
       // plain column conflict target; that silently failed every write).
+      // Match on NAME **and** a compatible address so two different properties
+      // that share a name never merge into one row.
       const { data: existingRows } = await supabase
         .from('aria_properties')
-        .select('id, facts, org_id')
-        .ilike('property_name', name)
+        .select('id, facts, org_id, address')
+        .ilike('property_name', name.replace(/[%_]/g, ''))
         .order('last_researched_at', { ascending: false, nullsFirst: false })
-        .limit(1)
-      const existing = existingRows?.[0] ?? null
+        .limit(10)
+      const existing = pickAddressMatch(existingRows ?? [], p.address ?? '')
+
+      // Cap only limits NEW rows. Enriching a row that already exists is free.
+      if (!existing && newRoom !== null) {
+        if (newRoom <= 0) { capBlocked++; continue }
+        newRoom--
+      }
 
       // Never overwrite good data with a shallow base pass.
       const keep = <T,>(fresh: T | null | undefined, prev: T | null | undefined): T | null =>
@@ -162,7 +175,11 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       )
     }
-    return NextResponse.json({ saved, failed: errors.length, errors })
+    // Tell the truth when the cap trimmed the batch.
+    const capNote = capBlocked > 0
+      ? `${capBlocked} not saved — monthly limit reached (${cap.used + saved}/${cap.limit}).`
+      : undefined
+    return NextResponse.json({ saved, failed: errors.length, errors, cap_blocked: capBlocked, ...(capNote ? { note: capNote } : {}) })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Save failed'
     return NextResponse.json({ error: msg }, { status: 500 })

@@ -271,7 +271,7 @@ async function saveCandidatesToDB(
   } catch { return [] }
 }
 
-function saveEvidencePackets(
+async function saveEvidencePackets(
   runId: string,
   candidateId: string | null,
   facts: Array<{
@@ -284,27 +284,30 @@ function saveEvidencePackets(
     raw_snippet?: string
     phase_found?: number
   }>
-): void {
+): Promise<void> {
+  // Returns the write promise so the caller can push it into `pendingWrites`
+  // and `flushWrites()` awaits it. It used to be a detached `void (async…)()`,
+  // which on Vercel is abandoned when the response returns — so the entire v8
+  // evidence ledger was routinely lost. Non-blocking still (errors swallowed),
+  // but no longer racing response teardown.
   if (!runId || !facts.length) return
-  void (async () => {
-    try {
-      await supabaseDeep.from('aria_evidence_packets').insert(
-        facts.map((f, i) => ({
-          search_run_id:    runId,
-          candidate_id:     candidateId,
-          source_url:       f.source_url ?? null,
-          source_type:      f.source_type,
-          source_authority: f.source_authority ?? 5,
-          fact_type:        f.fact_type,
-          extracted_value:  f.extracted_value,
-          confidence:       f.confidence ?? 50,
-          raw_snippet:      f.raw_snippet?.slice(0, 600) ?? null,
-          phase_found:      f.phase_found ?? 0,
-          arrival_order:    i,
-        }))
-      )
-    } catch { /* non-blocking */ }
-  })()
+  try {
+    await supabaseDeep.from('aria_evidence_packets').insert(
+      facts.map((f, i) => ({
+        search_run_id:    runId,
+        candidate_id:     candidateId,
+        source_url:       f.source_url ?? null,
+        source_type:      f.source_type,
+        source_authority: f.source_authority ?? 5,
+        fact_type:        f.fact_type,
+        extracted_value:  f.extracted_value,
+        confidence:       f.confidence ?? 50,
+        raw_snippet:      f.raw_snippet?.slice(0, 600) ?? null,
+        phase_found:      f.phase_found ?? 0,
+        arrival_order:    i,
+      }))
+    )
+  } catch { /* non-blocking */ }
 }
 
 // ─── v9: Supervisor loop ─────────────────────────────────────────────────────
@@ -363,23 +366,31 @@ async function runSupervisorCheck(
         `"${property_name}" ${city} internet provider bulk agreement MDU`,
         4, 'supervisor_isp'
       )
+      // [needle, canonical display name]. Word-boundary match on the needle
+      // (bare 'att' matched "Seattle"; 'gigsstreem' was a typo that never hit).
+      const ISP_HINTS: [string, string][] = [
+        ['spectrum', 'Spectrum'], ['at&t', 'AT&T'], ['att fiber', 'AT&T'],
+        ['comcast', 'Comcast'], ['verizon', 'Verizon'], ['xfinity', 'Xfinity'],
+        ['gigstreem', 'GIGstreem'], ['hotwire', 'Hotwire'], ['smartaira', 'Smartaira'],
+        ['dojonetworks', 'DojoNetworks'], ['frontier', 'Frontier'], ['google fiber', 'Google Fiber'],
+      ]
       for (const r of results) {
         const snippet = (r.content ?? '').toLowerCase()
-        for (const isp of ['spectrum', 'att', 'comcast', 'verizon', 'xfinity', 'gigsstreem', 'hotwire', 'smartaira', 'dojonetworks', 'frontier', 'google fiber']) {
-          if (snippet.includes(isp)) {
-            const provenance = sourceAuthority(r.url ?? '')
-            p2copy = { ...p2copy, isp_providers: [...new Set([...p2copy.isp_providers, isp])] }
-            evidence.push({
-              fact_type: 'isp',
-              extracted_value: isp,
-              source_url: r.url || undefined,
-              source_type: 'supervisor',
-              source_authority: provenance,
-              confidence: Math.round((provenance / 10) * 70),
-              raw_snippet: (r.content ?? '').slice(0, 600),
-              phase_found: 3,
-            })
-          }
+        for (const [needle, display] of ISP_HINTS) {
+          if (!mentionsProvider(snippet, needle)) continue
+          if (p2copy.isp_providers.some(p => p.toLowerCase() === display.toLowerCase())) continue
+          const provenance = sourceAuthority(r.url ?? '')
+          p2copy = { ...p2copy, isp_providers: [...p2copy.isp_providers, display] }
+          evidence.push({
+            fact_type: 'isp',
+            extracted_value: display,
+            source_url: r.url || undefined,
+            source_type: 'supervisor',
+            source_authority: provenance,
+            confidence: Math.round((provenance / 10) * 70),
+            raw_snippet: (r.content ?? '').slice(0, 600),
+            phase_found: 3,
+          })
         }
       }
     })())
@@ -468,7 +479,7 @@ function checkQualityGates(
 
 // ─── Normalization helpers ────────────────────────────────────────────────────
 
-const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0','tbd','?'])
+const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','no data found','no data','not specified','not listed','','—','–','-','0','tbd','?'])
 
 // ─── ISP / Video service-description blocklists ───────────────────────────────
 // These are SERVICE DESCRIPTIONS, not company names. Never store them as providers.
@@ -497,6 +508,19 @@ function filterProviderNames(values: string[], blocklist: Set<string>): string[]
     if (!v || v.length < 2) return false
     return !blocklist.has(v.toLowerCase().trim())
   })
+}
+
+/**
+ * Whole-word provider mention. `text` is already lowercased. Guards against the
+ * substring fabrication that turned "dishwasher" into Dish and "Seattle" into
+ * AT&T — the boundary lookarounds require a non-alphanumeric edge on both sides.
+ */
+function mentionsProvider(text: string, name: string): boolean {
+  const n = (name ?? '').trim().toLowerCase()
+  if (n.length < 3) return false
+  const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  try { return new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, 'i').test(text) }
+  catch { return text.includes(n) }
 }
 
 function normStr(val: unknown): string | null {
@@ -2698,7 +2722,7 @@ export async function POST(req: NextRequest) {
           raw_snippet: (r.content ?? '').slice(0, 600),
           phase_found: 1,
         }))
-        saveEvidencePackets(searchRunId, null, p1bEvidence)
+        pendingWrites.push(saveEvidencePackets(searchRunId, null, p1bEvidence))
       }
 
       // v8: Mark run complete with stats
@@ -2913,10 +2937,13 @@ export async function POST(req: NextRequest) {
     for (const signal of p3Final.pain_signals) {
       const text = (signal.quote + ' ' + (signal.source ?? '')).toLowerCase()
       const hasExclusivity = EXCLUSIVITY_RE.test(text)
-      // Scan for known ISP names
+      // Scan for known ISP names — WORD-BOUNDARY match, never substring.
+      // Substring matching fabricated brands: "dish" hit "dishwasher", "cox"
+      // hit "Wilcox", "att" hit "Seattle". A resident praising a dishwasher must
+      // not mint a Dish Network bulk deal.
       for (const ispName of KNOWN_MDU_BULK_ISPS) {
-        if (!text.includes(ispName.toLowerCase())) continue
-        if (!p2FinalConnectivity.isp_providers.some(p => p.toLowerCase().includes(ispName))) {
+        if (!mentionsProvider(text, ispName)) continue
+        if (!p2FinalConnectivity.isp_providers.some(p => p.toLowerCase() === ispName.toLowerCase())) {
           p2FinalConnectivity.isp_providers = [...p2FinalConnectivity.isp_providers, ispName]
         }
         if (hasExclusivity) {
@@ -2932,10 +2959,10 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-      // Scan for known video provider names
+      // Scan for known video provider names — WORD-BOUNDARY match, never substring.
       for (const vidName of KNOWN_VIDEO_PROVIDERS) {
-        if (!text.includes(vidName.toLowerCase())) continue
-        if (!p2FinalConnectivity.video_providers.some(p => p.toLowerCase().includes(vidName))) {
+        if (!mentionsProvider(text, vidName)) continue
+        if (!p2FinalConnectivity.video_providers.some(p => p.toLowerCase() === vidName.toLowerCase())) {
           p2FinalConnectivity.video_providers = [...p2FinalConnectivity.video_providers, vidName]
         }
         if (hasExclusivity) {
@@ -3035,11 +3062,11 @@ export async function POST(req: NextRequest) {
       p3Final.pain_signals.slice(0, 5).forEach(s =>
         evidenceFacts.push({ fact_type: 'pain_signal', extracted_value: s.quote.slice(0, 200), source_type: s.source, confidence: 65, phase_found: 3 })
       )
-      if (evidenceFacts.length > 0) saveEvidencePackets(searchRunId, null, evidenceFacts)
+      if (evidenceFacts.length > 0) pendingWrites.push(saveEvidencePackets(searchRunId, null, evidenceFacts))
 
       // v9 Catch 3: Save supervisor evidence packets — these have provenance scores, not orphaned at 0
       if (supervisorEvidence.length > 0) {
-        saveEvidencePackets(searchRunId, null, supervisorEvidence)
+        pendingWrites.push(saveEvidencePackets(searchRunId, null, supervisorEvidence))
       }
 
       // v9: Save Phase 3 raw source excerpts as bulk evidence — each result gets source_url + raw_snippet
@@ -3054,7 +3081,7 @@ export async function POST(req: NextRequest) {
           raw_snippet: (r.content ?? '').slice(0, 600),
           phase_found: 3,
         }))
-        saveEvidencePackets(searchRunId, null, p3BulkEvidence)
+        pendingWrites.push(saveEvidencePackets(searchRunId, null, p3BulkEvidence))
       }
 
       // v9: Save PropTech Scout findings as proptech evidence packets
@@ -3069,7 +3096,7 @@ export async function POST(req: NextRequest) {
           raw_snippet: f.evidence.slice(0, 600),
           phase_found: 3,
         }))
-        saveEvidencePackets(searchRunId, null, proptechEvidence)
+        pendingWrites.push(saveEvidencePackets(searchRunId, null, proptechEvidence))
       }
     }
 
@@ -3196,8 +3223,18 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     const gatekeeperTipResult = gatekeeperResult.status === 'fulfilled' ? gatekeeperResult.value : null
 
     // ── Build final payload ───────────────────────────────────────────────────
-    const cleanIspProviders = normStrArr(p2Final.isp_providers.length ? p2Final.isp_providers : (rawData.isp_providers ?? []))
-    const cleanVideoProviders = normStrArr(p2Final.video_providers.length ? p2Final.video_providers : (rawData.video_providers ?? []))
+    // Re-run the service-description blocklist on the FINAL merged arrays. The
+    // pain-signal loop and ground-truth merge append providers AFTER runPhase2's
+    // filter, so "High-Speed Internet" / "Cable TV" could otherwise slip through
+    // and be saved as if they were company names.
+    const cleanIspProviders = filterProviderNames(
+      normStrArr(p2Final.isp_providers.length ? p2Final.isp_providers : (rawData.isp_providers ?? [])),
+      ISP_SERVICE_DESCRIPTIONS,
+    )
+    const cleanVideoProviders = filterProviderNames(
+      normStrArr(p2Final.video_providers.length ? p2Final.video_providers : (rawData.video_providers ?? [])),
+      VIDEO_SERVICE_DESCRIPTIONS,
+    )
     const cleanBulkAgreements = p2Final.bulk_agreements.length ? p2Final.bulk_agreements : (rawData.bulk_agreements ?? [])
 
     const mergedDMChain = p3Final.contacts.filter(c => c.name).map(c => {
@@ -3379,7 +3416,10 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
         name: normStr(bestContact?.name || fallback.name) ?? null,
         title: normStr(bestContact?.title || fallback.title) ?? null,
         company: normStr(bestContact?.company || fallback.company) ?? mgmt ?? '',
-        email: normStr(bestContact?.email || fallback.email) ?? '',
+        // Fall back to the leasing-office email we confirmed in Phase 1A — a
+        // directly actionable address for a rep, never fabricated. Previously it
+        // was discovered, used only for a confidence badge, then dropped.
+        email: normStr(bestContact?.email || fallback.email || p1.confirmed_manager_email) ?? '',
         // Phone hierarchy: Apollo direct line → leasing office (labelled) → empty
         phone: normStr(bestContact?.phone) ?? (officePhone ?? ''),
         phone_source: (normStr(bestContact?.phone) ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
@@ -3411,7 +3451,25 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       },
       pain_signals: p3Final.pain_signals.length > 0 ? p3Final.pain_signals : (rawData.pain_signals ?? []),
       profile: {
-        buy_score: rawData.freshness_score ? Math.round(rawData.freshness_score * 1.0 + 0) : 5,
+        // Buy score (0–10) from ACTUAL signals, not freshness. Freshness only
+        // measures how recent our data is — it says nothing about buying intent.
+        // A real score rewards: an existing bulk/ROE deal to displace, resident
+        // pain, a reachable contact, and low proptech saturation (upgrade room).
+        buy_score: (() => {
+          const painCt = (p3Final.pain_signals ?? []).length
+          const hasBulk = !!p2Final.bulk_detected || cleanBulkAgreements.length > 0 || !!p2Final.roe_detected
+          const hasContact = mergedDMChain.length > 0 || !!normStr(bestContact?.name)
+          const proptechCt =
+            p3Final.proptech.gate_operators.length + p3Final.proptech.access_control.length +
+            p3Final.proptech.cameras.length + p3Final.proptech.intercoms.length +
+            p3Final.proptech.smart_locks.length
+          const s = 3
+            + (hasBulk ? 2 : 0)
+            + Math.min(painCt, 3)
+            + (hasContact ? 1 : 0)
+            + (proptechCt === 0 ? 1 : 0)
+          return Math.max(0, Math.min(10, s))
+        })(),
         urgency: p3Final.pain_signals.filter(s => s.type === 'gate').length > 2 || p2Final.bulk_detected ? 'high' : 'medium',
         primary_concern: normStr(rawData.key_finding?.slice(0, 300)) ?? 'No critical vulnerabilities detected',
         current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0] ?? p2Final.roe_providers[0]),
@@ -3472,8 +3530,10 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       }
     } catch { }
 
-    // ── Persist detections (non-blocking) ─────────────────────────────────────
-    void (async () => {
+    // ── Persist detections ────────────────────────────────────────────────────
+    // Pushed into pendingWrites (drained by flushWrites before we return) so the
+    // per-property provider detections aren't lost to serverless teardown.
+    pendingWrites.push((async () => {
       try {
         const { data: allProviders } = await supabaseDeep.from('mdu_providers').select('id, name').eq('active', true)
         if (!allProviders) return
@@ -3497,7 +3557,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
           }).filter(Boolean)
         if (rows.length > 0) await supabaseDeep.from('mdu_provider_detections').upsert(rows, { onConflict: 'provider_id,property_name', ignoreDuplicates: false })
       } catch { }
-    })()
+    })())
 
     // ── Persist to Intel DB ───────────────────────────────────────────────────
     // Direct in-process call to the shared upsert. This used to POST to

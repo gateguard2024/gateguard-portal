@@ -38,6 +38,34 @@ Hero image + steel theme already there. Missing: an embedded **map** in the deta
 - **G6 (done):** ARIA detail popup rethemed to the dashboard's brushed-steel tokens (`STEEL_FRAME` / `STEEL_TILE` / `STEEL_HEADER` / `STEEL_ACCENT`, matching the Opportunity Hub / windows). Widened to `max-w-6xl`; two-pane hero (property photo + live Mapbox **satellite map**, geocoded on open); big warm header banner; fonts bumped throughout (title 28px, rows 13px, buttons 15px, gauges larger); verdict + insight cards + sub-popups all steel. Fortune-500 clean, 5th-grader simple, same font/colors as the main dashboard.
 - **All ARIA plan gaps (G1–G6) complete.**
 
+## Deep audit + fixes (session 16, post-G6)
+
+Three parallel audits (engine · persistence/scoping · UI) ran end-to-end. Fixed:
+
+**Data integrity**
+- **Same-name/different-address merge (P0 corruption).** Row resolution matched on `property_name` only, so "The Metropolitan" (Atlanta) and (Dallas) merged into one row and cross-contaminated ISP/proptech/contacts. Added `pickAddressMatch()` (name + compatible street number; incompatible ⇒ insert new) in `lib/aria-upsert.ts`, and reused it in `save-base` and the 23505 retry.
+- **Address clobber.** `address` was written raw; a blank re-search wiped a known address (half the row's identity). Now via `mergeVal`.
+- **Lost secondary writes (P0).** `saveEvidencePackets` (the whole v8 evidence ledger), `mdu_provider_detections`, and the tech-provider counter were detached `void (async…)()` — dropped on Vercel response teardown. Now awaited / routed through `pendingWrites` → `flushWrites()`.
+
+**Save cap (G5 hardening)**
+- **Deep-research bypass (P0).** Cap was only enforced in `save-base`; deep research created rows uncapped. Added a central cap net inside `upsertAriaProperties` (the single choke point all save paths flow through) — enriching an existing row is free, only NEW rows count.
+- **Batch off-by-one.** `save-base` checked the cap once then saved the whole array; now counts within the batch and reports `cap_blocked`.
+
+**Accuracy / never-fabricate**
+- **Substring brand fabrication (P1).** "dishwasher"→Dish, "Seattle"→AT&T, "Wilcox"→Cox. Replaced `includes()` with word-boundary `mentionsProvider()` in the pain-signal loop and supervisor ISP scan; fixed bare `att` + `gigsstreem` typo → canonical display names.
+- **Service descriptions leaking as brands (P1).** "High-Speed Internet"/"Cable TV" appended after the filter. Re-run `filterProviderNames` on the FINAL merged ISP/video arrays.
+- **"No data found" leaking into scalar fields (P1).** Added to `SENTINEL_STRINGS` so a Sonnet "No data found" collapses to null (and doesn't score a false confidence).
+- **Buy score = freshness (meaningless).** Rebuilt from real signals: bulk/ROE to displace + resident pain + reachable contact + low proptech saturation.
+
+**Cross-org security**
+- **PATCH not org-scoped (P1).** Any CRM user could overwrite another org's row by id. Now fetches the row's `org_id` and 404s a non-corporate caller from outside their org.
+
+**Contact readiness (sell faster)**
+- **Leasing-office email was discovered then dropped.** Now falls back onto `decision_maker.email` so a rep has an address.
+- **Popup contact block.** New "Contact this property" card at the top of the report — office phone, primary contact, email, direct phone, owner, management — with **tap-to-call / tap-to-email / copy**. Previously all buried two clicks deep in sub-cards as static text.
+
+**Deferred (documented, lower risk):** `org_id` is nullable (legacy/service rows are corporate-only until backfilled); a few Sonnet schema fields (`assessed_value`, `edgar_signal`) are gathered but not surfaced; the internal `POST /api/aria/properties` relies on the central `upsertAriaProperties` cap net rather than its own early check.
+
 ## Suggested order (highest value first)
 1. **G2 + G4** (core facts + accuracy labels) — the foundation everything else reads.
 2. **G1** (improve Yardi/apartments extraction) — feeds G2.
