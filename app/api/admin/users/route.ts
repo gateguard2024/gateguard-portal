@@ -82,6 +82,8 @@ export async function GET() {
         org_id:   (u.publicMetadata?.org_id  as string) ?? null,
         org_tier: (u.publicMetadata?.org_tier as string) ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        role: (u.publicMetadata?.role as string) ?? (permsMap[u.id] as any)?.role ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         permissions: permsMap[u.id] ?? null,
       }))
 

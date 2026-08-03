@@ -107,7 +107,9 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} /></div>
+        {/* pb clears the Nexus bottom nav, which renders above this overlay because
+            the overlay is nested inside main's z-10 stacking context. */}
+        <div style={{ position: 'relative', paddingBottom: '160px' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} /></div>
       </div>
     )
   }

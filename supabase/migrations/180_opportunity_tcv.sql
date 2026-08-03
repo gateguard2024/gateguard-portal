@@ -11,3 +11,8 @@
 
 ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS install_fee   NUMERIC;
 ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS contract_term INTEGER;  -- months
+
+-- Managing admin (the person who oversees the rep on this deal — NOT the property
+-- management company, which is management_co). Selected from org admins.
+ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS manager_id   TEXT;
+ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS manager_name TEXT;

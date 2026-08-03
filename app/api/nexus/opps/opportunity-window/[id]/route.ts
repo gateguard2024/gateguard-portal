@@ -267,6 +267,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // Deal-value fields for TCV forecasting (drift-safe: stripped if not migrated).
     if (body.install_fee !== undefined && body.install_fee !== '') { const n = Number(body.install_fee); if (!isNaN(n)) map.install_fee = n }
     if (body.contract_term !== undefined && body.contract_term !== '') { const n = parseInt(String(body.contract_term), 10); if (!isNaN(n)) map.contract_term = n }
+    // Managing admin (oversees the rep on this deal). Person, not property mgmt co.
+    if (body.manager_id !== undefined) map.manager_id = clean(body.manager_id) || null
+    if (body.manager_name !== undefined) map.manager_name = clean(body.manager_name) || null
     if (Array.isArray(body.interests)) map.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
 
     if (Object.keys(map).length === 0) return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })

@@ -325,7 +325,7 @@ export function OpportunityGlassWindow({
   const canReassign = Boolean(data.canReassign)
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignLoading, setAssignLoading] = useState(false)
-  const [assignUsers, setAssignUsers] = useState<Array<{ id: string; full_name?: string; email: string }>>([])
+  const [assignUsers, setAssignUsers] = useState<Array<{ id: string; full_name?: string; email: string; role?: string }>>([])
   async function loadAssignees() {
     if (assignUsers.length > 0) return
     setAssignLoading(true)
@@ -333,10 +333,28 @@ export function OpportunityGlassWindow({
       const r = await fetch('/api/admin/users')
       const j = await r.json().catch(() => ({}))
       const list: AnyRecord[] = Array.isArray(j?.users) ? j.users : Array.isArray(j) ? j : []
-      setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '' })).filter(u => u.id))
+      setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '', role: (u.role ?? u.permissions?.role) as string | undefined })).filter(u => u.id))
     } catch { /* ignore */ } finally { setAssignLoading(false) }
   }
   async function openReassign() { setAssignOpen(true); await loadAssignees() }
+
+  // ── Managing admin (person who oversees the rep on this deal) ────────────────
+  const [managerOpen, setManagerOpen] = useState(false)
+  function openManager() { setManagerOpen(true); void loadAssignees() }
+  const orgAdmins = assignUsers.filter(u => (u.role ?? '').toLowerCase() === 'admin')
+  async function saveManager(id: string | null, name: string | null) {
+    if (!oppIdStr) return
+    setBusy('manager')
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', manager_id: id ?? '', manager_name: name ?? '' }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not set manager.' }); return }
+      setOv(prev => ({ ...prev, manager_name: name }))
+      setManagerOpen(false); setMsg({ ok: true, text: name ? `Manager set to ${name}` : 'Manager cleared' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not set manager.' }) }
+    finally { setBusy(null) }
+  }
   async function doReassign(assigneeId: string, name: string) {
     const oppId = opp.id as string | undefined
     if (!oppId) return
@@ -569,6 +587,35 @@ export function OpportunityGlassWindow({
         </div>
       </div>
     )}
+
+    {/* Manager picker — org admins */}
+    {managerOpen && (
+      <div onClick={() => setManagerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-1 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign manager</h4>
+            <button type="button" onClick={() => setManagerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <p className="mb-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Admins in this organization who oversee the rep.</p>
+          {assignLoading ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading admins…</div>
+            : orgAdmins.length === 0 ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>No admins found in this organization.</div>
+            : (
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                {orgAdmins.map(u => (
+                  <button key={u.id} type="button" disabled={busy === 'manager'} onClick={() => saveManager(u.id, u.full_name || u.email)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{u.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          <div className="mt-3 flex justify-between">
+            <button type="button" disabled={busy === 'manager'} onClick={() => saveManager(null, null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>Clear manager</button>
+            <button type="button" onClick={() => setManagerOpen(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>Close</button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="space-y-4 pb-44 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -658,7 +705,10 @@ export function OpportunityGlassWindow({
         {/* At-a-glance — assigned rep, manager, units, health (time-in-stage) + est win %. */}
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
-          {renderEditStat('management_co', 'Manager', val(show('management_co') ?? opp.management_co, 'Not set'), 'text', show('management_co') ?? opp.management_co)}
+          <button type="button" onClick={openManager} title="Assign a managing admin" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Manager <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+            <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(show('manager_name') ?? opp.manager_name, 'Assign')}</div>
+          </button>
           {renderEditStat('units', 'Units', val(show('units') ?? opp.units, 'Unknown'), 'number', show('units') ?? opp.units)}
           <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: `1px solid ${health.color}55` }}>
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Idle · {health.label}</div>
