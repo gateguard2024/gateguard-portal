@@ -281,6 +281,9 @@ function normalizeReport(raw: any): any {
       // Community lives in the `social_posts` column (written by /api/aria/social);
       // facts.community_posts is often an empty placeholder — take whichever has data.
       community: pickArr(f.community_posts, raw.social_posts),
+      // Resident pain signals the deep engine already gathered — used as the
+      // Community fallback when no dedicated social post was stored.
+      pain_signals: pickArr(f.pain_signals, raw.pain_signals),
       ai_intel: {
         key_finding: d.ai_intel?.key_finding ?? raw.primary_concern,
         buying_trends: d.ai_intel?.buying_trends,
@@ -317,6 +320,7 @@ function normalizeReport(raw: any): any {
     },
     contacts: (p.decision_maker_chain?.length ? p.decision_maker_chain : (p.decision_maker ? [p.decision_maker] : [])),
     community: p.social_posts ?? [],
+    pain_signals: p.pain_signals ?? [],
     ai_intel: { key_finding: p.profile?.primary_concern ?? p.key_finding, buying_trends: p.buying_trends, pitch_hook: p.pitch_strategy?.primary_hook },
     scout: { outreach_plan: p.scout_queue?.outreach_plan, outreach_sequence: p.scout_queue?.outreach_sequence, scout_brief: p.scout_brief },
     buy_score: p.profile?.buy_score,
@@ -1915,6 +1919,19 @@ export default function AriaExplorePage() {
                         // Negative resident posts from the last 8 months, newest first,
                         // each linked to its source. Undated posts are kept (we can't
                         // date-exclude them); positives fall to a collapsed remainder.
+                        // Fallback: when no dedicated social post was stored, show the
+                        // resident PAIN SIGNALS the deep engine already found (same
+                        // thing the AI audit shows) so this tab is never falsely empty.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const painAsPosts = ((rep.pain_signals ?? []) as any[]).map((p: any) => ({
+                          platform: p.platform || p.source || 'Resident signal',
+                          quote: p.quote ?? p.text ?? '',
+                          signal_type: p.signal_type || p.type,
+                          severity: p.severity || 'medium',
+                          date: p.date, url: p.url || p.source_url,
+                        })).filter((p: any) => p.quote)
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const list: any[] = (community as any[]).length ? (community as any[]) : painAsPosts
                         const EIGHT_MO = 1000 * 60 * 60 * 24 * 30 * 8
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const isNeg = (c: any) => {
@@ -1931,8 +1948,8 @@ export default function AriaExplorePage() {
                         }
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const ts = (c: any) => { const t = Date.parse(c?.date ?? ''); return isNaN(t) ? 0 : t }
-                        const negRecent = (community as any[]).filter(c => isNeg(c) && within8mo(c)).sort((a, b) => ts(b) - ts(a)) // eslint-disable-line @typescript-eslint/no-explicit-any
-                        const others = (community as any[]).filter(c => !negRecent.includes(c)) // eslint-disable-line @typescript-eslint/no-explicit-any
+                        const negRecent = list.filter(c => isNeg(c) && within8mo(c)).sort((a, b) => ts(b) - ts(a))
+                        const others = list.filter(c => !negRecent.includes(c))
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const Card = (c: any, i: number) => (
                           <div key={i} className="rounded-xl border border-white/10 bg-[#1E2A3A] p-3">
@@ -1952,7 +1969,7 @@ export default function AriaExplorePage() {
                         )
                         return (
                           <div className="space-y-2">
-                            {community.length === 0 && (
+                            {list.length === 0 && (
                               communityErr ? (
                                 <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-[11px] text-rose-200">{communityErr}</div>
                               ) : (
@@ -1976,7 +1993,30 @@ export default function AriaExplorePage() {
                           </div>
                         )
                       })()}
-                      {openCard === 'proptech' && (
+                      {openCard === 'proptech' && (() => {
+                        // Presence is proven three ways, in order of strength:
+                        //   1. deep engine named a brand (rep.presence)
+                        //   2. base find flagged it (detail.systems)
+                        //   3. residents complained about it (pain signals) — a
+                        //      "the gate is always broken" post PROVES a gate exists,
+                        //      even when no brand or listing amenity named it.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const painJoined = ((rep.pain_signals ?? []) as any[])
+                          .map((p: any) => `${p.type || ''} ${p.category || ''} ${p.signal_type || ''} ${p.quote || ''}`)
+                          .join(' ').toLowerCase()
+                        const painPresence: Record<string, boolean> = {
+                          gates:         /\bgate|access control|call ?box|callbox|key ?pad|keypad|entry gate|fob|clicker|intercom\b/.test(painJoined),
+                          cameras:       /camera|cctv|surveillance/.test(painJoined),
+                          smart_lockers: /package|parcel|locker|amazon hub/.test(painJoined),
+                          smart_rent:    /smart ?lock|keyless|smart ?home|smartrent|resident app/.test(painJoined),
+                          internet:      /internet|wi-?fi|isp|broadband|fiber/.test(painJoined),
+                          ev_chargers:   /ev charg|charging station|charger/.test(painJoined),
+                        }
+                        const isPresent = (k: string) =>
+                          !!(rep.presence ?? {})[k as keyof BaseSystems]
+                          || !!(detail?.systems ?? {})[k as keyof BaseSystems]
+                          || !!painPresence[k]
+                        return (
                         <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
                           {/* By CATEGORY — never a merged blob of brand names. Knowing
                               a gate operator is LiftMaster vs the intercom being
@@ -1985,7 +2025,7 @@ export default function AriaExplorePage() {
                           <div className="space-y-0">
                             {PROPTECH_CATEGORIES.map(cat => {
                               const brands: string[] = (pt?.[cat.key] ?? []).filter(Boolean)
-                              const present = !!(rep.presence ?? {})[cat.presenceKey as keyof BaseSystems]
+                              const present = isPresent(cat.presenceKey)
                               return (
                                 <div key={cat.key} className="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0">
                                   <span className="text-[10.5px] font-bold text-slate-400 w-28 shrink-0 uppercase tracking-wide">{cat.label}</span>
@@ -2003,8 +2043,7 @@ export default function AriaExplorePage() {
                           {/* Confirmed present by the base find, brand still unknown —
                               that's a finding in its own right, not an empty cell. */}
                           {(() => {
-                            const pz = rep.presence ?? {}
-                            const on = SYSTEM_LABELS.filter(sl => pz[sl.key])
+                            const on = SYSTEM_LABELS.filter(sl => isPresent(sl.key))
                             if (!on.length) return null
                             return (
                               <div className="mt-3 pt-3 border-t border-white/5">
@@ -2030,7 +2069,8 @@ export default function AriaExplorePage() {
                             </div>
                           )}
                         </div>
-                      )}
+                        )
+                      })()}
                       {openCard === 'ai' && (
                         <div className="space-y-2.5">
                           <div className="rounded-xl border border-white/10 bg-[#1E2A3A] p-4">
