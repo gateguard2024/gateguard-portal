@@ -74,8 +74,23 @@ function MiniStat({ label, value: v }: { label: string; value: string }) {
 function formatMoney(v: unknown): string {
   const n = Number(v)
   if (!v || isNaN(n)) return 'Not set'
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
-  return `$${n}`
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+  if (n >= 1000) return `$${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`
+  return `$${n.toLocaleString()}`
+}
+
+// Human date/time — never show a raw ISO string to the user.
+function fmtWhen(v: unknown): string {
+  if (!v) return ''
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return String(v)
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+function fmtDate(v: unknown): string {
+  if (!v) return ''
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return String(v)
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function OpportunityGlassWindow({
@@ -142,6 +157,76 @@ export function OpportunityGlassWindow({
     finally { setFuBusy(false) }
   }
 
+  // ── Log activity (call / email / note / meeting) ────────────────────────────
+  const [actOpen, setActOpen] = useState(false)
+  const [act, setAct] = useState<{ type: string; subject: string; body: string; outcome: string; due_at: string }>({ type: 'note', subject: '', body: '', outcome: '', due_at: '' })
+  const [actBusy, setActBusy] = useState(false)
+  async function submitActivity() {
+    if (!oppIdStr || !act.subject.trim()) return
+    setActBusy(true)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'log_activity', type: act.type, subject: act.subject, body: act.body || null, outcome: act.outcome || null, due_at: act.due_at || null }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not log activity.' }); return }
+      setActOpen(false); setAct({ type: 'note', subject: '', body: '', outcome: '', due_at: '' })
+      setMsg({ ok: true, text: 'Activity logged ✓' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not log activity.' }) }
+    finally { setActBusy(false) }
+  }
+
+  // ── Task complete / delete (todos) ──────────────────────────────────────────
+  const [taskBusy, setTaskBusy] = useState<string | null>(null)
+  async function completeTask(todoId: string, done: boolean) {
+    setTaskBusy(todoId)
+    try {
+      const r = await fetch(`/api/todos/${todoId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: done ? 'done' : 'open' }) })
+      if (!r.ok) { setMsg({ ok: false, text: 'Could not update task.' }); return }
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not update task.' }) }
+    finally { setTaskBusy(null) }
+  }
+  async function deleteTask(todoId: string) {
+    if (!confirm('Delete this task?')) return
+    setTaskBusy(todoId)
+    try {
+      const r = await fetch(`/api/todos/${todoId}`, { method: 'DELETE' })
+      if (!r.ok) { setMsg({ ok: false, text: 'Could not delete task.' }); return }
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not delete task.' }) }
+    finally { setTaskBusy(null) }
+  }
+
+  // ── Remove an attachment ────────────────────────────────────────────────────
+  const [fileRmBusy, setFileRmBusy] = useState<string | null>(null)
+  async function removeFile(attId: string) {
+    if (!oppIdStr || !confirm('Remove this file?')) return
+    setFileRmBusy(attId)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove_attachment', attachment_id: attId }) })
+      if (!r.ok) { setMsg({ ok: false, text: 'Could not remove file.' }); return }
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not remove file.' }) }
+    finally { setFileRmBusy(null) }
+  }
+
+  // ── Stage path (advance / move stage) ───────────────────────────────────────
+  const [stageBusy, setStageBusy] = useState<string | null>(null)
+  async function setStage(stage: string) {
+    if (!oppIdStr) return
+    setStageBusy(stage)
+    try {
+      const action = stage === 'won' ? 'mark_won' : stage === 'lost' ? 'mark_lost' : 'update_status'
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, stage }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not update stage.' }); return }
+      setOv(prev => ({ ...prev, stage }))
+      setMsg({ ok: true, text: `Moved to ${stage} ✓` })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not update stage.' }) }
+    finally { setStageBusy(null) }
+  }
+
   // Local overrides so edits show immediately (and persist on save).
   const [ov, setOv] = useState<AnyRecord>({})
   const show = (key: string, fallback?: unknown) => (ov[key] !== undefined ? ov[key] : (opp[key] ?? fallback))
@@ -206,8 +291,14 @@ export function OpportunityGlassWindow({
       const res = await fetch(`/api/nexus/opps/opportunity-window/${oppId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', ...f }) })
       const result = await res.json().catch(() => ({}))
       if (!res.ok || result.success === false) throw new Error(result?.message ?? 'Could not save.')
-      setOv(prev => ({ ...prev, ...f, units: f.units ? Number(f.units) : prev.units }))
-      setMsg({ ok: true, text: 'Saved ✓' }); setEditing(false)
+      // Only reflect fields the server actually stored — never show a dropped field as saved.
+      const dropped: string[] = Array.isArray(result.dropped) ? result.dropped : []
+      const savedEntries = Object.entries(f).filter(([k]) => !dropped.includes(k))
+      const saved = Object.fromEntries(savedEntries)
+      setOv(prev => ({ ...prev, ...saved, units: (!dropped.includes('units') && f.units) ? Number(f.units) : prev.units }))
+      setEditing(false)
+      if (dropped.length) setMsg({ ok: false, text: `Saved, but these didn't stick: ${dropped.join(', ')}` })
+      else setMsg({ ok: true, text: 'Saved ✓' })
       await onRefresh?.()
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save.' }) } finally { setSavingEdit(false) }
   }
@@ -286,6 +377,34 @@ export function OpportunityGlassWindow({
         </div>
       </div>
     )}
+
+    {/* Log activity popup */}
+    {actOpen && (
+      <div onClick={() => setActOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Log activity</h4>
+            <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {(['note', 'call', 'email', 'meeting'] as const).map(t => (
+              <button key={t} type="button" onClick={() => setAct({ ...act, type: t })} className="rounded-lg px-2.5 py-1 text-[11px] font-medium capitalize" style={act.type === t ? { background: '#2f7fb8', color: 'white', border: '1px solid #2f7fb8' } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(140,170,200,0.24)', color: 'rgba(255,255,255,0.7)' }}>{t}</button>
+            ))}
+          </div>
+          <div className="space-y-3">
+            <input value={act.subject} onChange={e => setAct({ ...act, subject: e.target.value })} placeholder={act.type === 'call' ? 'Call summary…' : act.type === 'email' ? 'Email subject…' : act.type === 'meeting' ? 'Meeting summary…' : 'Add a note…'} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <textarea value={act.body} onChange={e => setAct({ ...act, body: e.target.value })} placeholder="Details (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            {(act.type === 'call' || act.type === 'meeting') && (
+              <input value={act.outcome} onChange={e => setAct({ ...act, outcome: e.target.value })} placeholder="Outcome (e.g. Connected, Voicemail)…" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            )}
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
+            <button type="button" disabled={actBusy || !act.subject.trim()} onClick={submitActivity} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{actBusy ? 'Logging…' : 'Log it'}</button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="space-y-4 pb-28 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -341,11 +460,34 @@ export function OpportunityGlassWindow({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* Stage path — click any stage to move the deal there. */}
+        {(() => {
+          const STAGES = ['inquiry', 'qualified', 'proposal', 'negotiation', 'won']
+          const cur = String(show('stage') ?? 'inquiry').toLowerCase()
+          const isLost = ['lost', 'dead'].includes(cur)
+          const curIdx = STAGES.findIndex(s => cur.includes(s) || s.includes(cur))
+          return (
+            <div className="mt-4 flex items-stretch gap-1">
+              {STAGES.map((s, i) => {
+                const done = !isLost && curIdx >= 0 && i < curIdx
+                const active = !isLost && i === curIdx
+                return (
+                  <button key={s} type="button" disabled={stageBusy !== null} onClick={() => setStage(s)}
+                    className="flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide capitalize transition-colors disabled:opacity-60"
+                    style={{ background: active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.16)' : 'rgba(255,255,255,0.05)', border: `1px solid ${active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.4)' : 'rgba(140,170,200,0.24)'}`, color: active ? 'white' : done ? '#6ee7b7' : 'rgba(255,255,255,0.62)' }}>
+                    {stageBusy === s ? '…' : s}
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniStat label="Monthly $"   value={opp.est_mrr ? formatMoney(opp.est_mrr) : 'Not set'} />
           <MiniStat label="Amount"      value={opp.amount  ? formatMoney(opp.amount)  : 'Not set'} />
-          <MiniStat label="Close Date"  value={val(opp.close_date, 'Not set')} />
-          <MiniStat label="Updated"     value={val(opp.updated_at ?? opp.created_at, 'Unknown')} />
+          <MiniStat label="Close Date"  value={opp.close_date ? fmtDate(opp.close_date) : 'Not set'} />
+          <MiniStat label="Updated"     value={fmtWhen(opp.updated_at ?? opp.created_at) || 'Unknown'} />
         </div>
       </div>
 
@@ -427,31 +569,53 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Activity Timeline" count={activities.length}>
+            <button type="button" onClick={() => setActOpen(true)} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+              <div className="text-xs font-semibold">+ Log activity</div>
+              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Call, email, meeting, or note</div>
+            </button>
             <ListBlock
               records={activities}
               emptyText="No activity yet."
               render={a => (
                 <MiniRow
                   title={val(a.subject, val(a.type, 'Activity'))}
-                  subtitle={val(a.body ?? a.outcome, '')}
-                  meta={val(a.created_at, '')}
+                  subtitle={[val(a.body ?? a.outcome, ''), a.type ? `· ${String(a.type)}` : ''].filter(Boolean).join(' ')}
+                  meta={fmtWhen(a.created_at)}
                 />
               )}
             />
           </Section>
 
           <Section title="Tasks" count={todos.length}>
-            <ListBlock
-              records={todos}
-              emptyText="No tasks attached yet."
-              render={t => (
-                <MiniRow
-                  title={val(t.title, 'Task')}
-                  subtitle={val(t.body, '')}
-                  meta={val(t.status ?? t.due_date, '')}
-                />
-              )}
-            />
+            <button type="button" onClick={() => setFollowupOpen(true)} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+              <div className="text-xs font-semibold">+ Add task</div>
+              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>With a due date and notes</div>
+            </button>
+            {(!todos || todos.length === 0) ? (
+              <Empty text="No tasks attached yet." />
+            ) : (
+              <div className="space-y-2">
+                {todos.slice(0, 8).map((t, i) => {
+                  const tid = String(t.id ?? i)
+                  const done = String(t.status ?? '') === 'done'
+                  return (
+                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold" style={{ color: done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)', textDecoration: done ? 'line-through' : 'none' }}>{val(t.title, 'Task')}</div>
+                          {t.body && <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>{String(t.body)}</div>}
+                          {t.due_date && <div className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: '#9FD8EC' }}>Due {fmtDate(t.due_date)}</div>}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button type="button" disabled={taskBusy === tid} title={done ? 'Reopen' : 'Complete'} onClick={() => completeTask(tid, !done)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: done ? 'rgba(255,255,255,0.06)' : 'rgba(52,211,153,0.14)', border: `1px solid ${done ? 'rgba(255,255,255,0.14)' : 'rgba(52,211,153,0.4)'}`, color: done ? 'rgba(255,255,255,0.6)' : '#6ee7b7' }}>{taskBusy === tid ? '…' : done ? '↺' : '✓'}</button>
+                          <button type="button" disabled={taskBusy === tid} title="Delete" onClick={() => deleteTask(tid)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </Section>
         </div>
 
@@ -538,11 +702,25 @@ export function OpportunityGlassWindow({
               <div className="text-xs font-semibold">{fileBusy ? 'Uploading…' : '+ Attach a file'}</div>
               <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>PDF, image, or document</div>
             </button>
-            <ListBlock
-              records={attachments}
-              emptyText="No files attached yet."
-              render={f => <MiniRow title={val(f.file_name, 'File')} subtitle={val(f.file_type ?? f.type, '')} />}
-            />
+            {(!attachments || attachments.length === 0) ? (
+              <Empty text="No files attached yet." />
+            ) : (
+              <div className="space-y-2">
+                {attachments.slice(0, 8).map((f, i) => {
+                  const fid = String(f.id ?? i)
+                  const href = (f.url ?? f.public_url) as string | undefined
+                  return (
+                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                      <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
+                        <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>
+                      </a>
+                      <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </Section>
 
           {(company || lead) && (

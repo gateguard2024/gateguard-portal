@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,12 +157,16 @@ export async function GET(req: NextRequest) {
   needsQ = applyOrgScope(needsQ, scope)
   const needsAttention = await safe(needsQ.is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: true }).limit(10), [])
 
+  // Axis 2 — a plain "user" (rep) sees only opportunities assigned to them.
+  const assignedIdentity = { clerkUserId: user.id, profileId }
   let openOppsQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at')
   openOppsQ = applyOrgScope(openOppsQ, scope, 'dealer_org_id')
+  openOppsQ = applyAssignedScope(openOppsQ, user.role, assignedIdentity, 'opportunities')
   const openOpportunities = await safe(openOppsQ.is('won_at', null).is('lost_at', null).is('deleted_at', null).order('updated_at', { ascending: false }).limit(20), [])
 
   let proposalQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at')
   proposalQ = applyOrgScope(proposalQ, scope, 'dealer_org_id')
+  proposalQ = applyAssignedScope(proposalQ, user.role, assignedIdentity, 'opportunities')
   const proposalFollowUps = await safe(proposalQ.or('stage.ilike.%proposal%,stage.ilike.%propose%,stage.ilike.%negotiat%').order('updated_at', { ascending: true }).limit(10), [])
 
   return NextResponse.json({

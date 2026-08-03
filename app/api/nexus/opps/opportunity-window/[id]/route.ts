@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId, applyAssignedScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +43,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     .select('*')
     .eq('id', oppId)
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
+  // Axis 2 — a plain "user" (rep) may only open opportunities assigned to them.
+  // Admin/supervisor/corporate are unrestricted. Fails closed if no profile id.
+  const getProfile = await getProfileId(user.id)
+  oppQuery = applyAssignedScope(oppQuery, user.role, { clerkUserId: user.id, profileId: getProfile }, 'opportunities')
 
   const { data: opp, error: oppError } = await oppQuery.maybeSingle()
 
@@ -264,7 +268,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (Object.keys(map).length === 0) return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
     map.updated_at = new Date().toISOString()
 
-    // Drift-resilient: strip a not-yet-migrated column and retry rather than failing.
+    // Drift-resilient: strip a not-yet-migrated column and retry rather than
+    // failing. Track what we drop so the caller can tell the user the truth
+    // instead of a blanket "saved ✓".
+    const dropped: string[] = []
     let updated: Record<string, unknown> | null = null
     let updErr: { message?: string; code?: string } | null = null
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -273,13 +280,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       updErr = res.error
       const m = res.error.message ?? ''
       const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)'/)?.[1]) : null
-      if (missing && (missing in map)) { delete map[missing]; continue }
+      if (missing && (missing in map)) { delete map[missing]; dropped.push(missing); continue }
       break
     }
     if (updErr && !updated) return NextResponse.json({ success: false, message: updErr.message }, { status: 500 })
 
     await supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity details updated', body: `Updated: ${Object.keys(map).filter(k => k !== 'updated_at').join(', ')}.`, opportunity_id: oppId })
-    return NextResponse.json({ success: true, message: 'Opportunity details saved.' })
+    return NextResponse.json({
+      success: true,
+      message: dropped.length ? `Saved — but ${dropped.length} field(s) couldn't be stored yet.` : 'Opportunity details saved.',
+      dropped,
+    })
   }
 
   // ── mark_won / mark_lost / update_status ────────────────────────────────────
@@ -326,6 +337,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const assigneeId = clean(body.assignee_id)
     const assigneeName = clean(body.assignee_name)
     if (!assigneeId) return NextResponse.json({ success: false, message: 'Choose someone to assign this deal to.' }, { status: 400 })
+    // Subtree guard: a non-corporate admin may only reassign to a user inside
+    // their own org scope. (Defense in depth — the assignee picker is already
+    // org-scoped.) Only rejects when the target's org is known and out of scope.
+    if (!scope.all) {
+      const { data: ap } = await supabase.from('profiles').select('org_id').eq('clerk_user_id', assigneeId).maybeSingle()
+      const targetOrg = ap?.org_id ? String(ap.org_id) : null
+      if (targetOrg && !scope.ids.includes(targetOrg)) {
+        return NextResponse.json({ success: false, message: 'That user is outside your organization.' }, { status: 403 })
+      }
+    }
     const assigneeProfileId = await getProfileId(assigneeId)
     const initials = (assigneeName || '').split(/\s+/).map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
     const { error } = await supabase.from('opportunities').update({
@@ -337,6 +358,34 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
     await supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity reassigned', body: `Assigned to ${assigneeName || assigneeId}.`, opportunity_id: oppId })
     return NextResponse.json({ success: true, message: `Opportunity assigned to ${assigneeName || 'the selected user'}.` })
+  }
+
+  // ── log_activity — add a call / email / note / meeting to the timeline ───────
+  if (action === 'log_activity') {
+    const type = ['call', 'email', 'meeting', 'note'].includes(String(body.type)) ? String(body.type) : 'note'
+    const subject = clean(body.subject)
+    if (!subject) return NextResponse.json({ success: false, message: 'Add a short summary.' }, { status: 400 })
+    const row: Record<string, unknown> = {
+      dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
+      created_by: profileId,
+      type, subject,
+      body: clean(body.body) || null,
+      opportunity_id: oppId,
+    }
+    if (clean(body.outcome)) row.outcome = clean(body.outcome)
+    if (clean(body.due_at)) row.due_at = clean(body.due_at)
+    if (typeof body.duration_mins === 'number') row.duration_mins = body.duration_mins
+    // Drift-resilient insert (some deployments lack outcome/due_at/duration cols).
+    let inserted: Record<string, unknown> | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await supabase.from('crm_activities').insert(row).select('*').single()
+      if (!res.error) { inserted = res.data as Record<string, unknown>; break }
+      const m = res.error.message ?? ''
+      const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)'/)?.[1]) : null
+      if (missing && (missing in row)) { delete row[missing]; continue }
+      return NextResponse.json({ success: false, message: res.error.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, message: 'Activity logged.', activity: inserted })
   }
 
   return NextResponse.json({ success: false, message: 'Unknown opportunity action.' }, { status: 400 })
