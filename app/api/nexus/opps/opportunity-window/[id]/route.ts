@@ -270,6 +270,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // Managing admin (oversees the rep on this deal). Person, not property mgmt co.
     if (body.manager_id !== undefined) map.manager_id = clean(body.manager_id) || null
     if (body.manager_name !== undefined) map.manager_name = clean(body.manager_name) || null
+    // Manually-attached quote (stopgap until the quote builder is locked in).
+    if (body.quote_url !== undefined) map.quote_url = clean(body.quote_url) || null
+    if (body.quote_status !== undefined) map.quote_status = clean(body.quote_status) || null
+    if (body.quote_total !== undefined && body.quote_total !== '') { const n = Number(body.quote_total); if (!isNaN(n)) map.quote_total = n }
     if (Array.isArray(body.interests)) map.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
 
     if (Object.keys(map).length === 0) return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })

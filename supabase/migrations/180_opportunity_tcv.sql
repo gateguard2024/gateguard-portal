@@ -16,3 +16,8 @@ ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS contract_term INTEGER;
 -- management company, which is management_co). Selected from org admins.
 ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS manager_id   TEXT;
 ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS manager_name TEXT;
+
+-- Manually-attached quote (stopgap until the quote builder is locked in).
+ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS quote_url    TEXT;
+ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS quote_total  NUMERIC;
+ALTER TABLE public.opportunities ADD COLUMN IF NOT EXISTS quote_status TEXT;
