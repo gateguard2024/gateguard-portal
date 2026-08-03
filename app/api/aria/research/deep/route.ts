@@ -29,7 +29,7 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v9.0'
+const ARIA_ENGINE_VERSION = 'v9.1'
 
 // ─── CostTracker — real per-search API spend (accurate list prices) ────────────
 // Every external call records into the request's tracker via AsyncLocalStorage, so
@@ -1096,6 +1096,10 @@ interface Phase1Result {
   confirmed_owner: string | null
   confirmed_website: string | null
   confirmed_phone: string | null
+  confirmed_manager_email: string | null   // leasing/manager main email (first-pass)
+  confirmed_class: string | null           // A / B / C / D
+  confirmed_type: string | null            // garden, mid-rise, high-rise, etc.
+  confirmed_occupancy: string | null       // e.g. "94%"
   is_specific_property: boolean
   // Amenity-sourced fields — directly from listing page full content
   listing_url: string | null
@@ -1166,6 +1170,7 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     confirmed_units: null, confirmed_year_built: null,
     confirmed_management: null, confirmed_owner: null,
     confirmed_website: null, confirmed_phone: null,
+    confirmed_manager_email: null, confirmed_class: null, confirmed_type: null, confirmed_occupancy: null,
     is_specific_property: false,
     listing_url: null, listing_isp: null, listing_cable: null,
     listing_proptech: [], listing_bulk_detected: false,
@@ -1177,7 +1182,7 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
   // 3. Unit count web search — targets pages that explicitly mention total unit counts
   // 4. Amenities deep-read — raw full-page content to catch ISP/cable/gate in amenities section
   // 5. Phone/contact — Google Knowledge Graph + leasing office contact page (mandatory field)
-  const [listingResults, pressResults, unitCountResults, amenityResults, phoneResults] = await Promise.all([
+  const [listingResults, pressResults, unitCountResults, amenityResults, phoneResults, matrixResults] = await Promise.all([
     tavilySearch(
       `"${query}" apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`,
       4, 'listing', 'advanced', false
@@ -1201,11 +1206,18 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
       `"${query}" apartments leasing office phone contact`,
       3, 'phone'
     ),
+    // Powerful CRE databases — Yardi Matrix / LoopNet / CoStar / county assessor
+    // surface structured facts Google listing sites don't: class (A/B/C/D),
+    // property type (garden/mid/high-rise), occupancy %, owner entity, last sale.
+    serperSearch(
+      `"${query}" apartments (site:yardimatrix.com OR site:loopnet.com OR site:costar.com OR site:cbre.com OR site:crexi.com OR site:rentcafe.com) OR "occupancy" OR "class a" OR "class b" OR "garden" OR "mid-rise" OR "owner" OR "managed by"`,
+      6, 'matrix', 'search'
+    ),
   ])
 
   // IMP-1: filter Tavily results by score; IMP-2: deduplicate by URL
   const filteredListing = filterByScore(listingResults, 0.4)
-  const allResults = deduplicateByUrl([...filteredListing, ...pressResults, ...unitCountResults, ...phoneResults])
+  const allResults = deduplicateByUrl([...filteredListing, ...pressResults, ...unitCountResults, ...phoneResults, ...matrixResults])
   if (allResults.length === 0 && amenityResults.length === 0) return blank
 
   // Standard identity snippets — 1200 chars; IMP-3: tag with source authority
@@ -1227,7 +1239,7 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
 
   const extracted = await haikusExtract<Phase1Result>(
     `Extract verified property facts AND amenity/technology data. Return ONLY valid JSON:
-{"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"is_specific_property":false,"listing_url":null,"listing_isp":null,"listing_cable":null,"listing_proptech":[],"listing_bulk_detected":false}
+{"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"confirmed_manager_email":null,"confirmed_class":null,"confirmed_type":null,"confirmed_occupancy":null,"is_specific_property":false,"listing_url":null,"listing_isp":null,"listing_cable":null,"listing_proptech":[],"listing_bulk_detected":false}
 
 SOURCE AUTHORITY: Each snippet starts with [AUTH:N] where N=1-10. Prefer higher-authority sources (8-10) when data conflicts. Auth 8-10 = government/industry/listing sites. Auth 3-5 = social/review sites.
 
@@ -1253,6 +1265,10 @@ IDENTITY RULES:
 - confirmed_owner: investor/developer/owner entity
 - confirmed_website: official property URL (NOT apartments.com/zillow)
 - confirmed_phone: leasing office phone — PRIORITY: check [phone] source snippets FIRST — they contain "Phone: (xxx) xxx-xxxx" from Google's business listing. Also look for (xxx) xxx-xxxx or xxx-xxx-xxxx format in listings, contact sections, or footer anywhere in results. This is a MANDATORY field — search every snippet.
+- confirmed_manager_email: the leasing office / property manager MAIN email if plainly shown (e.g. "leasing@community.com", "manager@..."). Not a personal LinkedIn guess. null if not shown.
+- confirmed_class: asset class if a source (esp. Yardi Matrix / LoopNet / CoStar) states it — "Class A", "Class B", "Class C", or "Class D". Return ONLY the single letter A, B, C, or D. null if not stated — NEVER guess the class.
+- confirmed_type: building type if stated — "garden", "mid-rise", "high-rise", "townhome", "wrap", "podium", "low-rise". Copy the stated type. null if not stated.
+- confirmed_occupancy: occupancy rate if a source states one — e.g. "94%", "occupancy 92.5%", "95% occupied". Return the percentage as written (e.g. "94%"). null if not stated — NEVER estimate occupancy.
 - is_specific_property: true if results clearly identify ONE specific named property
 
 AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
@@ -2277,7 +2293,7 @@ const deepIntelTool: Anthropic.Tool = {
       key_finding: { type: 'string' },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
       units: { type: 'number' }, year_built: { type: 'number' },
-      property_class: { type: 'string', enum: ['A', 'B', 'C'] },
+      property_class: { type: 'string', enum: ['A', 'B', 'C', 'D'] },
       property_type: { type: 'string' },
       atlas_opportunity: { type: 'boolean' }, edgar_signal: { type: 'boolean' }, permit_signal: { type: 'boolean' },
       ownership: {
@@ -3281,10 +3297,10 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
         city: city || null,
         state: state || null,
         units: normInt(p1.confirmed_units ?? rawData.property_details?.units ?? rawData.units),
-        property_type: normStr(rawData.property_details?.property_type) ?? 'multifamily',
-        class: normStr(rawData.property_details?.class ?? rawData.property_class),
+        property_type: normStr(p1.confirmed_type ?? rawData.property_details?.property_type) ?? 'multifamily',
+        class: normStr(p1.confirmed_class ?? rawData.property_details?.class ?? rawData.property_class),
         year_built: normInt(p1.confirmed_year_built ?? rawData.property_details?.year_built ?? rawData.year_built),
-        occupancy: normStr(rawData.property_details?.occupancy),
+        occupancy: normStr(p1.confirmed_occupancy ?? rawData.property_details?.occupancy),
         management_company: normStr(mgmt ?? rawData.property_details?.management_company) || normStr(finalOwner ?? rawData.ownership?.owner_entity) || null,
         owner_entity: normStr(finalOwner || rawData.ownership?.owner_entity),
         old_name: null,
