@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 
@@ -227,6 +227,79 @@ export function OpportunityGlassWindow({
     finally { setStageBusy(null) }
   }
 
+  // ── Contact roles (opportunity_contacts) ────────────────────────────────────
+  const [contacts, setContacts] = useState<AnyRecord[]>([])
+  async function reloadContacts() {
+    if (!oppIdStr) return
+    const d = await fetch(`/api/crm/opportunities/${oppIdStr}/contacts`).then(r => (r.ok ? r.json() : [])).catch(() => [])
+    if (Array.isArray(d)) setContacts(d)
+  }
+  useEffect(() => { void reloadContacts() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [oppIdStr])
+  const [addContactOpen, setAddContactOpen] = useState(false)
+  const [nc, setNc] = useState({ name: '', title: '', email: '', phone: '', role: 'Decision Maker' })
+  const [ncBusy, setNcBusy] = useState(false)
+  async function addContact() {
+    if (!oppIdStr || !nc.name.trim()) return
+    setNcBusy(true)
+    try {
+      const r = await fetch(`/api/crm/opportunities/${oppIdStr}/contacts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
+      if (!r.ok) { setMsg({ ok: false, text: 'Could not add contact.' }); return }
+      setAddContactOpen(false); setNc({ name: '', title: '', email: '', phone: '', role: 'Decision Maker' })
+      await reloadContacts()
+    } catch { setMsg({ ok: false, text: 'Could not add contact.' }) }
+    finally { setNcBusy(false) }
+  }
+  async function delContact(cid: string) {
+    if (!oppIdStr || !confirm('Remove this contact?')) return
+    try {
+      const r = await fetch(`/api/crm/opportunities/${oppIdStr}/contacts?contactId=${encodeURIComponent(cid)}`, { method: 'DELETE' })
+      if (!r.ok) { setMsg({ ok: false, text: 'Could not remove contact.' }); return }
+      await reloadContacts()
+    } catch { setMsg({ ok: false, text: 'Could not remove contact.' }) }
+  }
+
+  // ── Inline-edit header stats (amount / est_mrr / close_date) ─────────────────
+  const [editStat, setEditStat] = useState<string | null>(null)
+  const [statVal, setStatVal] = useState('')
+  const [statBusy, setStatBusy] = useState(false)
+  function openStat(field: string, current: unknown) { setEditStat(field); setStatVal(current != null ? String(current) : '') }
+  async function saveStat(field: string) {
+    if (!oppIdStr) return
+    setStatBusy(true)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', [field]: statVal }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not save.' }); return }
+      const dropped: string[] = Array.isArray(j.dropped) ? j.dropped : []
+      if (!dropped.includes(field)) setOv(prev => ({ ...prev, [field]: (field === 'amount' || field === 'est_mrr') ? (Number(statVal) || 0) : statVal }))
+      setEditStat(null)
+      if (dropped.includes(field)) setMsg({ ok: false, text: `${field} couldn't be saved yet.` })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not save.' }) }
+    finally { setStatBusy(false) }
+  }
+  const statTile = { background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' } as const
+  function renderEditStat(field: string, label: string, display: string, inputType: string, current: unknown) {
+    if (editStat === field) {
+      return (
+        <div className="rounded-2xl p-3" style={statTile}>
+          <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label}</div>
+          <input autoFocus type={inputType} value={statVal} onChange={e => setStatVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void saveStat(field); if (e.key === 'Escape') setEditStat(null) }} className="mt-1 w-full rounded-lg px-2 py-1 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(95,184,224,0.4)', color: 'white' }} />
+          <div className="mt-1 flex gap-1">
+            <button type="button" disabled={statBusy} onClick={() => saveStat(field)} className="flex-1 rounded-md py-0.5 text-[10px] font-semibold disabled:opacity-50" style={{ background: '#2f7fb8', color: 'white' }}>{statBusy ? '…' : 'Save'}</button>
+            <button type="button" onClick={() => setEditStat(null)} className="rounded-md px-2 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}>✕</button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <button type="button" onClick={() => openStat(field, current)} title="Click to edit" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={statTile}>
+        <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label} <span style={{ color: 'rgba(95,184,224,0.6)' }}>✎</span></div>
+        <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{display}</div>
+      </button>
+    )
+  }
+
   // Local overrides so edits show immediately (and persist on save).
   const [ov, setOv] = useState<AnyRecord>({})
   const show = (key: string, fallback?: unknown) => (ov[key] !== undefined ? ov[key] : (opp[key] ?? fallback))
@@ -405,6 +478,36 @@ export function OpportunityGlassWindow({
         </div>
       </div>
     )}
+
+    {/* Add contact popup */}
+    {addContactOpen && (
+      <div onClick={() => setAddContactOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Add contact</h4>
+            <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <div className="space-y-2">
+            <input value={nc.name} onChange={e => setNc({ ...nc, name: e.target.value })} placeholder="Name" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <input value={nc.title} onChange={e => setNc({ ...nc, title: e.target.value })} placeholder="Title (optional)" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <div className="grid grid-cols-2 gap-2">
+              <input value={nc.email} onChange={e => setNc({ ...nc, email: e.target.value })} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+              <input value={nc.phone} onChange={e => setNc({ ...nc, phone: e.target.value })} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Role</label>
+              <select value={nc.role} onChange={e => setNc({ ...nc, role: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }}>
+                {['Decision Maker', 'Influencer', 'Economic Buyer', 'Property Manager', 'Site Contact', 'Billing', 'Technical', 'Other'].map(r => <option key={r} value={r} style={{ background: '#0b1424' }}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
+            <button type="button" disabled={ncBusy || !nc.name.trim()} onClick={addContact} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{ncBusy ? 'Adding…' : 'Add contact'}</button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="space-y-4 pb-28 rounded-[2rem] p-4 sm:p-5" style={WIN_FRAME}>
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -484,9 +587,9 @@ export function OpportunityGlassWindow({
         })()}
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniStat label="Monthly $"   value={opp.est_mrr ? formatMoney(opp.est_mrr) : 'Not set'} />
-          <MiniStat label="Amount"      value={opp.amount  ? formatMoney(opp.amount)  : 'Not set'} />
-          <MiniStat label="Close Date"  value={opp.close_date ? fmtDate(opp.close_date) : 'Not set'} />
+          {renderEditStat('est_mrr', 'Monthly $', (show('est_mrr') ?? opp.est_mrr) ? formatMoney(show('est_mrr') ?? opp.est_mrr) : 'Not set', 'number', show('est_mrr') ?? opp.est_mrr)}
+          {renderEditStat('amount', 'Amount', (show('amount') ?? opp.amount) ? formatMoney(show('amount') ?? opp.amount) : 'Not set', 'number', show('amount') ?? opp.amount)}
+          {renderEditStat('close_date', 'Close Date', (show('close_date') ?? opp.close_date) ? fmtDate(show('close_date') ?? opp.close_date) : 'Not set', 'date', show('close_date') ?? opp.close_date)}
           <MiniStat label="Updated"     value={fmtWhen(opp.updated_at ?? opp.created_at) || 'Unknown'} />
         </div>
       </div>
@@ -531,6 +634,30 @@ export function OpportunityGlassWindow({
             ) : (
               <Empty text="No contact linked yet. Tap Edit details to add one." />
             )}
+
+            {/* Contact roles — multiple stakeholders (decision maker, influencer…). */}
+            {contacts.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {contacts.map(c => (
+                  <div key={String(c.id)} className="flex items-start justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{val(c.contact_name, 'Contact')}</span>
+                        {c.role && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>{String(c.role)}</span>}
+                        {c.is_primary && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.35)', color: '#6ee7b7' }}>Primary</span>}
+                      </div>
+                      <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{[c.contact_title, c.contact_email, c.contact_phone].filter(Boolean).join(' • ') || 'No contact info'}</div>
+                    </div>
+                    <button type="button" onClick={() => delContact(String(c.id))} title="Remove" className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setAddContactOpen(true)} className="mt-2 w-full rounded-2xl px-3 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
+              <div className="text-xs font-semibold">+ Add contact</div>
+              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Decision maker, influencer, billing…</div>
+            </button>
+
             {opp.owner_name && (
               <div className="mt-2">
                 <MiniRow

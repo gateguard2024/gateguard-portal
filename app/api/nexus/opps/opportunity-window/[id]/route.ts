@@ -260,6 +260,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     set('property_type',   body.property_type)
     set('next_step',       body.next_step)
     set('notes',           body.notes)
+    if (body.close_date !== undefined) map.close_date = clean(body.close_date) || null
     if (body.units !== undefined && body.units !== '') { const n = parseInt(String(body.units), 10); if (!isNaN(n)) map.units = n }
     if (body.amount !== undefined && body.amount !== '') { const n = Number(body.amount); if (!isNaN(n)) map.amount = n }
     if (body.est_mrr !== undefined && body.est_mrr !== '') { const n = Number(body.est_mrr); if (!isNaN(n)) map.est_mrr = n }
