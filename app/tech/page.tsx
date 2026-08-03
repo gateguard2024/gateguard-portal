@@ -1511,17 +1511,27 @@ function TechTool() {
                 )
               })()}
 
-              {/* Mark complete — proof gated */}
+              {/* Mark complete. Steps are required ONLY when the job has a
+                  checklist (many assigned jobs have none — those must still be
+                  closable). A missing photo warns but never blocks, so there is
+                  always a way to close a work order. */}
               {(() => {
-                const allDone = checklist.length > 0 && doneCount === checklist.length
+                const hasChecklist = checklist.length > 0
+                const stepsDone = !hasChecklist || doneCount === checklist.length
                 const hasPhoto = (openJob._photos ?? []).length > 0
-                const can = allDone && hasPhoto
-                const isDone = ['completed', 'complete', 'done'].includes(String(openJob.status || '').toLowerCase())
+                const can = stepsDone   // steps gate only when present; photo is a nudge
+                const isDone = ['completed', 'complete', 'done', 'closed'].includes(String(openJob.status || '').toLowerCase())
                 if (isDone) return <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 11, color: C.green, padding: 10 }}>✓ JOB COMPLETE</div>
+                const doComplete = () => {
+                  if (!can) return
+                  if (!hasPhoto && typeof window !== 'undefined' && !window.confirm('No photo attached to this job. Complete it anyway?')) return
+                  setJobStatus(openJob.id, 'completed')
+                }
                 return (
                   <>
-                    <button onClick={() => can && setJobStatus(openJob.id, 'completed')} disabled={!can} style={{ width: '100%', padding: 14, borderRadius: 12, background: can ? C.green : 'rgba(255,255,255,0.06)', color: can ? '#06120c' : C.textMuted, border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, cursor: can ? 'pointer' : 'not-allowed', letterSpacing: '0.06em' }}>✓ COMPLETE JOB</button>
-                    {!can && <div style={{ textAlign: 'center', fontSize: 11, color: C.amber, marginTop: 6 }}>🔒 {!allDone ? (checklist.length === 0 ? 'Add & finish steps first' : `Finish all steps (${doneCount}/${checklist.length})`) : 'Add at least one photo'}</div>}
+                    <button onClick={doComplete} disabled={!can} style={{ width: '100%', padding: 14, borderRadius: 12, background: can ? C.green : 'rgba(255,255,255,0.06)', color: can ? '#06120c' : C.textMuted, border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, cursor: can ? 'pointer' : 'not-allowed', letterSpacing: '0.06em' }}>✓ COMPLETE JOB</button>
+                    {!can && <div style={{ textAlign: 'center', fontSize: 11, color: C.amber, marginTop: 6 }}>🔒 Finish all steps ({doneCount}/{checklist.length})</div>}
+                    {can && !hasPhoto && <div style={{ textAlign: 'center', fontSize: 11, color: C.textMuted, marginTop: 6 }}>Tip: add a photo for the commissioning record (optional)</div>}
                   </>
                 )
               })()}

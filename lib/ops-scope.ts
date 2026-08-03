@@ -43,7 +43,14 @@ export async function guardWorkOrder(req: NextRequest, woId: string): Promise<bo
     .eq('id', woId)
     .maybeSingle()
   if (!data) return false
-  return isInScope(scope, (data as { org_id?: string | null }).org_id)
+  const orgId = (data as { org_id?: string | null }).org_id
+  // A NULL org_id means the work order is shared/unassigned (demo + legacy seed
+  // rows have no org_id), NOT another tenant's private job — allow it, matching
+  // recordInScope's convention. Without this, assigning a tech to any org_id-less
+  // WO 404'd the dispatcher's PATCH, so the assignment silently never saved and
+  // the job never appeared at /tech.
+  if (orgId == null) return true
+  return isInScope(scope, orgId)
 }
 
 /** Guard by a field-ticket id: resolves its parent work order, then checks scope. */

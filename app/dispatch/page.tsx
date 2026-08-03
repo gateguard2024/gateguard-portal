@@ -1641,16 +1641,34 @@ export default function DispatchPage() {
   };
 
   const handleAssignTech = async (jobId: string, techId: string, techName: string) => {
-    // Optimistic update: assign tech + auto-move to Assigned
+    // Capture prior state so we can revert if the write is rejected — otherwise
+    // an optimistic "Assigned" can lie while the server never saved the tech.
+    const prevJob = jobs.find(j => j.id === jobId);
     setJobs(prev => prev.map(j => j.id === jobId
       ? { ...j, assignedTechId: techId, assignedTech: techName, status: "Assigned" }
       : j
     ));
-    await fetch(`/api/maintenance/${jobId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignee_id: techId, assignee_name: techName, status: "scheduled" }),
-    });
+    try {
+      const res = await fetch(`/api/maintenance/${jobId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignee_id: techId, assignee_name: techName, status: "scheduled" }),
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        setJobs(prev => prev.map(j => j.id === jobId
+          ? { ...j, assignedTechId: prevJob?.assignedTechId, assignedTech: prevJob?.assignedTech, status: prevJob?.status ?? j.status }
+          : j
+        ));
+        alert(`Couldn't assign this job (${res.status}). It was not saved, so it won't reach the tech. ${msg.slice(0, 140)}`);
+      }
+    } catch {
+      setJobs(prev => prev.map(j => j.id === jobId
+        ? { ...j, assignedTechId: prevJob?.assignedTechId, assignedTech: prevJob?.assignedTech, status: prevJob?.status ?? j.status }
+        : j
+      ));
+      alert("Network error assigning this job — it was not saved. Please try again.");
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
