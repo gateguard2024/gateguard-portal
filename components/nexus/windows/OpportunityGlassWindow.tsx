@@ -6,7 +6,8 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { PIPELINE_STAGES, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
 type AnyRecord = Record<string, any>
-const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1b2836,#0f1822)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 26px 54px rgba(0,0,0,0.55), inset 0 1px 0 rgba(190,215,240,0.10), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
+// Matches the Opportunity Hub / dashboard steel exactly (lighter steel accents).
+const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 
 type OpportunityGlassData = {
   opportunity?: AnyRecord | null
@@ -29,7 +30,7 @@ function val(v: unknown, fallback = 'Not added yet') {
 
 function Section({ title, children, count }: { title: string; children: React.ReactNode; count?: number }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</div>
         {typeof count === 'number' && count > 0 && (
@@ -47,7 +48,7 @@ function Empty({ text }: { text: string }) {
 
 function MiniRow({ title, subtitle, meta }: { title: string; subtitle?: string; meta?: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>{title}</div>
         {meta && <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap' }}>{meta}</div>}
@@ -64,7 +65,7 @@ function ListBlock({ records, emptyText, render }: { records?: AnyRecord[]; empt
 
 function MiniStat({ label, value: v }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
       <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label}</div>
       <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{v}</div>
     </div>
@@ -290,7 +291,7 @@ export function OpportunityGlassWindow({
     } catch { setMsg({ ok: false, text: 'Could not save.' }) }
     finally { setStatBusy(false) }
   }
-  const statTile = { background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' } as const
+  const statTile = { background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' } as const
   function renderEditStat(field: string, label: string, display: string, inputType: string, current: unknown) {
     if (editStat === field) {
       return (
@@ -314,6 +315,10 @@ export function OpportunityGlassWindow({
 
   // Local overrides so edits show immediately (and persist on save).
   const [ov, setOv] = useState<AnyRecord>({})
+  // When fresh server data arrives (updated_at changes after a refresh), drop the
+  // optimistic overrides so the screen reflects server truth — never stale input.
+  const oppUpdatedAt = (opp as AnyRecord)?.updated_at
+  useEffect(() => { setOv({}) }, [oppUpdatedAt])
   const show = (key: string, fallback?: unknown) => (ov[key] !== undefined ? ov[key] : (opp[key] ?? fallback))
   const [editing, setEditing] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -347,7 +352,7 @@ export function OpportunityGlassWindow({
   }
   const [f, setF] = useState({
     site_contact_name: '', site_contact_title: '', site_contact_phone: '', site_contact_email: '',
-    account_name: '', property_address: '', property_city: '', property_state: '', units: '', next_step: '', notes: '',
+    account_name: '', management_co: '', property_address: '', property_city: '', property_state: '', units: '', next_step: '', notes: '',
   })
 
   function openEdit() {
@@ -357,6 +362,7 @@ export function OpportunityGlassWindow({
       site_contact_phone: String(show('site_contact_phone', contact?.phone) ?? ''),
       site_contact_email: String(show('site_contact_email', contact?.email) ?? ''),
       account_name:       String(show('account_name', company?.name) ?? ''),
+      management_co:      String(show('management_co') ?? ''),
       property_address:   String(show('property_address') ?? ''),
       property_city:      String(show('property_city') ?? ''),
       property_state:     String(show('property_state') ?? ''),
@@ -478,7 +484,7 @@ export function OpportunityGlassWindow({
     {/* Schedule follow-up popup */}
     {followupOpen && (
       <div onClick={() => setFollowupOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Schedule follow-up</h4>
             <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -509,7 +515,7 @@ export function OpportunityGlassWindow({
     {/* Log activity popup */}
     {actOpen && (
       <div onClick={() => setActOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Log activity</h4>
             <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -537,7 +543,7 @@ export function OpportunityGlassWindow({
     {/* Add contact popup */}
     {addContactOpen && (
       <div onClick={() => setAddContactOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Add contact</h4>
             <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -582,7 +588,8 @@ export function OpportunityGlassWindow({
                 </div>
                 <div className="mb-2 mt-4 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Account &amp; property</div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <input value={f.account_name} onChange={e => setF({ ...f, account_name: e.target.value })} placeholder="Account / company" className="rounded-xl px-3 py-2 text-sm outline-none sm:col-span-2" style={editInput} />
+                  <input value={f.account_name} onChange={e => setF({ ...f, account_name: e.target.value })} placeholder="Account / company" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.management_co} onChange={e => setF({ ...f, management_co: e.target.value })} placeholder="Management company (manager)" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
                   <input value={f.property_address} onChange={e => setF({ ...f, property_address: e.target.value })} placeholder="Address" className="rounded-xl px-3 py-2 text-sm outline-none sm:col-span-2" style={editInput} />
                   <input value={f.property_city} onChange={e => setF({ ...f, property_city: e.target.value })} placeholder="City" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
                   <input value={f.property_state} onChange={e => setF({ ...f, property_state: e.target.value })} placeholder="State" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
@@ -601,7 +608,7 @@ export function OpportunityGlassWindow({
       )}
 
       {/* ── Header ── */}
-      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px), linear-gradient(145deg,#1d2a39,#0f1822)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 20px 70px rgba(0,0,0,0.35), inset 0 1px 0 rgba(190,215,240,0.08)' }}>
+      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#1e2a3a)', border: '1px solid rgba(95,184,224,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
@@ -651,13 +658,13 @@ export function OpportunityGlassWindow({
         {/* At-a-glance — assigned rep, manager, units, health (time-in-stage) + est win %. */}
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
-          <MiniStat label="Manager"     value={val(show('management_co') ?? opp.management_co, 'Not set')} />
-          <MiniStat label="Units"       value={val(show('units') ?? opp.units, 'Unknown')} />
-          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: `1px solid ${health.color}55` }}>
+          {renderEditStat('management_co', 'Manager', val(show('management_co') ?? opp.management_co, 'Not set'), 'text', show('management_co') ?? opp.management_co)}
+          {renderEditStat('units', 'Units', val(show('units') ?? opp.units, 'Unknown'), 'number', show('units') ?? opp.units)}
+          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: `1px solid ${health.color}55` }}>
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Idle · {health.label}</div>
             <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: health.color }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: health.color }} />{agingLabel(opp.updated_at ?? opp.created_at)}</div>
           </div>
-          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Est. win %</div>
             <div className="mt-1 text-xs font-semibold" style={{ color: estProb >= 60 ? '#34d399' : estProb >= 30 ? '#fbbf24' : '#f87171' }}>{estProb}%</div>
           </div>
@@ -670,7 +677,7 @@ export function OpportunityGlassWindow({
             {renderEditStat('install_fee', 'Install fee', installVal ? formatMoney(installVal) : 'Not set', 'number', installVal || '')}
             {renderEditStat('contract_term', 'Term (mo)', String(termVal), 'number', termVal)}
             <MiniStat label="TCV" value={tcv ? formatMoney(tcv) : '—'} />
-            <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(95,184,224,0.3)' }}>
+            <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
               <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Weighted · {estProb}%</div>
               <div className="mt-1 text-xs font-semibold" style={{ color: '#9FD8EC' }}>{weightedTcv ? formatMoney(weightedTcv) : '—'}</div>
             </div>
@@ -724,7 +731,7 @@ export function OpportunityGlassWindow({
             {contacts.length > 0 && (
               <div className="mt-2 space-y-2">
                 {contacts.map(c => (
-                  <div key={String(c.id)} className="flex items-start justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                  <div key={String(c.id)} className="flex items-start justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{val(c.contact_name, 'Contact')}</span>
@@ -817,7 +824,7 @@ export function OpportunityGlassWindow({
                   const tid = String(t.id ?? i)
                   const done = String(t.status ?? '') === 'done'
                   return (
-                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold" style={{ color: done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)', textDecoration: done ? 'line-through' : 'none' }}>{val(t.title, 'Task')}</div>
@@ -931,7 +938,7 @@ export function OpportunityGlassWindow({
                   const fid = String(f.id ?? i)
                   const href = (f.url ?? f.public_url) as string | undefined
                   return (
-                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#16232f,#0f1822)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
                       <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
                         <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
                         <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>

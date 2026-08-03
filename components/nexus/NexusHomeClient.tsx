@@ -207,10 +207,10 @@ export default function NexusHomeClient() {
   // source of truth. Every tab below renders inside this shell and inherits it;
   // a surface must never paint its own page background.
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
+    <div className="relative flex h-screen flex-col overflow-hidden" style={{ background: NEXUS_BG }}>
       <NexusBackdropLayers variant="hero" />
 
-      <main className={`relative z-10 flex flex-1 flex-col items-center px-6 pb-48 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
+      <main className={`relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 pb-48 pt-4 ${leftOpen ? 'lg:pl-[248px]' : 'lg:pl-8'} ${rightOpen ? 'lg:pr-[316px]' : 'lg:pr-8'}`}>
         {/* Slim brand band — small NEXUS mark + narrow Ask bar. Greeting now
             lives centered above the My Day summary. */}
         <NexusMark />

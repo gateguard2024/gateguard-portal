@@ -95,12 +95,19 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
     const d = await r.json().catch(() => null)
     if (d) setSelected(d)
   }
+  // Re-fetch the OPEN deal (so edits show without a page refresh) AND the dashboard.
+  async function refreshSelected() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const id = (selected as any)?.opportunity?.id
+    if (id) await openDeal(String(id))
+    void loadDash()
+  }
 
   if (selected) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={loadDash} /></div>
+        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} /></div>
       </div>
     )
   }
