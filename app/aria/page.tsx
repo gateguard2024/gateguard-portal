@@ -1156,8 +1156,9 @@ export default function AriaExplorePage() {
                 {panelItems.map((c, i) => (
                   <button key={i} onClick={() => { setPanel(null); openDetail({ id: c._property || '', name: c._property || '', address: '', city: '', state: '' }) }}
                     className="w-full text-left rounded-xl border border-white/10 bg-[#1E2A3A]/70 hover:border-[#5FB8E0]/50 p-3 transition-all">
-                    <p className="text-[13px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
+                    <p className="text-[13px] font-bold text-slate-100 truncate">{c.name} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span>{c.role_type === 'owner' && <span className="ml-1.5 rounded px-1 py-0.5 text-[8px] font-bold" style={{ background: 'rgba(251,191,36,0.16)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.4)' }}>OWNER</span>}</p>
                     <p className="text-[11px] text-slate-400 truncate mt-0.5">{[c.email, c.phone].filter((x: string) => x && x !== 'No data found').join('  ·  ') || 'No email / phone'}</p>
+                    {c.address && c.address !== 'No data found' && <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.address}</p>}
                     {c._property && <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1"><Building2 size={9} /> {c._property}</p>}
                   </button>
                 ))}
@@ -1935,8 +1936,9 @@ export default function AriaExplorePage() {
                             {contacts.length === 0 && <p className="text-[11px] text-slate-500 italic">No contacts found yet</p>}
                             {contacts.slice(0, 6).map((c, i) => (
                               <div key={i} className="py-2 border-b border-white/5 last:border-0">
-                                <p className="text-[12px] font-semibold text-slate-100">{c.name || 'Unknown'} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span></p>
+                                <p className="text-[12px] font-semibold text-slate-100">{c.name || 'Unknown'} <span className="text-slate-500 font-normal text-[11px]">· {c.title || c.role_type || '—'}</span>{c.role_type === 'owner' && <span className="ml-1.5 rounded px-1 py-0.5 text-[8px] font-bold" style={{ background: 'rgba(251,191,36,0.16)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.4)' }}>OWNER</span>}</p>
                                 <p className="text-[10px] text-slate-400 mt-0.5">{[c.email, c.phone].filter(x => x && x !== 'No data found').join('  ·  ') || 'No email / phone found'}</p>
+                                {c.address && c.address !== 'No data found' && <p className="text-[10px] text-slate-500 mt-0.5">📍 {c.address}</p>}
                               </div>
                             ))}
                           </div>

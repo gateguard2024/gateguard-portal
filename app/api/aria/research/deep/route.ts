@@ -1847,6 +1847,7 @@ SOURCE AUTHORITY + TAGS: Each snippet starts with [AUTH:N][source-tag][domain]. 
 interface StepContact {
   name: string; title: string; company: string;
   role_type: string; email: string; phone: string;
+  address?: string;   // mailing/office address for this contact (G3)
   linkedin: string; verified?: boolean
 }
 
@@ -2090,10 +2091,12 @@ Only infer ONE brand per unnamed category. NEVER default to ButterflyMX for a ga
   const contactExtracted = contactSnippets.length > 60
     ? await haikusExtract<{ contacts: Array<StepContact & { linkedin_url?: string }> }>(
         `Extract every named individual at "${entity || confirmedName}" or "${confirmedName}". Return ONLY valid JSON:
-{"contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""}]}
-role_type: "property_manager","regional_manager","asset_manager","corporate"
+{"contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","address":"","linkedin":""}]}
+role_type: "property_manager","regional_manager","asset_manager","corporate","owner"
+- Include the OWNER point-of-contact: a named person at the ownership entity (from EDGAR filings, LLC/corporate registration, "principal", "managing member", "president", "acquisitions") — set their role_type to "owner".
 - email: any address found, even partial
 - phone: any phone number
+- address: the contact's mailing/office/corporate street address if it appears (e.g. from a filing, footer, or registration). null/"" if not shown — never invent one.
 - linkedin: full LinkedIn URL if present
 - Only real "First Last" names (no companies or titles as names)
 - Include LinkedIn search hits even with brief snippets — URL alone proves existence
@@ -3202,6 +3205,7 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       return {
         name: c.name, title: c.title, company: c.company || mgmt || finalOwner,
         role_type: c.role_type, email: c.email, top_email_format: p3Final.email_format,
+        address: normStr(c.address) ?? null,   // G3 — contact mailing/office address
         // Phone hierarchy: direct line first, then leasing office, then empty
         phone: directPhone ?? (officePhone ?? ''),
         phone_source: (directPhone ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
