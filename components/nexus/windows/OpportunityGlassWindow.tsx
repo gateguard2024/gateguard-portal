@@ -122,7 +122,6 @@ export function OpportunityGlassWindow({
   const activities = data.activities ?? []
   const todos = data.todos ?? []
   const attachments = data.attachments ?? []
-  const quote = data.quote
   const nextBestActions = data.nextBestActions ?? []
 
   const router = useRouter()
@@ -157,6 +156,25 @@ export function OpportunityGlassWindow({
     } catch { setMsg({ ok: false, text: 'Upload failed.' }) }
     finally { setFileBusy(null); if (fileRef.current) fileRef.current.value = '' }
   }
+  // Upload a whole selection (multi-select) into one bucket, one after another.
+  async function uploadMany(files: FileList | File[], category: string) {
+    const list = Array.from(files)
+    for (const f of list) { await uploadFile(f, category) }
+  }
+  // Rename an attachment in place.
+  async function renameAttachment(id: string, currentName: string) {
+    if (!oppIdStr) return
+    const next = typeof window !== 'undefined' ? window.prompt('Rename file', currentName) : null
+    if (next == null) return
+    const name = next.trim()
+    if (!name || name === currentName) return
+    const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rename_attachment', attachment_id: id, file_name: name }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Rename failed.' }); return }
+    setMsg({ ok: true, text: 'Renamed ✓' }); await onRefresh?.()
+  }
+  // Lightbox preview for images.
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
   const [followupOpen, setFollowupOpen] = useState(false)
@@ -230,46 +248,8 @@ export function OpportunityGlassWindow({
     finally { setFileRmBusy(null) }
   }
 
-  // ── Attach a quote (stopgap until the quote builder ships) ──────────────────
-  const [quoteOpen, setQuoteOpen] = useState(false)
-  const [quoteForm, setQuoteForm] = useState({ url: '', total: '', status: 'Sent' })
-  const [quoteBusy, setQuoteBusy] = useState(false)
-  const quoteFileRef = useRef<HTMLInputElement>(null)
-  const [quoteUploading, setQuoteUploading] = useState(false)
-  function openQuote() {
-    setQuoteForm({
-      url: String(show('quote_url') ?? opp.quote_url ?? ''),
-      total: (show('quote_total') ?? opp.quote_total) != null ? String(show('quote_total') ?? opp.quote_total) : '',
-      status: String(show('quote_status') ?? opp.quote_status ?? 'Sent'),
-    })
-    setQuoteOpen(true)
-  }
-  async function uploadQuoteFile(file: File) {
-    if (!oppIdStr) return
-    setQuoteUploading(true)
-    try {
-      const urlRes = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name }) })
-      const u = await urlRes.json()
-      if (!urlRes.ok) { setMsg({ ok: false, text: u.error || 'Could not start upload.' }); return }
-      const put = await fetch(u.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
-      if (!put.ok) { setMsg({ ok: false, text: 'Upload failed.' }); return }
-      setQuoteForm(q => ({ ...q, url: u.publicUrl }))
-    } catch { setMsg({ ok: false, text: 'Upload failed.' }) }
-    finally { setQuoteUploading(false); if (quoteFileRef.current) quoteFileRef.current.value = '' }
-  }
-  async function saveQuote() {
-    if (!oppIdStr) return
-    setQuoteBusy(true)
-    try {
-      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', quote_url: quoteForm.url, quote_total: quoteForm.total, quote_status: quoteForm.status }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not save quote.' }); return }
-      setOv(prev => ({ ...prev, quote_url: quoteForm.url, quote_total: quoteForm.total ? Number(quoteForm.total) : null, quote_status: quoteForm.status }))
-      setQuoteOpen(false); setMsg({ ok: true, text: 'Quote attached ✓' })
-      await onRefresh?.()
-    } catch { setMsg({ ok: false, text: 'Could not save quote.' }) }
-    finally { setQuoteBusy(false) }
-  }
+  // (The standalone "Quote" card + modal were removed — quotes now live in the
+  //  "Quotes & Surveys" attachment bucket, so there's only one place for them.)
 
   // ── Stage path (advance / move stage) ───────────────────────────────────────
   const [stageBusy, setStageBusy] = useState<string | null>(null)
@@ -636,38 +616,18 @@ export function OpportunityGlassWindow({
       </div>
     )}
 
-    {/* Attach quote */}
-    {quoteOpen && (
-      <div onClick={() => setQuoteOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
-          <div className="mb-3 flex items-center justify-between">
-            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Attach a quote</h4>
-            <button type="button" onClick={() => setQuoteOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
-          </div>
-          <div className="space-y-3">
-            <input ref={quoteFileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadQuoteFile(f) }} />
-            <button type="button" disabled={quoteUploading} onClick={() => quoteFileRef.current?.click()} className="w-full rounded-xl px-3 py-2.5 text-left disabled:opacity-50" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
-              <div className="text-xs font-semibold">{quoteUploading ? 'Uploading…' : quoteForm.url ? 'Quote file attached ✓ — replace' : 'Upload quote file (PDF)'}</div>
-              {quoteForm.url && <div className="mt-0.5 truncate text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{quoteForm.url}</div>}
-            </button>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Total</label>
-                <input value={quoteForm.total} onChange={e => setQuoteForm({ ...quoteForm, total: e.target.value })} type="number" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Status</label>
-                <select value={quoteForm.status} onChange={e => setQuoteForm({ ...quoteForm, status: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }}>
-                  {['Draft', 'Sent', 'Viewed', 'Accepted', 'Declined'].map(s => <option key={s} value={s} style={{ background: '#0b1424' }}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button type="button" onClick={() => setQuoteOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-            <button type="button" disabled={quoteBusy || quoteUploading} onClick={saveQuote} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{quoteBusy ? 'Saving…' : 'Save quote'}</button>
+    {/* Image preview lightbox */}
+    {preview && (
+      <div onClick={() => setPreview(null)} className="fixed inset-0 z-[140] flex flex-col items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="mb-2 flex w-full max-w-4xl items-center justify-between gap-3">
+          <div className="truncate text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{preview.name}</div>
+          <div className="flex shrink-0 gap-2">
+            <a href={preview.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>Open original ↗</a>
+            <button type="button" onClick={() => setPreview(null)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.82)' }}>Close</button>
           </div>
         </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img onClick={e => e.stopPropagation()} src={preview.url} alt={preview.name} className="max-h-[82vh] max-w-4xl rounded-2xl object-contain" style={{ border: '1px solid rgba(140,170,200,0.28)' }} />
       </div>
     )}
 
@@ -1067,30 +1027,6 @@ export function OpportunityGlassWindow({
             </div>
           </Section>
 
-          <Section title="Quote">
-            {quote ? (
-              <MiniRow
-                title={`Quote #${val(quote.id, '').slice(0, 8).toUpperCase()}`}
-                subtitle={`Status: ${val(quote.status, 'draft')}`}
-                meta={quote.total ? formatMoney(quote.total) : undefined}
-              />
-            ) : (show('quote_url') ?? opp.quote_url) || (show('quote_total') ?? opp.quote_total) ? (
-              <a href={String(show('quote_url') ?? opp.quote_url) || undefined} target="_blank" rel="noreferrer" className="block rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold" style={{ color: (show('quote_url') ?? opp.quote_url) ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{(show('quote_url') ?? opp.quote_url) ? 'Attached quote ↗' : 'Quote'}</div>
-                  {(show('quote_total') ?? opp.quote_total) != null && <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>{formatMoney(show('quote_total') ?? opp.quote_total)}</div>}
-                </div>
-                <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Status: {val(show('quote_status') ?? opp.quote_status, 'Sent')}</div>
-              </a>
-            ) : (
-              <Empty text="No quote attached yet." />
-            )}
-            <button type="button" onClick={openQuote} className="mt-2 w-full rounded-2xl px-3 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
-              <div className="text-xs font-semibold">{(show('quote_url') ?? opp.quote_url) || (show('quote_total') ?? opp.quote_total) ? 'Update quote' : '+ Attach a quote'}</div>
-              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Upload a file + total (until the builder ships)</div>
-            </button>
-          </Section>
-
           {/* Attachments — five labeled buckets, one shared upload. Photo buckets
               render as a thumbnail grid; Quotes/Documents as a file list. Legacy
               files (no category) fall into Documents via the DB default. */}
@@ -1107,7 +1043,7 @@ export function OpportunityGlassWindow({
             const inCat = (a: any, k: string) => String(a.category ?? 'document') === k
             return (
               <>
-                <input ref={fileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f, uploadCat.current) }} />
+                <input ref={fileRef} type="file" multiple className="hidden" onChange={e => { const fs = e.target.files; if (fs && fs.length) void uploadMany(fs, uploadCat.current) }} />
                 {BUCKETS.map(b => {
                   const items = all.filter(a => inCat(a, b.key))
                   const busy = fileBusy === b.key
@@ -1132,11 +1068,15 @@ export function OpportunityGlassWindow({
                             const href = (f.url ?? f.public_url) as string | undefined
                             return (
                               <div key={fid} className="group relative aspect-square overflow-hidden rounded-xl" style={{ border: '1px solid rgba(140,170,200,0.2)', background: '#16232f' }}>
-                                <a href={href || undefined} target="_blank" rel="noreferrer">
+                                <button type="button" onClick={() => href && setPreview({ url: href, name: val(f.file_name, 'Photo') })} className="block h-full w-full" title={val(f.file_name, 'Photo')}>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={href} alt={val(f.file_name, 'Photo')} className="h-full w-full object-cover" />
-                                </a>
-                                <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="absolute right-1 top-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold opacity-0 transition group-hover:opacity-100 disabled:opacity-40" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                                </button>
+                                <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                                  <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'Photo'))} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>✎</button>
+                                  <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                                </div>
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate px-1.5 py-1 text-[9px]" style={{ background: 'linear-gradient(0deg,rgba(8,14,22,0.85),transparent)', color: 'rgba(255,255,255,0.82)' }}>{val(f.file_name, 'Photo')}</div>
                               </div>
                             )
                           })}
@@ -1152,6 +1092,7 @@ export function OpportunityGlassWindow({
                                   <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
                                   <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>
                                 </a>
+                                <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'File'))} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.35)', color: '#9FD8EC' }}>✎</button>
                                 <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
                               </div>
                             )

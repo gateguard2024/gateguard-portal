@@ -257,6 +257,22 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Attachment removed.' })
   }
 
+  // ── rename_attachment ───────────────────────────────────────────────────────
+  if (action === 'rename_attachment') {
+    const attachmentId = clean(body.attachment_id)
+    const newName = clean(body.file_name)
+    if (!attachmentId || !newName) return NextResponse.json({ success: false, message: 'Missing id or name.' }, { status: 400 })
+    const { data, error: renErr } = await supabase
+      .from('attachments')
+      .update({ file_name: newName })
+      .eq('id', attachmentId)
+      .eq('opportunity_id', oppId)   // scope: only this opportunity's files
+      .select('id, file_name')
+      .single()
+    if (renErr) return NextResponse.json({ success: false, message: renErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Renamed.', attachment: data })
+  }
+
   // ── update_details — save contact / property / interests on the opportunity ──
   if (action === 'update_details') {
     const map: Record<string, unknown> = {}
