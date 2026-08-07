@@ -130,14 +130,14 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       []
     ),
 
-    // Attachments
+    // Attachments (flat list + category; the UI groups into the five buckets)
     safe(
       supabase
         .from('attachments')
-        .select('id, file_name, url, file_type, size_bytes, type, created_at')
+        .select('id, file_name, url, file_type, size_bytes, type, category, created_at')
         .eq('opportunity_id', oppId)
         .order('created_at', { ascending: false })
-        .limit(20),
+        .limit(200),
       []
     ),
 
@@ -212,19 +212,34 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (!fileName || !url) {
       return NextResponse.json({ success: false, message: 'Missing file.' }, { status: 400 })
     }
-    const { data, error: insErr } = await supabase
+    // Which of the five buckets this file belongs to. Anything unexpected falls
+    // back to 'document' so a bad value can never reject the upload.
+    const ATTACH_CATEGORIES = ['quote_survey', 'survey_photo', 'document', 'install_photo', 'service_photo']
+    const category = ATTACH_CATEGORIES.includes(String(body.category)) ? String(body.category) : 'document'
+    const insertRow: Record<string, unknown> = {
+      dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
+      uploaded_by: profileId,
+      file_name: fileName,
+      url,
+      file_type: clean(body.file_type) || null,
+      size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
+      opportunity_id: oppId,
+      category,
+    }
+    let { data, error: insErr } = await supabase
       .from('attachments')
-      .insert({
-        dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
-        uploaded_by: profileId,
-        file_name: fileName,
-        url,
-        file_type: clean(body.file_type) || null,
-        size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
-        opportunity_id: oppId,
-      })
-      .select('id, file_name, url, file_type, size_bytes, created_at')
+      .insert(insertRow)
+      .select('id, file_name, url, file_type, size_bytes, category, created_at')
       .single()
+    // Drift-safe: if the category column isn't deployed yet, retry without it.
+    if (insErr && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+      delete insertRow.category
+      ;({ data, error: insErr } = await supabase
+        .from('attachments')
+        .insert(insertRow)
+        .select('id, file_name, url, file_type, size_bytes, created_at')
+        .single())
+    }
     if (insErr) return NextResponse.json({ success: false, message: insErr.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Attachment added.', attachment: data })
   }

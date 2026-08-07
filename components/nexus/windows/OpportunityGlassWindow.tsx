@@ -131,24 +131,31 @@ export function OpportunityGlassWindow({
   const oppIdStr = opp.id as string | undefined
 
   // ── File upload (signed URL → PUT → record via add_attachment) ──────────────
+  // One hidden input, reused by every bucket. The bucket's "+ Add" sets which
+  // category the next pick belongs to before opening the picker.
   const fileRef = useRef<HTMLInputElement>(null)
-  const [fileBusy, setFileBusy] = useState(false)
-  async function uploadFile(file: File) {
+  const uploadCat = useRef<string>('document')
+  const [fileBusy, setFileBusy] = useState<string | null>(null)   // = category currently uploading
+  function pickInto(category: string, accept: string) {
+    uploadCat.current = category
+    if (fileRef.current) { fileRef.current.accept = accept; fileRef.current.click() }
+  }
+  async function uploadFile(file: File, category: string) {
     if (!oppIdStr) return
-    setFileBusy(true); setMsg(null)
+    setFileBusy(category); setMsg(null)
     try {
-      const urlRes = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name }) })
+      const urlRes = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, category }) })
       const u = await urlRes.json()
       if (!urlRes.ok) { setMsg({ ok: false, text: u.error || 'Could not start upload.' }); return }
       const put = await fetch(u.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
       if (!put.ok) { setMsg({ ok: false, text: 'Upload failed.' }); return }
-      const rec = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: u.publicUrl, file_type: file.type || null, size_bytes: file.size }) })
+      const rec = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: u.publicUrl, file_type: file.type || null, size_bytes: file.size, category }) })
       const rj = await rec.json().catch(() => ({}))
       if (!rec.ok || rj.success === false) { setMsg({ ok: false, text: rj.message || 'Could not save file.' }); return }
-      setMsg({ ok: true, text: 'File attached ✓' })
+      setMsg({ ok: true, text: 'Attached ✓' })
       await onRefresh?.()
     } catch { setMsg({ ok: false, text: 'Upload failed.' }) }
-    finally { setFileBusy(false); if (fileRef.current) fileRef.current.value = '' }
+    finally { setFileBusy(null); if (fileRef.current) fileRef.current.value = '' }
   }
 
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
@@ -1084,38 +1091,79 @@ export function OpportunityGlassWindow({
             </button>
           </Section>
 
-          <Section title="Files" count={attachments.length}>
-            <input ref={fileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f) }} />
-            <button
-              type="button"
-              disabled={fileBusy}
-              onClick={() => fileRef.current?.click()}
-              className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-              style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}
-            >
-              <div className="text-xs font-semibold">{fileBusy ? 'Uploading…' : '+ Attach a file'}</div>
-              <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>PDF, image, or document</div>
-            </button>
-            {(!attachments || attachments.length === 0) ? (
-              <Empty text="No files attached yet." />
-            ) : (
-              <div className="space-y-2">
-                {attachments.slice(0, 8).map((f, i) => {
-                  const fid = String(f.id ?? i)
-                  const href = (f.url ?? f.public_url) as string | undefined
+          {/* Attachments — five labeled buckets, one shared upload. Photo buckets
+              render as a thumbnail grid; Quotes/Documents as a file list. Legacy
+              files (no category) fall into Documents via the DB default. */}
+          {(() => {
+            const BUCKETS: { key: string; label: string; accept: string; photo: boolean; hint: string }[] = [
+              { key: 'quote_survey',  label: 'Quotes & Surveys', accept: 'application/pdf,image/*', photo: false, hint: 'PDF or image' },
+              { key: 'survey_photo',  label: 'Survey Photos',    accept: 'image/*',                photo: true,  hint: 'JPG or PNG' },
+              { key: 'document',      label: 'Documents',        accept: '',                       photo: false, hint: 'PDF, image, or document' },
+              { key: 'install_photo', label: 'Install Photos',   accept: 'image/*',                photo: true,  hint: 'JPG or PNG' },
+              { key: 'service_photo', label: 'Service Photos',   accept: 'image/*',                photo: true,  hint: 'JPG or PNG' },
+            ]
+            const all = attachments ?? []
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const inCat = (a: any, k: string) => String(a.category ?? 'document') === k
+            return (
+              <>
+                <input ref={fileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f, uploadCat.current) }} />
+                {BUCKETS.map(b => {
+                  const items = all.filter(a => inCat(a, b.key))
+                  const busy = fileBusy === b.key
                   return (
-                    <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
-                      <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
-                        <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>
-                      </a>
-                      <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
-                    </div>
+                    <Section key={b.key} title={b.label} count={items.length}>
+                      <button
+                        type="button"
+                        disabled={!!fileBusy}
+                        onClick={() => pickInto(b.key, b.accept)}
+                        className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                        style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}
+                      >
+                        <div className="text-xs font-semibold">{busy ? 'Uploading…' : b.photo ? '+ Add photos' : '+ Add file'}</div>
+                        <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{b.hint}</div>
+                      </button>
+                      {items.length === 0 ? (
+                        <Empty text="Nothing here yet." />
+                      ) : b.photo ? (
+                        <div className="grid grid-cols-3 gap-2">
+                          {items.map((f, i) => {
+                            const fid = String(f.id ?? i)
+                            const href = (f.url ?? f.public_url) as string | undefined
+                            return (
+                              <div key={fid} className="group relative aspect-square overflow-hidden rounded-xl" style={{ border: '1px solid rgba(140,170,200,0.2)', background: '#16232f' }}>
+                                <a href={href || undefined} target="_blank" rel="noreferrer">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={href} alt={val(f.file_name, 'Photo')} className="h-full w-full object-cover" />
+                                </a>
+                                <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="absolute right-1 top-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold opacity-0 transition group-hover:opacity-100 disabled:opacity-40" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {items.map((f, i) => {
+                            const fid = String(f.id ?? i)
+                            const href = (f.url ?? f.public_url) as string | undefined
+                            return (
+                              <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                                <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
+                                  <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
+                                  <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>
+                                </a>
+                                <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </Section>
                   )
                 })}
-              </div>
-            )}
-          </Section>
+              </>
+            )
+          })()}
 
           {(company || lead) && (
             <Section title="Source">

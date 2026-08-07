@@ -24,11 +24,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
     }
 
-    const { filename } = await req.json()
+    const { filename, category } = await req.json()
     if (!filename) return NextResponse.json({ error: 'filename is required' }, { status: 400 })
 
+    // Namespace by bucket category so storage stays tidy; unknown → 'document'.
+    const CATS = ['quote_survey', 'survey_photo', 'document', 'install_photo', 'service_photo']
+    const cat = CATS.includes(String(category)) ? String(category) : 'document'
     const safeName = String(filename).replace(/\s+/g, '-').toLowerCase().replace(/[^a-z0-9._-]/g, '')
-    const storagePath = `opp/${params.id}/${Date.now()}_${safeName}`
+    const storagePath = `opp/${params.id}/${cat}/${Date.now()}_${safeName}`
 
     await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => { /* exists */ })
 
