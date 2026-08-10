@@ -127,6 +127,8 @@ export async function PATCH(
     'whats_included', 'payment_schedule_json', 'sow_text',
     'agreement_type', 'agreement_html', 'attachments',
     'accepted_by_rep', 'accepted_by_rep_name',
+    // migration 182 module-based proposal
+    'proposal_blocks', 'proposal_theme',
   ]
 
   const updates: Record<string, unknown> = {}

@@ -43,7 +43,7 @@ function Grid({ items }: { items: { h: string; p: string }[] }) {
   )
 }
 
-export default function ProposalView({ quote, lineItems }: { quote: Quote; lineItems: PricedLine[] }) {
+export default function ProposalView({ quote, lineItems, preview = false }: { quote: Quote; lineItems: PricedLine[]; preview?: boolean }) {
   const blocks = useMemo(() => resolveBlocks(quote), [quote])
   const vars = (b: ProposalBlock) => ({ ...(moduleDef(b.type)?.defaultVars ?? {}), ...(b.vars ?? {}) })
 
@@ -275,7 +275,9 @@ export default function ProposalView({ quote, lineItems }: { quote: Quote; lineI
           <div key={i} style={{ padding: '24px 32px', background: C.close, color: C.dim }}>
             <div style={secH}>{v.title}</div>
             <div style={{ fontSize: 13, lineHeight: 1.5 }}>{v.body} — <b style={{ color: C.ink }}>{quote?.created_by_name || 'Russel Feldman'}</b>, Gate Guard</div>
-            {done ? (
+            {preview ? (
+              <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 11, background: 'rgba(95,184,224,.10)', border: '1px dashed rgba(95,184,224,.4)', color: '#9fc2dc', fontSize: 12, fontWeight: 600 }}>Preview — the client signs & accepts here.</div>
+            ) : done ? (
               <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 11, background: 'rgba(18,184,134,.14)', border: '1px solid rgba(18,184,134,.4)', color: '#7fe0b8', fontWeight: 700 }}>✓ Accepted — thank you! We’ll be in touch to get started.</div>
             ) : (
               <div style={{ marginTop: 14, ...tile }}>

@@ -200,7 +200,7 @@ export function OpportunityGlassWindow({
       const qid = j?.quote?.id || j?.id
       if (!r.ok || j?.error || !qid) { setMsg({ ok: false, text: j?.error || 'Could not create proposal.' }); return }
       setMsg({ ok: true, text: 'Proposal created ✓ — opening builder' })
-      if (typeof window !== 'undefined') window.open(`/quotes/${qid}`, '_blank')
+      if (typeof window !== 'undefined') window.open(`/quotes/${qid}/build`, '_blank')
       await onRefresh?.()
     } catch { setMsg({ ok: false, text: 'Could not create proposal.' }) }
     finally { setQuoteBusy(false) }
