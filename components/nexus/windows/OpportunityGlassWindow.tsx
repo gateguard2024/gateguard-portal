@@ -181,8 +181,13 @@ export function OpportunityGlassWindow({
   // entry point that was missing — the bucket only *uploaded* files before.
   const [quoteBusy, setQuoteBusy] = useState(false)
   async function createProposal() {
-    if (!oppIdStr) return
+    if (!oppIdStr || quoteBusy) return
     setQuoteBusy(true); setMsg(null)
+    // Open the tab NOW, while we still have the click's user gesture. Calling
+    // window.open() AFTER the await gets silently blocked by the popup blocker —
+    // that was the "goes noplace" bug. We aim this blank tab at the quote once
+    // it's created; if the browser blocked it we fall back to same-tab nav.
+    const win = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const anyC: any = contact ?? {}; const anyP: any = property ?? {}; const anyCo: any = company ?? {}
@@ -198,12 +203,20 @@ export function OpportunityGlassWindow({
       const r = await fetch('/api/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const j = await r.json().catch(() => ({}))
       const qid = j?.quote?.id || j?.id
-      if (!r.ok || j?.error || !qid) { setMsg({ ok: false, text: j?.error || 'Could not create proposal.' }); return }
+      if (!r.ok || j?.error || !qid) {
+        if (win) win.close()
+        setMsg({ ok: false, text: j?.error || 'Could not create proposal.' })
+        return
+      }
+      const url = `/quotes/${qid}/build`
+      if (win) win.location.href = url
+      else if (typeof window !== 'undefined') window.location.href = url   // popup blocked → same tab
       setMsg({ ok: true, text: 'Proposal created ✓ — opening builder' })
-      if (typeof window !== 'undefined') window.open(`/quotes/${qid}/build`, '_blank')
       await onRefresh?.()
-    } catch { setMsg({ ok: false, text: 'Could not create proposal.' }) }
-    finally { setQuoteBusy(false) }
+    } catch {
+      if (win) win.close()
+      setMsg({ ok: false, text: 'Could not create proposal.' })
+    } finally { setQuoteBusy(false) }
   }
 
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
