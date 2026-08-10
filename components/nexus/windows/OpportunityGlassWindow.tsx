@@ -176,6 +176,36 @@ export function OpportunityGlassWindow({
   // Lightbox preview for images.
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
+  // Create a portal quote/proposal straight from this opportunity, pre-filled
+  // with its client + property, then open the builder in a new tab. This is the
+  // entry point that was missing — the bucket only *uploaded* files before.
+  const [quoteBusy, setQuoteBusy] = useState(false)
+  async function createProposal() {
+    if (!oppIdStr) return
+    setQuoteBusy(true); setMsg(null)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyC: any = contact ?? {}; const anyP: any = property ?? {}; const anyCo: any = company ?? {}
+      const title = String(opp.name || opp.account_name || anyP.name || anyP.address || 'New proposal')
+      const body = {
+        title,
+        opportunity_id: oppIdStr,
+        client_name: anyC.name || anyCo.name || opp.account_name || null,
+        client_email: anyC.email || opp.contact_email || null,
+        property_name: anyP.name || opp.property_name || anyP.address || null,
+        units: opp.units || anyP.units || null,
+      }
+      const r = await fetch('/api/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      const qid = j?.quote?.id || j?.id
+      if (!r.ok || j?.error || !qid) { setMsg({ ok: false, text: j?.error || 'Could not create proposal.' }); return }
+      setMsg({ ok: true, text: 'Proposal created ✓ — opening builder' })
+      if (typeof window !== 'undefined') window.open(`/quotes/${qid}`, '_blank')
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not create proposal.' }) }
+    finally { setQuoteBusy(false) }
+  }
+
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
   const [followupOpen, setFollowupOpen] = useState(false)
   const [fu, setFu] = useState({ title: '', due_date: '', notes: '', assigned_to: '', assigned_to_name: '' })
@@ -1049,6 +1079,18 @@ export function OpportunityGlassWindow({
                   const busy = fileBusy === b.key
                   return (
                     <Section key={b.key} title={b.label} count={items.length}>
+                      {b.key === 'quote_survey' && (
+                        <button
+                          type="button"
+                          disabled={quoteBusy}
+                          onClick={createProposal}
+                          className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', color: 'white' }}
+                        >
+                          <div className="text-xs font-semibold">{quoteBusy ? 'Creating…' : '✦ Create proposal'}</div>
+                          <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>Build a quote from this opportunity</div>
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={!!fileBusy}
@@ -1056,7 +1098,7 @@ export function OpportunityGlassWindow({
                         className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
                         style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}
                       >
-                        <div className="text-xs font-semibold">{busy ? 'Uploading…' : b.photo ? '+ Add photos' : '+ Add file'}</div>
+                        <div className="text-xs font-semibold">{busy ? 'Uploading…' : b.photo ? '+ Add photos' : (b.key === 'quote_survey' ? '+ Attach existing file' : '+ Add file')}</div>
                         <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{b.hint}</div>
                       </button>
                       {items.length === 0 ? (
