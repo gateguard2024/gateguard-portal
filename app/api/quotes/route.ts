@@ -97,50 +97,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not resolve org_id — make sure your account has an organization assigned.' }, { status: 400 })
   }
 
-  // Auto-generate quote_number: GG-YYYY-NNNN
+  // Auto-generate quote_number: GG-YYYY-NNNN.
+  // Only NUMERIC suffixes count toward the sequence — a manually seeded id like
+  // "GG-2026-DEMO1" must never poison it (it used to sort highest, fail to parse,
+  // reset the counter to 0001, and collide). We also retry on a unique-collision
+  // race so two reps clicking at once can't both grab the same number.
   const year = new Date().getFullYear()
-  const { data: maxRow } = await supabase
+  const { data: numRows } = await supabase
     .from('quotes')
     .select('quote_number')
     .like('quote_number', `GG-${year}-%`)
-    .order('quote_number', { ascending: false })
-    .limit(1)
-    .single()
-
-  let nextSeq = 1
-  if (maxRow?.quote_number) {
-    const parts = (maxRow.quote_number as string).split('-')
-    const last = parseInt(parts[parts.length - 1], 10)
-    if (!isNaN(last)) nextSeq = last + 1
+  let maxSeq = 0
+  for (const r of (numRows ?? [])) {
+    const m = /^GG-\d{4}-(\d+)$/.exec(String((r as { quote_number?: string }).quote_number ?? ''))
+    if (m) { const n = parseInt(m[1], 10); if (Number.isFinite(n) && n > maxSeq) maxSeq = n }
   }
-  const quote_number = `GG-${year}-${String(nextSeq).padStart(4, '0')}`
 
-  // Create the quote
-  const { data: quote, error: quoteErr } = await supabase
-    .from('quotes')
-    .insert({
-      quote_number,
-      org_id,
-      client_org_id:  client_org_id  ?? null,
-      opportunity_id: opportunity_id ?? null,
-      client_name:    client_name    ?? null,
-      client_email:   client_email   ?? null,
-      client_phone:   client_phone   ?? null,
-      site_id:        site_id        ?? null,
-      title,
-      property_name:  property_name ?? null,
-      units:          units ?? null,
-      status:         'draft',
-      notes:          notes ?? null,
-      valid_until:    valid_until ?? null,
-      total_one_time: 0,
-      total_mrr:      0,
-      dealer_mrr:     0,
-    })
-    .select()
-    .single()
+  const baseInsert = {
+    org_id,
+    client_org_id:  client_org_id  ?? null,
+    opportunity_id: opportunity_id ?? null,
+    client_name:    client_name    ?? null,
+    client_email:   client_email   ?? null,
+    client_phone:   client_phone   ?? null,
+    site_id:        site_id        ?? null,
+    title,
+    property_name:  property_name ?? null,
+    units:          units ?? null,
+    status:         'draft',
+    notes:          notes ?? null,
+    valid_until:    valid_until ?? null,
+    total_one_time: 0,
+    total_mrr:      0,
+    dealer_mrr:     0,
+  }
 
-  if (quoteErr) return NextResponse.json({ error: quoteErr.message }, { status: 500 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let quote: any = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let quoteErr: any = null
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const quote_number = `GG-${year}-${String(maxSeq + 1 + attempt).padStart(4, '0')}`
+    const res = await supabase.from('quotes').insert({ quote_number, ...baseInsert }).select().single()
+    if (!res.error) { quote = res.data; quoteErr = null; break }
+    quoteErr = res.error
+    if (res.error.code !== '23505') break   // only a duplicate-number collision is worth retrying
+  }
+
+  if (quoteErr || !quote) return NextResponse.json({ error: quoteErr?.message ?? 'Could not create quote' }, { status: 500 })
 
   // Insert line items if provided
   if (line_items && Array.isArray(line_items) && line_items.length > 0) {
