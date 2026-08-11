@@ -19,16 +19,21 @@ type Quote = Record<string, any>
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 
-// ── Theme tokens (dark steel — the Qwilr look) ───────────────────────────────
+// ── Theme tokens — the app's STEEL schema. Medium brushed-steel bands with
+// darker brushed cards, bright text, and brighter borders for real contrast.
+const BRUSH = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px)'
 const C = {
-  cover: 'radial-gradient(120% 140% at 15% 0%,#16406b 0%,#0c1a2e 55%,#070d18 100%)',
-  sec: '#0e1a2b', close: '#0b1524', tile: '#12233a',
-  line: 'rgba(150,180,210,0.16)', accent: '#5FB8E0', good: '#12b886',
-  ink: '#f2f8fd', dim: '#b8cad9', dim2: '#8fabc4',
+  page:  `${BRUSH}, linear-gradient(180deg,#40546e,#2a3a4d)`,   // outer sheet — light steel
+  cover: 'linear-gradient(105deg,#1a2c44 0%,#22374f 55%,#2c435f 100%)', // hero base under the photo
+  sec:   `${BRUSH}, linear-gradient(180deg,#3a4d67,#31435b)`,   // section band — brighter steel
+  close: `${BRUSH}, linear-gradient(180deg,#33465e,#26313f)`,
+  tile:  `${BRUSH}, linear-gradient(180deg,#22303f,#1a2634)`,   // brushed dark card = strong contrast
+  line:  'rgba(170,198,222,0.34)', accent: '#5FB8E0', good: '#12b886',
+  ink:   '#f6fbff', dim: '#d6e3ef', dim2: '#a9bed1',
 }
 const kick = { fontSize: 10, letterSpacing: '0.16em', fontWeight: 800, color: C.accent, textTransform: 'uppercase' as const }
 const secH = { fontSize: 20, fontWeight: 800, margin: '5px 0 16px', color: C.ink }
-const tile = { background: C.tile, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14 }
+const tile = { background: C.tile, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10)' }
 
 // Real brand assets from gateguard.co — used as tasteful defaults; any block can
 // override with vars.image, and the hero prefers the quote's own cover_image_url.
@@ -113,11 +118,11 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         const heroImg = quote?.cover_image_url || v.image || BRAND.hero
         return (
           <div key={i} style={{
-            padding: '30px 32px 28px', color: '#eaf3fb', position: 'relative', minHeight: 320,
-            background: `linear-gradient(105deg, rgba(7,14,24,0.94) 0%, rgba(9,20,34,0.82) 44%, rgba(9,20,34,0.5) 100%), url("${heroImg}") center/cover no-repeat`,
+            padding: '30px 34px 30px', color: '#eaf3fb', position: 'relative', minHeight: 340,
+            background: `linear-gradient(105deg, rgba(20,34,52,0.90) 0%, rgba(26,42,62,0.72) 46%, rgba(34,55,79,0.42) 100%), url("${heroImg}") center/cover no-repeat`,
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={BRAND.logo} alt="Gate Guard" style={{ height: 34, marginBottom: 14, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }} />
+            <img src={BRAND.logo} alt="Gate Guard" style={{ height: 92, marginBottom: 16, filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.55))' }} />
             <div style={{ position: 'absolute', top: 26, right: 28, textAlign: 'right' }}>
               <b style={{ fontSize: 26, display: 'block', color: '#fff' }}>{money(totals.dueToday)}</b>
               <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9fc2dc' }}>due today</span>
@@ -333,7 +338,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
   }
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', background: '#0c1424', color: C.ink, borderRadius: 16, overflow: 'hidden', fontFamily: 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', background: C.page, color: C.ink, borderRadius: 16, overflow: 'hidden', border: `1px solid ${C.line}`, boxShadow: '0 24px 70px rgba(0,0,0,0.45)', fontFamily: 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif' }}>
       {blocks.map(renderBlock)}
     </div>
   )

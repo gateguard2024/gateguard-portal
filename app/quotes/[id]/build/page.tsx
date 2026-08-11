@@ -76,7 +76,7 @@ export default function ProposalBuilder() {
   const previewQuote = { ...quote, proposal_blocks: blocks }
 
   return (
-    <div className="flex flex-col h-screen w-full" style={{ background: '#0f1822', color: '#e7eef7' }}>
+    <div className="flex flex-col h-screen w-full" style={{ background: 'linear-gradient(180deg,#33465e,#26313f)', color: '#eef4fb' }}>
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-3" style={{ background: HEADER, borderBottom: '1px solid rgba(140,170,200,0.2)' }}>
         <a href={`/quotes/${id}`} className="text-[13px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>← Line items</a>
@@ -94,7 +94,7 @@ export default function ProposalBuilder() {
 
       <div className="flex flex-1 min-h-0">
         {/* LEFT — module palette */}
-        <aside className="w-64 shrink-0 overflow-y-auto p-3" style={{ background: '#141d28', borderRight: '1px solid rgba(140,170,200,0.16)' }}>
+        <aside className="w-64 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderRight: '1px solid rgba(170,198,222,0.28)' }}>
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: '#8fa4b8' }}>Modules · drag order</div>
           {blocks.map((b, i) => {
             const def = moduleDef(b.type)
@@ -129,12 +129,12 @@ export default function ProposalBuilder() {
         </aside>
 
         {/* CENTER — live customer preview */}
-        <main className="flex-1 overflow-y-auto p-6" style={{ background: 'radial-gradient(120% 90% at 50% 0%, #16233400 0%, #0b1420 70%)' }}>
+        <main className="flex-1 overflow-y-auto p-6" style={{ background: 'linear-gradient(180deg,#3d5069,#2c3c50)' }}>
           <ProposalView quote={previewQuote} lineItems={lineItems} preview />
         </main>
 
         {/* RIGHT — quick numbers + next steps */}
-        <aside className="w-72 shrink-0 overflow-y-auto p-3" style={{ background: '#141d28', borderLeft: '1px solid rgba(140,170,200,0.16)' }}>
+        <aside className="w-72 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderLeft: '1px solid rgba(170,198,222,0.28)' }}>
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: '#8fa4b8' }}>The numbers</div>
           <div className="rounded-xl p-3 mb-2" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)' }}>
             <Row k="Monthly" v={money(totals.monthly)} />
