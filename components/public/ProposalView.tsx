@@ -30,6 +30,15 @@ const kick = { fontSize: 10, letterSpacing: '0.16em', fontWeight: 800, color: C.
 const secH = { fontSize: 20, fontWeight: 800, margin: '5px 0 16px', color: C.ink }
 const tile = { background: C.tile, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14 }
 
+// Real brand assets from gateguard.co — used as tasteful defaults; any block can
+// override with vars.image, and the hero prefers the quote's own cover_image_url.
+const BRAND = {
+  hero: 'https://www.gateguard.co/hero-bg.jpg',
+  logo: 'https://www.gateguard.co/logo.png',
+  brivo: 'https://www.gateguard.co/app-brivo.png',
+  callbox: 'https://www.gateguard.co/app-callbox.png',
+}
+
 function Grid({ items }: { items: { h: string; p: string }[] }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
@@ -100,16 +109,22 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
     if (!b.enabled) return null
     const v = vars(b)
     switch (b.type) {
-      case 'hero':
+      case 'hero': {
+        const heroImg = quote?.cover_image_url || v.image || BRAND.hero
         return (
-          <div key={i} style={{ padding: '34px 32px 28px', background: C.cover, color: '#eaf3fb', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 24, right: 28, textAlign: 'right' }}>
+          <div key={i} style={{
+            padding: '30px 32px 28px', color: '#eaf3fb', position: 'relative', minHeight: 320,
+            background: `linear-gradient(105deg, rgba(7,14,24,0.94) 0%, rgba(9,20,34,0.82) 44%, rgba(9,20,34,0.5) 100%), url("${heroImg}") center/cover no-repeat`,
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={BRAND.logo} alt="Gate Guard" style={{ height: 34, marginBottom: 14, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }} />
+            <div style={{ position: 'absolute', top: 26, right: 28, textAlign: 'right' }}>
               <b style={{ fontSize: 26, display: 'block', color: '#fff' }}>{money(totals.dueToday)}</b>
               <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9fc2dc' }}>due today</span>
             </div>
             <div style={kick}>{v.kicker}</div>
-            <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.12, margin: '10px 0 12px', maxWidth: '76%' }}>{v.headline}</div>
-            <div style={{ fontSize: 13, color: '#c4d6e6', lineHeight: 1.5, maxWidth: '82%' }}>{v.subhead}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1, margin: '10px 0 12px', maxWidth: '72%', textShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>{v.headline}</div>
+            <div style={{ fontSize: 13.5, color: '#d3e2ef', lineHeight: 1.5, maxWidth: '78%', textShadow: '0 1px 8px rgba(0,0,0,0.4)' }}>{v.subhead}</div>
             <div style={{ display: 'flex', gap: 26, marginTop: 18, fontSize: 11, color: '#9fc2dc', flexWrap: 'wrap' }}>
               <div>Prepared for<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.property_name || quote?.client_name || '—'}</b></div>
               <div>Date<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.created_at ? new Date(quote.created_at).toLocaleDateString() : '—'}</b></div>
@@ -117,6 +132,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             </div>
           </div>
         )
+      }
       case 'cover_letter':
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}`, color: C.dim }}>
@@ -156,18 +172,36 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
                 </div>
               ))}
             </div>
+            {/* Brand app imagery — resident mobile pass + visitor callbox. */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+              {[{ img: BRAND.brivo, cap: 'Resident mobile pass — enter by phone' }, { img: BRAND.callbox, cap: 'Digital visitor callbox' }].map((x, k) => (
+                <figure key={k} style={{ margin: 0, ...tile, padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={x.img} alt={x.cap} style={{ height: 150, width: 'auto', maxWidth: '100%', objectFit: 'contain', borderRadius: 8 }} />
+                  <figcaption style={{ fontSize: 11, color: C.dim2, marginTop: 8, textAlign: 'center' }}>{x.cap}</figcaption>
+                </figure>
+              ))}
+            </div>
           </div>
         )
       }
       case 'costs_gone':
       case 'cameras':
-      case 'value_props':
+      case 'value_props': {
+        // Optional banner image (defaults to the brand hero shot on the cameras
+        // block). Any block can set vars.image to add its own.
+        const banner = v.image || (b.type === 'cameras' ? BRAND.hero : null)
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
             <div style={kick}>{v.kicker}</div><div style={secH}>{v.title}</div>
+            {banner && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={banner} alt={v.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, marginBottom: 14, border: `1px solid ${C.line}` }} />
+            )}
             <Grid items={v.items} />
           </div>
         )
+      }
       case 'testimonial':
         return (
           <div key={i} style={{ padding: '24px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
