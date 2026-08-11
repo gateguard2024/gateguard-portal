@@ -61,9 +61,11 @@ export const MODULE_LIBRARY: ModuleDef[] = [
     title: 'You have paid for these gates more than once',
     steps: [
       { h: '1 · It breaks', p: 'A gate goes down. Residents cannot get in.' },
-      { h: '2 · You pay', p: 'Trip charge, parts, labor. A bill nobody budgeted.' },
-      { h: '3 · It works', p: 'For a few weeks. Maybe a couple months.' },
-      { h: '4 · It breaks', p: 'Same gate. New invoice. Back to step one.' },
+      { h: '2 · The wait begins', p: '2–6 weeks for a technician to come out and get approval.' },
+      { h: '3 · The parts wait', p: '2–6 more weeks for the part to be ordered and the repair completed.' },
+      { h: '4 · You pay', p: 'Trip charge, parts, labor. A bill nobody budgeted.' },
+      { h: '5 · It works', p: 'For a few weeks. Maybe a couple of months.' },
+      { h: '6 · It breaks again', p: 'Same gate. New invoice. Back to step one.' },
     ],
   } },
   { type: 'included', label: 'What you get', defaultVars: {

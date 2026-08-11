@@ -31,8 +31,8 @@ const C = {
   line:  'rgba(170,198,222,0.34)', accent: '#5FB8E0', good: '#12b886',
   ink:   '#f6fbff', dim: '#d6e3ef', dim2: '#a9bed1',
 }
-const kick = { fontSize: 10, letterSpacing: '0.16em', fontWeight: 800, color: C.accent, textTransform: 'uppercase' as const }
-const secH = { fontSize: 20, fontWeight: 800, margin: '5px 0 16px', color: C.ink }
+const kick = { fontSize: 11.5, letterSpacing: '0.16em', fontWeight: 800, color: C.accent, textTransform: 'uppercase' as const }
+const secH = { fontSize: 24, fontWeight: 800, margin: '5px 0 16px', color: C.ink }
 const tile = { background: C.tile, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10)' }
 
 // Real brand assets from gateguard.co — used as tasteful defaults; any block can
@@ -57,11 +57,12 @@ function Head({ k, t }: { k?: string; t: string }) {
 
 function Grid({ items }: { items: { h: string; p: string }[] }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+    // Always an even 2-wide grid (no orphaned last card): 4 items → 2×2, 6 → 2×3.
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
       {items.map((it, i) => (
-        <div key={i} style={tile}>
-          <b style={{ color: C.ink, fontSize: 13 }}>{it.h}</b>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: C.dim, lineHeight: 1.45 }}>{it.p}</p>
+        <div key={i} style={{ ...tile, padding: 16 }}>
+          <b style={{ color: C.ink, fontSize: 15 }}>{it.h}</b>
+          <p style={{ margin: '5px 0 0', fontSize: 14, color: C.dim, lineHeight: 1.5 }}>{it.p}</p>
         </div>
       ))}
     </div>
@@ -133,7 +134,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             background: `linear-gradient(105deg, rgba(20,34,52,0.90) 0%, rgba(26,42,62,0.72) 46%, rgba(34,55,79,0.42) 100%), url("${heroImg}") center/cover no-repeat`,
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={BRAND.logo} alt="Gate Guard" style={{ height: 92, marginBottom: 16, filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.55))' }} />
+            <img src={BRAND.logo} alt="Gate Guard" style={{ height: 132, marginBottom: 18, filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.55))' }} />
             <div style={{ position: 'absolute', top: 24, right: 28, textAlign: 'right' }}>
               <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8fe3c6', fontWeight: 800 }}>Your price</span>
               <b style={{ fontSize: 46, display: 'block', lineHeight: 1, marginTop: 2, background: 'linear-gradient(90deg,#7fe0ff,#8fe3c6)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.4))' }}>{money(totals.monthly)}</b>
@@ -141,13 +142,13 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
               <div style={{ fontSize: 11, color: '#9fc2dc', marginTop: 6 }}>{money(totals.dueToday)} due today</div>
             </div>
             <div style={kick}>{v.kicker}</div>
-            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.08, margin: '10px 0 12px', maxWidth: '70%', textShadow: '0 2px 14px rgba(0,0,0,0.45)' }}>{v.headline}</div>
-            <div style={{ fontSize: 14, color: '#dbe7f2', lineHeight: 1.5, maxWidth: '74%', textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>{v.subhead}</div>
+            <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1.06, margin: '12px 0 14px', maxWidth: '72%', textShadow: '0 2px 14px rgba(0,0,0,0.45)' }}>{v.headline}</div>
+            <div style={{ fontSize: 16.5, color: '#e2ecf5', lineHeight: 1.55, maxWidth: '76%', textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>{v.subhead}</div>
             <a href="#gg-accept" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 22px', borderRadius: 12, fontWeight: 800, fontSize: 14, textDecoration: 'none', color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', boxShadow: '0 10px 26px rgba(18,184,134,0.4)' }}>Get started →</a>
-            <div style={{ display: 'flex', gap: 26, marginTop: 18, fontSize: 11, color: '#9fc2dc', flexWrap: 'wrap' }}>
-              <div>Prepared for<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.property_name || quote?.client_name || '—'}</b></div>
-              <div>Date<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.created_at ? new Date(quote.created_at).toLocaleDateString() : '—'}</b></div>
-              <div>Prepared by<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.created_by_name || quote?.org_name || 'Gate Guard'}</b></div>
+            <div style={{ display: 'flex', gap: 28, marginTop: 20, fontSize: 12.5, color: '#a9c8de', flexWrap: 'wrap' }}>
+              <div>Prepared for<b style={{ display: 'block', color: '#eaf3fb', fontSize: 13.5 }}>{quote?.property_name || quote?.client_name || '—'}</b></div>
+              <div>Date<b style={{ display: 'block', color: '#eaf3fb', fontSize: 13.5 }}>{quote?.created_at ? new Date(quote.created_at).toLocaleDateString() : '—'}</b></div>
+              <div>Prepared by<b style={{ display: 'block', color: '#eaf3fb', fontSize: 13.5 }}>{quote?.created_by_name || quote?.org_name || 'Gate Guard'}</b></div>
             </div>
           </div>
         )
@@ -156,7 +157,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}`, color: C.dim }}>
             <div style={secH}>{v.title}</div>
-            <p style={{ fontSize: 13, lineHeight: 1.6, color: C.dim, whiteSpace: 'pre-line' }}>{v.body}</p>
+            <p style={{ fontSize: 15, lineHeight: 1.65, color: C.dim, whiteSpace: 'pre-line' }}>{v.body}</p>
             <div style={{ marginTop: 10, fontWeight: 700, color: C.ink }}>{quote?.created_by_name || 'Russel Feldman'}</div>
           </div>
         )
@@ -175,7 +176,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             {items.map((it, k) => (
               <div key={k} style={{ display: 'flex', gap: 11, marginBottom: 12 }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(18,182,134,.18)', border: '1px solid rgba(18,182,134,.5)', color: '#4fe0aa', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 1 }}>✓</span>
-                <div><b style={{ color: C.ink, fontSize: 13 }}>{it.h}</b>{it.p ? <p style={{ margin: '2px 0 0', fontSize: 12, color: C.dim, lineHeight: 1.45 }}>{it.p}</p> : null}</div>
+                <div><b style={{ color: C.ink, fontSize: 15 }}>{it.h}</b>{it.p ? <p style={{ margin: '3px 0 0', fontSize: 14, color: C.dim, lineHeight: 1.5 }}>{it.p}</p> : null}</div>
               </div>
             ))}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 8 }}>
@@ -229,8 +230,8 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
       case 'testimonial':
         return (
           <div key={i} style={{ padding: '24px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <p style={{ fontSize: 15, fontStyle: 'italic', color: C.ink, lineHeight: 1.5, margin: 0 }}>&ldquo;{v.quote}&rdquo;</p>
-            <div style={{ marginTop: 8, fontSize: 12, color: C.dim2 }}><b style={{ color: C.dim }}>{v.author}</b> · {v.role}</div>
+            <p style={{ fontSize: 18, fontStyle: 'italic', color: C.ink, lineHeight: 1.55, margin: 0 }}>&ldquo;{v.quote}&rdquo;</p>
+            <div style={{ marginTop: 10, fontSize: 13, color: C.dim2 }}><b style={{ color: C.dim }}>{v.author}</b> · {v.role}</div>
           </div>
         )
       case 'quote':
@@ -363,7 +364,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
   )
 }
 
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: `1px dashed ${C.line}`, color: '#cdddec' }
+const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 13.5, padding: '7px 0', borderBottom: `1px dashed ${C.line}`, color: '#d6e3ef' }
 const totSpan: React.CSSProperties = { fontSize: 9.5, color: C.dim2, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }
 const totB: React.CSSProperties = { fontSize: 18, color: C.ink }
 const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.line}`, borderRadius: 9, background: 'rgba(0,0,0,0.28)', color: C.ink, fontSize: 13 }
