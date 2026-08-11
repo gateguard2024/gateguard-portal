@@ -95,6 +95,14 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
     return { sectionOrder: order, bySection: by }
   }, [lineItems])
 
+  // Sections that an offering block already renders (so the quote block won't
+  // double-render them).
+  const ownedSections = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => new Set(blocks.filter(b => b.enabled && b.type === 'offering').map(b => String((b.vars as any)?.section ?? '')).filter(Boolean)),
+    [blocks],
+  )
+
   // ── Accept / sign ──────────────────────────────────────────────────────────
   const alreadyAccepted = quote?.status === 'accepted' || !!quote?.signed_at || !!quote?.accepted_at
   const [signName, setSignName] = useState('')
@@ -128,6 +136,38 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
       return wi.map((x: unknown) => typeof x === 'string' ? { h: x, p: '' } : (x as { h: string; p: string }))
     }
     return v.items ?? []
+  }
+
+  // Shared pricing rows — used by both the offering blocks and the quote block.
+  const priceRow = (l: PricedLine) => (
+    <div key={l.id} style={row}><span>{l.description}{l.qty > 1 ? ` ×${l.qty}` : ''}</span><span>{money(l.total)}{l.recurring ? '/mo' : ''}</span></div>
+  )
+  const optRow = (l: PricedLine) => {
+    const on = selected.has(l.id)
+    return (
+      <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', marginBottom: 6, borderRadius: 10, cursor: done ? 'default' : 'pointer', background: on ? 'rgba(95,184,224,0.12)' : 'rgba(12,20,32,0.4)', border: `1px solid ${on ? 'rgba(95,184,224,0.5)' : C.line}` }}>
+        <input type="checkbox" checked={on} disabled={done} onChange={e => { setSelected(prev => { const n = new Set(prev); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n }) }} style={{ accentColor: C.accent, width: 17, height: 17 }} />
+        <span style={{ flex: 1 }}><b style={{ color: '#eaf3fb', fontSize: 13.5 }}>{l.description}</b>{l.notes ? <em style={{ display: 'block', fontStyle: 'normal', fontSize: 11.5, color: C.dim2 }}>{l.notes}</em> : null}</span>
+        <span style={{ fontWeight: 800, color: '#7fd0f0', fontSize: 14 }}>{money(l.total)}{l.recurring ? '/mo' : ''}</span>
+      </label>
+    )
+  }
+  const renderSectionLines = (sname: string, showHeader: boolean) => {
+    const lines = bySection[sname] ?? []
+    const req = lines.filter(l => !l.is_optional)
+    const opt = lines.filter(l => l.is_optional)
+    return (
+      <div style={{ marginTop: 14 }}>
+        {showHeader && <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', color: C.accent, marginBottom: 4 }}>{sname.toUpperCase()}</div>}
+        {req.map(priceRow)}
+        {opt.length > 0 && (
+          <div style={{ marginTop: req.length ? 8 : 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim2, marginBottom: 4 }}>Choose your options ↓</div>
+            {opt.map(optRow)}
+          </div>
+        )}
+      </div>
+    )
   }
 
   function renderBlock(b: ProposalBlock, i: number) {
@@ -242,7 +282,28 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             <div style={{ marginTop: 10, fontSize: 13, color: C.dim2 }}><b style={{ color: C.dim }}>{v.author}</b> · {v.role}</div>
           </div>
         )
-      case 'quote':
+      case 'offering': {
+        // An offering = benefits/talking points + its own priced section, together.
+        const section = String(v.section || '')
+        const hasLines = section && (bySection[section]?.length ?? 0) > 0
+        return (
+          <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
+            <Head k={v.kicker} t={v.title} />
+            {v.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={v.image} alt={v.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, marginBottom: 14, border: `1px solid ${C.line}` }} />
+            )}
+            <Grid items={v.benefits ?? []} />
+            {hasLines && (
+              <div style={{ marginTop: 16, background: 'linear-gradient(180deg,#1a3550,#12263a)', border: '1px solid rgba(95,184,224,0.4)', borderRadius: 14, padding: 16 }}>
+                {renderSectionLines(section, false)}
+              </div>
+            )}
+          </div>
+        )
+      }
+      case 'quote': {
+        const openSections = sectionOrder.filter(s => !ownedSections.has(s))
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
             <div style={kick}>YOUR QUOTE</div>
@@ -253,39 +314,8 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
                 <em style={{ fontStyle: 'normal', color: '#c4d6e6', fontSize: 13, fontWeight: 600 }}>/ month{units ? ` · ${units} units` : ''}</em>
               </div>
 
-              {/* Unlimited named sections. Required lines list plainly; optional
-                  lines render as SELECTABLE add-ons the client can toggle — so all
-                  options are visible with pricing and totals recompute live. */}
-              {sectionOrder.map(sname => {
-                const lines = bySection[sname]
-                const req = lines.filter(l => !l.is_optional)
-                const opt = lines.filter(l => l.is_optional)
-                return (
-                  <div key={sname} style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', color: C.accent, marginBottom: 4 }}>{sname.toUpperCase()}</div>
-                    {req.map(l => (
-                      <div key={l.id} style={row}><span>{l.description}{l.qty > 1 ? ` ×${l.qty}` : ''}</span><span>{money(l.total)}{l.recurring ? '/mo' : ''}</span></div>
-                    ))}
-                    {opt.length > 0 && (
-                      <div style={{ marginTop: req.length ? 8 : 0 }}>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim2, marginBottom: 4 }}>Choose your options ↓</div>
-                        {opt.map(l => {
-                          const on = selected.has(l.id)
-                          return (
-                            <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', marginBottom: 6, borderRadius: 10, cursor: done ? 'default' : 'pointer', background: on ? 'rgba(95,184,224,0.12)' : 'rgba(12,20,32,0.4)', border: `1px solid ${on ? 'rgba(95,184,224,0.5)' : C.line}` }}>
-                              <input type="checkbox" checked={on} disabled={done} onChange={e => {
-                                setSelected(prev => { const n = new Set(prev); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n })
-                              }} style={{ accentColor: C.accent, width: 17, height: 17 }} />
-                              <span style={{ flex: 1 }}><b style={{ color: '#eaf3fb', fontSize: 13.5 }}>{l.description}</b>{l.notes ? <em style={{ display: 'block', fontStyle: 'normal', fontSize: 11.5, color: C.dim2 }}>{l.notes}</em> : null}</span>
-                              <span style={{ fontWeight: 800, color: '#7fd0f0', fontSize: 14 }}>{money(l.total)}{l.recurring ? '/mo' : ''}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              {/* Sections not already shown by an offering block above. */}
+              {openSections.map(sname => renderSectionLines(sname, true))}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
                 <div style={{ ...tile, textAlign: 'center' }}><span style={totSpan}>One-time</span><b style={totB}>{money(totals.setup)}</b></div>
@@ -295,6 +325,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             </div>
           </div>
         )
+      }
       case 'payment_schedule': {
         const sched = Array.isArray(quote?.payment_schedule_json) ? quote.payment_schedule_json : []
         if (!sched.length) return null

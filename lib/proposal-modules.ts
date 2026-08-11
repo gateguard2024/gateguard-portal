@@ -21,6 +21,7 @@ export type ProposalBlockType =
   | 'cameras'       // visibility / incident reporting
   | 'value_props'   // why it wins (grid)
   | 'testimonial'   // customer quote
+  | 'offering'      // an education/benefits block bundled with its own pricing section
   | 'quote'         // the pricing block (setup + recurring + optional add-ons)
   | 'payment_schedule' // deposit / ramp-up / milestone schedule
   | 'attachments'   // downloadable spec sheets / docs
@@ -122,6 +123,93 @@ export const MODULE_LIBRARY: ModuleDef[] = [
 
 export function moduleDef(type: ProposalBlockType): ModuleDef | undefined {
   return MODULE_LIBRARY.find(m => m.type === type)
+}
+
+// ── Offerings — an offering is a benefits/talking-points block + its own priced
+// section. Adding one drops both the story AND a matching pricing section so a
+// rep sells the value, not just a line item. Copy is editable per proposal. ──
+export interface OfferingStarter { description: string; unit_price: number; is_recurring: boolean; is_optional: boolean }
+export interface OfferingDef {
+  id: string
+  label: string        // picker label
+  section: string      // the pricing section_name it owns
+  kicker: string
+  title: string
+  benefits: { h: string; p: string }[]
+  starter?: OfferingStarter[]   // seed line(s) so the section exists
+}
+
+export const OFFERING_LIBRARY: OfferingDef[] = [
+  { id: 'cameras', label: 'Cameras', section: 'Cameras', kicker: 'SURVEILLANCE', title: 'Eyes on every entrance',
+    benefits: [
+      { h: 'Monitored, not just recorded', p: 'A live team watches the feed — you know who did what, when.' },
+      { h: 'Damage gets attributed', p: 'When a gate or door is hit, you have the vehicle on video to charge it back.' },
+      { h: 'New hardware or take over yours', p: 'We install fresh cameras or adopt your existing infrastructure.' },
+      { h: 'One platform', p: 'Video and access control live in the same place your team already works.' },
+    ],
+    starter: [{ description: 'Camera install (per camera)', unit_price: 0, is_recurring: false, is_optional: false }],
+  },
+  { id: 'camera_monitoring', label: 'Camera + Monitoring', section: 'Camera Monitoring', kicker: 'MONITORED SURVEILLANCE', title: 'Watched around the clock',
+    benefits: [
+      { h: 'Daily monitoring & reporting', p: 'We watch the entrances and send you what happened — you stop digging through footage.' },
+      { h: 'Incidents, not just clips', p: 'Illegal dumping, damage, tailgating — flagged and reported, tied to the video.' },
+      { h: 'Predictable monthly cost', p: 'One per-camera monthly fee covers monitoring, reporting, and support.' },
+    ],
+    starter: [
+      { description: 'Camera install (per camera)', unit_price: 0, is_recurring: false, is_optional: false },
+      { description: 'Monitoring (per camera)', unit_price: 0, is_recurring: true, is_optional: false },
+    ],
+  },
+  { id: 'smart_locks', label: 'Smart Unit Locks', section: 'Smart Locks', kicker: 'SMART ACCESS', title: 'Keyless entry for every unit',
+    benefits: [
+      { h: 'No more lockouts or rekeys', p: 'Codes replace keys — turnover takes minutes, not a locksmith.' },
+      { h: 'Grant or revoke instantly', p: 'Vendors, staff, and residents get exactly the access they should, when they should.' },
+      { h: 'An amenity residents pay for', p: 'Keyless entry lifts rent and offsets the cost with a per-unit amenity fee.' },
+    ],
+    starter: [
+      { description: 'Smart lock install (per unit)', unit_price: 0, is_recurring: false, is_optional: false },
+      { description: 'Smart lock service (per unit)', unit_price: 0, is_recurring: true, is_optional: false },
+    ],
+  },
+  { id: 'smart_units', label: 'Smart Units (thermostat/lights)', section: 'Smart Units', kicker: 'SMART HOME', title: 'Thermostats and lights that pay for themselves',
+    benefits: [
+      { h: 'Cut vacant-unit energy waste', p: 'Set back heat and AC automatically the moment a unit goes empty.' },
+      { h: 'A premium that lifts rent', p: 'Smart-home units command more and lease faster.' },
+      { h: 'One app for your team', p: 'Control every unit’s climate and lighting from one dashboard.' },
+    ],
+    starter: [
+      { description: 'Smart unit package (per unit)', unit_price: 0, is_recurring: false, is_optional: false },
+      { description: 'Smart unit service (per unit)', unit_price: 0, is_recurring: true, is_optional: false },
+    ],
+  },
+  { id: 'unit_security', label: 'Unit Security', section: 'Unit Security', kicker: 'IN-UNIT SECURITY', title: 'Peace of mind inside every door',
+    benefits: [
+      { h: 'Door & window protection', p: 'Sensors on every unit, controlled by the resident from their phone.' },
+      { h: 'A resident-paid add-on', p: 'Offer it as an amenity — new recurring revenue at almost no cost to you.' },
+      { h: 'One community platform', p: 'In-unit security ties into the same access and video system.' },
+    ],
+    starter: [{ description: 'Unit security (per unit)', unit_price: 0, is_recurring: true, is_optional: true }],
+  },
+  { id: 'bulk_video', label: 'Bulk Video (DIRECTV)', section: 'Bulk Video', kicker: 'BULK TV', title: 'Premium TV, resident-paid',
+    benefits: [
+      { h: 'DIRECTV at bulk rates', p: 'Every unit gets premium TV for a fraction of retail.' },
+      { h: 'Revenue to the property', p: 'A share of every subscription comes back to you — resident-paid, zero owner cost.' },
+      { h: 'An amenity residents expect', p: 'Move-in-ready entertainment that helps you lease.' },
+    ],
+    starter: [{ description: 'Bulk video (per unit, resident-paid)', unit_price: 0, is_recurring: true, is_optional: false }],
+  },
+  { id: 'bulk_internet', label: 'Bulk Internet', section: 'Bulk Internet', kicker: 'BULK INTERNET', title: 'Property-wide internet as an amenity',
+    benefits: [
+      { h: 'Managed Wi-Fi everywhere', p: 'Fast, reliable internet in every unit and amenity space — installed and managed.' },
+      { h: 'Resident-paid, revenue to you', p: 'Residents pay a bulk rate below retail; the property earns a share.' },
+      { h: 'Move-in-ready connectivity', p: 'Residents are online day one — no waiting on an ISP truck roll.' },
+    ],
+    starter: [{ description: 'Bulk internet (per unit, resident-paid)', unit_price: 0, is_recurring: true, is_optional: false }],
+  },
+]
+
+export function offeringDef(id: string): OfferingDef | undefined {
+  return OFFERING_LIBRARY.find(o => o.id === id)
 }
 
 /**

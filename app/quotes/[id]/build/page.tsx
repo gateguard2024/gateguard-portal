@@ -14,8 +14,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import ProposalView from '@/components/public/ProposalView'
 import {
-  resolveBlocks, moduleDef, computeTotals, MODULE_LIBRARY,
-  type ProposalBlock, type PricedLine, type ProposalBlockType,
+  resolveBlocks, moduleDef, computeTotals, MODULE_LIBRARY, OFFERING_LIBRARY,
+  type ProposalBlock, type PricedLine, type ProposalBlockType, type OfferingDef,
 } from '@/lib/proposal-modules'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,6 +55,7 @@ export default function ProposalBuilder() {
   const totals = useMemo(() => computeTotals(lineItems, new Set(lineItems.filter(l => l.is_optional && l.is_included).map(l => l.id))), [lineItems])
 
   const [addOpen, setAddOpen] = useState(false)
+  const [offerOpen, setOfferOpen] = useState(false)
   function mutate(next: ProposalBlock[]) { setBlocks(next); setDirty(true); setSaved(false) }
   function toggle(i: number) { const n = [...blocks]; n[i] = { ...n[i], enabled: !n[i].enabled }; mutate(n) }
   function remove(i: number) { const n = [...blocks]; n.splice(i, 1); mutate(n) }
@@ -112,6 +113,23 @@ export default function ProposalBuilder() {
   function addSection() {
     const name = typeof window !== 'undefined' ? window.prompt('New section name — e.g. Cameras, Smart Locks, Bulk Internet') : null
     if (name && name.trim()) setSectionNames(prev => [...prev, name.trim()])
+  }
+  // Add an OFFERING: drop its benefits/talking-points module AND seed its priced
+  // section, so the rep sells the value, not just a line item.
+  async function addOffering(off: OfferingDef) {
+    mutate([...blocks, { type: 'offering', enabled: true, vars: { offeringId: off.id, section: off.section, kicker: off.kicker, title: off.title, benefits: off.benefits } }])
+    setSectionNames(prev => prev.includes(off.section) ? prev : [...prev, off.section])
+    setAddingIn(off.section)
+    try {
+      for (const s of (off.starter ?? [])) {
+        const r = await fetch(`/api/quotes/${id}/items`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: s.description, qty: 1, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: off.section, item_type: 'service' }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
+      }
+    } finally { setAddingIn(null); setOfferOpen(false) }
   }
   async function addLine(section: string, opts?: { optional?: boolean }) {
     setAddingIn(section); setErr(null)
@@ -174,7 +192,8 @@ export default function ProposalBuilder() {
             return (
               <div key={b.type + i} className="flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)', opacity: b.enabled ? 1 : 0.45 }}>
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: b.enabled ? ACCENT : '#5f7186' }} />
-                <span className="flex-1 text-[12.5px] font-semibold">{def?.label ?? b.type}</span>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                <span className="flex-1 text-[12.5px] font-semibold">{b.type === 'offering' ? String((b.vars as any)?.title ?? 'Offering') : (def?.label ?? b.type)}</span>
                 <button onClick={() => move(i, -1)} title="Move up" className="text-[12px] px-1" style={{ color: '#9fb4c9' }}>↑</button>
                 <button onClick={() => move(i, 1)} title="Move down" className="text-[12px] px-1" style={{ color: '#9fb4c9' }}>↓</button>
                 <input type="checkbox" title={b.enabled ? 'Hide' : 'Show'} checked={b.enabled} onChange={() => toggle(i)} style={{ accentColor: ACCENT, width: 15, height: 15 }} />
@@ -185,9 +204,21 @@ export default function ProposalBuilder() {
             )
           })}
 
-          {/* Add a section from the library (duplicates allowed — e.g. two value blocks) */}
-          <button onClick={() => setAddOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1 text-[12.5px] font-semibold" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: ACCENT }}>
-            + Add section
+          {/* Add an OFFERING — benefits + its own pricing section, together. */}
+          <button onClick={() => setOfferOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1 text-[12.5px] font-bold" style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', color: '#04202e' }}>
+            ✦ Add offering (talking points + pricing)
+          </button>
+          {offerOpen && (
+            <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.2)' }}>
+              {OFFERING_LIBRARY.map(o => (
+                <button key={o.id} onClick={() => addOffering(o)} className="block w-full text-left rounded-lg px-2.5 py-1.5 text-[12px]" style={{ color: '#cfe0f0' }}>{o.label}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Add a plain content block */}
+          <button onClick={() => setAddOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1.5 text-[12.5px] font-semibold" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: ACCENT }}>
+            + Add content block
           </button>
           {addOpen && (
             <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.2)' }}>
@@ -197,7 +228,7 @@ export default function ProposalBuilder() {
             </div>
           )}
 
-          <div className="text-[11px] mt-3 leading-relaxed" style={{ color: '#6f8299' }}>Add or remove any section, reorder with the arrows, or hide one with its checkbox. The client sees exactly the center preview.</div>
+          <div className="text-[11px] mt-3 leading-relaxed" style={{ color: '#6f8299' }}>An <b style={{ color: '#9FD8EC' }}>offering</b> adds its benefits story <i>and</i> a matching pricing section. Reorder with the arrows, hide with the checkbox. The client sees exactly the center preview.</div>
         </aside>
 
         {/* CENTER — live customer preview */}
