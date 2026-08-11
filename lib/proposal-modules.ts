@@ -260,6 +260,8 @@ export interface PricedLine {
   section_name?: string
   unit?: string
   notes?: string
+  unit_cost?: number      // material cost per unit (INTERNAL — never shown to client)
+  labor_hours?: number    // install labor hours per unit (one-time lines)
 }
 
 export interface ProposalTotals {
@@ -276,6 +278,58 @@ export interface ProposalTotals {
  * Compute totals identically everywhere. `selectedOptional` is the set of
  * optional line ids the client has toggled ON.
  */
+// ── Cost model (rough, editable per line) ────────────────────────────────────
+// Seeds an expected material cost + install labor for a line so the dealer P&L
+// is populated the moment a line is generated. These are estimates — the rep can
+// override them per line. Recurring lines carry a monthly material/service cost;
+// one-time lines carry material + labor hours.
+export function estimateLineCost(o: { description?: string; item_type?: string; is_recurring?: boolean }): { unit_cost: number; labor_hours: number } {
+  const d = (o.description ?? '').toLowerCase()
+  if (o.is_recurring) {
+    if (/internet|bulk video|directv/.test(d)) return { unit_cost: 0, labor_hours: 0 }   // resident-paid / revenue-share
+    if (/gate program|\/unit|per unit/.test(d)) return { unit_cost: 2, labor_hours: 0 }
+    if (/additional gate|gate/.test(d)) return { unit_cost: 60, labor_hours: 0 }
+    if (/camera/.test(d)) return { unit_cost: 20, labor_hours: 0 }
+    if (/door/.test(d)) return { unit_cost: 15, labor_hours: 0 }
+    if (/lock/.test(d)) return { unit_cost: 3, labor_hours: 0 }
+    return { unit_cost: 0, labor_hours: 0 }
+  }
+  if (/non-?working|broken/.test(d)) return { unit_cost: 250, labor_hours: 6 }
+  if (/gate/.test(d)) return { unit_cost: 150, labor_hours: 3 }
+  if (/camera/.test(d)) return { unit_cost: 120, labor_hours: 2 }
+  if (/lock/.test(d)) return { unit_cost: 90, labor_hours: 1 }
+  if (/door/.test(d)) return { unit_cost: 80, labor_hours: 1.5 }
+  return { unit_cost: 0, labor_hours: 0 }
+}
+
+export interface PLResult {
+  setupRevenue: number; setupCost: number; setupProfit: number; setupMargin: number
+  monthlyRevenue: number; monthlyCost: number; monthlyProfit: number
+  termMonths: number; termRevenue: number; termCost: number; termProfit: number
+  totalProfit: number
+}
+
+/** Dealer P&L: setup profit + term-of-contract profit. Optional lines only count
+ *  when the client has selected them. */
+export function computePL(lines: PricedLine[], selectedOptional: Set<string>, laborRate: number, termMonths: number): PLResult {
+  let setupRevenue = 0, setupCost = 0, monthlyRevenue = 0, monthlyCost = 0
+  for (const l of lines) {
+    if (l.is_optional && !selectedOptional.has(l.id)) continue
+    const amt = typeof l.total === 'number' ? l.total : l.qty * l.unitPrice
+    const uc = l.unit_cost ?? 0, lh = l.labor_hours ?? 0
+    if (l.recurring) { monthlyRevenue += amt; monthlyCost += l.qty * uc }
+    else { setupRevenue += amt; setupCost += l.qty * (uc + lh * laborRate) }
+  }
+  const setupProfit = setupRevenue - setupCost
+  const monthlyProfit = monthlyRevenue - monthlyCost
+  return {
+    setupRevenue, setupCost, setupProfit, setupMargin: setupRevenue ? setupProfit / setupRevenue : 0,
+    monthlyRevenue, monthlyCost, monthlyProfit,
+    termMonths, termRevenue: monthlyRevenue * termMonths, termCost: monthlyCost * termMonths, termProfit: monthlyProfit * termMonths,
+    totalProfit: setupProfit + monthlyProfit * termMonths,
+  }
+}
+
 export function computeTotals(lines: PricedLine[], selectedOptional: Set<string>): ProposalTotals {
   let oneTime = 0, recurring = 0, optRec = 0, optOne = 0
   for (const l of lines) {

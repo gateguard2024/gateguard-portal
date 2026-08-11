@@ -55,6 +55,7 @@ export async function PATCH(
     'is_optional', 'is_included', 'package_tier',
     'model_number', 'notes', 'sku',
     'line_discount_percent',
+    'unit_cost', 'labor_hours',
   ]
 
   const updates: Record<string, unknown> = {}

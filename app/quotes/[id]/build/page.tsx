@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import ProposalView from '@/components/public/ProposalView'
 import {
-  resolveBlocks, moduleDef, computeTotals, MODULE_LIBRARY, OFFERING_LIBRARY,
+  resolveBlocks, moduleDef, computeTotals, computePL, estimateLineCost, MODULE_LIBRARY, OFFERING_LIBRARY,
   type ProposalBlock, type PricedLine, type ProposalBlockType, type OfferingDef,
 } from '@/lib/proposal-modules'
 import { GateProgramCalc, type GenLine } from '@/components/quotes/GateProgramCalc'
@@ -39,6 +39,9 @@ export default function ProposalBuilder() {
   const [saved, setSaved] = useState(false)
   const [addingIn, setAddingIn] = useState<string | null>(null)
   const [sectionNames, setSectionNames] = useState<string[]>([])
+  const [showCosts, setShowCosts] = useState(false)
+  const [laborRate, setLaborRate] = useState(45)
+  const [termMonths, setTermMonths] = useState(60)
 
   useEffect(() => {
     if (!id) return
@@ -47,13 +50,23 @@ export default function ProposalBuilder() {
       if (!live) return
       if (j?.error) { setErr(j.error); return }
       setQuote(j.quote); setLineItems(j.lineItems ?? []); setBlocks(resolveBlocks(j.quote))
+      if (j.quote?.contract_term) setTermMonths(Number(j.quote.contract_term) || 60)
       // Seed a familiar starting structure only when the quote has no lines yet.
       if (!(j.lineItems ?? []).length) setSectionNames(['Monthly Program', 'One-Time Setup', 'Optional Upgrades'])
+      // Merge INTERNAL cost/labor (never in the public payload) for the dealer P&L.
+      fetch(`/api/quotes/${id}/items`).then(r => r.json()).then(ij => {
+        if (!live) return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cost = new Map((ij.items ?? []).map((it: any) => [it.id, { unit_cost: it.unit_cost != null ? Number(it.unit_cost) : undefined, labor_hours: it.labor_hours != null ? Number(it.labor_hours) : undefined }]))
+        setLineItems(prev => prev.map(l => ({ ...l, ...(cost.get(l.id) ?? {}) })))
+      }).catch(() => {})
     }).catch(() => { if (live) setErr('Could not load this quote.') })
     return () => { live = false }
   }, [id])
 
-  const totals = useMemo(() => computeTotals(lineItems, new Set(lineItems.filter(l => l.is_optional && l.is_included).map(l => l.id))), [lineItems])
+  const selectedSet = useMemo(() => new Set(lineItems.filter(l => l.is_optional && l.is_included).map(l => l.id)), [lineItems])
+  const totals = useMemo(() => computeTotals(lineItems, selectedSet), [lineItems, selectedSet])
+  const pl = useMemo(() => computePL(lineItems, selectedSet, laborRate, termMonths), [lineItems, selectedSet, laborRate, termMonths])
 
   const [addOpen, setAddOpen] = useState(false)
   const [offerOpen, setOfferOpen] = useState(false)
@@ -84,6 +97,8 @@ export default function ProposalBuilder() {
       id: it.id, description: it.description ?? '', qty, unitPrice: up, total: qty * up,
       recurring: !!it.is_recurring, is_optional: !!it.is_optional, is_included: it.is_included ?? true,
       section_name: it.section_name, notes: it.notes,
+      unit_cost: it.unit_cost != null ? Number(it.unit_cost) : undefined,
+      labor_hours: it.labor_hours != null ? Number(it.labor_hours) : undefined,
     }
   }
   function patchLocal(lineId: string, patch: Partial<PricedLine>) {
@@ -124,9 +139,10 @@ export default function ProposalBuilder() {
     setAddingIn(off.section)
     try {
       for (const s of (off.starter ?? [])) {
+        const c = estimateLineCost({ description: s.description, is_recurring: s.is_recurring })
         const r = await fetch(`/api/quotes/${id}/items`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description: s.description, qty: 1, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: off.section, item_type: 'service' }),
+          body: JSON.stringify({ description: s.description, qty: 1, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: off.section, item_type: 'service', unit_cost: c.unit_cost, labor_hours: c.labor_hours }),
         })
         const j = await r.json().catch(() => ({}))
         if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
@@ -136,9 +152,10 @@ export default function ProposalBuilder() {
   async function addLine(section: string, opts?: { optional?: boolean }) {
     setAddingIn(section); setErr(null)
     try {
+      const c = estimateLineCost({ description: 'New line', is_recurring: true })
       const r = await fetch(`/api/quotes/${id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: 'New line', qty: 1, unit_price: 0, is_recurring: true, is_optional: !!opts?.optional, section_name: section, item_type: 'service' }),
+        body: JSON.stringify({ description: 'New line', qty: 1, unit_price: 0, is_recurring: true, is_optional: !!opts?.optional, section_name: section, item_type: 'service', unit_cost: c.unit_cost, labor_hours: c.labor_hours }),
       })
       const j = await r.json().catch(() => ({}))
       if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
@@ -159,9 +176,10 @@ export default function ProposalBuilder() {
     setCalcOpen(false); setAddingIn(section)
     try {
       for (const s of lines) {
+        const c = estimateLineCost({ description: s.description, is_recurring: s.is_recurring })
         const r = await fetch(`/api/quotes/${id}/items`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'service' }),
+          body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'service', unit_cost: c.unit_cost, labor_hours: c.labor_hours }),
         })
         const j = await r.json().catch(() => ({}))
         if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
@@ -257,12 +275,40 @@ export default function ProposalBuilder() {
 
         {/* RIGHT — pricing editor */}
         <aside className="w-96 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderLeft: '1px solid rgba(170,198,222,0.28)' }}>
-          <div className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: '#8fa4b8' }}>Pricing</div>
+          <div className="flex items-center mb-2">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: '#8fa4b8' }}>Pricing</div>
+            <button onClick={() => setShowCosts(s => !s)} className="ml-auto text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: showCosts ? 'rgba(18,184,134,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${showCosts ? 'rgba(18,184,134,0.4)' : 'rgba(140,170,200,0.24)'}`, color: showCosts ? '#7fe0b8' : '#9fb4c9' }}>{showCosts ? '✓ Costs & P&L' : 'Costs & P&L'}</button>
+          </div>
           <div className="rounded-xl p-3 mb-3" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)' }}>
             <Row k="Monthly" v={money(totals.monthly)} strong />
             <Row k="One-time setup" v={money(totals.setup)} />
             <Row k="Due today" v={money(totals.dueToday)} strong />
           </div>
+
+          {showCosts && (
+            <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#1c3a2e,#16322a)', border: '1px solid rgba(18,184,134,0.34)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#7fe0b8' }}>Dealer P&amp;L</div>
+                <label className="ml-auto text-[10px]" style={{ color: '#9fb4c9' }}>Labor $/hr
+                  <input type="number" value={laborRate} onChange={e => setLaborRate(Math.max(0, Number(e.target.value) || 0))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                </label>
+                <label className="text-[10px]" style={{ color: '#9fb4c9' }}>Term mo
+                  <input type="number" value={termMonths} onChange={e => setTermMonths(Math.max(1, Number(e.target.value) || 60))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                </label>
+              </div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5" style={{ color: '#8fa4b8' }}>One-time setup</div>
+              <Row k="Revenue" v={money(pl.setupRevenue)} />
+              <Row k="Cost (parts + labor)" v={money(pl.setupCost)} />
+              <Row k={`Profit · ${Math.round(pl.setupMargin * 100)}%`} v={money(pl.setupProfit)} strong pos={pl.setupProfit >= 0} />
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] mt-2 mb-0.5" style={{ color: '#8fa4b8' }}>Over {termMonths} mo term</div>
+              <Row k="Recurring revenue" v={money(pl.termRevenue)} />
+              <Row k="Recurring cost" v={money(pl.termCost)} />
+              <Row k="Term profit" v={money(pl.termProfit)} strong pos={pl.termProfit >= 0} />
+              <div className="mt-2 pt-2" style={{ borderTop: '1px dashed rgba(140,170,200,0.24)' }}>
+                <Row k="Total contract profit" v={money(pl.totalProfit)} strong pos={pl.totalProfit >= 0} />
+              </div>
+            </div>
+          )}
 
           {sections.map(sname => {
             const rows = linesIn(sname)
@@ -292,6 +338,27 @@ export default function ProposalBuilder() {
                       <button onClick={() => deleteLine(l.id)} title="Remove" className="ml-auto text-[12px]" style={{ color: '#e6808a' }}>✕</button>
                     </div>
                     <div className="text-right text-[11px] mt-1" style={{ color: '#9fb4c9' }}>{money(l.total)}{l.recurring ? '/mo' : ''}{l.is_optional ? ' · optional' : ''}</div>
+                    {showCosts && (() => {
+                      const uc = l.unit_cost ?? 0, lh = l.labor_hours ?? 0
+                      const lineCost = l.recurring ? l.qty * uc : l.qty * (uc + lh * laborRate)
+                      const profit = l.total - lineCost
+                      return (
+                        <div className="mt-1.5 pt-1.5 flex items-center gap-1.5" style={{ borderTop: '1px dashed rgba(140,170,200,0.16)' }}>
+                          <span className="text-[9px] uppercase tracking-wide" style={{ color: '#6f8299' }}>cost</span>
+                          <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                            <span className="text-[10px]" style={{ color: '#6f8299' }}>$</span>
+                            <input type="number" value={uc} onChange={e => patchLocal(l.id, { unit_cost: Number(e.target.value) })} onBlur={e => persist(l.id, { unit_cost: Number(e.target.value) })} className="w-12 bg-transparent text-[11px] outline-none" style={{ color: '#e7eef7' }} title="Material cost / unit" />
+                          </div>
+                          {!l.recurring && (
+                            <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                              <input type="number" value={lh} onChange={e => patchLocal(l.id, { labor_hours: Number(e.target.value) })} onBlur={e => persist(l.id, { labor_hours: Number(e.target.value) })} className="w-10 bg-transparent text-[11px] outline-none text-center" style={{ color: '#e7eef7' }} title="Labor hours / unit" />
+                              <span className="text-[10px]" style={{ color: '#6f8299' }}>h</span>
+                            </div>
+                          )}
+                          <span className="ml-auto text-[11px] font-bold" style={{ color: profit >= 0 ? '#7fe0b8' : '#fca5a5' }}>{money(profit)}{l.recurring ? '/mo' : ''}</span>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
@@ -306,11 +373,12 @@ export default function ProposalBuilder() {
   )
 }
 
-function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+function Row({ k, v, strong, pos }: { k: string; v: string; strong?: boolean; pos?: boolean }) {
+  const color = pos === undefined ? (strong ? '#eaf3fb' : '#cfe0f0') : (pos ? '#7fe0b8' : '#fca5a5')
   return (
     <div className="flex justify-between py-1.5" style={{ borderBottom: '1px solid rgba(140,170,200,0.12)' }}>
       <span className="text-[12px]" style={{ color: '#9fb4c9' }}>{k}</span>
-      <span className={strong ? 'text-[13px] font-extrabold' : 'text-[12px] font-semibold'} style={{ color: strong ? '#eaf3fb' : '#cfe0f0' }}>{v}</span>
+      <span className={strong ? 'text-[13px] font-extrabold' : 'text-[12px] font-semibold'} style={{ color }}>{v}</span>
     </div>
   )
 }

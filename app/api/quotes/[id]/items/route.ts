@@ -57,7 +57,8 @@ export async function GET(
     .select(`
       id, sort_order, category, description, qty, unit_price, is_recurring, created_at,
       section_name, product_id, item_type, unit, is_optional, is_included,
-      package_tier, model_number, notes, sku, line_discount_percent
+      package_tier, model_number, notes, sku, line_discount_percent,
+      unit_cost, labor_hours
     `)
     .eq('quote_id', params.id)
     .order('sort_order', { ascending: true })
@@ -98,32 +99,37 @@ export async function POST(
 
   const sort_order = maxRow ? (maxRow.sort_order + 1) : 0
 
-  const { data: item, error } = await supabase
-    .from('quote_line_items')
-    .insert({
-      quote_id:     params.id,
-      sort_order,
-      category:     body.category     ?? 'General',
-      description:  body.description  ?? '',
-      qty:          body.qty          ?? 1,
-      unit_price:   body.unit_price   ?? 0,
-      unit:         body.unit         ?? 'each',
-      is_recurring: body.is_recurring ?? false,
-      section_name: body.section_name ?? 'Equipment',
-      product_id:   body.product_id   ?? null,
-      item_type:    body.item_type    ?? 'equipment',
-      is_optional:  body.is_optional  ?? false,
-      is_included:  body.is_included  ?? true,
-      package_tier: body.package_tier ?? null,
-      // image_url intentionally NOT stored — the photo lives only in products and
-      // is read live via product_id (single source of truth).
-      model_number:          body.model_number          ?? null,
-      notes:                 body.notes                 ?? null,
-      sku:                   body.sku                   ?? null,
-      line_discount_percent: body.line_discount_percent ?? 0,
-    })
-    .select()
-    .single()
+  const insertRow: Record<string, unknown> = {
+    quote_id:     params.id,
+    sort_order,
+    category:     body.category     ?? 'General',
+    description:  body.description  ?? '',
+    qty:          body.qty          ?? 1,
+    unit_price:   body.unit_price   ?? 0,
+    unit:         body.unit         ?? 'each',
+    is_recurring: body.is_recurring ?? false,
+    section_name: body.section_name ?? 'Equipment',
+    product_id:   body.product_id   ?? null,
+    item_type:    body.item_type    ?? 'equipment',
+    is_optional:  body.is_optional  ?? false,
+    is_included:  body.is_included  ?? true,
+    package_tier: body.package_tier ?? null,
+    // image_url intentionally NOT stored — the photo lives only in products and
+    // is read live via product_id (single source of truth).
+    model_number:          body.model_number          ?? null,
+    notes:                 body.notes                 ?? null,
+    sku:                   body.sku                   ?? null,
+    line_discount_percent: body.line_discount_percent ?? 0,
+    // Internal cost/labor (migration 183) — never returned by the public API.
+    unit_cost:    body.unit_cost   ?? null,
+    labor_hours:  body.labor_hours ?? null,
+  }
+  let { data: item, error } = await supabase.from('quote_line_items').insert(insertRow).select().single()
+  // Drift-safe: if the cost columns aren't deployed yet, retry without them.
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+    delete insertRow.unit_cost; delete insertRow.labor_hours
+    ;({ data: item, error } = await supabase.from('quote_line_items').insert(insertRow).select().single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
