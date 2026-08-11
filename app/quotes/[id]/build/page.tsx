@@ -76,7 +76,7 @@ export default function ProposalBuilder() {
   const previewQuote = { ...quote, proposal_blocks: blocks }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#0f1822', color: '#e7eef7' }}>
+    <div className="flex flex-col h-screen w-full" style={{ background: '#0f1822', color: '#e7eef7' }}>
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-3" style={{ background: HEADER, borderBottom: '1px solid rgba(140,170,200,0.2)' }}>
         <a href={`/quotes/${id}`} className="text-[13px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>← Line items</a>
