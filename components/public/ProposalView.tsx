@@ -44,6 +44,17 @@ const BRAND = {
   callbox: 'https://www.gateguard.co/app-callbox.png',
 }
 
+// Section header with an energetic accent underline.
+function Head({ k, t }: { k?: string; t: string }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {k && <div style={kick}>{k}</div>}
+      <div style={{ ...secH, margin: '6px 0 8px' }}>{t}</div>
+      <div style={{ width: 46, height: 3, borderRadius: 2, background: 'linear-gradient(90deg,#5FB8E0,#3ddc97)' }} />
+    </div>
+  )
+}
+
 function Grid({ items }: { items: { h: string; p: string }[] }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
@@ -123,13 +134,16 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={BRAND.logo} alt="Gate Guard" style={{ height: 92, marginBottom: 16, filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.55))' }} />
-            <div style={{ position: 'absolute', top: 26, right: 28, textAlign: 'right' }}>
-              <b style={{ fontSize: 26, display: 'block', color: '#fff' }}>{money(totals.dueToday)}</b>
-              <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9fc2dc' }}>due today</span>
+            <div style={{ position: 'absolute', top: 24, right: 28, textAlign: 'right' }}>
+              <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8fe3c6', fontWeight: 800 }}>Your price</span>
+              <b style={{ fontSize: 46, display: 'block', lineHeight: 1, marginTop: 2, background: 'linear-gradient(90deg,#7fe0ff,#8fe3c6)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.4))' }}>{money(totals.monthly)}</b>
+              <span style={{ fontSize: 11, color: '#c4d6e6' }}>per month{units ? ` · ${units} units` : ''}</span>
+              <div style={{ fontSize: 11, color: '#9fc2dc', marginTop: 6 }}>{money(totals.dueToday)} due today</div>
             </div>
             <div style={kick}>{v.kicker}</div>
-            <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1, margin: '10px 0 12px', maxWidth: '72%', textShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>{v.headline}</div>
-            <div style={{ fontSize: 13.5, color: '#d3e2ef', lineHeight: 1.5, maxWidth: '78%', textShadow: '0 1px 8px rgba(0,0,0,0.4)' }}>{v.subhead}</div>
+            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.08, margin: '10px 0 12px', maxWidth: '70%', textShadow: '0 2px 14px rgba(0,0,0,0.45)' }}>{v.headline}</div>
+            <div style={{ fontSize: 14, color: '#dbe7f2', lineHeight: 1.5, maxWidth: '74%', textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>{v.subhead}</div>
+            <a href="#gg-accept" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 22px', borderRadius: 12, fontWeight: 800, fontSize: 14, textDecoration: 'none', color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', boxShadow: '0 10px 26px rgba(18,184,134,0.4)' }}>Get started →</a>
             <div style={{ display: 'flex', gap: 26, marginTop: 18, fontSize: 11, color: '#9fc2dc', flexWrap: 'wrap' }}>
               <div>Prepared for<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.property_name || quote?.client_name || '—'}</b></div>
               <div>Date<b style={{ display: 'block', color: '#eaf3fb', fontSize: 12 }}>{quote?.created_at ? new Date(quote.created_at).toLocaleDateString() : '—'}</b></div>
@@ -149,7 +163,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
       case 'problem':
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <div style={kick}>{v.kicker}</div><div style={secH}>{v.title}</div>
+            <Head k={v.kicker} t={v.title} />
             <Grid items={v.steps} />
           </div>
         )
@@ -157,7 +171,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         const items = includedItems(v)
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <div style={kick}>{v.kicker}</div><div style={secH}>{v.title}</div>
+            <Head k={v.kicker} t={v.title} />
             {items.map((it, k) => (
               <div key={k} style={{ display: 'flex', gap: 11, marginBottom: 12 }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(18,182,134,.18)', border: '1px solid rgba(18,182,134,.5)', color: '#4fe0aa', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 1 }}>✓</span>
@@ -166,13 +180,14 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             ))}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 8 }}>
               {[
-                { b: units ? String(units) : '—', s: 'units' },
-                { b: money(perUnit), s: 'per unit/mo' },
-                { b: money(totals.monthly), s: 'monthly' },
-                { b: '$0', s: 'trip charges' },
+                { b: units ? String(units) : '—', s: 'units', c: C.ink },
+                { b: money(perUnit), s: 'per unit / mo', c: '#7fe0ff' },
+                { b: money(totals.monthly), s: 'monthly', c: '#7fe0ff' },
+                { b: '$0', s: 'trip charges', c: '#3ddc97' },
               ].map((st, k) => (
-                <div key={k} style={{ ...tile, textAlign: 'center' }}>
-                  <b style={{ fontSize: 20, color: C.ink, display: 'block' }}>{st.b}</b>
+                <div key={k} style={{ ...tile, textAlign: 'center', paddingTop: 14, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,#5FB8E0,#3ddc97)' }} />
+                  <b style={{ fontSize: 32, fontWeight: 900, color: st.c, display: 'block', lineHeight: 1 }}>{st.b}</b>
                   <span style={{ fontSize: 10, color: C.dim2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{st.s}</span>
                 </div>
               ))}
@@ -196,9 +211,13 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         // Optional banner image (defaults to the brand hero shot on the cameras
         // block). Any block can set vars.image to add its own.
         const banner = v.image || (b.type === 'cameras' ? BRAND.hero : null)
+        // value_props gets an accent-tinted band so there's a colour break.
+        const bg = b.type === 'value_props'
+          ? `${BRUSH}, linear-gradient(120deg,#124a5e 0%,#16405a 60%,#1a3a52 100%)`
+          : C.sec
         return (
-          <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <div style={kick}>{v.kicker}</div><div style={secH}>{v.title}</div>
+          <div key={i} style={{ padding: '22px 32px', background: bg, borderBottom: `1px solid ${C.line}` }}>
+            <Head k={v.kicker} t={v.title} />
             {banner && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={banner} alt={v.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, marginBottom: 14, border: `1px solid ${C.line}` }} />
@@ -218,11 +237,11 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
             <div style={kick}>YOUR QUOTE</div>
-            <div style={{ background: 'linear-gradient(180deg,#13293f,#0d1c2e)', border: `1px solid rgba(95,184,224,0.4)`, borderRadius: 16, padding: 18, marginTop: 8, boxShadow: '0 12px 40px rgba(0,0,0,.35)' }}>
-              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', color: '#0c1424', background: C.accent, display: 'inline-block', padding: '3px 9px', borderRadius: 999, textTransform: 'uppercase' }}>Recommended</span>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '10px 0 6px' }}>
-                <b style={{ fontSize: 30, color: C.ink }}>{money(totals.monthly)}</b>
-                <em style={{ fontStyle: 'normal', color: '#9fc2dc', fontSize: 12 }}>/ month{units ? ` · ${units} units` : ''}</em>
+            <div style={{ background: 'linear-gradient(180deg,#1a3550,#12263a)', border: `1px solid rgba(95,184,224,0.55)`, borderRadius: 16, padding: 20, marginTop: 8, boxShadow: '0 16px 46px rgba(0,0,0,.4), 0 0 40px rgba(95,184,224,0.14)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', display: 'inline-block', padding: '4px 11px', borderRadius: 999, textTransform: 'uppercase', boxShadow: '0 4px 14px rgba(18,184,134,0.4)' }}>★ Recommended</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '12px 0 6px' }}>
+                <b style={{ fontSize: 48, fontWeight: 900, lineHeight: 1, background: 'linear-gradient(90deg,#7fe0ff,#8fe3c6)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{money(totals.monthly)}</b>
+                <em style={{ fontStyle: 'normal', color: '#c4d6e6', fontSize: 13, fontWeight: 600 }}>/ month{units ? ` · ${units} units` : ''}</em>
               </div>
 
               {requiredRecurring.length > 0 && (
@@ -311,9 +330,9 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
       }
       case 'close':
         return (
-          <div key={i} style={{ padding: '24px 32px', background: C.close, color: C.dim }}>
-            <div style={secH}>{v.title}</div>
-            <div style={{ fontSize: 13, lineHeight: 1.5 }}>{v.body} — <b style={{ color: C.ink }}>{quote?.created_by_name || 'Russel Feldman'}</b>, Gate Guard</div>
+          <div key={i} id="gg-accept" style={{ padding: '28px 32px', background: `${BRUSH}, linear-gradient(140deg,#153a4e,#122a3d)`, color: C.dim, scrollMarginTop: 12 }}>
+            <div style={{ ...secH, fontSize: 24 }}>{v.title}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{v.body} — <b style={{ color: C.ink }}>{quote?.created_by_name || 'Russel Feldman'}</b>, Gate Guard</div>
             {preview ? (
               <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 11, background: 'rgba(95,184,224,.10)', border: '1px dashed rgba(95,184,224,.4)', color: '#9fc2dc', fontSize: 12, fontWeight: 600 }}>Preview — the client signs & accepts here.</div>
             ) : done ? (
@@ -325,7 +344,7 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
                   <input value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="Email" style={inp} />
                 </div>
                 {err && <div style={{ fontSize: 12, color: '#fca5a5', marginBottom: 8 }}>{err}</div>}
-                <button onClick={accept} disabled={busy} style={{ width: '100%', background: C.good, color: '#04231a', border: 0, fontWeight: 800, padding: '12px 16px', borderRadius: 11, fontSize: 14, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                <button onClick={accept} disabled={busy} style={{ width: '100%', background: 'linear-gradient(135deg,#3ddc97,#12b886)', color: '#04231a', border: 0, fontWeight: 900, padding: '16px 16px', borderRadius: 12, fontSize: 16, letterSpacing: '0.01em', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 12px 30px rgba(18,184,134,0.42)' }}>
                   {busy ? 'Submitting…' : signName.trim() ? 'Accept & Sign →' : 'Accept Proposal →'}
                 </button>
               </div>
