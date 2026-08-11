@@ -426,6 +426,26 @@ export function OpportunityGlassWindow({
     } catch { setMsg({ ok: false, text: 'Could not set manager.' }) }
     finally { setBusy(null) }
   }
+  // ── Rename the opportunity ───────────────────────────────────────────────────
+  const [renaming, setRenaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  function startRename() { setNameDraft(String(show('name') ?? '')); setRenaming(true) }
+  async function saveName() {
+    if (!oppIdStr) return
+    const next = nameDraft.trim()
+    if (!next) { setMsg({ ok: false, text: 'Name cannot be empty.' }); return }
+    if (next === String(show('name') ?? '')) { setRenaming(false); return }
+    setBusy('rename')
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppIdStr}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', name: next }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) { setMsg({ ok: false, text: j.message || 'Could not rename.' }); return }
+      setOv(prev => ({ ...prev, name: next }))
+      setRenaming(false); setMsg({ ok: true, text: 'Renamed ✓' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not rename.' }) }
+    finally { setBusy(null) }
+  }
   async function doReassign(assigneeId: string, name: string) {
     const oppId = opp.id as string | undefined
     if (!oppId) return
@@ -770,9 +790,29 @@ export function OpportunityGlassWindow({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
-            <h3 className="mt-2 text-2xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>
-              {val(opp.name, 'Untitled Opportunity')}
-            </h3>
+            {renaming ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setRenaming(false) }}
+                  className="min-w-[220px] flex-1 rounded-xl px-3 py-2 text-lg font-semibold outline-none"
+                  style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.4)', color: 'rgba(255,255,255,0.94)' }}
+                />
+                <button type="button" disabled={busy === 'rename'} onClick={saveName} className="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{busy === 'rename' ? 'Saving…' : 'Save'}</button>
+                <button type="button" onClick={() => setRenaming(false)} className="rounded-full px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-start gap-2">
+                <h3 className="text-2xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>
+                  {val(show('name'), 'Untitled Opportunity')}
+                </h3>
+                <button type="button" onClick={startRename} title="Rename opportunity" className="mt-1 shrink-0 rounded-lg p-1.5 transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(95,184,224,0.24)', color: '#9FD8EC' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                </button>
+              </div>
+            )}
             <div className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
               {val(show('account_name') ?? company?.name, 'No account attached')}
             </div>

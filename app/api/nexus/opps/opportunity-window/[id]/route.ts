@@ -282,6 +282,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     set('site_contact_title', body.site_contact_title ?? body.contact_title)
     set('site_contact_phone', body.site_contact_phone ?? body.phone)
     set('site_contact_email', body.site_contact_email ?? body.email)
+    // Opportunity name (rename)
+    set('name',            body.name)
     // Account / property
     set('account_name',    body.account_name)
     set('management_co',   body.management_co)

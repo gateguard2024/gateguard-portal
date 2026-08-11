@@ -10,7 +10,7 @@
  *   - right:  quick numbers + save + links
  * Later pieces add line-item/pricing editing, the floor guard, auto-fill, send.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import ProposalView from '@/components/public/ProposalView'
 import {
@@ -18,6 +18,7 @@ import {
   type ProposalBlock, type PricedLine, type ProposalBlockType, type OfferingDef,
 } from '@/lib/proposal-modules'
 import { GateProgramCalc, type GenLine } from '@/components/quotes/GateProgramCalc'
+import { SiteVariables, EMPTY_SITE_VARS, type SiteVars } from '@/components/quotes/SiteVariables'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -42,6 +43,7 @@ export default function ProposalBuilder() {
   const [showCosts, setShowCosts] = useState(false)
   const [laborRate, setLaborRate] = useState(45)
   const [termMonths, setTermMonths] = useState(60)
+  const [siteVars, setSiteVars] = useState<SiteVars>(EMPTY_SITE_VARS)
 
   useEffect(() => {
     if (!id) return
@@ -51,6 +53,7 @@ export default function ProposalBuilder() {
       if (j?.error) { setErr(j.error); return }
       setQuote(j.quote); setLineItems(j.lineItems ?? []); setBlocks(resolveBlocks(j.quote))
       if (j.quote?.contract_term) setTermMonths(Number(j.quote.contract_term) || 60)
+      if (j.quote?.site_vars && typeof j.quote.site_vars === 'object') setSiteVars({ ...EMPTY_SITE_VARS, ...j.quote.site_vars })
       // Seed a familiar starting structure only when the quote has no lines yet.
       if (!(j.lineItems ?? []).length) setSectionNames(['Monthly Program', 'One-Time Setup', 'Optional Upgrades'])
       // Merge INTERNAL cost/labor (never in the public payload) for the dealer P&L.
@@ -186,6 +189,41 @@ export default function ProposalBuilder() {
       }
     } finally { setAddingIn(null) }
   }
+  // ── Site Variables → auto-drive the managed "Gate Program" section ────────────
+  // Persist the intake counts on the quote.
+  async function saveSiteVars(v: SiteVars) {
+    setSiteVars(v)
+    try { await fetch(`/api/quotes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site_vars: v }) }) } catch { /* best effort */ }
+  }
+  // Regenerate the Gate Program section from the calculator lines: delete the old
+  // managed lines, insert the fresh set. Serialized so rapid typing can't duplicate.
+  const syncingRef = useRef(false)
+  const pendingRef = useRef<GenLine[] | null>(null)
+  async function syncGateProgram(lines: GenLine[]) {
+    if (syncingRef.current) { pendingRef.current = lines; return }
+    syncingRef.current = true
+    const section = 'Gate Program'
+    try {
+      const existing = lineItems.filter(l => sectionOf(l) === section)
+      setLineItems(prev => prev.filter(l => sectionOf(l) !== section))
+      for (const l of existing) { try { await fetch(`/api/quotes/${id}/items/${l.id}`, { method: 'DELETE' }) } catch { /* */ } }
+      if (lines.length) {
+        setSectionNames(prev => prev.includes(section) ? prev : [...prev, section])
+        for (const s of lines) {
+          const c = estimateLineCost({ description: s.description, is_recurring: s.is_recurring })
+          const r = await fetch(`/api/quotes/${id}/items`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'service', unit_cost: c.unit_cost, labor_hours: c.labor_hours }),
+          })
+          const j = await r.json().catch(() => ({}))
+          if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
+        }
+      }
+    } finally {
+      syncingRef.current = false
+      if (pendingRef.current) { const next = pendingRef.current; pendingRef.current = null; void syncGateProgram(next) }
+    }
+  }
   function renameSection(s: string) {
     const name = typeof window !== 'undefined' ? window.prompt('Rename section', s) : null
     if (!name || !name.trim() || name.trim() === s) return
@@ -284,6 +322,8 @@ export default function ProposalBuilder() {
             <Row k="One-time setup" v={money(totals.setup)} />
             <Row k="Due today" v={money(totals.dueToday)} strong />
           </div>
+
+          <SiteVariables initial={siteVars} onVarsChange={saveSiteVars} onGenerate={syncGateProgram} />
 
           {showCosts && (
             <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#1c3a2e,#16322a)', border: '1px solid rgba(18,184,134,0.34)' }}>

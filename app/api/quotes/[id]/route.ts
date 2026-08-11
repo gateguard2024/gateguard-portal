@@ -129,6 +129,8 @@ export async function PATCH(
     'accepted_by_rep', 'accepted_by_rep_name',
     // migration 182 module-based proposal
     'proposal_blocks', 'proposal_theme',
+    // migration 184 known site variables (intake counts)
+    'site_vars',
   ]
 
   const updates: Record<string, unknown> = {}
