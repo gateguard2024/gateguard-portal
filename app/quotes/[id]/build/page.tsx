@@ -36,6 +36,7 @@ export default function ProposalBuilder() {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [addingIn, setAddingIn] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -49,7 +50,6 @@ export default function ProposalBuilder() {
   }, [id])
 
   const totals = useMemo(() => computeTotals(lineItems, new Set(lineItems.filter(l => l.is_optional && l.is_included).map(l => l.id))), [lineItems])
-  const optionalCount = lineItems.filter(l => l.is_optional).length
 
   const [addOpen, setAddOpen] = useState(false)
   function mutate(next: ProposalBlock[]) { setBlocks(next); setDirty(true); setSaved(false) }
@@ -69,6 +69,51 @@ export default function ProposalBuilder() {
     } catch { setErr('Save failed.') }
     finally { setSaving(false) }
   }
+
+  // ── Line-item / pricing editor ──────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function apiToPriced(it: any): PricedLine {
+    const qty = Number(it.qty) || 0, up = Number(it.unit_price) || 0
+    return {
+      id: it.id, description: it.description ?? '', qty, unitPrice: up, total: qty * up,
+      recurring: !!it.is_recurring, is_optional: !!it.is_optional, is_included: it.is_included ?? true,
+      section_name: it.section_name, notes: it.notes,
+    }
+  }
+  const GROUPS = {
+    monthly:  { section: 'Monthly Program',   is_recurring: true,  is_optional: false, item_type: 'service' },
+    setup:    { section: 'One-Time Setup',    is_recurring: false, is_optional: false, item_type: 'labor' },
+    optional: { section: 'Optional Upgrades', is_recurring: true,  is_optional: true,  item_type: 'service' },
+  } as const
+  async function addLine(group: keyof typeof GROUPS) {
+    setAddingIn(group); setErr(null)
+    const g = GROUPS[group]
+    try {
+      const r = await fetch(`/api/quotes/${id}/items`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'New line', qty: 1, unit_price: 0, is_recurring: g.is_recurring, is_optional: g.is_optional, section_name: g.section, item_type: g.item_type }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
+      else setErr(j?.error || 'Could not add line.')
+    } catch { setErr('Could not add line.') }
+    finally { setAddingIn(null) }
+  }
+  function patchLocal(lineId: string, patch: Partial<PricedLine>) {
+    setLineItems(prev => prev.map(l => l.id === lineId
+      ? { ...l, ...patch, total: (patch.qty ?? l.qty) * (patch.unitPrice ?? l.unitPrice) }
+      : l))
+  }
+  async function persist(lineId: string, apiPatch: Record<string, unknown>) {
+    try { await fetch(`/api/quotes/${id}/items/${lineId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiPatch) }) } catch { /* keep optimistic */ }
+  }
+  async function deleteLine(lineId: string) {
+    setLineItems(prev => prev.filter(l => l.id !== lineId))
+    try { await fetch(`/api/quotes/${id}/items/${lineId}`, { method: 'DELETE' }) } catch { /* */ }
+  }
+  function toggleRecurring(l: PricedLine) { patchLocal(l.id, { recurring: !l.recurring }); persist(l.id, { is_recurring: !l.recurring }) }
+  const groupLines = (g: keyof typeof GROUPS) => lineItems.filter(l =>
+    g === 'optional' ? l.is_optional : (g === 'monthly' ? (!l.is_optional && l.recurring) : (!l.is_optional && !l.recurring)))
 
   if (err) return <div style={{ padding: 40, color: '#e6555f' }}>{err}</div>
   if (!quote) return <div style={{ padding: 40, color: '#8fa4b8' }}>Loading builder…</div>
@@ -133,23 +178,51 @@ export default function ProposalBuilder() {
           <ProposalView quote={previewQuote} lineItems={lineItems} preview />
         </main>
 
-        {/* RIGHT — quick numbers + next steps */}
-        <aside className="w-72 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderLeft: '1px solid rgba(170,198,222,0.28)' }}>
-          <div className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: '#8fa4b8' }}>The numbers</div>
-          <div className="rounded-xl p-3 mb-2" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)' }}>
-            <Row k="Monthly" v={money(totals.monthly)} />
+        {/* RIGHT — pricing editor */}
+        <aside className="w-96 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderLeft: '1px solid rgba(170,198,222,0.28)' }}>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: '#8fa4b8' }}>Pricing</div>
+          <div className="rounded-xl p-3 mb-3" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)' }}>
+            <Row k="Monthly" v={money(totals.monthly)} strong />
             <Row k="One-time setup" v={money(totals.setup)} />
             <Row k="Due today" v={money(totals.dueToday)} strong />
-            <Row k="Optional upgrades" v={String(optionalCount)} />
-            <Row k="Line items" v={String(lineItems.length)} />
           </div>
-          {lineItems.length === 0 && (
-            <div className="rounded-xl p-3 mb-2 text-[12px] leading-relaxed" style={{ background: 'rgba(240,160,32,0.12)', border: '1px solid rgba(240,160,32,0.4)', color: '#f2c879' }}>
-              No line items yet — the quote will read $0. Add them in the line-item editor, then they flow into this preview automatically.
-            </div>
-          )}
-          <a href={`/quotes/${id}`} className="block text-center text-[12px] font-bold rounded-xl px-3 py-2.5 mb-2" style={{ background: ACCENT, color: '#04202e' }}>+ Edit line items</a>
-          <div className="text-[11px] leading-relaxed" style={{ color: '#6f8299' }}>Pricing editing, the floor guard, and one-click send land in the next builder pieces.</div>
+
+          {([
+            { key: 'monthly',  label: 'Monthly Program',  suffix: '/mo' },
+            { key: 'setup',    label: 'One-Time Setup',   suffix: '' },
+            { key: 'optional', label: 'Optional Upgrades', suffix: '' },
+          ] as const).map(g => {
+            const rows = groupLines(g.key)
+            return (
+              <div key={g.key} className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: '#a9bed1' }}>{g.label} <span style={{ color: '#6f8299' }}>· {rows.length}</span></span>
+                  <button onClick={() => addLine(g.key)} disabled={addingIn === g.key} className="text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.4)', color: ACCENT }}>{addingIn === g.key ? '…' : '+ Add'}</button>
+                </div>
+                {rows.length === 0 && <div className="text-[11px] mb-1.5" style={{ color: '#6f8299' }}>Nothing here yet.</div>}
+                {rows.map(l => (
+                  <div key={l.id} className="rounded-lg p-2 mb-1.5" style={{ background: 'rgba(12,20,32,0.5)', border: '1px solid rgba(140,170,200,0.18)' }}>
+                    <input value={l.description} onChange={e => patchLocal(l.id, { description: e.target.value })} onBlur={e => persist(l.id, { description: e.target.value })}
+                      className="w-full bg-transparent text-[12.5px] font-semibold outline-none" style={{ color: '#eef4fb' }} placeholder="Description" />
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <input type="number" value={l.qty} onChange={e => patchLocal(l.id, { qty: Number(e.target.value) })} onBlur={e => persist(l.id, { qty: Number(e.target.value) })}
+                        className="w-12 rounded px-1.5 py-1 text-[12px] text-center outline-none" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                      <span className="text-[11px]" style={{ color: '#6f8299' }}>×</span>
+                      <div className="flex items-center rounded px-1.5 py-1" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                        <span className="text-[11px]" style={{ color: '#6f8299' }}>$</span>
+                        <input type="number" value={l.unitPrice} onChange={e => patchLocal(l.id, { unitPrice: Number(e.target.value) })} onBlur={e => persist(l.id, { unit_price: Number(e.target.value) })}
+                          className="w-16 bg-transparent text-[12px] outline-none" style={{ color: '#e7eef7' }} />
+                      </div>
+                      <button onClick={() => toggleRecurring(l)} title="Monthly vs one-time" className="text-[10px] font-bold rounded px-1.5 py-1" style={{ background: l.recurring ? 'rgba(95,184,224,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${l.recurring ? 'rgba(95,184,224,0.4)' : 'rgba(140,170,200,0.24)'}`, color: l.recurring ? ACCENT : '#9fb4c9' }}>{l.recurring ? '/mo' : 'once'}</button>
+                      <span className="ml-auto text-[12.5px] font-bold" style={{ color: '#eaf3fb' }}>{money(l.total)}{l.recurring ? g.suffix || '/mo' : ''}</span>
+                      <button onClick={() => deleteLine(l.id)} title="Remove" className="text-[12px]" style={{ color: '#e6808a' }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+          <div className="text-[11px] leading-relaxed" style={{ color: '#6f8299' }}>Edit here and the preview updates live. Optional upgrades show the client a checkbox. Floor guard + one-click send land next.</div>
         </aside>
       </div>
     </div>
