@@ -83,9 +83,17 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
   const units = Number(quote?.units) || 0
   const perUnit = units > 0 ? totals.recurring / units : 0
 
-  const requiredOneTime = lineItems.filter(l => !l.is_optional && !l.recurring)
-  const requiredRecurring = lineItems.filter(l => !l.is_optional && l.recurring)
-  const optional = lineItems.filter(l => l.is_optional)
+  // Group lines into named sections, preserving their (sort-ordered) appearance.
+  const { sectionOrder, bySection } = useMemo(() => {
+    const order: string[] = []
+    const by: Record<string, PricedLine[]> = {}
+    for (const l of lineItems) {
+      const s = (l.section_name && l.section_name.trim()) || 'Services'
+      if (!by[s]) { by[s] = []; order.push(s) }
+      by[s].push(l)
+    }
+    return { sectionOrder: order, bySection: by }
+  }, [lineItems])
 
   // ── Accept / sign ──────────────────────────────────────────────────────────
   const alreadyAccepted = quote?.status === 'accepted' || !!quote?.signed_at || !!quote?.accepted_at
@@ -245,39 +253,41 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
                 <em style={{ fontStyle: 'normal', color: '#c4d6e6', fontSize: 13, fontWeight: 600 }}>/ month{units ? ` · ${units} units` : ''}</em>
               </div>
 
-              {requiredRecurring.length > 0 && (
-                <div style={{ margin: '10px 0 2px', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: C.dim2 }}>MONTHLY PROGRAM</div>
-              )}
-              {requiredRecurring.map(l => (
-                <div key={l.id} style={row}><span>{l.description}</span><span>{money(l.total)}/mo</span></div>
-              ))}
+              {/* Unlimited named sections. Required lines list plainly; optional
+                  lines render as SELECTABLE add-ons the client can toggle — so all
+                  options are visible with pricing and totals recompute live. */}
+              {sectionOrder.map(sname => {
+                const lines = bySection[sname]
+                const req = lines.filter(l => !l.is_optional)
+                const opt = lines.filter(l => l.is_optional)
+                return (
+                  <div key={sname} style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', color: C.accent, marginBottom: 4 }}>{sname.toUpperCase()}</div>
+                    {req.map(l => (
+                      <div key={l.id} style={row}><span>{l.description}{l.qty > 1 ? ` ×${l.qty}` : ''}</span><span>{money(l.total)}{l.recurring ? '/mo' : ''}</span></div>
+                    ))}
+                    {opt.length > 0 && (
+                      <div style={{ marginTop: req.length ? 8 : 0 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim2, marginBottom: 4 }}>Choose your options ↓</div>
+                        {opt.map(l => {
+                          const on = selected.has(l.id)
+                          return (
+                            <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', marginBottom: 6, borderRadius: 10, cursor: done ? 'default' : 'pointer', background: on ? 'rgba(95,184,224,0.12)' : 'rgba(12,20,32,0.4)', border: `1px solid ${on ? 'rgba(95,184,224,0.5)' : C.line}` }}>
+                              <input type="checkbox" checked={on} disabled={done} onChange={e => {
+                                setSelected(prev => { const n = new Set(prev); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n })
+                              }} style={{ accentColor: C.accent, width: 17, height: 17 }} />
+                              <span style={{ flex: 1 }}><b style={{ color: '#eaf3fb', fontSize: 13.5 }}>{l.description}</b>{l.notes ? <em style={{ display: 'block', fontStyle: 'normal', fontSize: 11.5, color: C.dim2 }}>{l.notes}</em> : null}</span>
+                              <span style={{ fontWeight: 800, color: '#7fd0f0', fontSize: 14 }}>{money(l.total)}{l.recurring ? '/mo' : ''}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
-              {requiredOneTime.length > 0 && (
-                <div style={{ margin: '12px 0 2px', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: C.dim2 }}>ONE-TIME SETUP</div>
-              )}
-              {requiredOneTime.map(l => (
-                <div key={l.id} style={row}><span>{l.description}{l.qty > 1 ? ` ×${l.qty}` : ''}</span><span>{money(l.total)}</span></div>
-              ))}
-
-              {optional.length > 0 && (
-                <>
-                  <div style={{ margin: '14px 0 2px', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: C.dim2 }}>OPTIONAL UPGRADES — YOU CHOOSE</div>
-                  {optional.map(l => {
-                    const on = selected.has(l.id)
-                    return (
-                      <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', borderBottom: `1px dashed ${C.line}`, cursor: done ? 'default' : 'pointer' }}>
-                        <input type="checkbox" checked={on} disabled={done} onChange={e => {
-                          setSelected(prev => { const n = new Set(prev); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n })
-                        }} style={{ accentColor: C.accent, width: 16, height: 16 }} />
-                        <span style={{ flex: 1 }}><b style={{ color: '#eaf3fb', fontSize: 12.5 }}>{l.description}</b>{l.notes ? <em style={{ display: 'block', fontStyle: 'normal', fontSize: 10.5, color: C.dim2 }}>{l.notes}</em> : null}</span>
-                        <span style={{ fontWeight: 700, color: '#7fd0f0' }}>{money(l.total)}{l.recurring ? '/mo' : ''}</span>
-                      </label>
-                    )
-                  })}
-                </>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
                 <div style={{ ...tile, textAlign: 'center' }}><span style={totSpan}>One-time</span><b style={totB}>{money(totals.setup)}</b></div>
                 <div style={{ ...tile, textAlign: 'center' }}><span style={totSpan}>Monthly</span><b style={totB}>{money(totals.monthly)}</b></div>
                 <div style={{ ...tile, textAlign: 'center', borderColor: 'rgba(95,184,224,.5)', background: '#143050' }}><span style={totSpan}>Due today</span><b style={totB}>{money(totals.dueToday)}</b></div>
