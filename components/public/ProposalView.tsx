@@ -172,6 +172,23 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
     )
   }
 
+  // Download the agreement as a standalone, print-ready HTML file (saves as PDF).
+  function downloadAgreement() {
+    const esc = (s: string) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
+    const body = quote?.agreement_html
+      ? String(quote.agreement_html)
+      : agreementDoc.sections.map(s => `<h3>${esc(s.h)}</h3><p>${esc(s.p).replace(/\n/g, '<br/>')}</p>`).join('')
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(agreementDoc.title)}</title>
+<style>body{font-family:Georgia,'Times New Roman',serif;max-width:760px;margin:40px auto;padding:0 24px;color:#111;line-height:1.5}h1{font-size:22px;margin:0}h2{font-size:14px;color:#555;font-weight:400;margin:2px 0 24px}h3{font-size:15px;margin:22px 0 4px}p{margin:4px 0 0;white-space:pre-line}.ft{margin-top:36px;color:#888;font-size:12px;border-top:1px solid #ddd;padding-top:10px}</style>
+</head><body><h1>${esc(agreementDoc.title)}</h1><h2>${esc(agreementDoc.subtitle)}</h2>${body}
+<div class="ft">Gate Guard · Atlanta, GA · (770) 776-8095 · gateguard.co</div></body></html>`
+    const blob = new Blob([doc], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `Agreement-${quote?.quote_number || quote?.id || 'gateguard'}.html`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+  }
+
   function renderBlock(b: ProposalBlock, i: number) {
     if (!b.enabled) return null
     const v = vars(b)
@@ -364,17 +381,24 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
         const sow = quote?.sow_text
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <Head k="AGREEMENT" t={agreementDoc.title} />
-            {html
-              ? <div style={{ fontSize: 13.5, color: C.dim, lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: String(html) }} />
-              : sow
-                ? <p style={{ fontSize: 13.5, color: C.dim, lineHeight: 1.65, whiteSpace: 'pre-line' }}>{sow}</p>
-                : agreementDoc.sections.map((s, k) => (
-                    <div key={k} style={{ marginBottom: 12 }}>
-                      <b style={{ color: C.ink, fontSize: 13.5 }}>{s.h}</b>
-                      <p style={{ margin: '3px 0 0', fontSize: 13, color: C.dim, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{s.p}</p>
-                    </div>
-                  ))}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 8 }}>
+              <div style={{ flex: 1 }}><Head k="AGREEMENT" t={agreementDoc.title} /></div>
+              <button onClick={downloadAgreement} style={{ flex: 'none', fontSize: 12, fontWeight: 700, color: C.accent, background: 'rgba(95,184,224,0.12)', border: `1px solid rgba(95,184,224,0.4)`, borderRadius: 9, padding: '7px 12px', cursor: 'pointer', marginBottom: 6 }}>⬇ Download</button>
+            </div>
+            {/* Scrolling box so the full contract doesn't dominate the page. */}
+            <div style={{ maxHeight: 320, overflowY: 'auto', padding: '14px 16px', borderRadius: 12, background: 'rgba(12,20,32,0.4)', border: `1px solid ${C.line}` }}>
+              {html
+                ? <div style={{ fontSize: 13, color: C.dim, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: String(html) }} />
+                : sow
+                  ? <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{sow}</p>
+                  : agreementDoc.sections.map((s, k) => (
+                      <div key={k} style={{ marginBottom: 12 }}>
+                        <b style={{ color: C.ink, fontSize: 13 }}>{s.h}</b>
+                        <p style={{ margin: '3px 0 0', fontSize: 12.5, color: C.dim, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{s.p}</p>
+                      </div>
+                    ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim2, marginTop: 6 }}>Scroll to read the full agreement · or download a copy.</div>
           </div>
         )
       }
@@ -410,7 +434,8 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
                 <div style={{ fontSize: 16, fontWeight: 800 }}>{agreementDoc.title}</div>
                 <div style={{ fontSize: 11.5, color: '#9fc2dc' }}>{agreementDoc.subtitle}</div>
               </div>
-              <button onClick={() => setAgreementOpen(false)} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: '#cfe0f0', borderRadius: 9, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Close</button>
+              <button onClick={downloadAgreement} style={{ marginLeft: 'auto', background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC', borderRadius: 9, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇ Download</button>
+              <button onClick={() => setAgreementOpen(false)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: '#cfe0f0', borderRadius: 9, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Close</button>
             </div>
             <div style={{ padding: '18px 22px', overflowY: 'auto' }}>
               <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'rgba(95,184,224,0.1)', border: `1px solid ${C.line}`, fontSize: 13 }}>
