@@ -174,5 +174,34 @@ export async function POST(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // "Sent back to us" — notify the team when a proposal is accepted/signed.
+  if (action === 'sign' || action === 'approve') {
+    try {
+      const { data: q } = await supabase
+        .from('quotes')
+        .select('quote_number, property_name, client_name, total_mrr, total_one_time, created_by_name')
+        .eq('id', params.id).single()
+      const key = process.env.RESEND_API_KEY
+      const from = process.env.RESEND_DOCUMENTS_FROM_EMAIL || 'documents@nexus.gateguard.co'
+      if (q && key) {
+        const money = (n: unknown) => '$' + Math.round(Number(n) || 0).toLocaleString()
+        const who = signer_name || 'the client'
+        const subject = `✅ Proposal accepted — ${q.quote_number} · ${q.property_name || q.client_name || ''}`.trim()
+        const bodyHtml = `<div style="font-family:system-ui,sans-serif;font-size:15px;color:#0f1722">
+          <h2 style="margin:0 0 8px">Proposal accepted &amp; signed</h2>
+          <p><b>${q.quote_number}</b> — ${q.property_name || q.client_name || ''}</p>
+          <p>Signed by <b>${who}</b>${signer_email ? ` (${signer_email})` : ''} at ${new Date(ts).toLocaleString()}${ip && ip !== 'unknown' ? ` · IP ${ip}` : ''}.</p>
+          <p>Monthly ${money(q.total_mrr)} · One-time ${money(q.total_one_time)}${q.created_by_name ? ` · Prepared by ${q.created_by_name}` : ''}.</p>
+        </div>`
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: `Gate Guard <${from}>`, to: ['rfeldman@gateguard.co'], subject, html: bodyHtml }),
+        })
+      }
+    } catch { /* notification is best-effort — never fail the acceptance */ }
+  }
+
   return NextResponse.json({ quote: updated })
 }

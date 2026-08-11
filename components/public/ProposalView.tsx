@@ -13,6 +13,7 @@ import {
   resolveBlocks, moduleDef, computeTotals,
   type ProposalBlock, type PricedLine,
 } from '@/lib/proposal-modules'
+import { buildServiceAgreement } from '@/lib/service-agreement'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -110,21 +111,22 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(alreadyAccepted)
   const [err, setErr] = useState<string | null>(null)
+  const [agreementOpen, setAgreementOpen] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const agreementDoc = useMemo(() => buildServiceAgreement(quote, { monthly: totals.monthly, setup: totals.setup }), [quote, totals])
 
   async function accept() {
+    if (!signName.trim() || !agreed) { setErr('Please type your name and agree to the terms.'); return }
     setBusy(true); setErr(null)
     try {
       const item_selections = optionalIds.map(id => ({ id, is_included: selected.has(id) }))
-      const signing = signName.trim().length > 0
-      const body = signing
-        ? { action: 'sign', signer_name: signName.trim(), signer_email: signEmail, item_selections }
-        : { action: 'approve', item_selections }
+      const body = { action: 'sign', signer_name: signName.trim(), signer_email: signEmail, item_selections }
       const r = await fetch(`/api/quotes/${quote.id}/public`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok || j?.error) { setErr(j?.error || 'Could not submit. Please try again.'); return }
-      setDone(true)
+      setDone(true); setAgreementOpen(false)
     } catch { setErr('Could not submit. Please try again.') }
     finally { setBusy(false) }
   }
@@ -360,13 +362,19 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
       case 'agreement': {
         const html = quote?.agreement_html
         const sow = quote?.sow_text
-        if (!html && !sow) return null
         return (
           <div key={i} style={{ padding: '22px 32px', background: C.sec, borderBottom: `1px solid ${C.line}` }}>
-            <div style={kick}>AGREEMENT</div><div style={secH}>Service agreement & scope</div>
+            <Head k="AGREEMENT" t={agreementDoc.title} />
             {html
-              ? <div style={{ fontSize: 12.5, color: C.dim, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: String(html) }} />
-              : <p style={{ fontSize: 12.5, color: C.dim, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{sow}</p>}
+              ? <div style={{ fontSize: 13.5, color: C.dim, lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: String(html) }} />
+              : sow
+                ? <p style={{ fontSize: 13.5, color: C.dim, lineHeight: 1.65, whiteSpace: 'pre-line' }}>{sow}</p>
+                : agreementDoc.sections.map((s, k) => (
+                    <div key={k} style={{ marginBottom: 12 }}>
+                      <b style={{ color: C.ink, fontSize: 13.5 }}>{s.h}</b>
+                      <p style={{ margin: '3px 0 0', fontSize: 13, color: C.dim, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{s.p}</p>
+                    </div>
+                  ))}
           </div>
         )
       }
@@ -380,16 +388,9 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
             ) : done ? (
               <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 11, background: 'rgba(18,184,134,.14)', border: '1px solid rgba(18,184,134,.4)', color: '#7fe0b8', fontWeight: 700 }}>✓ Accepted — thank you! We’ll be in touch to get started.</div>
             ) : (
-              <div style={{ marginTop: 14, ...tile }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-                  <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Type your name to sign" style={inp} />
-                  <input value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="Email" style={inp} />
-                </div>
-                {err && <div style={{ fontSize: 12, color: '#fca5a5', marginBottom: 8 }}>{err}</div>}
-                <button onClick={accept} disabled={busy} style={{ width: '100%', background: 'linear-gradient(135deg,#3ddc97,#12b886)', color: '#04231a', border: 0, fontWeight: 900, padding: '16px 16px', borderRadius: 12, fontSize: 16, letterSpacing: '0.01em', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 12px 30px rgba(18,184,134,0.42)' }}>
-                  {busy ? 'Submitting…' : signName.trim() ? 'Accept & Sign →' : 'Accept Proposal →'}
-                </button>
-              </div>
+              <button onClick={() => { setErr(null); setAgreementOpen(true) }} style={{ marginTop: 16, width: '100%', background: 'linear-gradient(135deg,#3ddc97,#12b886)', color: '#04231a', border: 0, fontWeight: 900, padding: '17px', borderRadius: 12, fontSize: 16.5, cursor: 'pointer', boxShadow: '0 12px 30px rgba(18,184,134,0.42)' }}>
+                Accept Proposal →
+              </button>
             )}
           </div>
         )
@@ -400,6 +401,54 @@ export default function ProposalView({ quote, lineItems, preview = false }: { qu
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', background: C.page, color: C.ink, borderRadius: 16, overflow: 'hidden', border: `1px solid ${C.line}`, boxShadow: '0 24px 70px rgba(0,0,0,0.45)', fontFamily: 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif' }}>
+      {/* Accept → fill-and-sign the Service Agreement */}
+      {agreementOpen && !done && (
+        <div onClick={() => setAgreementOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(6,12,20,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(680px,100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', borderRadius: 18, background: C.page, border: `1px solid ${C.line}`, boxShadow: '0 30px 90px rgba(0,0,0,0.6)', color: C.ink }}>
+            <div style={{ padding: '16px 22px', background: 'linear-gradient(140deg,#153a4e,#122a3d)', borderRadius: '18px 18px 0 0', display: 'flex', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>{agreementDoc.title}</div>
+                <div style={{ fontSize: 11.5, color: '#9fc2dc' }}>{agreementDoc.subtitle}</div>
+              </div>
+              <button onClick={() => setAgreementOpen(false)} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: '#cfe0f0', borderRadius: 9, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Close</button>
+            </div>
+            <div style={{ padding: '18px 22px', overflowY: 'auto' }}>
+              <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'rgba(95,184,224,0.1)', border: `1px solid ${C.line}`, fontSize: 13 }}>
+                <b style={{ color: C.ink }}>{quote?.property_name || quote?.client_name || 'Property'}</b> · {money(totals.monthly)}/mo + {money(totals.setup)} setup · {money(totals.dueToday)} due today
+              </div>
+              {quote?.agreement_html
+                ? <div style={{ fontSize: 13.5, color: C.dim, lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: String(quote.agreement_html) }} />
+                : agreementDoc.sections.map((s, k) => (
+                    <div key={k} style={{ marginBottom: 12 }}>
+                      <b style={{ color: C.ink, fontSize: 13.5 }}>{s.h}</b>
+                      <p style={{ margin: '3px 0 0', fontSize: 13, color: C.dim, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{s.p}</p>
+                    </div>
+                  ))}
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: `1px solid ${C.line}`, background: C.sec, borderRadius: '0 0 18px 18px' }}>
+              {preview ? (
+                <div style={{ fontSize: 12.5, color: '#9fc2dc', textAlign: 'center', padding: 6 }}>Preview — the client agrees and signs here.</div>
+              ) : (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, marginBottom: 10, cursor: 'pointer', color: C.dim }}>
+                    <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ accentColor: C.good, width: 18, height: 18 }} />
+                    I have read and agree to the terms of this Service Agreement.
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                    <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Type your full name to sign" style={inp} />
+                    <input value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="Email" style={inp} />
+                  </div>
+                  {err && <div style={{ fontSize: 12.5, color: '#fca5a5', marginBottom: 8 }}>{err}</div>}
+                  <button onClick={accept} disabled={busy || !agreed || !signName.trim()} style={{ width: '100%', background: (busy || !agreed || !signName.trim()) ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg,#3ddc97,#12b886)', color: (busy || !agreed || !signName.trim()) ? '#7f93a6' : '#04231a', border: 0, fontWeight: 900, padding: '15px', borderRadius: 12, fontSize: 15.5, cursor: (busy || !agreed || !signName.trim()) ? 'not-allowed' : 'pointer' }}>
+                    {busy ? 'Submitting…' : 'Sign & Accept →'}
+                  </button>
+                  {signName.trim() && <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, fontStyle: 'italic', color: C.dim2 }}>Signed: {signName}</div>}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {blocks.map(renderBlock)}
     </div>
   )
