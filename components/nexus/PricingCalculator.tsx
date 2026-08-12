@@ -161,6 +161,7 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
               <div style={tagS}>Customer bill / month</div>
               <div style={{ fontSize: 26, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{empty ? '—' : usd0(calc.customerMonthly ?? 0)}</div>
               <div style={{ fontSize: 12, opacity: .75 }}>{empty ? '' : usd0(calc.perUnit ?? 0) + ' / unit'}</div>
+              {calc.propertyMinBinds && <div style={{ fontSize: 10.5, fontWeight: 800, color: '#f0a020', marginTop: 3 }}>Monthly minimum applied ({usd0(calc.propertyMin ?? 1500)})</div>}
             </div>
           </div>
         </div>
@@ -174,7 +175,6 @@ export function PricingCalculator({ initialUnits, initialDoors, initialCameras, 
             {empty ? <div className="text-[12px]" style={{ opacity: .5 }}>Enter a site.</div> : (<>
               {(calc.costBrivo ?? 0) > 0 && <Row label="Brivo site fee ($90 flat)" total={calc.costBrivo} units={u} />}
               {(calc.costEntry ?? 0) > 0 && <Row label={`${calc.entryPoints} entry points (tiered)`} total={calc.costEntry} units={u} />}
-              {(calc.costLarge ?? 0) > 0 && <Row label="Large-site surcharge" total={calc.costLarge} units={u} />}
               {(calc.costCameras ?? 0) > 0 && <Row label={`Cameras (${calc.camerasMonitored ?? 0} mon / ${calc.camerasNonMonitored ?? 0} non)`} total={calc.costCameras} units={u} />}
               {(calc.costCellular ?? 0) > 0 && <Row label="Cellular" total={calc.costCellular} units={u} />}
               {(calc.costSmart ?? 0) > 0 && <Row label={`Smart units${calc.smartMult === 2 ? ' (full ×2)' : ''}`} total={calc.costSmart} units={u} />}

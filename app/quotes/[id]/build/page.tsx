@@ -211,9 +211,11 @@ export default function ProposalBuilder() {
         setSectionNames(prev => prev.includes(section) ? prev : [...prev, section])
         for (const s of lines) {
           const c = estimateLineCost({ description: s.description, is_recurring: s.is_recurring })
+          const unit_cost = s.unit_cost != null ? s.unit_cost : c.unit_cost
+          const labor_hours = s.labor_hours != null ? s.labor_hours : c.labor_hours
           const r = await fetch(`/api/quotes/${id}/items`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'service', unit_cost: c.unit_cost, labor_hours: c.labor_hours }),
+            body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'service', unit_cost, labor_hours }),
           })
           const j = await r.json().catch(() => ({}))
           if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])

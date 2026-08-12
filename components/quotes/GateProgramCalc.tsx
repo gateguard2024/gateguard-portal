@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 
-export interface GenLine { description: string; qty: number; unit_price: number; is_recurring: boolean; is_optional: boolean }
+export interface GenLine { description: string; qty: number; unit_price: number; is_recurring: boolean; is_optional: boolean; unit_cost?: number; labor_hours?: number }
 interface Rates {
   unitRate: number; includedGates: number; includedSystems: number; includedCamerasPerSystem: number
   addlGate: number; setupWorking: number; setupNonWorking: number
