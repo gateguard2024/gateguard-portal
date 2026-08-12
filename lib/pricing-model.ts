@@ -89,6 +89,12 @@ export function computePricing(input: PricingInputs, internal: boolean): Record<
     ggNet = round2(ggNet + (PROPERTY_MIN_MONTHLY - bill))
     bill = PROPERTY_MIN_MONTHLY
   }
+  // Round the per-unit fee UP to the nearest whole dollar; the rounding uplift
+  // falls to Gate Guard (its net), same as the floor.
+  if (u > 0) {
+    const roundedBill = Math.ceil(bill / u) * u
+    if (roundedBill > bill) { ggNet = round2(ggNet + (roundedBill - bill)); bill = roundedBill }
+  }
   const gateGuardCombined = round2(bill - dealer - sales)   // the single dealer-facing GG line
   const perUnit = u > 0 ? round2(bill / u) : 0
 

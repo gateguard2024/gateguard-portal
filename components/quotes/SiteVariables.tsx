@@ -27,18 +27,20 @@ export interface SiteVars {
   units: number
   vehicleGates: number
   amenityGates: number
+  nonWorkingGates: number
   callBoxes: number
   existingCameras: number
   newCameras: number
 }
-export const EMPTY_SITE_VARS: SiteVars = { units: 0, vehicleGates: 0, amenityGates: 0, callBoxes: 0, existingCameras: 0, newCameras: 0 }
+export const EMPTY_SITE_VARS: SiteVars = { units: 0, vehicleGates: 0, amenityGates: 0, nonWorkingGates: 0, callBoxes: 0, existingCameras: 0, newCameras: 0 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Result = Record<string, any>
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 const round2 = (n: number) => Math.round(n * 100) / 100
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0))
-const WORKING_GATE_CHARGE = 500   // one-time install guideline / gate (from InstallCalculator)
+const WORKING_GATE_CHARGE = 500   // one-time install guideline — working gate
+const BROKEN_GATE_CHARGE = 750    // one-time install guideline — non-working / repair
 
 // Build the Gate Program priced lines from the engine result.
 function buildLines(res: Result, v: SiteVars): GenLine[] {
@@ -57,10 +59,13 @@ function buildLines(res: Result, v: SiteVars): GenLine[] {
       lines.push({ description: 'Gate Guard monthly service', qty: 1, unit_price: round2(monthly), is_recurring: true, is_optional: false, unit_cost: Math.max(0, round2(monthly - dealer)), labor_hours: 0 })
     }
   }
+  // One-time gate setup — split working ($500) vs non-working / repair ($750).
+  // Both are one-time lines, so they roll up into the "One-time setup" total.
   if (totalGates > 0) {
-    // One-time gate setup (install guideline). Cost falls back to the builder's
-    // per-gate estimate until the parts sheet is wired in.
-    lines.push({ description: 'Gate activation & setup (per gate)', qty: totalGates, unit_price: WORKING_GATE_CHARGE, is_recurring: false, is_optional: false })
+    const nonWork = Math.min(v.nonWorkingGates || 0, totalGates)
+    const work = totalGates - nonWork
+    if (work > 0) lines.push({ description: 'Gate setup — working ($500/gate)', qty: work, unit_price: WORKING_GATE_CHARGE, is_recurring: false, is_optional: false })
+    if (nonWork > 0) lines.push({ description: 'Gate setup — non-working / repair ($750/gate)', qty: nonWork, unit_price: BROKEN_GATE_CHARGE, is_recurring: false, is_optional: false })
   }
   return lines
 }
@@ -119,6 +124,7 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
     { k: 'units', l: 'Units' },
     { k: 'vehicleGates', l: 'Vehicle gates' },
     { k: 'amenityGates', l: 'Amenity / pedestrian gates' },
+    { k: 'nonWorkingGates', l: 'Gates needing repair' },
     { k: 'callBoxes', l: 'Current call boxes' },
     { k: 'existingCameras', l: 'Existing cameras (take over)' },
     { k: 'newCameras', l: 'New cameras' },
@@ -127,6 +133,9 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
   const monthly = Number(res?.customerMonthly) || 0
   const perUnit = Number(res?.perUnit) || 0
   const minBinds = !!res?.propertyMinBinds
+  const dealerCut = Number(res?.dealerCut) || 0
+  const salesCut = Number(res?.salesCut) || 0
+  const ggCut = Number(res?.gateGuardCombined) || 0
 
   return (
     <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#22384f,#1b2a3b)', border: '1px solid rgba(95,184,224,0.34)' }}>
@@ -158,7 +167,23 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
             <span style={{ color: '#9fb4c9' }}>{money(perUnit)}/unit</span>
           </div>
           {minBinds && <div className="mt-1 text-[11px] font-bold" style={{ color: '#f0a020' }}>Monthly minimum applied ({money(Number(res.propertyMin) || 1500)})</div>}
-          <div className="mt-1 text-[10px]" style={{ color: '#6f8299' }}>Call boxes + new-camera installs price on the one-time side (coming).</div>
+
+          {/* Where the monthly money goes — the three buckets a dealer needs to see. */}
+          <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+            {[
+              { l: 'Dealer', v: dealerCut, c: '#3ddc97' },
+              { l: 'Sales rep', v: salesCut, c: '#9FD8EC' },
+              { l: 'Gate Guard', v: ggCut, c: '#c3d3e2' },
+            ].map(x => (
+              <div key={x.l} className="rounded-lg px-2 py-1.5 text-center" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                <div className="text-[9px] font-bold uppercase tracking-[0.04em]" style={{ color: '#8fa4b8' }}>{x.l}</div>
+                <div className="text-[13px] font-extrabold" style={{ color: x.c }}>{money(x.v)}</div>
+                <div className="text-[8.5px]" style={{ color: '#6f8299' }}>/ mo</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-1.5 text-[10px]" style={{ color: '#6f8299' }}>Call boxes + new-camera installs price on the one-time side (coming).</div>
         </>
       )}
     </div>
