@@ -151,7 +151,9 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
         {fields.map(f => (
           <label key={f.k} className="text-[9.5px] font-bold uppercase tracking-[0.04em]" style={{ color: '#9fb4c9' }}>{f.l}
             <input
-              type="number" min={0} value={v[f.k]}
+              type="number" min={0} inputMode="numeric" placeholder="0"
+              value={v[f.k] === 0 ? '' : v[f.k]}
+              onFocus={e => e.target.select()}
               onChange={e => set(f.k, num(e.target.value))}
               className="block w-full mt-1 rounded-lg px-2 py-1.5 text-[14px] font-semibold outline-none"
               style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb' }}

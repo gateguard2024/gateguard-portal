@@ -19,6 +19,7 @@ import {
 } from '@/lib/proposal-modules'
 import { GateProgramCalc, type GenLine } from '@/components/quotes/GateProgramCalc'
 import { SiteVariables, EMPTY_SITE_VARS, type SiteVars } from '@/components/quotes/SiteVariables'
+import { InstallCalculator } from '@/components/quotes/InstallCalculator'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -74,6 +75,7 @@ export default function ProposalBuilder() {
   const [addOpen, setAddOpen] = useState(false)
   const [offerOpen, setOfferOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
   function mutate(next: ProposalBlock[]) { setBlocks(next); setDirty(true); setSaved(false) }
   function toggle(i: number) { const n = [...blocks]; n[i] = { ...n[i], enabled: !n[i].enabled }; mutate(n) }
   function remove(i: number) { const n = [...blocks]; n.splice(i, 1); mutate(n) }
@@ -226,6 +228,30 @@ export default function ProposalBuilder() {
       if (pendingRef.current) { const next = pendingRef.current; pendingRef.current = null; void syncGateProgram(next) }
     }
   }
+  // Install calculator → itemized parts + labor, written into the "Install & Setup"
+  // section (replaces any prior install lines so re-running doesn't duplicate).
+  async function applyInstallLines(lines: GenLine[]) {
+    const section = 'Install & Setup'
+    setInstallOpen(false)
+    const existing = lineItems.filter(l => sectionOf(l) === section)
+    setLineItems(prev => prev.filter(l => sectionOf(l) !== section))
+    for (const l of existing) { try { await fetch(`/api/quotes/${id}/items/${l.id}`, { method: 'DELETE' }) } catch { /* */ } }
+    setSectionNames(prev => prev.includes(section) ? prev : [...prev, section])
+    setAddingIn(section)
+    try {
+      for (const s of lines) {
+        const c = estimateLineCost({ description: s.description, is_recurring: s.is_recurring })
+        const unit_cost = s.unit_cost != null ? s.unit_cost : c.unit_cost
+        const labor_hours = s.labor_hours != null ? s.labor_hours : c.labor_hours
+        const r = await fetch(`/api/quotes/${id}/items`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: s.description, qty: s.qty, unit_price: s.unit_price, is_recurring: s.is_recurring, is_optional: s.is_optional, section_name: section, item_type: 'hardware', unit_cost, labor_hours }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.ok && j?.item) setLineItems(prev => [...prev, apiToPriced(j.item)])
+      }
+    } finally { setAddingIn(null) }
+  }
   function renameSection(s: string) {
     const name = typeof window !== 'undefined' ? window.prompt('Rename section', s) : null
     if (!name || !name.trim() || name.trim() === s) return
@@ -244,6 +270,10 @@ export default function ProposalBuilder() {
   return (
     <div className="flex flex-col h-screen w-full" style={{ background: 'linear-gradient(180deg,#33465e,#26313f)', color: '#eef4fb' }}>
       {calcOpen && <GateProgramCalc defaultUnits={Number(quote.units) || 0} onClose={() => setCalcOpen(false)} onGenerate={addGateProgram} />}
+      {installOpen && <InstallCalculator
+        defaultWorkingGates={Math.max(0, (siteVars.vehicleGates + siteVars.amenityGates) - siteVars.nonWorkingGates)}
+        defaultNonWorkingGates={siteVars.nonWorkingGates}
+        onClose={() => setInstallOpen(false)} onGenerate={applyInstallLines} />}
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-3" style={{ background: HEADER, borderBottom: '1px solid rgba(140,170,200,0.2)' }}>
         <a href={`/quotes/${id}`} className="text-[13px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>← Line items</a>
@@ -407,6 +437,7 @@ export default function ProposalBuilder() {
             )
           })}
           <button onClick={() => setCalcOpen(true)} className="w-full text-left rounded-xl px-3 py-2.5 mb-1.5 text-[12.5px] font-bold" style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', color: '#04202e' }}>🧮 Gate Program calculator</button>
+          <button onClick={() => setInstallOpen(true)} className="w-full text-left rounded-xl px-3 py-2.5 mb-1.5 text-[12.5px] font-bold" style={{ background: 'linear-gradient(135deg,#12b886,#3ddc97)', color: '#04231a' }}>🔧 Install calculator</button>
           <button onClick={addSection} className="w-full text-left rounded-xl px-3 py-2.5 text-[12.5px] font-semibold" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: ACCENT }}>+ Add section</button>
           <div className="text-[11px] leading-relaxed mt-3" style={{ color: '#6f8299' }}>Add any number of sections (Cameras, Smart Locks, Bulk Internet…). Mark a line <b style={{ color: '#a9bed1' }}>★ opt</b> and the client sees it as a selectable add-on. Preview updates live.</div>
         </aside>
