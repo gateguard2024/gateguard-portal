@@ -39,8 +39,6 @@ type Result = Record<string, any>
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 const round2 = (n: number) => Math.round(n * 100) / 100
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0))
-const WORKING_GATE_CHARGE = 500   // one-time install guideline — working gate
-const BROKEN_GATE_CHARGE = 750    // one-time install guideline — non-working / repair
 
 // Build the Gate Program priced lines from the engine result.
 function buildLines(res: Result, v: SiteVars): GenLine[] {
@@ -49,7 +47,6 @@ function buildLines(res: Result, v: SiteVars): GenLine[] {
   const perUnit = Number(res.perUnit) || 0
   const monthly = Number(res.customerMonthly) || 0
   const dealer = Number(res.dealerCut) || 0
-  const totalGates = v.vehicleGates + v.amenityGates
   if (monthly > 0) {
     if (units > 0) {
       // cost = the portion remitted past the dealer, so dealer P&L profit ≈ dealer cut
@@ -59,14 +56,9 @@ function buildLines(res: Result, v: SiteVars): GenLine[] {
       lines.push({ description: 'Gate Guard monthly service', qty: 1, unit_price: round2(monthly), is_recurring: true, is_optional: false, unit_cost: Math.max(0, round2(monthly - dealer)), labor_hours: 0 })
     }
   }
-  // One-time gate setup — split working ($500) vs non-working / repair ($750).
-  // Both are one-time lines, so they roll up into the "One-time setup" total.
-  if (totalGates > 0) {
-    const nonWork = Math.min(v.nonWorkingGates || 0, totalGates)
-    const work = totalGates - nonWork
-    if (work > 0) lines.push({ description: 'Gate setup — working ($500/gate)', qty: work, unit_price: WORKING_GATE_CHARGE, is_recurring: false, is_optional: false })
-    if (nonWork > 0) lines.push({ description: 'Gate setup — non-working / repair ($750/gate)', qty: nonWork, unit_price: BROKEN_GATE_CHARGE, is_recurring: false, is_optional: false })
-  }
+  // One-time setup is owned by the Install calculator ("Install & Setup" section) so
+  // the dealer can pick standard / standard+extras / itemized. We only emit the
+  // recurring monthly line here to avoid double-counting the setup.
   return lines
 }
 

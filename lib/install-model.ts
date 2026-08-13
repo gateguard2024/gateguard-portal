@@ -39,6 +39,31 @@ export const INSTALL_PARTS: InstallPart[] = [
 // Dealer's default labor rates (they override these). $/hr.
 export const DEFAULT_LABOR = { costRate: 45, retailRate: 125 }
 
+// Standard recommended setup fee per gate/door (dealer may override). One source of
+// truth shared by the proposal-builder install calc and the sales-tab install calc.
+export const STANDARD_SETUP = { working: 500, nonWorking: 750 }
+
+// Shared localStorage keys so a dealer's rates sync across BOTH install tools.
+export const LS = {
+  laborCost: 'gg_labor_cost_rate',
+  laborRetail: 'gg_labor_retail_rate',
+  setupWorking: 'gg_setup_working',
+  setupNonWorking: 'gg_setup_nonworking',
+} as const
+export function loadRate(key: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback
+  const v = Number(window.localStorage.getItem(key))
+  return Number.isFinite(v) && v > 0 ? v : fallback
+}
+export function saveRate(key: string, value: number): void {
+  if (typeof window !== 'undefined') window.localStorage.setItem(key, String(value))
+}
+
+// Which parts the flat standard setup rate is assumed to already cover (controller
+// + labor). Everything else is "additional equipment" itemized on top in the
+// standard-plus mode.
+export const BASE_PART_KEYS = ['controller']
+
 export const corpCost   = (base: number) => round2(base * (1 + INSTALL_MARKUP.tax))
 export const dealerCost = (base: number) => round2(base * (1 + INSTALL_MARKUP.tax) * (1 + INSTALL_MARKUP.override))
 export const retailPrice = (base: number) => round2(base * INSTALL_MARKUP.retailMult)
