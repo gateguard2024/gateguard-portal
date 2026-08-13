@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { DM_Sans, IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -36,9 +37,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Satellite domain: when beta runs under the PRODUCTION Clerk instance it is a
-  // satellite of the primary domain. These are set on beta only (blank on main),
-  // so main renders ClerkProvider exactly as before.
-  const isSatellite = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true';
+  // satellite of the primary domain. Only engage satellite mode when the browser
+  // is ACTUALLY on the satellite host — otherwise clerk-js boots in satellite mode
+  // for a domain it isn't on and the sign-in page renders blank (e.g. on a Vercel
+  // preview *.vercel.app URL). On any other host we fall back to plain Clerk.
+  const host = headers().get('host') || '';
+  const satelliteDomain = process.env.NEXT_PUBLIC_CLERK_DOMAIN || '';
+  const isSatellite =
+    process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true' &&
+    !!satelliteDomain &&
+    host === satelliteDomain;
   // Typed as any: ClerkProvider's props are a discriminated union that rejects a
   // string|undefined domain; this is a pass-through config object, not app logic.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

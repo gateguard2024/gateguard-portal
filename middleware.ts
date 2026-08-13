@@ -104,12 +104,20 @@ function isBypassPath(pathname: string): boolean {
 const CLERK_IS_SATELLITE   = process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true'
 const CLERK_DOMAIN         = process.env.NEXT_PUBLIC_CLERK_DOMAIN || undefined
 const CLERK_PRIMARY_SIGNIN = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || undefined
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const clerkOptions: any = CLERK_IS_SATELLITE
-  ? { isSatellite: true, domain: CLERK_DOMAIN, signInUrl: CLERK_PRIMARY_SIGNIN }
-  : {}
 
-// Clerk handler — only invoked for portal routes
+// Satellite mode may ONLY engage when the browser is actually on the satellite
+// domain. On any other host (e.g. a Vercel preview URL like *.vercel.app) Clerk
+// would otherwise try to boot in satellite mode for a domain it isn't on, and the
+// sign-in page never mounts (blank login). Gating on the real request host means
+// preview/other hosts fall back to plain Clerk and sign-in renders normally.
+function isSatelliteHost(req: NextRequest): boolean {
+  if (!CLERK_IS_SATELLITE || !CLERK_DOMAIN) return false
+  const host = req.headers.get('host') || req.nextUrl.host || ''
+  return host === CLERK_DOMAIN
+}
+
+// Clerk handler — only invoked for portal routes. Options are computed per-request
+// so satellite config applies solely on the satellite host.
 const clerkHandler = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname
 
@@ -123,15 +131,18 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 
   const { userId } = await auth()
   if (!userId) {
-    // On a satellite, sign-in lives on the PRIMARY domain; send them there and
-    // bring them back. On main this is the local /sign-in exactly as before.
-    const signInUrl = CLERK_IS_SATELLITE && CLERK_PRIMARY_SIGNIN
+    // On the satellite host, sign-in lives on the PRIMARY domain; send them there
+    // and bring them back. Everywhere else this is the local /sign-in as before.
+    const signInUrl = isSatelliteHost(req) && CLERK_PRIMARY_SIGNIN
       ? new URL(CLERK_PRIMARY_SIGNIN)
       : new URL('/sign-in', req.url)
     signInUrl.searchParams.set('redirect_url', req.url)
     return NextResponse.redirect(signInUrl)
   }
-}, clerkOptions)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+}, ((req: NextRequest): any => isSatelliteHost(req)
+  ? { isSatellite: true, domain: CLERK_DOMAIN, signInUrl: CLERK_PRIMARY_SIGNIN }
+  : {}))
 
 // Plain Next.js middleware — runs before Clerk
 export function middleware(req: NextRequest, event: NextFetchEvent) {

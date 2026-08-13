@@ -51,10 +51,12 @@
 
 | Environment | URL | Branch | Supabase | Rule |
 |-------------|-----|--------|----------|------|
-| **Beta** | beta.portal.gateguard.co | `beta` | Beta project | New features go here first |
+| **Beta** | `gateguard-portal-git-beta-gate-guard.vercel.app` (Vercel preview URL — NOT beta.portal.gateguard.co) | `beta` | Beta project | New features go here first |
 | **Live** | portal.gateguard.co | `main` | Prod project | Only after Russel approves from beta |
 
 **Always run migrations on beta Supabase first, then prod.**
+
+> **⚠️ Clerk satellite gotcha (Aug 2026):** beta is reached via the Vercel *preview* URL above, not a custom domain. The Clerk satellite env vars (`NEXT_PUBLIC_CLERK_IS_SATELLITE` / `_DOMAIN` / `_SIGN_IN_URL`) point at `beta.portal.gateguard.co`. Satellite mode now only activates when the **request host matches** that domain (`middleware.ts` + `app/layout.tsx`), so the preview URL falls back to plain Clerk and the login renders. If sign-in ever goes blank on beta again, verify that host-gating is intact — don't blindly force `isSatellite` from the env var alone.
 
 ---
 
