@@ -20,6 +20,7 @@ import {
 import { GateProgramCalc, type GenLine } from '@/components/quotes/GateProgramCalc'
 import { SiteVariables, EMPTY_SITE_VARS, type SiteVars } from '@/components/quotes/SiteVariables'
 import { InstallCalculator } from '@/components/quotes/InstallCalculator'
+import { DealProfitability } from '@/components/quotes/DealProfitability'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -354,6 +355,8 @@ export default function ProposalBuilder() {
             <Row k="One-time setup" v={money(totals.setup)} />
             <Row k="Due today" v={money(totals.dueToday)} strong />
           </div>
+
+          <DealProfitability lines={lineItems} selected={selectedSet} laborRate={laborRate} />
 
           <SiteVariables initial={siteVars} onVarsChange={saveSiteVars} onGenerate={syncGateProgram} />
 
