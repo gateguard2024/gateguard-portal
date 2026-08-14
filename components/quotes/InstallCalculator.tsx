@@ -25,11 +25,12 @@ const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 const num = (v: string) => Math.max(0, Number(v) || 0)
 const isBase = (key: string) => BASE_PART_KEYS.includes(key)
 
-export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates, onClose, onGenerate }: {
+export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates, onClose, onGenerate, inline = false }: {
   defaultWorkingGates?: number
   defaultNonWorkingGates?: number
-  onClose: () => void
+  onClose?: () => void
   onGenerate: (lines: GenLine[]) => void
+  inline?: boolean
 }) {
   const [mode, setMode] = useState<Mode>('standard')
   const [workingGates, setWorkingGates] = useState(defaultWorkingGates || 0)
@@ -100,13 +101,14 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
     { v: 'itemized', l: 'Fully itemized' },
   ]
 
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(6,12,20,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 'min(660px,100%)', maxHeight: '92vh', overflowY: 'auto', borderRadius: 18, padding: 20, color: '#eef4fb', background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#33465e,#243141)', border: '1px solid rgba(170,198,222,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55)' }}>
+  const body = (
+    <>
+        {!inline && (
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 16, fontWeight: 800 }}>🔧 Install calculator</div>
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#cfe0f0', borderRadius: 9, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Close</button>
         </div>
+        )}
 
         {/* Mode selector */}
         <div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
@@ -171,6 +173,14 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
           Add to proposal →
         </button>
         <div style={{ fontSize: 10.5, color: '#6f8299', marginTop: 8 }}>* placeholder part cost — confirm with corporate. Your labor + setup rates are saved and shared with the sales-tab calculator.</div>
+    </>
+  )
+
+  if (inline) return <div style={{ color: '#eef4fb' }}>{body}</div>
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(6,12,20,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(660px,100%)', maxHeight: '92vh', overflowY: 'auto', borderRadius: 18, padding: 20, color: '#eef4fb', background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#33465e,#243141)', border: '1px solid rgba(170,198,222,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55)' }}>
+        {body}
       </div>
     </div>
   )

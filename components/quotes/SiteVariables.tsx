@@ -132,7 +132,7 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
   return (
     <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#22384f,#1b2a3b)', border: '1px solid rgba(95,184,224,0.34)' }}>
       <div className="flex items-center gap-2 mb-1">
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>📋 Site variables</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>🛡️ Gate Program</div>
         <span className="ml-auto text-[10px]" style={{ color: '#6f8299' }}>{loading ? 'pricing…' : 'live Gate Guard engine'}</span>
       </div>
       <div className="text-[10.5px] mb-2 leading-relaxed" style={{ color: '#8fa4b8' }}>Key in the counts — the Gate Program section prices itself from the real calculator. Every line stays editable below.</div>
