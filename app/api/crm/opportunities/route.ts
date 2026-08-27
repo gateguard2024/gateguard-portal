@@ -167,12 +167,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Stamp the creator as the rep by default so "My deals" finds it. rep_id is the
+    // profiles.id (an admin can reassign later). Respect an explicit rep_id if sent.
+    const { data: creatorProf } = await supabase.from('profiles').select('id').eq('clerk_user_id', user.id).maybeSingle()
+    const creatorProfileId = (creatorProf as { id?: string } | null)?.id ?? null
     const insertRow: Record<string, unknown> = {
       ...safeBody,
       stage,
       probability:    body.probability ?? STAGE_PROB[normalizeStage(stage)],
       owner_name:     user.name,
       owner_initials: user.initials,
+      rep_id:         (safeBody.rep_id as string | undefined) ?? creatorProfileId ?? undefined,
       dealer_org_id,
       ...(lead_id ? { lead_id } : {}),
     }

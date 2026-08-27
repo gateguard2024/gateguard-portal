@@ -21,10 +21,16 @@ function typeOf(title: string | null | undefined): FType {
 }
 
 // GET /api/nexus/opps/opps-dashboard — the Opportunity Hub cockpit data.
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await getCurrentUser()
     const scope = await resolveOrgScope(user)
+
+    // "My deals" filter — scope to the caller's own rep_id (their profiles.id).
+    const mine = new URL(req.url).searchParams.get('mine') === '1'
+    const { data: prof } = await supabase.from('profiles').select('id').eq('clerk_user_id', user.id).maybeSingle()
+    const profileId = (prof as { id?: string } | null)?.id ?? null
+    const mineFilter = mine && profileId ? profileId : null
 
     // Open deals (not won / lost / dead / deleted)
     let openQ = supabase
@@ -32,6 +38,7 @@ export async function GET() {
       .select('id, name, account_name, stage, units, est_mrr, amount, close_date, next_step')
       .is('deleted_at', null).is('won_at', null).is('lost_at', null)
     openQ = applyOrgScope(openQ, scope, 'dealer_org_id')
+    if (mineFilter) openQ = openQ.eq('rep_id', mineFilter)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: openRows, error: openErr } = await (openQ as any).order('updated_at', { ascending: false })
     if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 })
@@ -41,12 +48,14 @@ export async function GET() {
     // Won (with dates for MTD) + lost counts → win rate
     let wonQ = supabase.from('opportunities').select('id, won_at').is('deleted_at', null).not('won_at', 'is', null)
     wonQ = applyOrgScope(wonQ, scope, 'dealer_org_id')
+    if (mineFilter) wonQ = wonQ.eq('rep_id', mineFilter)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: wonRows } = await (wonQ as any)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wonArr: any[] = Array.isArray(wonRows) ? wonRows : []
     let lostQ = supabase.from('opportunities').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('lost_at', 'is', null)
     lostQ = applyOrgScope(lostQ, scope, 'dealer_org_id')
+    if (mineFilter) lostQ = lostQ.eq('rep_id', mineFilter)
     const { count: lostCount } = await lostQ
     const won = wonArr.length
     const lost = lostCount ?? 0
@@ -99,8 +108,6 @@ export async function GET() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const todoFus = (Array.isArray(fuRows) ? fuRows : []).map((t: any) => ({ id: String(t.id), type: typeOf(t.title), title: t.title ?? 'Follow-up', lead: (t.linked_label as string) ?? null, due: (t.due_date as string) ?? null }))
 
-    const { data: prof } = await supabase.from('profiles').select('id').eq('clerk_user_id', user.id).maybeSingle()
-    const profileId = (prof as { id?: string } | null)?.id ?? null
     let actQ = supabase.from('crm_activities').select('id, type, subject, due_at, opportunity_id, opportunities(name)').not('opportunity_id', 'is', null).is('completed_at', null).not('due_at', 'is', null).lte('due_at', weekEnd.toISOString())
     if (!scope.all && profileId) actQ = actQ.eq('created_by', profileId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

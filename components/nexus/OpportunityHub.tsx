@@ -80,14 +80,15 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
   const [showNew, setShowNew] = useState(false)
   const [work, setWork] = useState<string | null>(null)
 
+  const [mine, setMine] = useState(false)
   const loadDash = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/nexus/opps/opps-dashboard', { cache: 'no-store' })
+      const r = await fetch(`/api/nexus/opps/opps-dashboard${mine ? '?mine=1' : ''}`, { cache: 'no-store' })
       const d = await r.json().catch(() => ({}))
       setDash(d && typeof d === 'object' ? d : {})
     } finally { setLoading(false) }
-  }, [])
+  }, [mine])
   useEffect(() => { void loadDash() }, [loadDash])
 
   async function openDeal(id: string) {
@@ -141,7 +142,13 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
         <div className="mt-3 rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Sales</div><h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Opportunity Hub</h2></div>
-            <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span> Search deals…</button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-xl p-0.5" style={{ background: '#e8eef5', border: '1px solid rgba(140,170,200,0.35)' }}>
+                <button type="button" onClick={() => setMine(true)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={mine ? { background: '#26374a', color: '#fff' } : { background: 'transparent', color: '#5a6c84' }}>My deals</button>
+                <button type="button" onClick={() => setMine(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={!mine ? { background: '#26374a', color: '#fff' } : { background: 'transparent', color: '#5a6c84' }}>All deals</button>
+              </div>
+              <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span> Search deals…</button>
+            </div>
           </div>
 
           {/* KPI ROW */}
