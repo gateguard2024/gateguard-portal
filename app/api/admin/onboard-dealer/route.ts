@@ -205,12 +205,17 @@ export async function POST(req: NextRequest) {
     admin_email,
     admin_role = 'admin',
     send_invite = true,
+    // "Save & finish later" — create the dealer with just name + tier, mark it
+    // incomplete, and skip the admin invite + NDA/agreement sends. Resume anytime.
+    draft = false,
   } = body
 
   if (!clean(org_name)) return NextResponse.json({ error: 'org_name is required' }, { status: 400 })
   if (!VALID_DEALER_TIERS.includes(org_tier)) return NextResponse.json({ error: `Invalid org_tier: ${org_tier}` }, { status: 400 })
-  if (!clean(admin_first_name) || !clean(admin_last_name)) return NextResponse.json({ error: 'admin_first_name and admin_last_name are required' }, { status: 400 })
-  if (!String(admin_email ?? '').includes('@')) return NextResponse.json({ error: 'valid admin_email is required' }, { status: 400 })
+  if (!draft) {
+    if (!clean(admin_first_name) || !clean(admin_last_name)) return NextResponse.json({ error: 'admin_first_name and admin_last_name are required' }, { status: 400 })
+    if (!String(admin_email ?? '').includes('@')) return NextResponse.json({ error: 'valid admin_email is required' }, { status: 400 })
+  }
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
@@ -223,6 +228,7 @@ export async function POST(req: NextRequest) {
       service_area_states: service_area_states ?? [],
       tech_count: tech_count ?? 0,
       onboarded_at: new Date().toISOString(),
+      ...(draft ? { onboarding_complete: false } : {}),
       ...(phone && { phone }),
       ...(org_email && { email: org_email }),
       ...(website && { website }),
@@ -236,6 +242,18 @@ export async function POST(req: NextRequest) {
 
   if (orgErr || !org) {
     return NextResponse.json({ error: `Failed to create org: ${orgErr?.message}` }, { status: 500 })
+  }
+
+  // Draft: dealer saved, onboarding deferred. Skip invite + document sends.
+  if (draft) {
+    await supabase.from('sensitive_field_access_log').insert({
+      user_id: caller.id, org_id: org.id, table_name: 'organizations', record_id: org.id,
+      fields: ['draft_created'], ip_address: req.headers.get('x-forwarded-for') ?? null,
+    })
+    return NextResponse.json({
+      ok: true, org, draft: true,
+      message: `Draft dealer "${clean(org_name)}" saved. Finish onboarding anytime from the Dealers list.`,
+    }, { status: 201 })
   }
 
   let clerk_user_id: string | null = null

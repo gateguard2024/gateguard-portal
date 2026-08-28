@@ -747,6 +747,33 @@ export default function NewDealerPage() {
     setStep(s => Math.max(1, s - 1))
   }
 
+  /* ── Save & finish later — create the draft dealer now, leave the rest for
+        the resume flow. Everything already entered persists on the org. ── */
+  const saveAndExit = async () => {
+    // Past step 2 the draft org already exists — just leave; it's saved.
+    if (form.draft_org_id) { router.push(`/admin/dealers/${form.draft_org_id}`); return }
+    if (!form.org_name.trim() || !form.org_tier) {
+      setError('Enter a dealer name and tier first — then you can finish onboarding later.')
+      return
+    }
+    setCreatingDraft(true); setError(null)
+    try {
+      const res = await fetch('/api/admin/create-draft-dealer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_name: form.org_name.trim(), org_tier: form.org_tier, entity_type: form.entity_type,
+          license_number: form.license_number || null, service_area_states: form.service_area_states,
+          tech_count: form.tech_count ? parseInt(form.tech_count) : null,
+          address: form.address || null, city: form.city || null, state: form.state || null, zip: form.zip || null,
+          phone: form.org_phone || null, email: form.org_email || null, website: form.website || null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to save draft')
+      router.push(`/admin/dealers/${json.org_id}`)
+    } catch (e: any) { setError(e.message) } finally { setCreatingDraft(false) }
+  }
+
   /* ── NDA send ── */
   const sendNda = async () => {
     if (!form.draft_org_id || !form.org_email.trim()) return
@@ -1839,31 +1866,42 @@ export default function NewDealerPage() {
           <ChevronLeft size={16} /> Back
         </button>
 
-        {step < 9 ? (
-          <button
-            onClick={() => { void advance() }}
-            disabled={!canAdvance() || creatingDraft}
-            className="flex items-center gap-2 px-5 py-2.5 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {creatingDraft ? (
-              <><Loader2 size={15} className="animate-spin" /> Creating draft…</>
-            ) : (
-              <>Continue <ChevronRight size={16} /></>
-            )}
-          </button>
-        ) : (
-          <button
-            onClick={() => { void handleActivate() }}
-            disabled={activating}
-            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {activating ? (
-              <><Loader2 size={15} className="animate-spin" /> Activating…</>
-            ) : (
-              <><Zap size={16} /> Activate Dealer</>
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {(form.draft_org_id || form.org_name.trim()) && step < 9 && (
+            <button
+              onClick={() => { void saveAndExit() }}
+              disabled={creatingDraft}
+              className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save &amp; finish later
+            </button>
+          )}
+          {step < 9 ? (
+            <button
+              onClick={() => { void advance() }}
+              disabled={!canAdvance() || creatingDraft}
+              className="flex items-center gap-2 px-5 py-2.5 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {creatingDraft ? (
+                <><Loader2 size={15} className="animate-spin" /> Saving…</>
+              ) : (
+                <>Continue <ChevronRight size={16} /></>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => { void handleActivate() }}
+              disabled={activating}
+              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {activating ? (
+                <><Loader2 size={15} className="animate-spin" /> Activating…</>
+              ) : (
+                <><Zap size={16} /> Activate Dealer</>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
