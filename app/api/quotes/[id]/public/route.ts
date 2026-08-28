@@ -24,7 +24,7 @@ export async function GET(
       package_mode, selected_package, created_by_name, expiry_date,
       payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
       whats_included, payment_schedule_json, sow_text,
-      proposal_blocks, proposal_theme, site_vars,
+      proposal_blocks, proposal_theme, site_vars, partnership,
       agreement_type, agreement_html, attachments,
       signed_at, signer_name, signer_email,
       accepted_by_rep, accepted_by_rep_name,

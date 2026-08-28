@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { NexusDocShell } from '@/components/public/NexusDocShell'
 import ProposalView from '@/components/public/ProposalView'
+import { PartnershipProposal } from '@/components/public/PartnershipProposal'
 import type { PricedLine } from '@/lib/proposal-modules'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,12 +42,15 @@ export default function ProposalPage() {
   if (err) return center(err)
   if (!data) return center('Loading proposal…')
 
+  const isPartnership = data.quote?.quote_mode === 'partnership' || !!data.quote?.partnership
   return (
     <NexusDocShell
       meta={{ number: data.quote?.quote_number, validUntil: data.quote?.valid_until ?? data.quote?.expiry_date }}
       onDownload={() => window.print()}
     >
-      <ProposalView quote={data.quote} lineItems={data.lineItems ?? []} />
+      {isPartnership
+        ? <PartnershipProposal quote={data.quote} cfg={data.quote?.partnership ?? {}} />
+        : <ProposalView quote={data.quote} lineItems={data.lineItems ?? []} />}
     </NexusDocShell>
   )
 }

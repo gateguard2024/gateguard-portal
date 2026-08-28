@@ -131,6 +131,8 @@ export async function PATCH(
     'proposal_blocks', 'proposal_theme',
     // migration 184 known site variables (intake counts)
     'site_vars',
+    // migration 185 Property Partnership proposal config + mode
+    'partnership', 'quote_mode',
   ]
 
   const updates: Record<string, unknown> = {}
