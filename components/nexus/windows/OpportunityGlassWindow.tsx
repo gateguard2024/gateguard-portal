@@ -208,10 +208,10 @@ export function OpportunityGlassWindow({
         setMsg({ ok: false, text: j?.error || 'Could not create proposal.' })
         return
       }
-      const url = `/quotes/${qid}/build`
+      const url = `/quotes/${qid}/partnership`
       if (win) win.location.href = url
       else if (typeof window !== 'undefined') window.location.href = url   // popup blocked → same tab
-      setMsg({ ok: true, text: 'Proposal created ✓ — opening builder' })
+      setMsg({ ok: true, text: 'Proposal created ✓ — opening partnership editor' })
       await onRefresh?.()
     } catch {
       if (win) win.close()

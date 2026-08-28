@@ -39,7 +39,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   // customer-facing — no sidebar, no portal chrome, no auth wall
   const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin
     // Proposal builder + the public proposal/approve pages run full-screen, no sidebar.
-    || /^\/quotes\/[^/]+(\/proposal|\/approve|\/build)(\/|$)/.test(pathname)
+    || /^\/quotes\/[^/]+(\/proposal|\/approve|\/build|\/partnership)(\/|$)/.test(pathname)
   const isFullGlass = isAria || isDesignStudio || isDesignCanvas  // 100dvh flex-column, own internal scroll
 
   // Standalone: full-screen, no portal chrome
