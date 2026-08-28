@@ -78,8 +78,9 @@ export async function POST(req: NextRequest) {
   const { error: activateErr } = await supabase
     .from('organizations')
     .update({
-      is_active:    true,
-      onboarded_at: new Date().toISOString(),
+      is_active:            true,
+      onboarding_complete:  true,   // finishing the wizard completes onboarding
+      onboarded_at:         new Date().toISOString(),
     })
     .eq('id', org_id)
 

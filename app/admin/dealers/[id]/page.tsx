@@ -142,7 +142,7 @@ function TierPill({ tier, tierLabel }: { tier: string; tierLabel?: string | null
 
 function WOStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    open:        'bg-slate-100 text-slate-600',
+    open:        'bg-[rgba(255,255,255,0.06)] text-[#9fb4c9]',
     in_progress: 'bg-blue-100 text-blue-700',
     scheduled:   'bg-amber-100 text-amber-700',
     in_route:    'bg-orange-100 text-orange-700',
@@ -151,7 +151,7 @@ function WOStatusBadge({ status }: { status: string }) {
     cancelled:   'bg-rose-100 text-rose-700',
   }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[status] ?? 'bg-slate-100 text-slate-600'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[status] ?? 'bg-[rgba(255,255,255,0.06)] text-[#9fb4c9]'}`}>
       {status.replace('_', ' ')}
     </span>
   )
@@ -165,7 +165,7 @@ function CommissionStatusBadge({ status }: { status: string }) {
     held:     'bg-rose-100 text-rose-700',
   }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[status] ?? 'bg-slate-100 text-slate-600'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[status] ?? 'bg-[rgba(255,255,255,0.06)] text-[#9fb4c9]'}`}>
       {status}
     </span>
   )
@@ -176,9 +176,9 @@ function DocStatusBadge({ status }: { status: PartnerDoc['status'] }) {
     on_file:  { cls: 'bg-emerald-100 text-emerald-700', label: 'On File'  },
     pending:  { cls: 'bg-amber-100 text-amber-700',     label: 'Pending'  },
     expired:  { cls: 'bg-rose-100 text-rose-700',       label: 'Expired'  },
-    missing:  { cls: 'bg-slate-100 text-slate-500',     label: 'Missing'  },
+    missing:  { cls: 'bg-[rgba(255,255,255,0.06)] text-[#8fa4b8]',     label: 'Missing'  },
   }
-  const { cls, label } = map[status] ?? { cls: 'bg-slate-100 text-slate-400', label: status }
+  const { cls, label } = map[status] ?? { cls: 'bg-[rgba(255,255,255,0.06)] text-slate-400', label: status }
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}>
       {label}
@@ -221,7 +221,7 @@ function OnboardingStepper({ org }: { org: Org }) {
           <div key={step.key} className="flex items-center">
             <div className="flex flex-col items-center min-w-[100px]">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-400'
+                done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-[#243141] border-[rgba(95,184,224,0.18)] text-slate-400'
               }`}>
                 {done ? <CheckCircle2 size={14} /> : i + 1}
               </div>
@@ -411,20 +411,20 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
             const doc = docMap.get(cfg.type)
             const status = doc?.status ?? 'missing'
             return (
-              <div key={cfg.type} className="bg-card border border-border rounded-xl p-4 space-y-3">
+              <div key={cfg.type} className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <FileText size={14} className="text-muted-foreground shrink-0" />
-                      <span className="font-semibold text-sm text-foreground">{cfg.label}</span>
+                      <FileText size={14} className="text-[#9fb4c9] shrink-0" />
+                      <span className="font-semibold text-sm text-[#eaf2fb]">{cfg.label}</span>
                     </div>
                     {doc?.expires_at && (
-                      <div className="text-xs text-muted-foreground mt-0.5 ml-[22px]">
+                      <div className="text-xs text-[#9fb4c9] mt-0.5 ml-[22px]">
                         Expires: {fmtDate(doc.expires_at)}
                       </div>
                     )}
                     {doc?.uploaded_at && (
-                      <div className="text-xs text-muted-foreground mt-0.5 ml-[22px]">
+                      <div className="text-xs text-[#9fb4c9] mt-0.5 ml-[22px]">
                         Uploaded: {fmtDate(doc.uploaded_at)}
                       </div>
                     )}
@@ -433,7 +433,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                 </div>
 
                 {doc?.notes && (
-                  <p className="text-xs text-muted-foreground italic border-l-2 border-border pl-2">{doc.notes}</p>
+                  <p className="text-xs text-[#9fb4c9] italic border-l-2 border-[rgba(95,184,224,0.20)] pl-2">{doc.notes}</p>
                 )}
 
                 <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -442,7 +442,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                       href={doc.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(95,184,224,0.12)] transition-colors"
                     >
                       <ExternalLink size={11} /> View
                     </a>
@@ -475,7 +475,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                             <button
                               onClick={() => { void handleSendDoc(cfg.type === 'agreement' ? 'dealer_agreement' : cfg.type, sigEmail) }}
                               disabled={sendingDoc === cfg.type}
-                              className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 text-[10px] text-slate-500 hover:bg-slate-50 transition-colors"
+                              className="flex items-center gap-1 px-2 py-1 rounded border border-[rgba(95,184,224,0.18)] text-[10px] text-[#8fa4b8] hover:bg-[rgba(0,0,0,0.20)] transition-colors"
                             >
                               Resend
                             </button>
@@ -518,7 +518,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                   })()}
                   <button
                     onClick={() => openSlide(cfg.type)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(95,184,224,0.12)] transition-colors"
                   >
                     <Upload size={11} />
                     {doc?.url ? 'Update' : 'Manual upload'}
@@ -548,11 +548,11 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Status</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Status</label>
             <select
               value={slide.status}
               onChange={e => setSlide(s => ({ ...s, status: e.target.value as PartnerDoc['status'] }))}
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             >
               <option value="missing">Missing</option>
               <option value="pending">Pending Review</option>
@@ -561,34 +561,34 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Document URL</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Document URL</label>
             <input
               type="url"
               value={slide.url}
               onChange={e => setSlide(s => ({ ...s, url: e.target.value }))}
               placeholder="https://drive.google.com/…"
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           {slideCfg?.hasExpiry && (
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Expiry Date</label>
+              <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Expiry Date</label>
               <input
                 type="date"
                 value={slide.expires_at}
                 onChange={e => setSlide(s => ({ ...s, expires_at: e.target.value }))}
-                className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
               />
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Notes</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Notes</label>
             <textarea
               value={slide.notes}
               onChange={e => setSlide(s => ({ ...s, notes: e.target.value }))}
               rows={3}
               placeholder="Optional notes about this document…"
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background resize-none"
+              className="w-full px-3 py-2 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735] resize-none"
             />
           </div>
         </div>
@@ -619,7 +619,7 @@ interface OrgFeature {
 }
 
 const ACCESS_OPTIONS: { value: AccessLevel; label: string; color: string }[] = [
-  { value: 'none', label: 'None',  color: 'bg-slate-100 text-slate-500' },
+  { value: 'none', label: 'None',  color: 'bg-[rgba(255,255,255,0.06)] text-[#8fa4b8]' },
   { value: 'view', label: 'View',  color: 'bg-amber-100 text-amber-700' },
   { value: 'edit', label: 'Edit',  color: 'bg-emerald-100 text-emerald-700' },
 ]
@@ -632,7 +632,7 @@ function OrgAccessSelector({ value, onChange }: { value: AccessLevel; onChange: 
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
-            value === opt.value ? opt.color : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+            value === opt.value ? opt.color : 'bg-[rgba(0,0,0,0.20)] text-slate-400 hover:bg-[rgba(255,255,255,0.06)]'
           }`}
         >
           {opt.label}
@@ -755,7 +755,7 @@ function FeaturesTab({ org }: { org: Org }) {
           className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             dirty.size > 0
               ? 'bg-brand-400 text-white hover:bg-brand-500'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-[rgba(255,255,255,0.06)] text-slate-400 cursor-not-allowed'
           }`}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
@@ -765,15 +765,15 @@ function FeaturesTab({ org }: { org: Org }) {
 
       {/* Feature sections */}
       {Array.from(sections.entries()).map(([sectionKey, { label, items }]) => (
-        <div key={sectionKey} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={sectionKey} className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
           {/* Section header */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-slate-50">
-            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">{label}</h3>
+          <div className="flex items-center justify-between px-5 py-2.5 border-b border-[rgba(95,184,224,0.20)] bg-[rgba(0,0,0,0.20)]">
+            <h3 className="text-xs font-bold text-[#9fb4c9] uppercase tracking-wider">{label}</h3>
             <span className="text-[10px] text-slate-400">{items.length} feature{items.length !== 1 ? 's' : ''}</span>
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-1.5 border-b border-slate-100 bg-slate-50/50">
+          <div className="grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-1.5 border-b border-slate-100 bg-[rgba(0,0,0,0.20)]/50">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feature</span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Access Level</span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Tier Default</span>
@@ -791,13 +791,13 @@ function FeaturesTab({ org }: { org: Org }) {
             return (
               <div
                 key={f.key}
-                className={`grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-3 border-b border-slate-50 items-center hover:bg-slate-50/50 transition-colors ${
+                className={`grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-3 border-b border-slate-50 items-center hover:bg-[rgba(0,0,0,0.20)]/50 transition-colors ${
                   isDirty ? 'bg-amber-50/30' : ''
                 }`}
               >
                 {/* Label */}
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium text-foreground truncate">{f.label}</span>
+                  <span className="text-sm font-medium text-[#eaf2fb] truncate">{f.label}</span>
                   {f.is_overridden && !isDirty && (
                     <span className="text-[9px] font-bold bg-brand-50 text-brand-400 px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0">Override</span>
                   )}
@@ -836,13 +836,13 @@ function FeaturesTab({ org }: { org: Org }) {
                     value={expiresAt.slice(0, 10)}
                     onChange={e => markDirty(f.key, { expires_at: e.target.value || null })}
                     placeholder="No expiry"
-                    className="w-32 text-[11px] border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600"
+                    className="w-32 text-[11px] border border-[rgba(95,184,224,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
                   />
                   <input
                     value={notes}
                     onChange={e => markDirty(f.key, { notes: e.target.value || null })}
                     placeholder="Notes…"
-                    className="flex-1 text-[11px] border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600"
+                    className="flex-1 text-[11px] border border-[rgba(95,184,224,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
                   />
                 </div>
               </div>
@@ -958,6 +958,21 @@ export default function DealerDetailPage() {
     finally { setSavingStatus(false) }
   }
 
+  const [completingOnboarding, setCompletingOnboarding] = useState(false)
+  const handleCompleteOnboarding = async () => {
+    if (!org) return
+    setCompletingOnboarding(true)
+    try {
+      await fetch(`/api/admin/dealers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboarding_complete: true }),
+      })
+      void load()
+    } catch (e) { console.error(e) }
+    finally { setCompletingOnboarding(false) }
+  }
+
   const handleCommissionAction = async (commId: string, status: string) => {
     setCommActionId(commId)
     try {
@@ -976,20 +991,20 @@ export default function DealerDetailPage() {
     {
       key: 'name',
       label: 'Property',
-      render: (_, row) => <span className="font-medium text-foreground">{row.name}</span>,
+      render: (_, row) => <span className="font-medium text-[#eaf2fb]">{row.name}</span>,
     },
     {
       key: 'unit_count',
       label: 'Units',
       align: 'right',
-      render: (_, row) => <span className="text-muted-foreground">{row.unit_count ?? '—'}</span>,
+      render: (_, row) => <span className="text-[#9fb4c9]">{row.unit_count ?? '—'}</span>,
     },
     {
       key: 'monthly_mrr',
       label: 'Monthly MRR',
       align: 'right',
       render: (_, row) => (
-        <span className="font-medium text-foreground">
+        <span className="font-medium text-[#eaf2fb]">
           {row.monthly_mrr ? fmtDollars(row.monthly_mrr) : '—'}
         </span>
       ),
@@ -1001,11 +1016,11 @@ export default function DealerDetailPage() {
         const s = row.status ?? 'active'
         const map: Record<string, string> = {
           active:   'bg-emerald-100 text-emerald-700',
-          inactive: 'bg-slate-100 text-slate-500',
+          inactive: 'bg-[rgba(255,255,255,0.06)] text-[#8fa4b8]',
           pending:  'bg-amber-100 text-amber-700',
         }
         return (
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[s] ?? 'bg-slate-100 text-slate-600'}`}>
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${map[s] ?? 'bg-[rgba(255,255,255,0.06)] text-[#9fb4c9]'}`}>
             {s}
           </span>
         )
@@ -1014,12 +1029,12 @@ export default function DealerDetailPage() {
     {
       key: 'last_wo_date',
       label: 'Last WO',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.last_wo_date)}</span>,
+      render: (_, row) => <span className="text-[#9fb4c9] text-xs">{fmtDate(row.last_wo_date)}</span>,
     },
     {
       key: 'contract_end_date',
       label: 'Contract End',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.contract_end_date)}</span>,
+      render: (_, row) => <span className="text-[#9fb4c9] text-xs">{fmtDate(row.contract_end_date)}</span>,
     },
   ]
 
@@ -1036,7 +1051,7 @@ export default function DealerDetailPage() {
     {
       key: 'title',
       label: 'Title',
-      render: (_, row) => <span className="font-medium text-foreground">{row.title}</span>,
+      render: (_, row) => <span className="font-medium text-[#eaf2fb]">{row.title}</span>,
     },
     {
       key: 'status',
@@ -1047,20 +1062,20 @@ export default function DealerDetailPage() {
       key: 'priority',
       label: 'Priority',
       render: (_, row) => {
-        if (!row.priority) return <span className="text-muted-foreground">—</span>
-        const map: Record<string, string> = { high: 'text-rose-600', medium: 'text-amber-600', low: 'text-slate-500' }
-        return <span className={`text-xs font-semibold capitalize ${map[row.priority] ?? 'text-slate-500'}`}>{row.priority}</span>
+        if (!row.priority) return <span className="text-[#9fb4c9]">—</span>
+        const map: Record<string, string> = { high: 'text-rose-600', medium: 'text-amber-600', low: 'text-[#8fa4b8]' }
+        return <span className={`text-xs font-semibold capitalize ${map[row.priority] ?? 'text-[#8fa4b8]'}`}>{row.priority}</span>
       },
     },
     {
       key: 'scheduled_date',
       label: 'Scheduled',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.scheduled_date)}</span>,
+      render: (_, row) => <span className="text-[#9fb4c9] text-xs">{fmtDate(row.scheduled_date)}</span>,
     },
     {
       key: 'tech_name',
       label: 'Tech',
-      render: (_, row) => <span className="text-muted-foreground">{row.tech_name ?? '—'}</span>,
+      render: (_, row) => <span className="text-[#9fb4c9]">{row.tech_name ?? '—'}</span>,
     },
   ]
 
@@ -1069,13 +1084,13 @@ export default function DealerDetailPage() {
       key: 'pay_period',
       label: 'Period',
       sortable: true,
-      render: (_, row) => <span className="font-mono text-xs text-foreground">{row.pay_period}</span>,
+      render: (_, row) => <span className="font-mono text-xs text-[#eaf2fb]">{row.pay_period}</span>,
     },
     {
       key: 'rep_id',
       label: 'Rep',
       render: (_, row) => (
-        <span className="text-foreground">
+        <span className="text-[#eaf2fb]">
           {row.sales_reps ? `${row.sales_reps.first_name} ${row.sales_reps.last_name}`.trim() : '—'}
         </span>
       ),
@@ -1085,7 +1100,7 @@ export default function DealerDetailPage() {
       label: 'Amount',
       sortable: true,
       align: 'right',
-      render: (_, row) => <span className="font-semibold text-foreground">{fmtMoney(row.amount_cents)}</span>,
+      render: (_, row) => <span className="font-semibold text-[#eaf2fb]">{fmtMoney(row.amount_cents)}</span>,
     },
     {
       key: 'status',
@@ -1096,7 +1111,7 @@ export default function DealerDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-[#1b2735]">
         <TopBar title="Partner Detail" subtitle="Loading…" />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 size={24} className="animate-spin text-brand-400" />
@@ -1107,12 +1122,12 @@ export default function DealerDetailPage() {
 
   if (!org) {
     return (
-      <div className="flex flex-col min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-[#1b2735]">
         <TopBar title="Partner Not Found" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <AlertTriangle size={40} className="mx-auto text-amber-400 mb-3" />
-            <p className="font-semibold text-foreground">Partner not found</p>
+            <p className="font-semibold text-[#eaf2fb]">Partner not found</p>
             <Link href="/admin/dealers" className="text-brand-400 text-sm mt-2 inline-block hover:underline">
               ← Back to Partner Network
             </Link>
@@ -1126,7 +1141,7 @@ export default function DealerDetailPage() {
   const TierIcon = tierCfg?.icon ?? Building2
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen" style={{ background: 'linear-gradient(180deg, #101b2e 0%, #0b1322 60%, #080f1c 100%)' }}>
       <TopBar
         title={org.name}
         subtitle={tierCfg?.label ?? org.org_tier}
@@ -1134,7 +1149,7 @@ export default function DealerDetailPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-accent transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium hover:bg-[rgba(95,184,224,0.12)] transition-colors"
             >
               <Edit2 size={13} /> Edit
             </button>
@@ -1163,12 +1178,12 @@ export default function DealerDetailPage() {
       <div className="flex-1 p-6 space-y-6 max-w-screen-xl mx-auto w-full">
 
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/admin/dealers" className="hover:text-foreground flex items-center gap-1">
+        <div className="flex items-center gap-2 text-sm text-[#9fb4c9]">
+          <Link href="/admin/dealers" className="hover:text-[#eaf2fb] flex items-center gap-1">
             <ChevronLeft size={14} /> Partner Network
           </Link>
           <span>/</span>
-          <span className="text-foreground font-medium">{org.name}</span>
+          <span className="text-[#eaf2fb] font-medium">{org.name}</span>
         </div>
 
         {/* Onboarding incomplete banner */}
@@ -1181,6 +1196,14 @@ export default function DealerDetailPage() {
                 This dealer was created but the onboarding wizard was not finished. Resume to complete setup.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleCompleteOnboarding}
+              disabled={completingOnboarding}
+              className="shrink-0 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50"
+            >
+              {completingOnboarding ? 'Marking…' : 'Mark complete'}
+            </button>
             <Link
               href={`/admin/dealers/new?resume=${org.id}`}
               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors"
@@ -1191,21 +1214,21 @@ export default function DealerDetailPage() {
         )}
 
         {/* Header card */}
-        <div className="bg-card border border-border rounded-xl p-6">
+        <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-6">
           <div className="flex items-start gap-4">
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${tierCfg?.bg ?? 'bg-slate-100'}`}>
-              <TierIcon size={24} className={tierCfg?.color ?? 'text-slate-500'} />
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${tierCfg?.bg ?? 'bg-[rgba(255,255,255,0.06)]'}`}>
+              <TierIcon size={24} className={tierCfg?.color ?? 'text-[#8fa4b8]'} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-xl font-bold text-foreground">{org.name}</h1>
+                <h1 className="text-xl font-bold text-[#eaf2fb]">{org.name}</h1>
                 <TierPill tier={org.org_tier} tierLabel={org.tier_label} />
                 <span className={`inline-flex items-center gap-1 text-xs font-medium ${org.is_active ? 'text-emerald-600' : 'text-rose-600'}`}>
                   <span className={`w-1.5 h-1.5 rounded-full inline-block ${org.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                   {org.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-[#9fb4c9]">
                 {org.email && (
                   <span className="flex items-center gap-1.5">
                     <Mail size={13} /> {org.email}
@@ -1229,8 +1252,8 @@ export default function DealerDetailPage() {
               </div>
               {/* Primary contact */}
               {(org.contact_name || org.contact_email) && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground border-t border-border/50 pt-2">
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Primary Contact:</span>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-[#9fb4c9] border-t border-[rgba(95,184,224,0.20)]/50 pt-2">
+                  <span className="text-xs text-[#9fb4c9] font-medium uppercase tracking-wide">Primary Contact:</span>
                   {org.contact_name && <span>{org.contact_name}</span>}
                   {org.contact_email && (
                     <span className="flex items-center gap-1.5">
@@ -1249,29 +1272,29 @@ export default function DealerDetailPage() {
 
           {/* Quick stats */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-border">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-[rgba(95,184,224,0.20)]">
               <div>
-                <div className="text-2xl font-bold text-foreground">{stats.sites_count}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Properties Served</div>
+                <div className="text-2xl font-bold text-[#eaf2fb]">{stats.sites_count}</div>
+                <div className="text-xs text-[#9fb4c9] mt-0.5">Properties Served</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{stats.active_wos_count}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Active WOs</div>
+                <div className="text-2xl font-bold text-[#eaf2fb]">{stats.active_wos_count}</div>
+                <div className="text-xs text-[#9fb4c9] mt-0.5">Active WOs</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{fmtDollars(stats.monthly_revenue)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Monthly Revenue</div>
+                <div className="text-2xl font-bold text-[#eaf2fb]">{fmtDollars(stats.monthly_revenue)}</div>
+                <div className="text-xs text-[#9fb4c9] mt-0.5">Monthly Revenue</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{fmtMoney(stats.total_commission)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Commission Paid</div>
+                <div className="text-2xl font-bold text-[#eaf2fb]">{fmtMoney(stats.total_commission)}</div>
+                <div className="text-xs text-[#9fb4c9] mt-0.5">Commission Paid</div>
               </div>
             </div>
           )}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 border-b border-border overflow-x-auto">
+        <div className="flex gap-0.5 border-b border-[rgba(95,184,224,0.20)] overflow-x-auto">
           {(Object.keys(TAB_LABELS) as TabKey[]).map(t => (
             <button
               key={t}
@@ -1279,7 +1302,7 @@ export default function DealerDetailPage() {
               className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 tab === t
                   ? 'border-brand-400 text-brand-400'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  : 'border-transparent text-[#9fb4c9] hover:text-[#eaf2fb]'
               }`}
             >
               {TAB_LABELS[t]}
@@ -1291,57 +1314,57 @@ export default function DealerDetailPage() {
         {tab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Info card */}
-            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Organization Info</h3>
+            <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-[#eaf2fb]">Organization Info</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tier</span>
+                  <span className="text-[#9fb4c9]">Tier</span>
                   <TierPill tier={org.org_tier} tierLabel={org.tier_label} />
                 </div>
                 {org.license_number && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">License #</span>
-                    <span className="font-mono text-xs text-foreground">{org.license_number}</span>
+                    <span className="text-[#9fb4c9]">License #</span>
+                    <span className="font-mono text-xs text-[#eaf2fb]">{org.license_number}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Technicians</span>
-                  <span className="text-foreground font-medium">{org.tech_count}</span>
+                  <span className="text-[#9fb4c9]">Technicians</span>
+                  <span className="text-[#eaf2fb] font-medium">{org.tech_count}</span>
                 </div>
                 {org.service_area_states?.length > 0 && (
                   <div className="flex justify-between items-start gap-2">
-                    <span className="text-muted-foreground shrink-0">Service Area</span>
+                    <span className="text-[#9fb4c9] shrink-0">Service Area</span>
                     <div className="flex flex-wrap gap-1 justify-end">
                       {org.service_area_states.map(s => (
-                        <span key={s} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{s}</span>
+                        <span key={s} className="text-xs bg-[rgba(255,255,255,0.06)] text-[#9fb4c9] px-1.5 py-0.5 rounded font-semibold">{s}</span>
                       ))}
                     </div>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Onboarded</span>
-                  <span className="text-foreground">{fmtDate(org.onboarded_at)}</span>
+                  <span className="text-[#9fb4c9]">Onboarded</span>
+                  <span className="text-[#eaf2fb]">{fmtDate(org.onboarded_at)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Created</span>
-                  <span className="text-foreground">{fmtDate(org.created_at)}</span>
+                  <span className="text-[#9fb4c9]">Created</span>
+                  <span className="text-[#eaf2fb]">{fmtDate(org.created_at)}</span>
                 </div>
               </div>
 
               {/* Commission config */}
               {commConfig && (
-                <div className="pt-4 border-t border-border space-y-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Config</h4>
+                <div className="pt-4 border-t border-[rgba(95,184,224,0.20)] space-y-2">
+                  <h4 className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide">Commission Config</h4>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Sales Partner Rate</span>
-                    <span className="font-mono font-semibold text-foreground">${commConfig.sales_partner_rate.toFixed(2)}/unit</span>
+                    <span className="text-[#9fb4c9]">Sales Partner Rate</span>
+                    <span className="font-mono font-semibold text-[#eaf2fb]">${commConfig.sales_partner_rate.toFixed(2)}/unit</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Service Dealer Rate</span>
-                    <span className="font-mono font-semibold text-foreground">${commConfig.service_dealer_rate.toFixed(2)}/unit</span>
+                    <span className="text-[#9fb4c9]">Service Dealer Rate</span>
+                    <span className="font-mono font-semibold text-[#eaf2fb]">${commConfig.service_dealer_rate.toFixed(2)}/unit</span>
                   </div>
                   {commConfig.notes && (
-                    <p className="text-xs text-muted-foreground italic mt-2">{commConfig.notes}</p>
+                    <p className="text-xs text-[#9fb4c9] italic mt-2">{commConfig.notes}</p>
                   )}
                   {commConfig._default && (
                     <p className="text-xs text-amber-600 mt-1">Using default rates — no custom config set</p>
@@ -1351,25 +1374,25 @@ export default function DealerDetailPage() {
             </div>
 
             {/* Onboarding stepper */}
-            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Onboarding Progress</h3>
+            <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-[#eaf2fb]">Onboarding Progress</h3>
               <OnboardingStepper org={org} />
 
               {/* Recent activity */}
-              <div className="pt-4 border-t border-border space-y-2">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recent Activity</h4>
+              <div className="pt-4 border-t border-[rgba(95,184,224,0.20)] space-y-2">
+                <h4 className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide">Recent Activity</h4>
                 {wos.slice(0, 5).length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2">No activity yet</p>
+                  <p className="text-xs text-[#9fb4c9] py-2">No activity yet</p>
                 ) : (
                   wos.slice(0, 5).map(wo => (
-                    <div key={wo.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/50 last:border-0">
+                    <div key={wo.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-[rgba(95,184,224,0.20)]/50 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Wrench size={12} className="text-muted-foreground shrink-0" />
-                        <span className="text-sm text-foreground truncate">{wo.title}</span>
+                        <Wrench size={12} className="text-[#9fb4c9] shrink-0" />
+                        <span className="text-sm text-[#eaf2fb] truncate">{wo.title}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <WOStatusBadge status={wo.status} />
-                        <span className="text-xs text-muted-foreground">{fmtDate(wo.scheduled_date)}</span>
+                        <span className="text-xs text-[#9fb4c9]">{fmtDate(wo.scheduled_date)}</span>
                       </div>
                     </div>
                   ))
@@ -1381,12 +1404,12 @@ export default function DealerDetailPage() {
 
         {/* ── Properties ─────────────────────────────────────── */}
         {tab === 'properties' && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
               <Building2 size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Properties Served</h2>
               {sites.length > 0 && (
-                <span className="ml-auto text-[10px] text-muted-foreground">{sites.length} sites</span>
+                <span className="ml-auto text-[10px] text-[#9fb4c9]">{sites.length} sites</span>
               )}
             </div>
             <DataTable<Site>
@@ -1398,7 +1421,7 @@ export default function DealerDetailPage() {
               onRowClick={row => router.push(`/sites/${row.id}`)}
               emptyState={
                 <EmptyState
-                  icon={<Building2 size={32} className="text-muted-foreground" />}
+                  icon={<Building2 size={32} className="text-[#9fb4c9]" />}
                   title="No properties yet"
                   description="Properties linked to this partner will appear here"
                 />
@@ -1409,12 +1432,12 @@ export default function DealerDetailPage() {
 
         {/* ── Work Orders ────────────────────────────────────── */}
         {tab === 'work_orders' && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
               <Wrench size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Work Orders</h2>
               {wos.length > 0 && (
-                <span className="ml-auto text-[10px] text-muted-foreground">{wos.length} recent WOs</span>
+                <span className="ml-auto text-[10px] text-[#9fb4c9]">{wos.length} recent WOs</span>
               )}
             </div>
             <DataTable<WorkOrder>
@@ -1426,7 +1449,7 @@ export default function DealerDetailPage() {
               onRowClick={row => router.push(`/maintenance/${row.id}`)}
               emptyState={
                 <EmptyState
-                  icon={<Wrench size={32} className="text-muted-foreground" />}
+                  icon={<Wrench size={32} className="text-[#9fb4c9]" />}
                   title="No work orders"
                   description="Work orders for this partner will appear here"
                 />
@@ -1437,8 +1460,8 @@ export default function DealerDetailPage() {
 
         {/* ── Commission History ──────────────────────────────── */}
         {tab === 'commissions' && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
               <DollarSign size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Commission History</h2>
             </div>
@@ -1481,7 +1504,7 @@ export default function DealerDetailPage() {
                     <button
                       onClick={() => { void handleCommissionAction(row.id, 'approved') }}
                       disabled={commActionId === row.id}
-                      className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                      className="px-2.5 py-1 rounded-lg bg-[rgba(0,0,0,0.20)] text-slate-700 text-xs font-semibold border border-[rgba(95,184,224,0.18)] hover:bg-[rgba(255,255,255,0.06)] transition-colors disabled:opacity-50"
                     >
                       Unhold
                     </button>
@@ -1490,7 +1513,7 @@ export default function DealerDetailPage() {
               )}
               emptyState={
                 <EmptyState
-                  icon={<DollarSign size={32} className="text-muted-foreground" />}
+                  icon={<DollarSign size={32} className="text-[#9fb4c9]" />}
                   title="No commission records"
                   description="Commission payouts for this partner will appear here"
                 />
@@ -1511,21 +1534,21 @@ export default function DealerDetailPage() {
 
         {/* ── Reps ────────────────────────────────────────────── */}
         {tab === 'reps' && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
               <div className="flex items-center gap-2">
                 <Users size={15} className="text-brand-400" />
                 <h2 className="text-sm font-semibold">Sales Reps</h2>
               </div>
               <Link
                 href={`/reps?org_id=${org.id}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-accent transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium hover:bg-[rgba(95,184,224,0.12)] transition-colors"
               >
                 View in Reps <ExternalLink size={11} />
               </Link>
             </div>
             <EmptyState
-              icon={<Users size={32} className="text-muted-foreground" />}
+              icon={<Users size={32} className="text-[#9fb4c9]" />}
               title="No reps linked"
               description="Sales reps assigned to this partner will appear here"
               action={{ label: 'Manage Reps', onClick: () => router.push('/reps') }}
@@ -1535,13 +1558,13 @@ export default function DealerDetailPage() {
 
         {/* ── Activity Log ────────────────────────────────────── */}
         {tab === 'activity' && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
               <Activity size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Activity Log</h2>
             </div>
             <EmptyState
-              icon={<Activity size={32} className="text-muted-foreground" />}
+              icon={<Activity size={32} className="text-[#9fb4c9]" />}
               title="No activity recorded"
               description="Onboarding steps, document uploads, and status changes will appear here"
             />
@@ -1567,71 +1590,71 @@ export default function DealerDetailPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Organization Name</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Organization Name</label>
             <input
               value={editName}
               onChange={e => setEditName(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Org Email</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Org Email</label>
             <input
               type="email"
               value={editEmail}
               onChange={e => setEditEmail(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Org Phone</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Org Phone</label>
             <input
               type="tel"
               value={editPhone}
               onChange={e => setEditPhone(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Website</label>
+            <label className="block text-xs font-semibold text-[#9fb4c9] mb-1.5 uppercase tracking-wide">Website</label>
             <input
               type="url"
               value={editWebsite}
               onChange={e => setEditWebsite(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
 
-          <div className="pt-2 border-t border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Primary Contact</p>
+          <div className="pt-2 border-t border-[rgba(95,184,224,0.20)]">
+            <p className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide mb-3">Primary Contact</p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Name</label>
+                <label className="block text-xs font-medium text-[#9fb4c9] mb-1">Name</label>
                 <input
                   value={editContactName}
                   onChange={e => setEditContactName(e.target.value)}
                   placeholder="Contact name"
-                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                <label className="block text-xs font-medium text-[#9fb4c9] mb-1">Email</label>
                 <input
                   type="email"
                   value={editContactEmail}
                   onChange={e => setEditContactEmail(e.target.value)}
                   placeholder="contact@example.com"
-                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
+                <label className="block text-xs font-medium text-[#9fb4c9] mb-1">Phone</label>
                 <input
                   type="tel"
                   value={editContactPhone}
                   onChange={e => setEditContactPhone(e.target.value)}
                   placeholder="+1 (555) 000-0000"
-                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
             </div>

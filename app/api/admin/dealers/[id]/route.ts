@@ -172,7 +172,7 @@ export async function PATCH(
 
   // Allowed fields only
   const allowed = [
-    'is_active', 'name', 'email', 'phone', 'website',
+    'is_active', 'onboarding_complete', 'name', 'email', 'phone', 'website',
     'address', 'city', 'state', 'zip', 'license_number', 'tech_count',
     'partner_docs', 'contact_name', 'contact_email', 'contact_phone',
   ]

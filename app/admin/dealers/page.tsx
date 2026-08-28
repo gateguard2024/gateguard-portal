@@ -83,7 +83,7 @@ function ComplianceDots({ docs }: { docs: PartnerDoc[] | null | undefined }) {
         return (
           <div key={type} className="flex flex-col items-center gap-0.5" title={`${abbr}: ${status ?? 'no data'}`}>
             <div className={`w-2 h-2 rounded-full ${dotColor}`} />
-            <span className="text-[8px] text-slate-400 font-medium leading-none">{abbr}</span>
+            <span className="text-[8px] text-[#6f8299] font-medium leading-none">{abbr}</span>
           </div>
         )
       })}
@@ -94,7 +94,7 @@ function ComplianceDots({ docs }: { docs: PartnerDoc[] | null | undefined }) {
 /* ─── Tier pill ──────────────────────────────────────────── */
 function TierPill({ tier }: { tier: string }) {
   const cfg = TIER_CONFIG[tier]
-  if (!cfg) return <span className="text-xs text-slate-400">{tier}</span>
+  if (!cfg) return <span className="text-xs text-[#6f8299]">{tier}</span>
   const Icon = cfg.icon
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
@@ -165,16 +165,17 @@ export default function PartnerNetworkPage() {
   }
 
   return (
+    <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #101b2e 0%, #0b1322 60%, #080f1c 100%)' }}>
     <div className="p-6 max-w-screen-2xl mx-auto space-y-6">
 
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#eaf2fb] flex items-center gap-2">
             <Users size={24} className="text-brand-400" />
             Partner Network
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-[#8fa4b8] mt-0.5">
             Master Agents, MSOs, System Operators, and Servicing / Install / Sales Partners
           </p>
         </div>
@@ -188,18 +189,18 @@ export default function PartnerNetworkPage() {
 
       {/* ── Search ──────────────────────────────────────────── */}
       <div className="relative max-w-md">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f8299] pointer-events-none" />
         <input
           type="text"
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search by name, contact, email…"
-          className="w-full pl-9 pr-4 py-2 h-9 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+          className="w-full pl-9 pr-4 py-2 h-9 border border-[rgba(95,184,224,0.18)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#243141]"
         />
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────── */}
-      <div className="flex gap-0.5 border-b border-slate-200 overflow-x-auto">
+      <div className="flex gap-0.5 border-b border-[rgba(95,184,224,0.18)] overflow-x-auto">
         {TABS.map(tab => (
           <button
             key={tab.key}
@@ -207,14 +208,14 @@ export default function PartnerNetworkPage() {
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
               activeTab === tab.key
                 ? 'border-brand-400 text-brand-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                : 'border-transparent text-[#8fa4b8] hover:text-[#dbe7f2]'
             }`}
           >
             {tab.label}
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
               activeTab === tab.key
                 ? 'bg-brand-100 text-brand-600'
-                : 'bg-slate-100 text-slate-500'
+                : 'bg-[rgba(255,255,255,0.06)] text-[#8fa4b8]'
             }`}>
               {counts[tab.key] ?? 0}
             </span>
@@ -223,16 +224,16 @@ export default function PartnerNetworkPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-[#243141] rounded-xl border border-[rgba(95,184,224,0.18)] overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400">
+          <div className="flex items-center justify-center py-16 text-[#6f8299]">
             <div className="animate-spin w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
             Loading partners…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-16 text-[#6f8299]">
             <Users size={36} className="mb-3 opacity-25" />
-            <p className="font-medium text-slate-600">No partners found</p>
+            <p className="font-medium text-[#9fb4c9]">No partners found</p>
             <p className="text-sm mt-1">
               {q ? 'Try a different search term' : 'Use the onboarding wizard to add your first partner'}
             </p>
@@ -248,14 +249,14 @@ export default function PartnerNetworkPage() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Organization</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Partner Type</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Contact</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Service Area</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Sites</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Compliance</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Onboarded</th>
+              <tr className="border-b border-[rgba(95,184,224,0.18)] bg-[rgba(0,0,0,0.20)]">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Organization</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Partner Type</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Contact</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Service Area</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Sites</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Compliance</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Onboarded</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -266,19 +267,19 @@ export default function PartnerNetworkPage() {
                 return (
                   <tr
                     key={org.id}
-                    className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                    className="hover:bg-[rgba(0,0,0,0.20)] group transition-colors cursor-pointer"
                     onClick={() => router.push(`/admin/dealers/${org.id}`)}
                   >
                     {/* Organization */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg?.bg ?? 'bg-slate-100'}`}>
-                          <OrgIcon size={14} className={cfg?.color ?? 'text-slate-500'} />
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg?.bg ?? 'bg-[rgba(255,255,255,0.06)]'}`}>
+                          <OrgIcon size={14} className={cfg?.color ?? 'text-[#8fa4b8]'} />
                         </div>
                         <div className="min-w-0">
-                          <div className="font-semibold text-slate-900 truncate max-w-[200px]">{org.name}</div>
+                          <div className="font-semibold text-[#eaf2fb] truncate max-w-[200px]">{org.name}</div>
                           {org.license_number && (
-                            <div className="text-[11px] text-slate-400">
+                            <div className="text-[11px] text-[#6f8299]">
                               Lic: {org.license_number}
                             </div>
                           )}
@@ -299,16 +300,16 @@ export default function PartnerNetworkPage() {
                       {org.contact_name || org.contact_email ? (
                         <div className="space-y-0.5">
                           {org.contact_name && (
-                            <div className="text-sm font-medium text-slate-700">{org.contact_name}</div>
+                            <div className="text-sm font-medium text-[#dbe7f2]">{org.contact_name}</div>
                           )}
                           {org.contact_email && (
-                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <div className="flex items-center gap-1 text-xs text-[#6f8299]">
                               <Mail size={10} />
                               <span className="truncate max-w-[160px]">{org.contact_email}</span>
                             </div>
                           )}
                           {org.contact_phone && (
-                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <div className="flex items-center gap-1 text-xs text-[#6f8299]">
                               <Phone size={10} />
                               {org.contact_phone}
                             </div>
@@ -324,10 +325,10 @@ export default function PartnerNetworkPage() {
                       {org.service_area_states?.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {org.service_area_states.slice(0, 4).map(s => (
-                            <span key={s} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{s}</span>
+                            <span key={s} className="text-xs bg-[rgba(255,255,255,0.06)] text-[#9fb4c9] px-1.5 py-0.5 rounded font-semibold">{s}</span>
                           ))}
                           {org.service_area_states.length > 4 && (
-                            <span className="text-xs text-slate-400">+{org.service_area_states.length - 4}</span>
+                            <span className="text-xs text-[#6f8299]">+{org.service_area_states.length - 4}</span>
                           )}
                         </div>
                       ) : (
@@ -336,7 +337,7 @@ export default function PartnerNetworkPage() {
                     </td>
 
                     {/* Sites */}
-                    <td className="px-4 py-3.5 text-slate-500 text-sm">
+                    <td className="px-4 py-3.5 text-[#8fa4b8] text-sm">
                       <span className="text-slate-300">—</span>
                     </td>
 
@@ -346,14 +347,14 @@ export default function PartnerNetworkPage() {
                     </td>
 
                     {/* Onboarded */}
-                    <td className="px-4 py-3.5 text-xs text-slate-500">
+                    <td className="px-4 py-3.5 text-xs text-[#8fa4b8]">
                       {org.onboarded_at ? (
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />
                           {fmtDate(org.onboarded_at)}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-slate-400">
+                        <div className="flex items-center gap-1.5 text-[#6f8299]">
                           <Clock size={11} className="shrink-0" />
                           Pending
                         </div>
@@ -382,6 +383,7 @@ export default function PartnerNetworkPage() {
         )}
       </div>
 
+    </div>
     </div>
   )
 }
