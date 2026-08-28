@@ -463,8 +463,12 @@ export function OpportunityGlassWindow({
     site_contact_name: '', site_contact_title: '', site_contact_phone: '', site_contact_email: '',
     account_name: '', management_co: '', property_address: '', property_city: '', property_state: '', units: '', next_step: '', notes: '',
   })
+  // Property edits shouldn't re-ask for a contact — People (opportunity_contacts)
+  // owns contacts. 'property' mode hides the legacy site-contact block.
+  const [editMode, setEditMode] = useState<'all' | 'property'>('all')
 
-  function openEdit() {
+  function openEdit(mode: 'all' | 'property' = 'all') {
+    setEditMode(mode)
     setF({
       site_contact_name:  String(show('site_contact_name', contact ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') : '') ?? ''),
       site_contact_title: String(show('site_contact_title', contact?.title) ?? ''),
@@ -753,10 +757,11 @@ export function OpportunityGlassWindow({
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
             <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(95,184,224,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
               <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(95,184,224,0.18)' }}>
-                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: '#9FD8EC' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
+                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: '#9FD8EC' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{editMode === 'property' ? 'Property details' : 'Contact & property details'}</h3></div>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
               </div>
               <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+                {editMode !== 'property' && (<>
                 <div className="mb-2 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Contact</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input value={f.site_contact_name} onChange={e => setF({ ...f, site_contact_name: e.target.value })} placeholder="Contact name" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
@@ -764,6 +769,10 @@ export function OpportunityGlassWindow({
                   <input value={f.site_contact_phone} onChange={e => setF({ ...f, site_contact_phone: e.target.value })} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
                   <input value={f.site_contact_email} onChange={e => setF({ ...f, site_contact_email: e.target.value })} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
                 </div>
+                </>)}
+                {editMode === 'property' && (
+                  <div className="mb-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.24)', color: '#9FD8EC' }}>Contacts are managed in the People section above — add or edit them there.</div>
+                )}
                 <div className="mb-2 mt-4 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Account &amp; property</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input value={f.account_name} onChange={e => setF({ ...f, account_name: e.target.value })} placeholder="Account / company" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
@@ -917,7 +926,7 @@ export function OpportunityGlassWindow({
 
           <Section title="People">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit details</button>
+              <button type="button" onClick={() => openEdit('all')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit details</button>
             </div>
             {show('site_contact_name') ? (
               <MiniRow
@@ -976,7 +985,7 @@ export function OpportunityGlassWindow({
 
           <Section title="Property">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit property</button>
+              <button type="button" onClick={() => openEdit('property')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit property</button>
             </div>
             {(show('property_address') || property) ? (
               <MiniRow
@@ -990,7 +999,7 @@ export function OpportunityGlassWindow({
                 meta={show('units') ? `${show('units')} units` : property?.unit_count ? `${property.unit_count} units` : undefined}
               />
             ) : (
-              <button type="button" onClick={openEdit} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px dashed rgba(95,184,224,0.35)', color: '#9FD8EC' }}>
+              <button type="button" onClick={() => openEdit('property')} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px dashed rgba(95,184,224,0.35)', color: '#9FD8EC' }}>
                 <div className="text-xs font-semibold">+ Add property details</div>
                 <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Address, city, state, and units</div>
               </button>
