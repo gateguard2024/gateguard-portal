@@ -21,6 +21,8 @@ type OpportunityGlassData = {
   quote?: AnyRecord | null
   nextBestActions?: Array<{ title: string; subtitle: string; action: string }>
   canReassign?: boolean
+  canAssignDealer?: boolean
+  dealerOrg?: { id: string; name: string } | null
 }
 
 function val(v: unknown, fallback = 'Not added yet') {
@@ -409,6 +411,39 @@ export function OpportunityGlassWindow({
   }
   async function openReassign() { setAssignOpen(true); await loadAssignees() }
 
+  // ── Dealer assignment (which dealer org owns this deal) ──────────────────────
+  const canAssignDealer = Boolean(data.canAssignDealer)
+  const currentDealer = data.dealerOrg as { id: string; name: string } | null | undefined
+  const [dealerName, setDealerName] = useState<string | null>(currentDealer?.name ?? null)
+  useEffect(() => { setDealerName(currentDealer?.name ?? null) }, [currentDealer?.name])
+  const [dealerOpen, setDealerOpen] = useState(false)
+  const [dealerLoading, setDealerLoading] = useState(false)
+  const [dealerOrgs, setDealerOrgs] = useState<Array<{ id: string; name: string; tier_label?: string }>>([])
+  async function loadDealers() {
+    if (dealerOrgs.length > 0) return
+    setDealerLoading(true)
+    try {
+      const r = await fetch('/api/crm/assignable-orgs')
+      const j = await r.json().catch(() => ({}))
+      const list: AnyRecord[] = Array.isArray(j?.orgs) ? j.orgs : []
+      setDealerOrgs(list.map(o => ({ id: String(o.id ?? ''), name: String(o.name ?? 'Unnamed'), tier_label: o.tier_label as string | undefined })).filter(o => o.id))
+    } catch { /* ignore */ } finally { setDealerLoading(false) }
+  }
+  async function openDealerPicker() { setDealerOpen(true); await loadDealers() }
+  async function doAssignDealer(orgId: string, name: string) {
+    const oppId = opp.id as string | undefined
+    if (!oppId) return
+    setBusy('assign_dealer'); setMsg(null)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${oppId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'assign_dealer', dealer_org_id: orgId, dealer_name: name }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.success === false) throw new Error(j?.message ?? 'Could not assign dealer.')
+      setDealerName(name)
+      setMsg({ ok: true, text: j.message ?? 'Dealer assigned ✓' }); setDealerOpen(false)
+      await onRefresh?.()
+    } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not assign dealer.' }) } finally { setBusy(null) }
+  }
+
   // ── Managing admin (person who oversees the rep on this deal) ────────────────
   const [managerOpen, setManagerOpen] = useState(false)
   function openManager() { setManagerOpen(true); void loadAssignees() }
@@ -723,6 +758,31 @@ export function OpportunityGlassWindow({
       </div>
     )}
 
+    {/* Dealer picker — assign this deal to a dealer org in your network */}
+    {dealerOpen && (
+      <div onClick={() => setDealerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+          <div className="mb-1 flex items-center justify-between">
+            <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign to dealer</h4>
+            <button type="button" onClick={() => setDealerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+          </div>
+          <p className="mb-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Choose which dealer in your network owns this deal.</p>
+          {dealerLoading ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading dealers…</div>
+            : dealerOrgs.length === 0 ? <div className="py-3 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>No dealers available.</div>
+            : (
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                {dealerOrgs.map(o => (
+                  <button key={o.id} type="button" disabled={busy === 'assign_dealer'} onClick={() => doAssignDealer(o.id, o.name)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{o.name}{currentDealer?.id === o.id ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(52,211,153,0.9)' }}>· current</span> : null}</span>
+                    {o.tier_label ? <span className="text-[10px] uppercase" style={{ color: 'rgba(159,216,236,0.7)' }}>{o.tier_label}</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+      </div>
+    )}
+
     {/* Manager picker — org admins */}
     {managerOpen && (
       <div onClick={() => setManagerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
@@ -862,8 +922,16 @@ export function OpportunityGlassWindow({
           <MiniStat label="Updated"     value={fmtWhen(opp.updated_at ?? opp.created_at) || 'Unknown'} />
         </div>
 
-        {/* At-a-glance — assigned rep, manager, units, health (time-in-stage) + est win %. */}
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {/* At-a-glance — assigned dealer, rep, manager, units, health (time-in-stage) + est win %. */}
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-6">
+          {canAssignDealer ? (
+            <button type="button" onClick={openDealerPicker} title="Assign this deal to a dealer" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Dealer <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+              <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(dealerName, 'Assign')}</div>
+            </button>
+          ) : (
+            <MiniStat label="Dealer" value={val(dealerName, 'Unassigned')} />
+          )}
           {canReassign ? (
             <button type="button" onClick={openReassign} title="Assign a rep / agent" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
               <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Rep / Agent <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, getProfileId, applyAssignedScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId, applyAssignedScope, isInScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -159,6 +159,18 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const mergedActivities = [...(activities as any[]), ...(crmActivities as any[])] // eslint-disable-line @typescript-eslint/no-explicit-any
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
 
+  // Which dealer org currently owns this deal (name for display in the window).
+  let dealerOrg: { id: string; name: string } | null = null
+  if (opportunity.dealer_org_id) {
+    const d = await safe(
+      supabase.from('organizations').select('id, name').eq('id', opportunity.dealer_org_id as string).single(),
+      null as { id: string; name: string } | null
+    )
+    dealerOrg = d
+  }
+  // Only tiers that can assign beyond themselves may re-home a deal to a dealer org.
+  const canAssignDealer = Boolean(user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer)
+
   return NextResponse.json({
     success: true,
     opportunity,
@@ -170,6 +182,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     todos,
     attachments,
     quote,
+    dealerOrg,
+    canAssignDealer,
     canReassign: user.role === 'admin' || user.isCorporate,
     nextBestActions: [
       { title: 'Edit Details',       subtitle: 'Fix contact, property, interests.',   action: 'update_details' },
@@ -384,6 +398,28 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: res.error.message }, { status: 500 })
     }
     return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo })
+  }
+
+  if (action === 'assign_dealer') {
+    // Re-home this opportunity to a dealer org (sets dealer_org_id). Only tiers
+    // that can assign beyond themselves may do this; the target must be inside
+    // the caller's own subtree (defense in depth — the picker is already scoped).
+    if (!(user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer)) {
+      return NextResponse.json({ success: false, message: 'You do not have permission to assign this deal to a dealer.' }, { status: 403 })
+    }
+    const dealerOrgId = clean(body.dealer_org_id)
+    const dealerName = clean(body.dealer_name)
+    if (!dealerOrgId) return NextResponse.json({ success: false, message: 'Choose a dealer to assign this deal to.' }, { status: 400 })
+    if (!isInScope(scope, dealerOrgId)) {
+      return NextResponse.json({ success: false, message: 'That dealer is outside your organization.' }, { status: 403 })
+    }
+    const { error } = await supabase.from('opportunities').update({
+      dealer_org_id: dealerOrgId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', oppId)
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    await supabase.from('crm_activities').insert({ dealer_org_id: dealerOrgId, created_by: profileId, type: 'note', subject: 'Deal assigned to dealer', body: `Assigned to ${dealerName || dealerOrgId}.`, opportunity_id: oppId })
+    return NextResponse.json({ success: true, message: `Deal assigned to ${dealerName || 'the selected dealer'}.` })
   }
 
   if (action === 'reassign_opp') {
