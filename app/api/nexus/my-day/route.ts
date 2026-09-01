@@ -29,6 +29,8 @@ type DayEvent = {
   time?: string | null
   starts_at?: string | null
   link?: string | null
+  overdue?: boolean
+  reason?: string | null
 }
 
 function ymd(date: Date): string {
@@ -181,6 +183,17 @@ export async function GET() {
         date: row.due_at ? String(row.due_at).split('T')[0] : today,
         time: row.due_at ? String(row.due_at).split('T')[1]?.slice(0, 5) : null,
         link: row.opportunity_id ? `/crm/opportunities/${row.opportunity_id}` : '/crm',
+      })),
+      // Overdue to-dos roll forward into today's schedule and keep appearing until done.
+      ...scopedOverdue.map(row => ({
+        id: `todo-${row.id}`,
+        type: 'todo',
+        title: row.title ?? 'Overdue To-Do',
+        date: row.due_date ?? today,
+        time: null,
+        overdue: true,
+        reason: 'Overdue',
+        link: '/todos',
       })),
     ].sort((a, b) => `${a.date ?? ''}T${a.time ?? '00:00'}`.localeCompare(`${b.date ?? ''}T${b.time ?? '00:00'}`))
 

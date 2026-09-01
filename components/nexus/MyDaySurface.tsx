@@ -33,6 +33,8 @@ type MyDayEvent = {
   date?: string | null
   time?: string | null
   starts_at?: string | null
+  overdue?: boolean
+  reason?: string | null
 }
 
 type MyDaySummary = {
@@ -256,10 +258,12 @@ function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onO
         <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-300 hover:text-white">Nothing scheduled today &mdash; open calendar</button>
       ) : (
         <div className="space-y-1.5">
-          {events.slice(0, 4).map((e) => (
-            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 border-[#5FB8E0] bg-[#1e2a3a] px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-[#26374a]">
+          {events.slice(0, 5).map((e) => (
+            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 bg-[#1e2a3a] px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-[#26374a]" style={{ borderLeftColor: e.overdue ? '#f43f5e' : '#5FB8E0' }}>
               <span className="truncate">{e.title}</span>
-              <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-200">{formatEventTime(e)}</span>
+              {e.overdue
+                ? <span className="ml-2 shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(244,63,94,0.16)', color: '#fda4af', border: '1px solid rgba(244,63,94,0.4)' }}>Overdue</span>
+                : <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-200">{formatEventTime(e)}</span>}
             </button>
           ))}
         </div>

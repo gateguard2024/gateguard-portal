@@ -13,9 +13,11 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { data: quote, error } = await supabase
-    .from('quotes')
-    .select(`
+  // Newer columns (added by later migrations). If a migration hasn't run yet on
+  // this DB, selecting a missing column would 404 EVERY quote — so we retry
+  // without them rather than break the whole proposal system.
+  const OPTIONAL_COLS = 'proposal_blocks, proposal_theme, site_vars, partnership'
+  const selectCols = (withOptional: boolean) => `
       id, quote_number, title, status, property_name, units,
       total_one_time, total_mrr, valid_until, accepted_at, sent_at, declined_at,
       notes, share_token, org_id, opportunity_id, created_at,
@@ -24,7 +26,7 @@ export async function GET(
       package_mode, selected_package, created_by_name, expiry_date,
       payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
       whats_included, payment_schedule_json, sow_text,
-      proposal_blocks, proposal_theme, site_vars, partnership,
+      ${withOptional ? OPTIONAL_COLS + ',' : ''}
       agreement_type, agreement_html, attachments,
       signed_at, signer_name, signer_email,
       accepted_by_rep, accepted_by_rep_name,
@@ -33,9 +35,19 @@ export async function GET(
         section_name, item_type, is_optional, is_included, product_id,
         package_tier, model_number, notes, sku
       )
-    `)
-    .eq('id', params.id)
-    .single()
+    `
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let quote: any = null
+  let error: { code?: string; message?: string } | null = null
+  {
+    const res = await supabase.from('quotes').select(selectCols(true)).eq('id', params.id).single()
+    quote = res.data; error = res.error
+  }
+  if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+    const res = await supabase.from('quotes').select(selectCols(false)).eq('id', params.id).single()
+    quote = res.data; error = res.error
+  }
 
   if (error || !quote) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
