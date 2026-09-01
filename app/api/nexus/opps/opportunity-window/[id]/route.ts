@@ -184,7 +184,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     quote,
     dealerOrg,
     canAssignDealer,
-    canReassign: user.role === 'admin' || user.isCorporate,
+    // Corporate + org admins + dealer principals (they run their own teams) can
+    // reassign the rep/manager. Non-corporate targets are subtree-guarded on POST.
+    canReassign: user.role === 'admin' || user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer,
     nextBestActions: [
       { title: 'Edit Details',       subtitle: 'Fix contact, property, interests.',   action: 'update_details' },
       { title: 'Schedule Follow-Up', subtitle: 'Create the next touch.',              action: 'schedule_followup' },
@@ -423,8 +425,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   }
 
   if (action === 'reassign_opp') {
-    if (!(user.role === 'admin' || user.isCorporate)) {
-      return NextResponse.json({ success: false, message: 'Only an administrator can reassign opportunities.' }, { status: 403 })
+    if (!(user.role === 'admin' || user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer)) {
+      return NextResponse.json({ success: false, message: 'You do not have permission to reassign opportunities.' }, { status: 403 })
     }
     const assigneeId = clean(body.assignee_id)
     const assigneeName = clean(body.assignee_name)

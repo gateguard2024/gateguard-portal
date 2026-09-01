@@ -399,23 +399,31 @@ export function OpportunityGlassWindow({
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignUsers, setAssignUsers] = useState<Array<{ id: string; full_name?: string; email: string; role?: string }>>([])
-  async function loadAssignees() {
-    if (assignUsers.length > 0) return
+  // Which org the loaded assignee list is scoped to (null = caller's own scope).
+  // When a deal is assigned to a dealer, we scope the rep/manager picker to that
+  // dealer's staff — so re-fetch whenever the target org changes.
+  const [assignScope, setAssignScope] = useState<string | null>(null)
+  async function loadAssignees(scopeOrgId?: string | null) {
+    const target = scopeOrgId ?? null
+    if (assignUsers.length > 0 && assignScope === target) return
     setAssignLoading(true)
     try {
-      const r = await fetch('/api/admin/users')
+      const r = await fetch(target ? `/api/admin/users?org_id=${encodeURIComponent(target)}` : '/api/admin/users')
       const j = await r.json().catch(() => ({}))
       const list: AnyRecord[] = Array.isArray(j?.users) ? j.users : Array.isArray(j) ? j : []
       setAssignUsers(list.map(u => ({ id: String(u.id ?? u.user_id ?? u.clerk_user_id ?? ''), full_name: u.full_name ?? u.name, email: u.email ?? '', role: (u.role ?? u.permissions?.role) as string | undefined })).filter(u => u.id))
+      setAssignScope(target)
     } catch { /* ignore */ } finally { setAssignLoading(false) }
   }
-  async function openReassign() { setAssignOpen(true); await loadAssignees() }
+  async function openReassign() { setAssignOpen(true); await loadAssignees(dealerId) }
 
   // ── Dealer assignment (which dealer org owns this deal) ──────────────────────
   const canAssignDealer = Boolean(data.canAssignDealer)
   const currentDealer = data.dealerOrg as { id: string; name: string } | null | undefined
   const [dealerName, setDealerName] = useState<string | null>(currentDealer?.name ?? null)
-  useEffect(() => { setDealerName(currentDealer?.name ?? null) }, [currentDealer?.name])
+  // Scopes the rep/manager picker to the assigned dealer's staff.
+  const [dealerId, setDealerId] = useState<string | null>(currentDealer?.id ?? null)
+  useEffect(() => { setDealerName(currentDealer?.name ?? null); setDealerId(currentDealer?.id ?? null) }, [currentDealer?.id, currentDealer?.name])
   const [dealerOpen, setDealerOpen] = useState(false)
   const [dealerLoading, setDealerLoading] = useState(false)
   const [dealerOrgs, setDealerOrgs] = useState<Array<{ id: string; name: string; tier_label?: string }>>([])
@@ -438,7 +446,7 @@ export function OpportunityGlassWindow({
       const r = await fetch(`/api/nexus/opps/opportunity-window/${oppId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'assign_dealer', dealer_org_id: orgId, dealer_name: name }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok || j.success === false) throw new Error(j?.message ?? 'Could not assign dealer.')
-      setDealerName(name)
+      setDealerName(name); setDealerId(orgId)
       setMsg({ ok: true, text: j.message ?? 'Dealer assigned ✓' }); setDealerOpen(false)
       await onRefresh?.()
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not assign dealer.' }) } finally { setBusy(null) }
@@ -446,7 +454,7 @@ export function OpportunityGlassWindow({
 
   // ── Managing admin (person who oversees the rep on this deal) ────────────────
   const [managerOpen, setManagerOpen] = useState(false)
-  function openManager() { setManagerOpen(true); void loadAssignees() }
+  function openManager() { setManagerOpen(true); void loadAssignees(dealerId) }
   const orgAdmins = assignUsers.filter(u => (u.role ?? '').toLowerCase() === 'admin')
   async function saveManager(id: string | null, name: string | null) {
     if (!oppIdStr) return

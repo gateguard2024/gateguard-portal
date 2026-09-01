@@ -16,7 +16,7 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const caller = await getCurrentUser()
 
@@ -49,6 +49,24 @@ export async function GET() {
       ]
     }
 
+    // Optional ?org_id= filter — narrows the list to a specific org's staff
+    // (used by the opportunity window to pick the assigned DEALER's people).
+    // Corporate may target any org; others only within their own permitted
+    // subtree. An out-of-scope or unknown org is ignored (falls back to the
+    // default scoping) so the param can never widen access.
+    let filterOrgIds: string[] | null = permittedOrgIds
+    const requestedOrg = new URL(req.url).searchParams.get('org_id')
+    if (requestedOrg) {
+      const allowed = caller.isCorporate || (permittedOrgIds?.includes(requestedOrg) ?? false)
+      if (allowed) {
+        const { data: kids } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('parent_org_id', requestedOrg)
+        filterOrgIds = [requestedOrg, ...((kids ?? []) as { id: string }[]).map(o => o.id)]
+      }
+    }
+
     const client = await clerkClient()
 
     // Fetch Clerk users — use a higher limit; filter in-memory by org scope
@@ -64,13 +82,13 @@ export async function GET() {
 
     const users = clerkUsers
       .filter(u => {
-        // Corporate sees everyone
-        if (!permittedOrgIds) return true
-        // Others: only users whose org_id is in their permitted subtree
+        // No filter set → corporate with no ?org_id= narrowing → sees everyone
+        if (!filterOrgIds) return true
+        // Otherwise: only users whose org_id is in the permitted / requested set
         const userOrgId = u.publicMetadata?.org_id as string | undefined
-        // If user has no org assigned, only corporate can see them
+        // If user has no org assigned, only unfiltered corporate can see them
         if (!userOrgId) return false
-        return permittedOrgIds.includes(userOrgId)
+        return filterOrgIds.includes(userOrgId)
       })
       .map(u => ({
         id: u.id,
