@@ -58,11 +58,16 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <div style={{ fontSize: 12.5, color: MUT, marginBottom: 16 }}>Gate, access control, and resident technology management for {r.property}</div>
 
       <p style={{ margin: '0 0 12px' }}>Dear {r.contactFirst},</p>
-      <p style={{ margin: '0 0 12px' }}>Thank you for your time reviewing the GateGuard program. This letter sets out our proposal to take over the gates, access control, and supporting technology at {r.property} under our Property Partnership model.</p>
+      <p style={{ margin: '0 0 12px' }}>
+        Thank you for your time and for walking me through {r.propertyShort}. This letter sets out our proposal to take over
+        {r.accessPoints ? ` all ${r.accessPoints} openings` : ' the gates'}
+        {r.openingsBreakdown ? ` — ${r.openingsBreakdown} —` : ' '}
+        together with the access control{r.camerasIncluded ? ', cameras,' : ','} monitoring, and resident support behind them, under our Property Partnership model.
+      </p>
       <p style={{ margin: '0 0 12px' }}>
         The structure is straightforward, and it is different from every gate quote you have received before. The property pays a single, one-time set-up fee of <b>{money(r.setupFee)}</b>{r.setupNote ? ` — ${r.setupNote}` : ''}, half at signing and half at Go-Live.{' '}
         {resident
-          ? 'After that, GateGuard does not invoice the property again. The ongoing program is funded by residents through a parking and amenity fee that we bill and collect directly at each lease signing and renewal — never through your office.'
+          ? `After that, GateGuard does not invoice the property again. The ongoing program is funded by residents through a parking and amenity fee of ${money(r.residentFee)} per unit — charged once per apartment, not per resident — which we bill and collect directly at each lease signing and renewal, never through your office.`
           : `After that, the property covers the parking and amenity program at a flat ${money(r.propertyMonthly)} per month, billed in bulk — so your residents are never billed individually.`}
       </p>
 
@@ -72,29 +77,25 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
         <div style={termCell}>
           <div style={{ fontSize: 10.5, fontWeight: 800, color: CYAN, textTransform: 'uppercase' }}>One-time set-up fee</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: NAVY }}>{money(r.setupFee)}</div>
-          <div style={{ fontSize: 11, color: MUT }}>{money(r.deposit)} at signing, {money(r.goLive)} at Go-Live.</div>
+          <div style={{ fontSize: 11, color: MUT }}>{r.setupCellNote ? `${r.setupCellNote} ` : ''}{money(r.deposit)} at signing, {money(r.goLive)} at Go-Live.</div>
         </div>
         <div style={{ ...termCell, borderLeft: '1px solid #eef2f6' }}>
           <div style={{ fontSize: 10.5, fontWeight: 800, color: CYAN, textTransform: 'uppercase' }}>Ongoing cost to property</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: NAVY }}>{resident ? '$0' : `${money(r.propertyMonthly)}`}<span style={{ fontSize: 12, color: MUT }}>{resident ? '' : ' /mo'}</span></div>
           <div style={{ fontSize: 11, color: MUT }}>{resident ? 'No monthly fee, no service calls, no parts or labor billing.' : 'Bulk parking & amenity fees, billed to the property monthly.'}</div>
         </div>
-        <div style={{ ...termCell, borderLeft: '1px solid #eef2f6' }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: CYAN, textTransform: 'uppercase' }}>Resident fee — billed by us</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: NAVY }}>{resident ? money(r.residentFee) : '$0'}</div>
-          <div style={{ fontSize: 11, color: MUT }}>{resident ? 'Per unit at each lease signing and renewal, covering a 12-month parking and amenity term.' : 'Residents are not billed — the property covers the fees in bulk.'}</div>
+        {/* Resident-fee column is highlighted (navy) in the sample proposals when resident-funded. */}
+        <div style={{ ...termCell, borderLeft: '1px solid #eef2f6', background: resident ? NAVY : undefined }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: resident ? '#7fc4ec' : CYAN, textTransform: 'uppercase' }}>{r.residentFeeLabel}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: resident ? '#fff' : NAVY }}>{resident ? money(r.residentFee) : '$0'}</div>
+          <div style={{ fontSize: 11, color: resident ? '#c6d6e6' : MUT }}>{resident ? 'Per unit at each lease signing and renewal, covering a 12-month parking and amenity term.' : 'Residents are not billed — the property covers the fees in bulk.'}</div>
         </div>
       </div>
 
       {/* SCOPE */}
-      <H>Scope at {r.property}</H>
+      <H>Scope at {r.propertyShort}</H>
       <div style={{ display: 'flex', textAlign: 'center', border: '1px solid #d8e1ea', borderRadius: 10, background: '#f6f9fc' }}>
-        {[
-          { num: r.gates, label: `vehicle gates`, sub: r.gateNote },
-          { num: r.amenityDoors, label: 'amenity doors', sub: '' },
-          { num: r.cameras, label: 'monitored cameras', sub: r.cameraNote },
-          { num: r.units, label: 'residential units', sub: '' },
-        ].map((c, i) => (
+        {r.scopeStats.map((c, i) => (
           <div key={i} style={{ flex: 1, padding: '12px 8px', borderLeft: i ? '1px solid #e5ebf1' : 'none' }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{c.num}</div>
             <div style={{ fontSize: 11.5, color: MUT }}>{c.label}</div>
@@ -108,15 +109,23 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <Check>Every repair for the full term. Parts, labor, and trip charges on the operators, controls, and electronics, plus monthly preventative maintenance — however many times service is required.</Check>
       <Check>Proactive monitoring and remote reset. We watch gate health around the clock and clear most faults remotely, so your maintenance team is not dispatched every time a gate is bumped.</Check>
       <Check>Mobile access with PMS integration. Residents enter by phone — no fobs or cards to issue, buy, or replace. Move-ins and move-outs sync with Yardi, Entrata, or RealPage.</Check>
-      <Check>{r.cameras} monitored cameras{r.cameraNote ? ` — ${r.cameraNote}` : ''}. Monitored, not merely recorded. When a gate is struck we make the footage available so the damage can be attributed to the driver and pursued as a chargeback.</Check>
+      {r.camerasIncluded && r.cameras > 0 && (
+        <Check>{r.cameras} new monitored camera{r.cameras === 1 ? '' : 's'}{r.cameraNote ? ` — ${r.cameraNote}` : ''}. Monitored, not merely recorded. When a gate is struck, the footage is there so the damage can be attributed and pursued as a chargeback.</Check>
+      )}
       <Check>Resident support. Access questions, credentials, and troubleshooting are handled by GateGuard directly, so your leasing office is not the help desk.</Check>
 
       <H>What the property stops paying</H>
       <Check>Gate repair invoices and emergency capital requests — commonly $10,000 to $40,000 annually</Check>
-      <Check>Callbox telephone line and service fees, where applicable</Check>
       <Check>Fobs, access cards, and clickers, including every replacement</Check>
-      <Check>Separate camera monitoring contracts</Check>
+      {r.camerasIncluded && r.cameras > 0 && <Check>Separate camera monitoring contracts</Check>}
       <Check>Staff hours spent adding and removing residents from the access system</Check>
+
+      {r.takeoverCompetitor && (
+        <>
+          <H>Your {r.takeoverCompetitor} contract — we take it over</H>
+          <p style={{ margin: '0 0 8px' }}>{r.takeoverNote || `Nobody wants to fund two vendors at once. Cancel ${r.takeoverCompetitor} when you sign with us and GateGuard assumes the remaining ${r.takeoverCompetitor} invoices for the balance of that term. The old contract winds down on our dime while the new system is already running.`}</p>
+        </>
+      )}
 
       <H>The one thing not covered</H>
       <p style={{ margin: '0 0 8px' }}>GateGuard covers everything at each opening except the physical gate itself — the steel panel, frame, posts, hinges, and welds. That coverage is available below. Everything that operates the gate — motors, operators, controllers, readers, callboxes, cameras — is covered.</p>
@@ -139,7 +148,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
             <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonGateTotal)} / mo</td>
           </tr>
           <tr style={{ borderTop: '1px solid #e5ebf1' }}>
-            <td style={{ padding: '6px 10px' }}>Additional monitored cameras beyond the {r.cameras} included</td>
+            <td style={{ padding: '6px 10px' }}>{r.camerasIncluded && r.cameras > 0 ? `Additional monitored cameras beyond the ${r.cameras} included` : 'Monitored cameras — gate, amenity, or wherever you want eyes'}</td>
             <td style={{ padding: '6px 10px' }}>as elected</td>
             <td style={{ padding: '6px 10px' }}>{money(r.addonCameraRate)} / camera / mo</td>
             <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonCameraRate)} / mo ea</td>
@@ -159,6 +168,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <H>Next steps</H>
       <Check>Execute this proposal and the accompanying service agreement</Check>
       <Check>Pay the {money(r.deposit)} deposit; the balance is due at Go-Live</Check>
+      {r.takeoverCompetitor && <Check>Cancel {r.takeoverCompetitor} — we assume the remaining invoices from there</Check>}
       <Check>Site survey to document the gates, access points, and existing equipment</Check>
       <Check>Installation, system commissioning, and PMS integration</Check>
       <Check>Resident onboarding and program launch</Check>

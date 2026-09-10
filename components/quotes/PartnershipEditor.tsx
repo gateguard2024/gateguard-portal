@@ -37,6 +37,17 @@ export function PartnershipEditor({ id }: { id: string }) {
   }, [id])
 
   const set = (k: keyof PartnershipConfig, v: unknown) => { setCfg(p => ({ ...p, [k]: v })); setSaved(false) }
+  // Scope-grid override rows (up to 4). Blank rows are ignored — the letter then
+  // auto-builds the grid from the counts above.
+  const setStat = (i: number, key: 'num' | 'label', val: string) => {
+    setCfg(p => {
+      const next = [...(p.scope_stats ?? [])]
+      while (next.length < 4) next.push({})
+      next[i] = { ...next[i], [key]: val }
+      return { ...p, scope_stats: next }
+    })
+    setSaved(false)
+  }
   const previewQuote = useMemo(() => ({ ...(quote ?? {}), property_name: propName, property_address: propAddr, units: Number(units) || 0 }), [quote, propName, propAddr, units])
   const r = useMemo(() => resolvePartnership(previewQuote, cfg), [previewQuote, cfg])
   const resident = (cfg.billing_mode ?? 'resident') !== 'property_monthly'
@@ -80,6 +91,7 @@ export function PartnershipEditor({ id }: { id: string }) {
 
         <Sec t="Property & contact" />
         <Field l="Property name"><input value={propName} onChange={e => { setPropName(e.target.value); setSaved(false) }} style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Short name (headers / 'walking me through …')"><input value={cfg.property_short ?? ''} onChange={e => set('property_short', e.target.value)} placeholder="The Halston  ·  Bridgewater" style={inS} /></Field>
         <div style={{ height: 8 }} /><Field l="Address"><input value={propAddr} onChange={e => { setPropAddr(e.target.value); setSaved(false) }} placeholder="Street, City, ST ZIP" style={inS} /></Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
           <Field l="Contact name"><input value={cfg.contact_name ?? ''} onChange={e => set('contact_name', e.target.value)} style={inS} /></Field>
@@ -95,16 +107,32 @@ export function PartnershipEditor({ id }: { id: string }) {
           <Field l="Amenity doors"><input type="number" min={0} value={cfg.amenity_doors ?? ''} onChange={e => set('amenity_doors', numOrU(e.target.value))} style={inS} /></Field>
           <Field l="Cameras"><input type="number" min={0} value={cfg.cameras ?? ''} onChange={e => set('cameras', numOrU(e.target.value))} style={inS} /></Field>
         </div>
-        <div style={{ height: 8 }} /><Field l="Gate note (optional)"><input value={cfg.gate_note ?? ''} onChange={e => set('gate_note', e.target.value)} placeholder="2 entry, 1 exit  ·  or: damaged, repaired" style={inS} /></Field>
-        <div style={{ height: 8 }} /><Field l="Camera note (optional)"><input value={cfg.camera_note ?? ''} onChange={e => set('camera_note', e.target.value)} placeholder="gate, dumpster, pool" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Camera note (optional)"><input value={cfg.camera_note ?? ''} onChange={e => set('camera_note', e.target.value)} placeholder="pool, front gate, and rear gate" style={inS} /></Field>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 12, color: '#c3d3e2' }}>
+          <input type="checkbox" checked={cfg.cameras_included ?? (r.cameras > 0)} onChange={e => set('cameras_included', e.target.checked)} />
+          Cameras included in the base program (shows the camera scope + delivers line)
+        </label>
+        <div style={{ height: 8 }} /><Field l="Openings breakdown (intro prose)"><input value={cfg.openings_breakdown ?? ''} onChange={e => set('openings_breakdown', e.target.value)} placeholder="five vehicle gates, the pedestrian gate, and five amenity doors" style={inS} /></Field>
         <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>{r.accessPoints} access points ({r.gates} gates + {r.amenityDoors} doors)</div>
+
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9', marginTop: 12, marginBottom: 4 }}>Scope grid columns (leave blank to auto-build)</div>
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 8, marginBottom: 6 }}>
+            <input value={String(cfg.scope_stats?.[i]?.num ?? '')} onChange={e => setStat(i, 'num', e.target.value)} placeholder="#" style={inS} />
+            <input value={cfg.scope_stats?.[i]?.label ?? ''} onChange={e => setStat(i, 'label', e.target.value)} placeholder={i === 0 ? 'entry gate — working' : i === 3 ? 'residential units' : 'exit gates — one down today'} style={inS} />
+          </div>
+        ))}
+        <div style={{ fontSize: 10.5, color: '#8fa4b8' }}>Now showing: {r.scopeStats.map(s => `${s.num ?? ''} ${s.label ?? ''}`.trim()).filter(Boolean).join(' · ')}</div>
+
+        <div style={{ height: 8 }} /><Field l="Gate note (optional)"><input value={cfg.gate_note ?? ''} onChange={e => set('gate_note', e.target.value)} placeholder="2 entry, 1 exit  ·  or: damaged, repaired" style={inS} /></Field>
 
         <Sec t="Money" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field l="Set-up / point"><input type="number" min={0} value={cfg.setup_per_point ?? ''} onChange={e => set('setup_per_point', numOrU(e.target.value))} placeholder="500" style={inS} /></Field>
           <Field l="Set-up total (override)"><input type="number" min={0} value={cfg.setup_fee ?? ''} onChange={e => set('setup_fee', numOrU(e.target.value))} placeholder={String(r.setupFee)} style={inS} /></Field>
         </div>
-        <div style={{ height: 8 }} /><Field l="Set-up note (optional)"><input value={cfg.setup_note ?? ''} onChange={e => set('setup_note', e.target.value)} placeholder="$500 per access point across 8 points" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Set-up note (structure paragraph)"><input value={cfg.setup_note ?? ''} onChange={e => set('setup_note', e.target.value)} placeholder="$500 per opening — $5,500 for all eleven, incl. 3 cameras" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Set-up cell note (terms box)"><input value={cfg.setup_cell_note ?? ''} onChange={e => set('setup_cell_note', e.target.value)} placeholder="$500 per opening across all eleven openings, plus three new cameras." style={inS} /></Field>
         <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>Set-up {money(r.setupFee)} · deposit {money(r.deposit)} · Go-Live {money(r.goLive)}</div>
 
         <Sec t="Billing" />
@@ -117,6 +145,11 @@ export function PartnershipEditor({ id }: { id: string }) {
           <Field l="Resident fee / unit"><input type="number" min={0} value={cfg.resident_fee ?? ''} onChange={e => set('resident_fee', numOrU(e.target.value))} placeholder="100" style={{ ...inS, opacity: resident ? 1 : 0.5 }} disabled={!resident} /></Field>
           <Field l="Property $/mo (bulk)"><input type="number" min={0} value={cfg.property_monthly ?? ''} onChange={e => set('property_monthly', numOrU(e.target.value))} placeholder="0" style={{ ...inS, opacity: resident ? 0.5 : 1 }} disabled={resident} /></Field>
         </div>
+
+        <Sec t="Competitor takeover (optional)" />
+        <Field l="Competitor name"><input value={cfg.takeover_competitor ?? ''} onChange={e => set('takeover_competitor', e.target.value)} placeholder="Gatewise" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Takeover note (optional — auto-written if blank)"><textarea value={cfg.takeover_note ?? ''} onChange={e => set('takeover_note', e.target.value)} rows={3} placeholder="Leave blank to auto-generate from the competitor name." style={{ ...inS, resize: 'vertical' }} /></Field>
+        <div style={{ fontSize: 10.5, color: '#8fa4b8', marginTop: 4 }}>Adds a “We take it over” section + a “Cancel …” next step.</div>
 
         <Sec t="Term" />
         <Field l="Term (months)"><input type="number" min={1} value={cfg.term_months ?? ''} onChange={e => set('term_months', numOrU(e.target.value))} placeholder="60" style={inS} /></Field>

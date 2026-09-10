@@ -16,7 +16,7 @@ export async function GET(
   // Newer columns (added by later migrations). If a migration hasn't run yet on
   // this DB, selecting a missing column would 404 EVERY quote — so we retry
   // without them rather than break the whole proposal system.
-  const OPTIONAL_COLS = 'proposal_blocks, proposal_theme, site_vars, partnership'
+  const OPTIONAL_COLS = 'proposal_blocks, proposal_theme, site_vars, partnership, review_status'
   const selectCols = (withOptional: boolean) => `
       id, quote_number, title, status, property_name, units,
       total_one_time, total_mrr, valid_until, accepted_at, sent_at, declined_at,
@@ -50,6 +50,14 @@ export async function GET(
   }
 
   if (error || !quote) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Review gate: a partnership proposal is only client-visible once approved.
+  // Legacy quotes (review_status null/undefined) are never gated, so existing
+  // sent proposals keep working. 'draft' | 'pending' | 'changes_requested' hold.
+  const isPartnership = quote.quote_mode === 'partnership' || !!quote.partnership
+  if (isPartnership && ['draft', 'pending', 'changes_requested'].includes(quote.review_status)) {
+    return NextResponse.json({ review_hold: true, review_status: quote.review_status })
+  }
 
   // Sort line items
   const rawItems = (quote.quote_line_items ?? []).sort(
