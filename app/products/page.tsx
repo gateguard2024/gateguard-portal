@@ -936,7 +936,8 @@ export default function ProductsPage() {
     setLoading(true);
     setDbError(null);
     try {
-      const res = await fetch("/api/products");
+      // Admin catalog needs the full list incl. inactive items.
+      const res = await fetch("/api/products?active=false&limit=2000");
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || "Failed to load products");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -990,7 +991,7 @@ export default function ProductsPage() {
       if (isNew) {
         const res = await fetch("/api/products", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ row }),
+          body: JSON.stringify(row),   // flat product — matches the shared API contract
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(j.error || "Save failed");
@@ -999,7 +1000,7 @@ export default function ProductsPage() {
       } else {
         const res = await fetch("/api/products", {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: p.id, row }),
+          body: JSON.stringify({ id: p.id, ...row }),   // flat { id, ...fields }
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(j.error || "Save failed");
@@ -1059,7 +1060,7 @@ export default function ProductsPage() {
     setProducts(prev => prev.map(p => p.id===id ? {...p, sellPrice:v} : p));
     const res = await fetch("/api/products", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, row: { sell_price: v } }),
+      body: JSON.stringify({ id, sell_price: v }),
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -1076,7 +1077,7 @@ export default function ProductsPage() {
     setProducts(prev => prev.map(p => p.id===id ? {...p, active:newVal} : p));
     const res = await fetch("/api/products", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, row: { active: newVal } }),
+      body: JSON.stringify({ id, active: newVal }),
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
