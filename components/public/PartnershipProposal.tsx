@@ -130,6 +130,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <H>The one thing not covered</H>
       <p style={{ margin: '0 0 8px' }}>GateGuard covers everything at each opening except the physical gate itself — the steel panel, frame, posts, hinges, and welds. That coverage is available below. Everything that operates the gate — motors, operators, controllers, readers, callboxes, cameras — is covered.</p>
 
+      {(r.offerGateCoverage || r.offerExtraCameras) && <>
       <H>Optional add-ons</H>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
         <thead>
@@ -141,21 +142,26 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
           </tr>
         </thead>
         <tbody>
-          <tr style={{ borderTop: '1px solid #e5ebf1' }}>
-            <td style={{ padding: '6px 10px' }}>Physical gate &amp; hinge coverage — the steel panel, frame, posts, hinges, and welds</td>
-            <td style={{ padding: '6px 10px' }}>{r.gates} gates</td>
-            <td style={{ padding: '6px 10px' }}>{money(r.addonGateRate)} / gate / mo</td>
-            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonGateTotal)} / mo</td>
-          </tr>
-          <tr style={{ borderTop: '1px solid #e5ebf1' }}>
-            <td style={{ padding: '6px 10px' }}>{r.camerasIncluded && r.cameras > 0 ? `Additional monitored cameras beyond the ${r.cameras} included` : 'Monitored cameras — gate, amenity, or wherever you want eyes'}</td>
-            <td style={{ padding: '6px 10px' }}>as elected</td>
-            <td style={{ padding: '6px 10px' }}>{money(r.addonCameraRate)} / camera / mo</td>
-            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonCameraRate)} / mo ea</td>
-          </tr>
+          {r.offerGateCoverage && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>Physical gate &amp; hinge coverage — the steel panel, frame, posts, hinges, and welds</td>
+              <td style={{ padding: '6px 10px' }}>{r.gates} gates</td>
+              <td style={{ padding: '6px 10px' }}>{money(r.addonGateRate)} / gate / mo</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonGateTotal)} / mo</td>
+            </tr>
+          )}
+          {r.offerExtraCameras && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>{r.camerasIncluded && r.cameras > 0 ? `Additional monitored cameras beyond the ${r.cameras} included` : 'Monitored cameras — gate, amenity, or wherever you want eyes'}</td>
+              <td style={{ padding: '6px 10px' }}>as elected</td>
+              <td style={{ padding: '6px 10px' }}>{money(r.addonCameraRate)} / camera / mo</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonCameraRate)} / mo ea</td>
+            </tr>
+          )}
         </tbody>
       </table>
       <div style={{ fontSize: 11.5, color: MUT, marginTop: 6 }}>Neither is required. The set-up fee and ongoing terms above are unchanged either way.</div>
+      </>}
 
       <H>Term and what we need from you</H>
       <Check>{r.termYears}-year term. The initial term runs {r.termMonths} months from the Go-Live Date, then renews for one-year terms unless either party gives 60 days’ written notice.</Check>

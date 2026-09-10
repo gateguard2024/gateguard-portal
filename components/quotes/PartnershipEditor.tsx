@@ -23,6 +23,28 @@ const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing:
 const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
 const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5FB8E0', margin: '14px 0 6px' }}>{t}</div>
 
+const stepBtn: React.CSSProperties = { width: 30, height: 34, borderRadius: 8, border: '1px solid rgba(140,170,200,0.3)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }
+// Tap-friendly number control: [−] value [+]. Steppers keep the form 5th-grader simple.
+function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { label: string; value?: number; onChange: (v: number) => void; min?: number; step?: number; prefix?: string }) {
+  const v = value ?? 0
+  return (
+    <div>
+      <div style={lbl}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <button type="button" onClick={() => onChange(Math.max(min, v - step))} style={stepBtn}>−</button>
+        <div style={{ position: 'relative', flex: 1 }}>
+          {prefix && <span style={{ position: 'absolute', left: 8, top: 9, color: '#8fa4b8', fontSize: 12 }}>{prefix}</span>}
+          <input type="number" min={min} value={v} onChange={e => onChange(Math.max(min, Number(e.target.value) || 0))} style={{ display: 'block', width: '100%', padding: '8px 10px', paddingLeft: prefix ? 18 : 10, borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13, textAlign: 'center' }} />
+        </div>
+        <button type="button" onClick={() => onChange(v + step)} style={stepBtn}>+</button>
+      </div>
+    </div>
+  )
+}
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'rgba(95,184,224,0.05)', border: '1px solid rgba(140,170,200,0.18)', marginBottom: 8 }
+const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#cfe0f0', marginBottom: 6 }
+const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: '#c3d3e2', fontWeight: 600 }
+
 export function PartnershipEditor({ id }: { id: string }) {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [cfg, setCfg] = useState<PartnershipConfig>({})
@@ -39,6 +61,7 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [reviewNote, setReviewNote] = useState<string>('')
   const [busy, setBusy] = useState<string | null>(null)
   const [reviewMsg, setReviewMsg] = useState<string | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -184,40 +207,78 @@ export function PartnershipEditor({ id }: { id: string }) {
           <Field l="Units"><input type="number" min={0} value={units} onChange={e => { setUnits(e.target.value); setSaved(false) }} style={inS} /></Field>
         </div>
 
-        <Sec t="Scope" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <Field l="Entry gates"><input type="number" min={0} value={cfg.entry_gates ?? ''} onChange={e => set('entry_gates', numOrU(e.target.value))} style={inS} /></Field>
-          <Field l="Exit gates"><input type="number" min={0} value={cfg.exit_gates ?? ''} onChange={e => set('exit_gates', numOrU(e.target.value))} style={inS} /></Field>
-          <Field l="Amenity doors"><input type="number" min={0} value={cfg.amenity_doors ?? ''} onChange={e => set('amenity_doors', numOrU(e.target.value))} style={inS} /></Field>
-          <Field l="Cameras"><input type="number" min={0} value={cfg.cameras ?? ''} onChange={e => set('cameras', numOrU(e.target.value))} style={inS} /></Field>
-        </div>
-        <div style={{ height: 8 }} /><Field l="Camera note (optional)"><input value={cfg.camera_note ?? ''} onChange={e => set('camera_note', e.target.value)} placeholder="pool, front gate, and rear gate" style={inS} /></Field>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 12, color: '#c3d3e2' }}>
-          <input type="checkbox" checked={cfg.cameras_included ?? (r.cameras > 0)} onChange={e => set('cameras_included', e.target.checked)} />
-          Cameras included in the base program (shows the camera scope + delivers line)
-        </label>
-        <div style={{ height: 8 }} /><Field l="Openings breakdown (intro prose)"><input value={cfg.openings_breakdown ?? ''} onChange={e => set('openings_breakdown', e.target.value)} placeholder="five vehicle gates, the pedestrian gate, and five amenity doors" style={inS} /></Field>
-        <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>{r.accessPoints} access points ({r.gates} gates + {r.amenityDoors} doors)</div>
-
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9', marginTop: 12, marginBottom: 4 }}>Scope grid columns (leave blank to auto-build)</div>
-        {[0, 1, 2, 3].map(i => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 8, marginBottom: 6 }}>
-            <input value={String(cfg.scope_stats?.[i]?.num ?? '')} onChange={e => setStat(i, 'num', e.target.value)} placeholder="#" style={inS} />
-            <input value={cfg.scope_stats?.[i]?.label ?? ''} onChange={e => setStat(i, 'label', e.target.value)} placeholder={i === 0 ? 'entry gate — working' : i === 3 ? 'residential units' : 'exit gates — one down today'} style={inS} />
+        <Sec t="Openings & condition" />
+        <div style={{ fontSize: 11, color: '#8fa4b8', marginBottom: 8 }}>Count each opening as Working or Needs repair. Repair openings price higher — the letter writes itself.</div>
+        <div style={groupCard}>
+          <div style={groupTitle}>Entry gates</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Stepper label="Working" value={cfg.entry_gates_working} onChange={v => set('entry_gates_working', v)} />
+            <Stepper label="Needs repair" value={cfg.entry_gates_repair} onChange={v => set('entry_gates_repair', v)} />
           </div>
-        ))}
-        <div style={{ fontSize: 10.5, color: '#8fa4b8' }}>Now showing: {r.scopeStats.map(s => `${s.num ?? ''} ${s.label ?? ''}`.trim()).filter(Boolean).join(' · ')}</div>
-
-        <div style={{ height: 8 }} /><Field l="Gate note (optional)"><input value={cfg.gate_note ?? ''} onChange={e => set('gate_note', e.target.value)} placeholder="2 entry, 1 exit  ·  or: damaged, repaired" style={inS} /></Field>
-
-        <Sec t="Money" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <Field l="Set-up / point"><input type="number" min={0} value={cfg.setup_per_point ?? ''} onChange={e => set('setup_per_point', numOrU(e.target.value))} placeholder="500" style={inS} /></Field>
-          <Field l="Set-up total (override)"><input type="number" min={0} value={cfg.setup_fee ?? ''} onChange={e => set('setup_fee', numOrU(e.target.value))} placeholder={String(r.setupFee)} style={inS} /></Field>
         </div>
-        <div style={{ height: 8 }} /><Field l="Set-up note (structure paragraph)"><input value={cfg.setup_note ?? ''} onChange={e => set('setup_note', e.target.value)} placeholder="$500 per opening — $5,500 for all eleven, incl. 3 cameras" style={inS} /></Field>
-        <div style={{ height: 8 }} /><Field l="Set-up cell note (terms box)"><input value={cfg.setup_cell_note ?? ''} onChange={e => set('setup_cell_note', e.target.value)} placeholder="$500 per opening across all eleven openings, plus three new cameras." style={inS} /></Field>
-        <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>Set-up {money(r.setupFee)} · deposit {money(r.deposit)} · Go-Live {money(r.goLive)}</div>
+        <div style={groupCard}>
+          <div style={groupTitle}>Exit gates</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Stepper label="Working" value={cfg.exit_gates_working} onChange={v => set('exit_gates_working', v)} />
+            <Stepper label="Needs repair" value={cfg.exit_gates_repair} onChange={v => set('exit_gates_repair', v)} />
+          </div>
+        </div>
+        <div style={groupCard}>
+          <div style={groupTitle}>Amenity / pedestrian doors</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Stepper label="Working" value={cfg.amenity_doors_working} onChange={v => set('amenity_doors_working', v)} />
+            <Stepper label="Needs repair" value={cfg.amenity_doors_repair} onChange={v => set('amenity_doors_repair', v)} />
+          </div>
+          <div style={{ height: 8 }} /><Field l="How it reads (door name)"><input value={cfg.door_label ?? ''} onChange={e => set('door_label', e.target.value)} placeholder="club room door · pedestrian gate and amenity doors" style={inS} /></Field>
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.cameras_included ?? (r.cameras > 0)} onChange={e => set('cameras_included', e.target.checked)} />
+            Include cameras in the program
+          </label>
+          {(cfg.cameras_included ?? (r.cameras > 0)) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8, alignItems: 'start' }}>
+              <Stepper label="How many" value={cfg.cameras} onChange={v => set('cameras', v)} />
+              <Field l="Where (optional)"><input value={cfg.camera_note ?? ''} onChange={e => set('camera_note', e.target.value)} placeholder="pool, front gate, rear gate" style={inS} /></Field>
+            </div>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: '#8fa4b8' }}>{r.accessPoints} openings — {r.workingOpenings} working, {r.repairOpenings} needing repair{r.camerasIncluded && r.cameras ? ` · ${r.cameras} cameras` : ''}</div>
+
+        <Sec t="Set-up pricing" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <Stepper label="$ / working opening" value={cfg.setup_per_working ?? 500} onChange={v => set('setup_per_working', v)} step={50} prefix="$" />
+          <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
+        </div>
+        <div style={{ fontSize: 11.5, color: '#a9bccf', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 8 }}>
+          {r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br />
+          deposit {money(r.deposit)} at signing · {money(r.goLive)} at Go-Live
+        </div>
+
+        <Sec t="Optional add-ons" />
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_gate_coverage ?? true} onChange={e => set('offer_gate_coverage', e.target.checked)} />
+            Offer gate &amp; hinge coverage
+          </label>
+          {(cfg.offer_gate_coverage ?? true) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="$ / gate / mo" value={cfg.addon_gate_hinge_rate ?? 150} onChange={v => set('addon_gate_hinge_rate', v)} step={25} prefix="$" />
+              <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 4 }}>{r.gates} gates × {money(r.addonGateRate)} = {money(r.addonGateTotal)} / mo</div>
+            </div>
+          )}
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_extra_cameras ?? true} onChange={e => set('offer_extra_cameras', e.target.checked)} />
+            Offer extra cameras
+          </label>
+          {(cfg.offer_extra_cameras ?? true) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="$ / camera / mo" value={cfg.addon_camera_rate ?? 100} onChange={v => set('addon_camera_rate', v)} step={25} prefix="$" />
+            </div>
+          )}
+        </div>
 
         <Sec t="Billing" />
         <div style={{ display: 'flex', gap: 6 }}>
@@ -237,6 +298,29 @@ export function PartnershipEditor({ id }: { id: string }) {
 
         <Sec t="Term" />
         <Field l="Term (months)"><input type="number" min={1} value={cfg.term_months ?? ''} onChange={e => set('term_months', numOrU(e.target.value))} placeholder="60" style={inS} /></Field>
+
+        {/* Advanced — everything below auto-writes from the numbers above; only touch to override wording. */}
+        <div style={{ marginTop: 16, borderTop: '1px solid rgba(140,170,200,0.15)', paddingTop: 12 }}>
+          <button type="button" onClick={() => setShowAdvanced(s => !s)} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', color: '#9fb4c9', fontSize: 12, fontWeight: 700 }}>
+            {showAdvanced ? '▾' : '▸'} Fine-tune wording (optional)
+          </button>
+          {showAdvanced && (
+            <div style={{ marginTop: 10 }}>
+              <Field l="Openings breakdown (intro)"><input value={cfg.openings_breakdown ?? ''} onChange={e => set('openings_breakdown', e.target.value)} placeholder="auto: five vehicle gates, the pedestrian gate, and five amenity doors" style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Set-up note (structure paragraph)"><input value={cfg.setup_note ?? ''} onChange={e => set('setup_note', e.target.value)} placeholder={`auto: ${r.setupNote}`} style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Set-up cell note (terms box)"><input value={cfg.setup_cell_note ?? ''} onChange={e => set('setup_cell_note', e.target.value)} placeholder={`auto: ${r.setupCellNote}`} style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Gate note"><input value={cfg.gate_note ?? ''} onChange={e => set('gate_note', e.target.value)} placeholder="optional" style={inS} /></Field>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9', marginTop: 12, marginBottom: 4 }}>Scope grid columns (blank = auto)</div>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 8, marginBottom: 6 }}>
+                  <input value={String(cfg.scope_stats?.[i]?.num ?? '')} onChange={e => setStat(i, 'num', e.target.value)} placeholder="#" style={inS} />
+                  <input value={cfg.scope_stats?.[i]?.label ?? ''} onChange={e => setStat(i, 'label', e.target.value)} placeholder={i === 3 ? 'residential units' : 'exit gates — one down today'} style={inS} />
+                </div>
+              ))}
+              <div style={{ fontSize: 10.5, color: '#8fa4b8' }}>Now showing: {r.scopeStats.map(s => `${s.num ?? ''} ${s.label ?? ''}`.trim()).filter(Boolean).join(' · ')}</div>
+            </div>
+          )}
+        </div>
         <div style={{ height: 40 }} />
       </aside>
 

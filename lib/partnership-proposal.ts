@@ -23,7 +23,16 @@ export interface PartnershipConfig {
   contact_title?: string
   management_co?: string
   property_short?: string   // short name for headers + "walking me through X" ("The Halston", "Bridgewater")
-  // Scope
+  // Scope — each opening type splits into WORKING and NEEDS-REPAIR counts.
+  // Working openings price at setup_per_working; repair openings at setup_per_repair.
+  entry_gates_working?: number
+  entry_gates_repair?: number
+  exit_gates_working?: number
+  exit_gates_repair?: number
+  amenity_doors_working?: number
+  amenity_doors_repair?: number
+  door_label?: string       // singular noun for the door column: "amenity door" | "club room door"
+  // Legacy total counts (pre-split). Still honored if the split fields are unused.
   entry_gates?: number
   exit_gates?: number
   amenity_doors?: number
@@ -33,11 +42,16 @@ export interface PartnershipConfig {
   camera_note?: string      // "gate, dumpster, pool" | "pool, front gate, and rear gate"
   openings_breakdown?: string // intro prose: "five vehicle gates, the pedestrian gate, and five amenity doors"
   scope_stats?: ScopeStat[] // override the scope grid entirely (up to 4). If absent, derived from counts.
-  // Money
-  setup_fee?: number        // total; if absent, computed = setup_per_point × access points
-  setup_per_point?: number  // default 500
+  // Money — differentiated per-opening set-up (dealer-editable on the left panel)
+  setup_fee?: number        // total override; if absent, computed from working/repair counts × rates
+  setup_per_working?: number // default 500 — a working opening
+  setup_per_repair?: number  // default 750 — an opening that needs repair
+  setup_per_point?: number  // legacy flat per-opening rate (fallback for setup_per_working)
   setup_note?: string       // structure-paragraph detail, e.g. "$500 per access point across eight points"
   setup_cell_note?: string  // TERMS set-up cell description, e.g. "$500 per opening across all eleven, plus 3 cameras"
+  // Add-ons — dealer chooses whether to offer each (rates editable per deal)
+  offer_gate_coverage?: boolean // default true — show the gate & hinge coverage row
+  offer_extra_cameras?: boolean // default true — show the extra-cameras row
   resident_fee?: number     // default 100 (per unit, at each lease signing & renewal)
   resident_fee_label?: string // TERMS 3rd-column header. Default "Resident fee — billed by us"
   billing_mode?: BillingMode
@@ -68,16 +82,22 @@ export interface ResolvedPartnership {
   cameras: number
   camerasIncluded: boolean
   accessPoints: number
+  workingOpenings: number
+  repairOpenings: number
   gateNote: string
   cameraNote: string
   openingsBreakdown: string
   scopeStats: ScopeStat[]
   setupPerPoint: number
+  setupPerWorking: number
+  setupPerRepair: number
   setupFee: number
   setupNote: string
   setupCellNote: string
   deposit: number
   goLive: number
+  offerGateCoverage: boolean
+  offerExtraCameras: boolean
   billingMode: BillingMode
   residentFee: number
   residentFeeLabel: string
@@ -96,16 +116,32 @@ export interface ResolvedPartnership {
 const n = (v: unknown, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d }
 
 export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): ResolvedPartnership {
-  const entryGates = n(cfg.entry_gates)
-  const exitGates = n(cfg.exit_gates)
+  // Working vs needs-repair counts. If any split field is set, the split defines
+  // the counts; otherwise fall back to the legacy totals (treated as all working).
+  const hasSplit = [cfg.entry_gates_working, cfg.entry_gates_repair, cfg.exit_gates_working, cfg.exit_gates_repair, cfg.amenity_doors_working, cfg.amenity_doors_repair].some(v => v != null)
+  const entryW = hasSplit ? n(cfg.entry_gates_working) : n(cfg.entry_gates)
+  const entryR = n(cfg.entry_gates_repair)
+  const exitW  = hasSplit ? n(cfg.exit_gates_working) : n(cfg.exit_gates)
+  const exitR  = n(cfg.exit_gates_repair)
+  const doorsW = hasSplit ? n(cfg.amenity_doors_working) : n(cfg.amenity_doors)
+  const doorsR = n(cfg.amenity_doors_repair)
+
+  const entryGates = entryW + entryR
+  const exitGates = exitW + exitR
   const gates = entryGates + exitGates
-  const amenityDoors = n(cfg.amenity_doors)
+  const amenityDoors = doorsW + doorsR
   const cameras = n(cfg.cameras)
   const accessPoints = gates + amenityDoors
+  const workingOpenings = entryW + exitW + doorsW
+  const repairOpenings = entryR + exitR + doorsR
   const units = n(quote?.units)
 
   const setupPerPoint = n(cfg.setup_per_point, 500)
-  const setupFee = cfg.setup_fee != null ? n(cfg.setup_fee) : setupPerPoint * accessPoints
+  const setupPerWorking = n(cfg.setup_per_working ?? cfg.setup_per_point, 500)
+  const setupPerRepair = n(cfg.setup_per_repair, 750)
+  const setupFee = cfg.setup_fee != null
+    ? n(cfg.setup_fee)
+    : (workingOpenings * setupPerWorking + repairOpenings * setupPerRepair)
   const deposit = Math.round(setupFee / 2)
   const goLive = setupFee - deposit
 
@@ -118,23 +154,26 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
   const property = String(quote?.property_name || quote?.client_name || 'the Property')
   const cameraNote = String(cfg.camera_note || '')
   const camerasIncluded = cfg.cameras_included != null ? !!cfg.cameras_included : cameras > 0
+  const doorLabel = String(cfg.door_label || 'amenity door')
 
   const plural = (nn: number, word: string) => `${word}${nn === 1 ? '' : 's'}`
+  // "3 exit gates — one down today" — appends the down-count when any need repair.
+  const downSuffix = (repair: number) => repair > 0 ? ` — ${repair === 1 ? 'one' : repair} down today` : ''
+  const openLabel = (total: number, base: string, repair: number) => `${plural(total, base)}${downSuffix(repair)}`
 
   // Openings breakdown for the intro ("five vehicle gates, the pedestrian gate, and five amenity doors").
-  // Prefer the explicit override; otherwise assemble a plain-number phrase from the counts.
   const bdParts: string[] = []
   if (entryGates) bdParts.push(`${entryGates} ${plural(entryGates, 'entry gate')}`)
   if (exitGates) bdParts.push(`${exitGates} ${plural(exitGates, 'exit gate')}`)
   if (!entryGates && !exitGates && gates) bdParts.push(`${gates} ${plural(gates, 'vehicle gate')}`)
-  if (amenityDoors) bdParts.push(`${amenityDoors} ${plural(amenityDoors, 'amenity door')}`)
+  if (amenityDoors) bdParts.push(`${amenityDoors} ${plural(amenityDoors, doorLabel)}`)
   const openingsBreakdown = String(
     cfg.openings_breakdown ||
     (bdParts.length > 1 ? bdParts.slice(0, -1).join(', ') + ' and ' + bdParts[bdParts.length - 1] : bdParts.join(''))
   )
 
-  // Scope grid — explicit override wins; otherwise derive up to 3 scope columns + units.
-  // Only rows with a value count as an override (the editor holds 4 possibly-blank rows).
+  // Scope grid — explicit override wins; otherwise derive up to 3 scope columns + units,
+  // auto-appending "— N down today" from the repair counts.
   const providedStats = (Array.isArray(cfg.scope_stats) ? cfg.scope_stats : [])
     .filter(s => (s?.num != null && s.num !== '') || (s?.label != null && String(s.label).trim() !== ''))
   let scopeStats: ScopeStat[]
@@ -143,12 +182,12 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
   } else {
     const derived: ScopeStat[] = []
     if (entryGates && exitGates) {
-      derived.push({ num: entryGates, label: plural(entryGates, 'entry gate') })
-      derived.push({ num: exitGates, label: plural(exitGates, 'exit gate') })
+      derived.push({ num: entryGates, label: openLabel(entryGates, 'entry gate', entryR) })
+      derived.push({ num: exitGates, label: openLabel(exitGates, 'exit gate', exitR) })
     } else if (gates) {
-      derived.push({ num: gates, label: plural(gates, 'vehicle gate') })
+      derived.push({ num: gates, label: openLabel(gates, 'vehicle gate', entryR + exitR) })
     }
-    if (amenityDoors) derived.push({ num: amenityDoors, label: plural(amenityDoors, 'amenity door') })
+    if (amenityDoors) derived.push({ num: amenityDoors, label: openLabel(amenityDoors, doorLabel, doorsR) })
     if (camerasIncluded && cameras) derived.push({ num: cameras, label: plural(cameras, 'monitored camera'), sub: cameraNote })
     scopeStats = [...derived.slice(0, 3), { num: units, label: 'residential units' }]
   }
@@ -163,13 +202,24 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     managementCo: String(cfg.management_co || ''),
     units,
     entryGates, exitGates, gates, amenityDoors, cameras, camerasIncluded, accessPoints,
+    workingOpenings, repairOpenings,
     gateNote: String(cfg.gate_note || [entryGates ? `${entryGates} entry` : '', exitGates ? `${exitGates} exit` : ''].filter(Boolean).join(', ')),
     cameraNote,
     openingsBreakdown,
     scopeStats,
-    setupPerPoint, setupFee,
-    setupNote: String(cfg.setup_note || (accessPoints ? `$${setupPerPoint} per access point across ${accessPoints} point${accessPoints === 1 ? '' : 's'}` : '')),
-    setupCellNote: String(cfg.setup_cell_note || (accessPoints ? `$${setupPerPoint} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}.` : '')),
+    setupPerPoint, setupPerWorking, setupPerRepair, setupFee,
+    setupNote: String(cfg.setup_note || (
+      repairOpenings > 0
+        ? `$${setupPerWorking} per working opening and $${setupPerRepair} per opening needing repair`
+        : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}` : '')
+    )),
+    setupCellNote: String(cfg.setup_cell_note || (
+      repairOpenings > 0
+        ? `$${setupPerWorking} per working opening · $${setupPerRepair} per opening needing repair.`
+        : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}.` : '')
+    )),
+    offerGateCoverage: cfg.offer_gate_coverage != null ? !!cfg.offer_gate_coverage : true,
+    offerExtraCameras: cfg.offer_extra_cameras != null ? !!cfg.offer_extra_cameras : true,
     deposit, goLive,
     billingMode: cfg.billing_mode === 'property_monthly' ? 'property_monthly' : 'resident',
     residentFee,
