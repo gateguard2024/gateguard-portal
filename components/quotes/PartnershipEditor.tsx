@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { PartnershipProposal } from '@/components/public/PartnershipProposal'
-import { resolvePartnership, money, type PartnershipConfig, type BillingMode } from '@/lib/partnership-proposal'
+import { resolvePartnership, money, residentFeeFromMonthly, type PartnershipConfig, type BillingMode } from '@/lib/partnership-proposal'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -62,6 +62,9 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [reviewMsg, setReviewMsg] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  // Auto resident fee (from the rough calculator): perUnit/mo × 12 × 1.2, ceil $5.
+  const [perUnitMonthly, setPerUnitMonthly] = useState<number | null>(null)
+  const [suggestedFee, setSuggestedFee] = useState<number | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -94,6 +97,35 @@ export function PartnershipEditor({ id }: { id: string }) {
   const previewQuote = useMemo(() => ({ ...(quote ?? {}), property_name: propName, property_address: propAddr, units: Number(units) || 0 }), [quote, propName, propAddr, units])
   const r = useMemo(() => resolvePartnership(previewQuote, cfg), [previewQuote, cfg])
   const resident = (cfg.billing_mode ?? 'resident') !== 'property_monthly'
+  const residentAuto = cfg.resident_fee_auto !== false // default on
+
+  // Pull the rough calculator's $/unit/month for this site, then derive the
+  // resident fee (×12, +20%, ceil $5). Runs server-side so the cost model never
+  // ships to the browser. Debounced; only the perUnit figure comes back.
+  const scopeKey = `${Number(units) || 0}|${r.accessPoints}|${r.camerasIncluded ? r.cameras : 0}`
+  useEffect(() => {
+    const [u, ep, cam] = scopeKey.split('|').map(Number)
+    if (!u) { setPerUnitMonthly(null); setSuggestedFee(null); return }
+    const t = setTimeout(() => {
+      fetch('/api/pricing/compute', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ livingUnits: u, entryPoints: ep, camerasMonitored: cam, camerasNonMonitored: 0, smartPackage: 'none', cellular: 'none', dealerMaintainsEntry: true }),
+      }).then(res => res.json()).then(j => {
+        const perUnit = j?.result?.perUnit
+        if (typeof perUnit !== 'number') return
+        setPerUnitMonthly(perUnit)
+        setSuggestedFee(residentFeeFromMonthly(perUnit))
+      }).catch(() => {})
+    }, 300)
+    return () => clearTimeout(t)
+  }, [scopeKey])
+
+  // In auto mode, keep resident_fee in sync with the suggestion.
+  useEffect(() => {
+    if (residentAuto && suggestedFee != null && suggestedFee !== cfg.resident_fee) {
+      setCfg(p => ({ ...p, resident_fee: suggestedFee }))
+    }
+  }, [residentAuto, suggestedFee, cfg.resident_fee])
 
   async function save() {
     setSaving(true); setErr(null)
@@ -246,12 +278,23 @@ export function PartnershipEditor({ id }: { id: string }) {
         <div style={{ fontSize: 11, color: '#8fa4b8' }}>{r.accessPoints} openings — {r.workingOpenings} working, {r.repairOpenings} needing repair{r.camerasIncluded && r.cameras ? ` · ${r.cameras} cameras` : ''}</div>
 
         <Sec t="Set-up pricing" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <Stepper label="$ / working opening" value={cfg.setup_per_working ?? 500} onChange={v => set('setup_per_working', v)} step={50} prefix="$" />
-          <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          {(['condition', 'flat'] as const).map(m => (
+            <button key={m} type="button" onClick={() => set('pricing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.pricing_mode ?? 'condition') === m) ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'condition' ? 'By condition' : 'Flat fee'}</button>
+          ))}
         </div>
+        {(cfg.pricing_mode ?? 'condition') === 'flat' ? (
+          <Stepper label="$ / opening — flat (all openings same)" value={cfg.setup_flat_per_opening ?? 500} onChange={v => set('setup_flat_per_opening', v)} step={50} prefix="$" />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Stepper label="$ / working opening" value={cfg.setup_per_working ?? 500} onChange={v => set('setup_per_working', v)} step={50} prefix="$" />
+            <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
+          </div>
+        )}
         <div style={{ fontSize: 11.5, color: '#a9bccf', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 8 }}>
-          {r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br />
+          {r.pricingMode === 'flat'
+            ? <>{r.accessPoints} openings × {money(r.setupFlatPerOpening)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br /></>
+            : <>{r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br /></>}
           deposit {money(r.deposit)} at signing · {money(r.goLive)} at Go-Live
         </div>
 
@@ -286,10 +329,29 @@ export function PartnershipEditor({ id }: { id: string }) {
             <button key={m} onClick={() => set('billing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.billing_mode ?? 'resident') === m) ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'resident' ? 'Resident-funded' : 'Property bulk / mo'}</button>
           ))}
         </div>
-        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <Field l="Resident fee / unit"><input type="number" min={0} value={cfg.resident_fee ?? ''} onChange={e => set('resident_fee', numOrU(e.target.value))} placeholder="100" style={{ ...inS, opacity: resident ? 1 : 0.5 }} disabled={!resident} /></Field>
-          <Field l="Property $/mo (bulk)"><input type="number" min={0} value={cfg.property_monthly ?? ''} onChange={e => set('property_monthly', numOrU(e.target.value))} placeholder="0" style={{ ...inS, opacity: resident ? 0.5 : 1 }} disabled={resident} /></Field>
-        </div>
+        {resident ? (
+          <div style={{ ...groupCard, marginTop: 8 }}>
+            <label style={toggleRow}>
+              <input type="checkbox" checked={residentAuto} onChange={e => set('resident_fee_auto', e.target.checked)} />
+              Auto-calculate resident fee (from the rough calculator)
+            </label>
+            {residentAuto ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#6ee7b7' }}>{suggestedFee != null ? money(suggestedFee) : '—'}<span style={{ fontSize: 12, color: '#8fa4b8', fontWeight: 400 }}> / unit</span></div>
+                <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 2 }}>{perUnitMonthly != null ? `${money(perUnitMonthly)}/unit/mo × 12 × 1.2, rounded up to $5` : 'Enter units + openings to calculate'}</div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 8 }}>
+                <Stepper label="Resident fee / unit" value={cfg.resident_fee ?? 100} onChange={v => set('resident_fee', v)} step={5} prefix="$" />
+                {suggestedFee != null && <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 4 }}>Calculator suggests {money(suggestedFee)} — <button type="button" onClick={() => set('resident_fee', suggestedFee)} style={{ background: 'transparent', border: 0, color: '#5FB8E0', cursor: 'pointer', padding: 0, fontWeight: 700 }}>use it</button></div>}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <Field l="Property $/mo (bulk)"><input type="number" min={0} value={cfg.property_monthly ?? ''} onChange={e => set('property_monthly', numOrU(e.target.value))} placeholder="0" style={inS} /></Field>
+          </div>
+        )}
 
         <Sec t="Competitor takeover (optional)" />
         <Field l="Competitor name"><input value={cfg.takeover_competitor ?? ''} onChange={e => set('takeover_competitor', e.target.value)} placeholder="Gatewise" style={inS} /></Field>

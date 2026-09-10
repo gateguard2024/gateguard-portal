@@ -42,17 +42,22 @@ export interface PartnershipConfig {
   camera_note?: string      // "gate, dumpster, pool" | "pool, front gate, and rear gate"
   openings_breakdown?: string // intro prose: "five vehicle gates, the pedestrian gate, and five amenity doors"
   scope_stats?: ScopeStat[] // override the scope grid entirely (up to 4). If absent, derived from counts.
-  // Money — differentiated per-opening set-up (dealer-editable on the left panel)
-  setup_fee?: number        // total override; if absent, computed from working/repair counts × rates
+  // Money — set-up pricing. Two modes (either/or):
+  //   'condition' → working openings @ setup_per_working, repair openings @ setup_per_repair
+  //   'flat'      → every opening @ setup_flat_per_opening (one rate, ignores condition)
+  pricing_mode?: 'condition' | 'flat' // default 'condition'
+  setup_flat_per_opening?: number // default 500 — flat mode rate per opening
+  setup_fee?: number        // total override; if absent, computed from the mode above
   setup_per_working?: number // default 500 — a working opening
   setup_per_repair?: number  // default 750 — an opening that needs repair
-  setup_per_point?: number  // legacy flat per-opening rate (fallback for setup_per_working)
+  setup_per_point?: number  // legacy flat per-opening rate (fallback)
   setup_note?: string       // structure-paragraph detail, e.g. "$500 per access point across eight points"
   setup_cell_note?: string  // TERMS set-up cell description, e.g. "$500 per opening across all eleven, plus 3 cameras"
   // Add-ons — dealer chooses whether to offer each (rates editable per deal)
   offer_gate_coverage?: boolean // default true — show the gate & hinge coverage row
   offer_extra_cameras?: boolean // default true — show the extra-cameras row
   resident_fee?: number     // default 100 (per unit, at each lease signing & renewal)
+  resident_fee_auto?: boolean // default true — auto-derive from the rough calculator (see residentFeeFromMonthly)
   resident_fee_label?: string // TERMS 3rd-column header. Default "Resident fee — billed by us"
   billing_mode?: BillingMode
   property_monthly?: number // property_monthly mode: bulk monthly the property pays
@@ -91,6 +96,8 @@ export interface ResolvedPartnership {
   setupPerPoint: number
   setupPerWorking: number
   setupPerRepair: number
+  pricingMode: 'condition' | 'flat'
+  setupFlatPerOpening: number
   setupFee: number
   setupNote: string
   setupCellNote: string
@@ -139,9 +146,13 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
   const setupPerPoint = n(cfg.setup_per_point, 500)
   const setupPerWorking = n(cfg.setup_per_working ?? cfg.setup_per_point, 500)
   const setupPerRepair = n(cfg.setup_per_repair, 750)
+  const pricingMode: 'condition' | 'flat' = cfg.pricing_mode === 'flat' ? 'flat' : 'condition'
+  const setupFlatPerOpening = n(cfg.setup_flat_per_opening ?? cfg.setup_per_point, 500)
   const setupFee = cfg.setup_fee != null
     ? n(cfg.setup_fee)
-    : (workingOpenings * setupPerWorking + repairOpenings * setupPerRepair)
+    : pricingMode === 'flat'
+      ? setupFlatPerOpening * accessPoints
+      : (workingOpenings * setupPerWorking + repairOpenings * setupPerRepair)
   const deposit = Math.round(setupFee / 2)
   const goLive = setupFee - deposit
 
@@ -207,16 +218,20 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     cameraNote,
     openingsBreakdown,
     scopeStats,
-    setupPerPoint, setupPerWorking, setupPerRepair, setupFee,
+    setupPerPoint, setupPerWorking, setupPerRepair, pricingMode, setupFlatPerOpening, setupFee,
     setupNote: String(cfg.setup_note || (
-      repairOpenings > 0
-        ? `$${setupPerWorking} per working opening and $${setupPerRepair} per opening needing repair`
-        : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}` : '')
+      pricingMode === 'flat'
+        ? (accessPoints ? `$${setupFlatPerOpening} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}` : '')
+        : repairOpenings > 0
+          ? `$${setupPerWorking} per working opening and $${setupPerRepair} per opening needing repair`
+          : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}` : '')
     )),
     setupCellNote: String(cfg.setup_cell_note || (
-      repairOpenings > 0
-        ? `$${setupPerWorking} per working opening · $${setupPerRepair} per opening needing repair.`
-        : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}.` : '')
+      pricingMode === 'flat'
+        ? (accessPoints ? `$${setupFlatPerOpening} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}.` : '')
+        : repairOpenings > 0
+          ? `$${setupPerWorking} per working opening · $${setupPerRepair} per opening needing repair.`
+          : (accessPoints ? `$${setupPerWorking} per opening across all ${accessPoints} opening${accessPoints === 1 ? '' : 's'}.` : '')
     )),
     offerGateCoverage: cfg.offer_gate_coverage != null ? !!cfg.offer_gate_coverage : true,
     offerExtraCameras: cfg.offer_extra_cameras != null ? !!cfg.offer_extra_cameras : true,
@@ -235,3 +250,13 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
 }
 
 export const money = (v: number) => '$' + Math.round(Number(v) || 0).toLocaleString()
+
+/**
+ * Resident parking & amenity fee per unit, derived from the rough calculator's
+ * $/unit/MONTH: annualize (×12, the fee covers a 12-month term), add 20%, then
+ * round UP to the nearest $5. e.g. $8.50/mo → 102 → 122.40 → $125.
+ */
+export const residentFeeFromMonthly = (perUnitMonthly: number) => {
+  const annualPlus = (Number(perUnitMonthly) || 0) * 12 * 1.2
+  return Math.ceil(annualPlus / 5) * 5
+}
