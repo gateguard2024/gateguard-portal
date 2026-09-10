@@ -29,7 +29,13 @@ export function NexusDocShell({
           'radial-gradient(circle at 50% 0%, rgba(0,124,255,0.16), transparent 36%), linear-gradient(180deg, #020713, #061225 50%, #020713)',
       }}
     >
-      <style>{`@media print { .nexus-doc-portal { background:#fff !important; } .nexus-doc-chrome { display:none !important; } }`}</style>
+      <style>{`@media print {
+        .nexus-doc-portal { background:#fff !important; min-height:0 !important; }
+        .nexus-doc-chrome { display:none !important; }
+        /* overflow:hidden on the sheet clips multi-page docs to page 1 in print */
+        .nexus-doc-sheet { overflow:visible !important; border-radius:0 !important; box-shadow:none !important; }
+        .nexus-doc-body { padding:0 !important; max-width:none !important; }
+      }`}</style>
 
       {/* Header */}
       <div
@@ -69,8 +75,8 @@ export function NexusDocShell({
       </div>
 
       {/* White document sheet */}
-      <div className="mx-auto max-w-4xl px-3 sm:px-6 py-6 sm:py-8">
-        <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 30px 100px rgba(0,0,0,0.5), 0 0 58px rgba(0,124,255,0.08)', overflow: 'hidden' }}>
+      <div className="nexus-doc-body mx-auto max-w-4xl px-3 sm:px-6 py-6 sm:py-8">
+        <div className="nexus-doc-sheet" style={{ background: '#fff', borderRadius: 24, boxShadow: '0 30px 100px rgba(0,0,0,0.5), 0 0 58px rgba(0,124,255,0.08)', overflow: 'hidden' }}>
           {children}
         </div>
       </div>

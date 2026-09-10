@@ -166,8 +166,15 @@ export function PartnershipEditor({ id }: { id: string }) {
   if (!quote) return <div style={{ padding: 40, color: '#9fb4c9' }}>Loading…</div>
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#101b2e,#0b1322)', display: 'flex' }}>
-      <style>{`@media print { .pp-form,.pp-bar{display:none!important} .pp-preview{position:static!important;width:100%!important;padding:0!important;background:#fff!important} body{background:#fff!important} }`}</style>
+    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#101b2e,#0b1322)', display: 'flex' }}>
+      <style>{`@media print {
+        .pp-form,.pp-bar{display:none!important}
+        /* The preview is a 100vh scroll container on screen; in print it must grow
+           to its full height and let overflow show, or only page 1 prints. */
+        .pp-preview{position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;width:100%!important;padding:0!important;background:#fff!important}
+        .pp-root{height:auto!important;min-height:0!important;overflow:visible!important;display:block!important;background:#fff!important}
+        html,body{height:auto!important;overflow:visible!important;background:#fff!important}
+      }`}</style>
 
       {/* Left form */}
       <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(95,184,224,0.2)' }}>
