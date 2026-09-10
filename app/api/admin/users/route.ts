@@ -105,6 +105,37 @@ export async function GET(req: NextRequest) {
         permissions: permsMap[u.id] ?? null,
       }))
 
+    // Merge in Supabase `profiles` (authoritative org membership). Clerk's
+    // publicMetadata.org_id can be stale or unset for freshly-onboarded dealer
+    // staff — their org is stamped on the invitation, and the reliable org link
+    // lands in profiles at sign-up. Without this merge, a real dealer user shows
+    // "no agents" in the rep/manager picker. Keyed by clerk_user_id so it's a
+    // valid reassignment target; Clerk-sourced rows win on dedupe (richer data).
+    try {
+      let profQuery = supabase
+        .from('profiles')
+        .select('clerk_user_id, org_id, role, first_name, last_name, email')
+      if (filterOrgIds) profQuery = profQuery.in('org_id', filterOrgIds)
+      const { data: profs } = await profQuery
+      const seen = new Set(users.map(u => u.id))
+      for (const p of (profs ?? []) as Array<{ clerk_user_id?: string; org_id?: string; role?: string; first_name?: string; last_name?: string; email?: string }>) {
+        if (!p.clerk_user_id || seen.has(p.clerk_user_id)) continue
+        seen.add(p.clerk_user_id)
+        users.push({
+          id: p.clerk_user_id,
+          email: p.email ?? '',
+          full_name: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || (p.email ?? ''),
+          image_url: '',
+          created_at: new Date().toISOString(),
+          last_sign_in: null,
+          org_id: p.org_id ?? '',
+          org_tier: '',
+          role: p.role ?? '',
+          permissions: null,
+        })
+      }
+    } catch { /* profiles merge is best-effort — never fail the whole list */ }
+
     // Pending invitations — only corporate or the inviting org can see them
     // (Clerk doesn't store which org invited them, so corporate sees all; others see none)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

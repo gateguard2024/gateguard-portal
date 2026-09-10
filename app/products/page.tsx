@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   Plus, Search, Package, Shield, Wifi,
@@ -937,24 +936,22 @@ export default function ProductsPage() {
     setLoading(true);
     setDbError(null);
     try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("category")
-        .order("name");
-
-      if (error) throw error;
+      const res = await fetch("/api/products");
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Failed to load products");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any[] = j.products ?? [];
 
       if (!data || data.length === 0) {
-        // First run — seed the table
+        // First run — seed the table (bulk upsert on SKU, server-side)
         const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", designMeta:{}, ggCost:0, ...p }));
-        const { data: inserted, error: seedErr } = await supabase
-          .from("products")
-          .upsert(seedRows, { onConflict: "sku" })
-          .select();
-
-        if (seedErr) throw seedErr;
-        setProducts((inserted ?? []).map(fromDb));
+        const seedRes = await fetch("/api/products", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upsert", rows: seedRows }),
+        });
+        const sj = await seedRes.json().catch(() => ({}));
+        if (!seedRes.ok) throw new Error(sj.error || "Seed failed");
+        setProducts((sj.products ?? []).map(fromDb));
       } else {
         setProducts(data.map(fromDb));
       }
@@ -991,23 +988,22 @@ export default function ProductsPage() {
 
       let savedId = p.id;
       if (isNew) {
-        const { data, error } = await supabase
-          .from("products")
-          .insert(row)
-          .select()
-          .single();
-        if (error) throw error;
-        savedId = data.id;
-        setProducts(prev => [...prev, fromDb(data)]);
+        const res = await fetch("/api/products", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ row }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || "Save failed");
+        savedId = j.product.id;
+        setProducts(prev => [...prev, fromDb(j.product)]);
       } else {
-        const { data, error } = await supabase
-          .from("products")
-          .update(row)
-          .eq("id", p.id)
-          .select()
-          .single();
-        if (error) throw error;
-        setProducts(prev => prev.map(x => x.id === p.id ? fromDb(data) : x));
+        const res = await fetch("/api/products", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: p.id, row }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || "Save failed");
+        setProducts(prev => prev.map(x => x.id === p.id ? fromDb(j.product) : x));
       }
 
       // Corporate: persist our GG cost through the server (it re-derives + locks
@@ -1039,12 +1035,13 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       const dbRows = rows.map(r => toDb(r));
-      const { data, error } = await supabase
-        .from("products")
-        .upsert(dbRows, { onConflict: "sku" })
-        .select();
-      if (error) throw error;
-      const imported = (data ?? []).map(fromDb);
+      const res = await fetch("/api/products", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "upsert", rows: dbRows }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Import failed");
+      const imported: Product[] = (j.products ?? []).map(fromDb);
       setProducts(prev => {
         const skus = new Set(imported.map(p => p.sku));
         return [...prev.filter(p => !skus.has(p.sku)), ...imported];
@@ -1060,12 +1057,13 @@ export default function ProductsPage() {
   const handleSellPrice = async (id: string, v: number) => {
     // Optimistic update
     setProducts(prev => prev.map(p => p.id===id ? {...p, sellPrice:v} : p));
-    const { error } = await supabase
-      .from("products")
-      .update({ sell_price: v })
-      .eq("id", id);
-    if (error) {
-      setDbError(getErrMsg(error));
+    const res = await fetch("/api/products", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, row: { sell_price: v } }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setDbError(j.error || "Update failed");
       loadProducts();
     }
   };
@@ -1076,12 +1074,13 @@ export default function ProductsPage() {
     const newVal = !product.active;
     // Optimistic update
     setProducts(prev => prev.map(p => p.id===id ? {...p, active:newVal} : p));
-    const { error } = await supabase
-      .from("products")
-      .update({ active: newVal })
-      .eq("id", id);
-    if (error) {
-      setDbError(getErrMsg(error));
+    const res = await fetch("/api/products", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, row: { active: newVal } }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setDbError(j.error || "Update failed");
       loadProducts();
     }
   };
@@ -1091,12 +1090,13 @@ export default function ProductsPage() {
     // Optimistic update
     setProducts(prev => prev.filter(p => !selected.has(p.id)));
     setSelected(new Set());
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .in("id", ids);
-    if (error) {
-      setDbError(getErrMsg(error));
+    const res = await fetch("/api/products", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setDbError(j.error || "Delete failed");
       loadProducts();
     }
   };
@@ -1104,12 +1104,13 @@ export default function ProductsPage() {
   const deleteOne = async (id: string) => {
     // Optimistic update
     setProducts(prev => prev.filter(p => p.id !== id));
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      setDbError(getErrMsg(error));
+    const res = await fetch("/api/products", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setDbError(j.error || "Delete failed");
       loadProducts();
     }
   };
