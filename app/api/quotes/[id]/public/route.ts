@@ -10,9 +10,13 @@ export const dynamic = 'force-dynamic'
 // GET /api/quotes/[id]/public — public fetch (no Clerk auth required)
 // Used by client-facing proposal + approve pages
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // The rep editor loads its own (possibly-unapproved) draft with ?internal=1.
+  // The client-facing proposal page never sends this, so the client link stays
+  // gated until approval.
+  const internal = new URL(req.url).searchParams.get('internal') === '1'
   // Newer columns (added by later migrations). If a migration hasn't run yet on
   // this DB, selecting a missing column would 404 EVERY quote — so we retry
   // without them rather than break the whole proposal system.
@@ -55,7 +59,7 @@ export async function GET(
   // Legacy quotes (review_status null/undefined) are never gated, so existing
   // sent proposals keep working. 'draft' | 'pending' | 'changes_requested' hold.
   const isPartnership = quote.quote_mode === 'partnership' || !!quote.partnership
-  if (isPartnership && ['draft', 'pending', 'changes_requested'].includes(quote.review_status)) {
+  if (!internal && isPartnership && ['draft', 'pending', 'changes_requested'].includes(quote.review_status)) {
     return NextResponse.json({ review_hold: true, review_status: quote.review_status })
   }
 

@@ -146,14 +146,28 @@ export async function PATCH(
   if (newStatus === 'accepted' && !body.accepted_at) updates.accepted_at = new Date().toISOString()
   if (newStatus === 'declined' && !body.declined_at) updates.declined_at = new Date().toISOString()
 
+  // Review gate (migration 187): a dealer's partnership proposal enters/returns to
+  // 'draft' on every save — so any edit must be re-submitted and re-approved before
+  // it can be sent. Corporate saves are auto-approved. review_status is never
+  // client-settable (not in allowedFields) — only derived here or via /review.
+  const savingPartnership = body.quote_mode === 'partnership' || body.partnership != null
+  if (savingPartnership) updates.review_status = user.isCorporate ? 'approved' : 'draft'
+
   updates.updated_at = new Date().toISOString()
 
-  const { data: updated, error: updateErr } = await supabase
+  let { data: updated, error: updateErr } = await supabase
     .from('quotes')
     .update(updates)
     .eq('id', params.id)
     .select()
     .single()
+
+  // Drift-safe: if review_status isn't migrated yet, don't block the save.
+  if (updateErr && (updateErr.code === '42703' || updateErr.code === 'PGRST204') && 'review_status' in updates) {
+    delete updates.review_status
+    ;({ data: updated, error: updateErr } = await supabase
+      .from('quotes').update(updates).eq('id', params.id).select().single())
+  }
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
   return NextResponse.json({ quote: updated })

@@ -7,6 +7,7 @@
  * config to quotes.partnership and flips quote_mode = 'partnership'.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { PartnershipProposal } from '@/components/public/PartnershipProposal'
 import { resolvePartnership, money, type PartnershipConfig, type BillingMode } from '@/lib/partnership-proposal'
 
@@ -23,16 +24,27 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // Review gate
+  const { user } = useUser()
+  const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === 'corporate'
+  const [reviewStatus, setReviewStatus] = useState<string | null>(null)
+  const [reviewNote, setReviewNote] = useState<string>('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [reviewMsg, setReviewMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
-    fetch(`/api/quotes/${id}/public`).then(r => r.json()).then(j => {
+    // ?internal=1 — the rep editor may load its own unapproved draft (the gate
+    // only hides the client-facing link).
+    fetch(`/api/quotes/${id}/public?internal=1`).then(r => r.json()).then(j => {
       if (j?.error) { setErr(j.error); return }
       const q = j.quote || {}
       setQuote(q); setCfg(q.partnership && typeof q.partnership === 'object' ? q.partnership : {})
       setPropName(q.property_name ?? q.client_name ?? '')
       setPropAddr(q.property_address ?? '')
       setUnits(q.units != null ? String(q.units) : '')
+      setReviewStatus(q.review_status ?? null)
+      setReviewNote(q.review_note ?? '')
     }).catch(() => setErr('Could not load this quote.'))
   }, [id])
 
@@ -61,9 +73,31 @@ export function PartnershipEditor({ id }: { id: string }) {
       })
       if (!res.ok) { const j = await res.json().catch(() => ({})); setErr(j?.error || 'Save failed.'); return }
       setSaved(true)
+      // Server resets a dealer's proposal to 'draft' on save; corporate auto-approves.
+      setReviewStatus(isCorporate ? 'approved' : 'draft')
     } catch { setErr('Save failed.') }
     finally { setSaving(false) }
   }
+
+  async function review(action: 'submit' | 'approve' | 'request_changes', note?: string) {
+    setBusy(action); setReviewMsg(null); setErr(null)
+    try {
+      const res = await fetch(`/api/quotes/${id}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, note }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setErr(j?.error || 'Could not update review.'); return }
+      setReviewStatus(j.review_status)
+      setReviewMsg(
+        action === 'submit' ? 'Submitted for review — the GateGuard team has been notified.'
+        : action === 'approve' ? 'Approved — the client link and PDF are unlocked.'
+        : 'Sent back for changes.'
+      )
+    } catch { setErr('Could not update review.') }
+    finally { setBusy(null) }
+  }
+  const approved = reviewStatus === 'approved' || reviewStatus === null || reviewStatus === 'not_required'
 
   const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13 }
   const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9' }
@@ -82,11 +116,48 @@ export function PartnershipEditor({ id }: { id: string }) {
         <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save proposal'}</button>
           <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(95,184,224,0.35)', background: 'rgba(95,184,224,0.12)', color: '#9FD8EC', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
-          <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
+          {approved
+            ? <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
+            : <span title="Locked until approved" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(140,170,200,0.15)', color: 'rgba(207,224,240,0.4)', fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>🔒 Client link</span>}
         </div>
         <div className="pp-bar" style={{ marginBottom: 12 }}>
           <a href={`/quotes/${id}/agreement`} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', padding: '8px', borderRadius: 10, border: '1px solid rgba(95,184,224,0.28)', background: 'rgba(95,184,224,0.06)', color: '#9FD8EC', fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>View service agreement ↗ (auto-matches these terms)</a>
         </div>
+
+        {/* Review gate */}
+        {(() => {
+          const meta: Record<string, { bg: string; bd: string; fg: string; label: string; note: string }> = {
+            draft:             { bg: 'rgba(148,163,184,0.12)', bd: 'rgba(148,163,184,0.4)', fg: '#cbd5e1', label: 'Draft — not sent', note: 'Submit for GateGuard review before this can be sent to the client.' },
+            pending:           { bg: 'rgba(251,191,36,0.12)',  bd: 'rgba(251,191,36,0.45)', fg: '#fcd34d', label: 'Pending review', note: 'The GateGuard team has been notified. The client link is locked until approved.' },
+            changes_requested: { bg: 'rgba(248,113,113,0.12)', bd: 'rgba(248,113,113,0.45)', fg: '#fca5a5', label: 'Changes requested', note: reviewNote || 'GateGuard asked for changes. Update and re-submit.' },
+            approved:          { bg: 'rgba(52,211,153,0.12)',  bd: 'rgba(52,211,153,0.45)', fg: '#6ee7b7', label: 'Approved — cleared to send', note: 'The client link and PDF are unlocked.' },
+          }
+          const m = meta[reviewStatus ?? 'draft'] ?? meta.draft
+          const showGate = reviewStatus != null && reviewStatus !== 'not_required'
+          if (!showGate && isCorporate) return null // corporate on a not-yet-gated quote: nothing to show
+          return (
+            <div className="pp-bar" style={{ marginBottom: 12, padding: 10, borderRadius: 10, background: m.bg, border: `1px solid ${m.bd}` }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: m.fg }}>{m.label}</div>
+              <div style={{ fontSize: 11, color: '#a9bccf', marginTop: 3 }}>{m.note}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {!isCorporate && reviewStatus !== 'pending' && reviewStatus !== 'approved' && (
+                  <button onClick={() => review('submit')} disabled={busy === 'submit'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#5FB8E0,#2f7fb8)', cursor: 'pointer' }}>{busy === 'submit' ? 'Submitting…' : 'Submit for review'}</button>
+                )}
+                {isCorporate && (
+                  <>
+                    <button onClick={() => review('approve')} disabled={busy === 'approve'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{busy === 'approve' ? 'Approving…' : 'Approve'}</button>
+                    <button onClick={() => review('request_changes', reviewNote)} disabled={busy === 'request_changes'} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.5)', fontWeight: 700, fontSize: 12, color: '#fca5a5', background: 'transparent', cursor: 'pointer' }}>Request changes</button>
+                  </>
+                )}
+              </div>
+              {isCorporate && (
+                <input value={reviewNote} onChange={e => setReviewNote(e.target.value)} placeholder="Note to the dealer (optional, sent with 'Request changes')" style={{ ...inS, marginTop: 8, fontSize: 12 }} />
+              )}
+              {reviewMsg && <div style={{ fontSize: 11, color: '#6ee7b7', marginTop: 6 }}>{reviewMsg}</div>}
+            </div>
+          )
+        })()}
+
         {err && <div style={{ color: '#fca5a5', fontSize: 12, marginBottom: 8 }}>{err}</div>}
 
         <Sec t="Property & contact" />
