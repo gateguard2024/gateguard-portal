@@ -16,7 +16,7 @@ import { PartnershipProposal } from '@/components/public/PartnershipProposal'
 import type { PricedLine } from '@/lib/proposal-modules'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Payload = { quote: any; lineItems: PricedLine[] }
+type Payload = { quote: any; lineItems: PricedLine[]; review_hold?: boolean; review_status?: string }
 
 export default function ProposalPage() {
   const params = useParams()
@@ -29,7 +29,7 @@ export default function ProposalPage() {
     let live = true
     fetch(`/api/quotes/${id}/public`)
       .then(r => r.json())
-      .then(j => { if (!live) return; if (j?.error) setErr(j.error); else setData(j) })
+      .then(j => { if (!live) return; if (j?.error) setErr(j.error); else if (j?.review_hold) setData({ quote: null, lineItems: [], review_hold: true, review_status: j.review_status }); else setData(j) })
       .catch(() => { if (live) setErr('Could not load this proposal.') })
     return () => { live = false }
   }, [id])
@@ -41,6 +41,13 @@ export default function ProposalPage() {
   )
   if (err) return center(err)
   if (!data) return center('Loading proposal…')
+  if (data.review_hold) return center(
+    <div style={{ maxWidth: 420, margin: '0 auto' }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#e6f1fb', marginBottom: 8 }}>This proposal is being finalized</div>
+      <div style={{ fontSize: 14, lineHeight: 1.6 }}>It’s in final review with the GateGuard team and will be available shortly. Please check back, or contact your GateGuard representative.</div>
+    </div>
+  )
 
   const isPartnership = data.quote?.quote_mode === 'partnership' || !!data.quote?.partnership
   return (
