@@ -15,6 +15,14 @@ import { resolvePartnership, money, type PartnershipConfig, type BillingMode } f
 type Quote = Record<string, any>
 const numOrU = (v: string) => (v === '' ? undefined : Math.max(0, Number(v) || 0))
 
+// ⚠️ These are defined at MODULE scope on purpose. When they lived inside the
+// component they were a brand-new component type on every render, so React
+// remounted every input on each keystroke — the "one letter at a time" bug.
+const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13 }
+const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9' }
+const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
+const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5FB8E0', margin: '14px 0 6px' }}>{t}</div>
+
 export function PartnershipEditor({ id }: { id: string }) {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [cfg, setCfg] = useState<PartnershipConfig>({})
@@ -99,11 +107,6 @@ export function PartnershipEditor({ id }: { id: string }) {
   }
   const approved = reviewStatus === 'approved' || reviewStatus === null || reviewStatus === 'not_required'
 
-  const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13 }
-  const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9' }
-  const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
-  const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5FB8E0', margin: '14px 0 6px' }}>{t}</div>
-
   if (err && !quote) return <div style={{ padding: 40, color: '#fca5a5' }}>{err}</div>
   if (!quote) return <div style={{ padding: 40, color: '#9fb4c9' }}>Loading…</div>
 
@@ -113,6 +116,16 @@ export function PartnershipEditor({ id }: { id: string }) {
 
       {/* Left form */}
       <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(95,184,224,0.2)' }}>
+        <div className="pp-bar" style={{ marginBottom: 10 }}>
+          <button
+            onClick={() => {
+              const oppId = quote?.opportunity_id
+              if (typeof window !== 'undefined' && window.history.length > 1) window.history.back()
+              else window.location.href = oppId ? `/crm/opportunities/${oppId}` : '/'
+            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(140,170,200,0.3)', background: 'transparent', color: '#9fb4c9', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          >← Back to opportunity</button>
+        </div>
         <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save proposal'}</button>
           <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(95,184,224,0.35)', background: 'rgba(95,184,224,0.12)', color: '#9FD8EC', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
