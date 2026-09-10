@@ -94,8 +94,9 @@ export async function PATCH(req: NextRequest) {
   const id = body.id != null && body.id !== '' ? String(body.id) : ''
   const row = body.row
   if (!id || !row || typeof row !== 'object') {
+    const keys = Object.keys(body).join(', ') || 'nothing'
     return NextResponse.json(
-      { error: 'Missing id or fields.', received: Object.keys(body) },
+      { error: `Missing id or fields (server received: ${keys}).`, received: Object.keys(body) },
       { status: 400 }
     )
   }
