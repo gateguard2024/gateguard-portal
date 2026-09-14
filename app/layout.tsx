@@ -16,7 +16,15 @@ const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400","500","600",
 export const metadata: Metadata = {
   title: { default: "GateGuard Nexus", template: "%s — GateGuard Nexus" },
   description: "The operating system for multifamily access and channel dealer networks.",
-  icons: { icon: "/favicon.ico", apple: "/icon-192.png" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: "/icon-192.png",
+    shortcut: "/favicon.ico",
+  },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
