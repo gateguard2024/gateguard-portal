@@ -13,8 +13,8 @@
 @layer base {
   :root {
     /* GateGuard OS — Light mode (portal is light-locked) */
-    --background:         216 33% 97%;   /* barely-there cool blue-white — cards pop against this */
-    --foreground:         215 28% 13%;   /* slightly deeper near-black for sharper text */
+    --background:         214 34% 94%;   /* richer light slate ground — not washed out, cards pop */
+    --foreground:         215 30% 12%;   /* deep ink for crisp, high-contrast text */
     --card:               0 0% 100%;     /* pure white tiles */
     --card-foreground:    215 25% 15%;
     --popover:            0 0% 100%;
@@ -29,8 +29,8 @@
     --accent-foreground:  215 25% 15%;
     --destructive:        0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border:             214 20% 88%;
-    --input:              214 20% 88%;
+    --border:             214 24% 85%;
+    --input:              214 24% 85%;
     --ring:               217 91% 53%;
     --radius:             0.625rem;  /* 10px — slightly more rounded, iOS feel */
     --sidebar-bg:         214 55% 8%;    /* deep navy sidebar — unchanged */
@@ -51,9 +51,9 @@
    =================================================== */
 .bg-card {
   box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.07),
-    0 4px 16px rgba(0, 0, 0, 0.06),
-    0 0 0 1px rgba(148, 163, 184, 0.10);
+    0 1px 3px rgba(20, 40, 80, 0.08),
+    0 8px 24px rgba(20, 40, 80, 0.08),
+    0 0 0 1px rgba(70, 100, 140, 0.10);
 }
 
 /* ===================================================
@@ -61,7 +61,9 @@
    Cards float as white tiles over this light ground
    =================================================== */
 main.portal-main {
-  background: linear-gradient(135deg, #EEF2F8 0%, #E8EEF6 60%, #EEF2F8 100%);
+  /* Richer light-slate ground — more depth than the old near-white so white cards
+     read as elevated tiles (Brivo-like), without going dark. */
+  background: linear-gradient(140deg, #E7EDF6 0%, #DCE5F1 55%, #E6EDF7 100%);
   min-height: 100vh;
 }
 
