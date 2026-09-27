@@ -10,7 +10,7 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
-import { PricingCalculator } from '@/components/nexus/PricingCalculator'
+import { RoiCalculator } from '@/components/nexus/RoiCalculator'
 import { OpportunityLifecycle } from '@/components/nexus/OpportunityLifecycle'
 import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
@@ -254,7 +254,7 @@ export function SalesSurface() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <HubTile glyph="quote" hex="#5FB8E0" title="Rough Calculator" subtitle="Fast monthly price from gates, doors, cameras, units." onClick={() => setActivePanel('rough-calc')} />
+            <HubTile glyph="quote" hex="#5FB8E0" title="ROI Calculator" subtitle="Deal profitability from scope + terms — start-up, monthly, ROI." onClick={() => setActivePanel('rough-calc')} />
             <HubTile glyph="research" hex="#5FB8E0" title="ARIA Research" subtitle="Property, owner, contacts, and proptech intel." badge="ARIA" onClick={() => router.push('/aria')} />
           </div>
         </div>
@@ -291,12 +291,12 @@ export function SalesSurface() {
       {oppsHub && <OpportunityHub onClose={() => { setOppsHub(false); void loadDashboard() }} />}
 
       {activePanel === 'rough-calc' && (
-        <SalesDetailShell title="Rough Calculator" subtitle="Enter what's on the site — Gate Guard cost + dealer price update live." onClose={() => setActivePanel(null)}
+        <SalesDetailShell title="ROI Calculator" subtitle="Enter the site scope + terms — start-up, monthly profit, and ROI update live." onClose={() => setActivePanel(null)}
           actions={<>
             <ActionButton label="Start a Quote" onClick={() => router.push('/quotes/new')} />
             <ActionButton label="New Opportunity" onClick={() => { setActivePanel('new-opp') }} />
           </>}>
-          <PricingCalculator />
+          <RoiCalculator />
         </SalesDetailShell>
       )}
     </section>
