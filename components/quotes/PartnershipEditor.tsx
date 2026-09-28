@@ -64,6 +64,13 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [reviewMsg, setReviewMsg] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  // Send-to-client
+  const [sendOpen, setSendOpen] = useState(false)
+  const [sendTo, setSendTo] = useState('')
+  const [sendSubject, setSendSubject] = useState('')
+  const [sendMessage, setSendMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // Auto resident fee (from the rough calculator): perUnit/mo × 12 × 1.2, ceil $5.
   const [perUnitMonthly, setPerUnitMonthly] = useState<number | null>(null)
   const [suggestedFee, setSuggestedFee] = useState<number | null>(null)
@@ -81,6 +88,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       setUnits(q.units != null ? String(q.units) : '')
       setReviewStatus(q.review_status ?? null)
       setReviewNote(q.review_note ?? '')
+      setSendTo(q.client_email ?? '')
     }).catch(() => setErr('Could not load this quote.'))
   }, [id])
 
@@ -164,11 +172,26 @@ export function PartnershipEditor({ id }: { id: string }) {
   }
   const approved = reviewStatus === 'approved' || reviewStatus === null || reviewStatus === 'not_required'
 
+  async function sendProposal() {
+    setSending(true); setSendMsg(null)
+    try {
+      const res = await fetch(`/api/quotes/${id}/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: sendTo, subject: sendSubject || undefined, message: sendMessage || undefined }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setSendMsg({ ok: false, text: j?.error || 'Could not send.' }); return }
+      setSendMsg({ ok: true, text: `Sent to ${j.to} via ${j.via === 'gmail' ? 'your Gmail' : 'email'} ✓` })
+      setReviewStatus('approved') // status is now 'sent' server-side; keep the link unlocked
+    } catch { setSendMsg({ ok: false, text: 'Could not send.' }) }
+    finally { setSending(false) }
+  }
+
   if (err && !quote) return <div style={{ padding: 40, color: '#b91c1c' }}>{err}</div>
   if (!quote) return <div style={{ padding: 40, color: MUT }}>Loading…</div>
 
   return (
-    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#B9CADF 0%,#A6BBD6 55%,#B4C6DD 100%)', display: 'flex' }}>
+    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#EEF3FA 0%,#E7EEF7 100%)', display: 'flex' }}>
       <style>{`@media print {
         .pp-form,.pp-bar{display:none!important}
         /* The preview is a 100vh scroll container on screen; in print it must grow
@@ -179,7 +202,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       }`}</style>
 
       {/* Left form */}
-      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(70,100,140,0.16)' }}>
+      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(70,100,140,0.2)', background: 'linear-gradient(180deg,#B7C8DE 0%,#A4B9D4 100%)' }}>
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
@@ -199,6 +222,25 @@ export function PartnershipEditor({ id }: { id: string }) {
         </div>
         <div className="pp-bar" style={{ marginBottom: 12 }}>
           <a href={`/quotes/${id}/agreement`} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', padding: '8px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.3)', background: '#eef4fb', color: CYAN, fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>View service agreement ↗ (auto-matches these terms)</a>
+        </div>
+
+        {/* Send to client */}
+        <div className="pp-bar" style={{ marginBottom: 12 }}>
+          {approved ? (
+            <button onClick={() => { setSendOpen(o => !o); setSendMsg(null) }} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#2f7fb8,#1d5c86)', cursor: 'pointer' }}>✉ Send proposal to client</button>
+          ) : (
+            <div title="Approve the proposal first" style={{ width: '100%', textAlign: 'center', padding: '10px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.6)', fontSize: 12.5, cursor: 'not-allowed' }}>🔒 Send unlocks once approved</div>
+          )}
+          {approved && sendOpen && (
+            <div style={{ ...groupCard, marginTop: 8 }}>
+              <Field l="To"><input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@email.com" style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Subject (optional)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder="Auto: Your GateGuard proposal — {property}" style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Message (optional)"><textarea value={sendMessage} onChange={e => setSendMessage(e.target.value)} rows={3} placeholder="Auto: a short cover note with the proposal + agreement links." style={{ ...inS, resize: 'vertical' }} /></Field>
+              <button onClick={sendProposal} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
+              <div style={{ fontSize: 10.5, color: MUT, marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
+              {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#b91c1c' }}>{sendMsg.text}</div>}
+            </div>
+          )}
         </div>
 
         {/* Review gate */}
