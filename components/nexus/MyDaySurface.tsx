@@ -100,10 +100,10 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
       type="button"
       onClick={onClick}
       className={`group relative flex flex-col overflow-hidden rounded-2xl p-5 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60 ${fill ? 'flex-1 min-h-[128px]' : 'min-h-[184px]'}`}
-      style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.32)', boxShadow: '0 14px 30px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 2px rgba(0,0,0,0.4)' }}
+      style={{ background: '#ffffff', border: '1px solid rgba(70,100,140,0.16)', boxShadow: '0 14px 30px rgba(20,40,80,0.10), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 2px rgba(20,40,80,0.08)' }}
     >
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(255,255,255,0.18)', color: '#DCE6F0' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(47,127,184,0.12)', border: '1px solid rgba(47,127,184,0.3)', color: '#2f7fb8' }}>
           {card.badge}
         </div>
       )}
@@ -131,16 +131,16 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
   const pill = (label: string, value: number, dot: string) => (
     <div className="flex items-center gap-1.5">
       <span className="h-2 w-2 rounded-full" style={{ background: dot, boxShadow: `0 0 8px ${dot}` }} />
-      <span className="font-medium text-slate-200">{label}</span>
-      <span className="ml-0.5 font-bold text-slate-100">{value}</span>
+      <span className="font-medium text-slate-700">{label}</span>
+      <span className="ml-0.5 font-bold text-slate-800">{value}</span>
     </div>
   )
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.34)', boxShadow: 'inset 0 4px 16px rgba(0,0,0,0.4), 0 16px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(150,180,210,0.12)' }}>
+    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: '#ffffff', border: '1px solid rgba(70,100,140,0.16)', boxShadow: 'inset 0 4px 16px rgba(20,40,80,0.08), 0 16px 32px rgba(20,40,80,0.08), 0 0 0 1px rgba(70,100,140,0.12)' }}>
 
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-[#9FD8EC]">Summary</span>
-        <span className="rounded-full border border-white/5 bg-slate-800/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-200">Live data</span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-[#2f7fb8]">Summary</span>
+        <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">Live data</span>
       </div>
 
       <div className="relative mb-1 flex items-center justify-center">
@@ -164,30 +164,30 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
           <text x="100" y="118" textAnchor="middle" fontSize="9" letterSpacing="3" fill="#8FA0B8">OPEN TASKS</text>
         </svg>
       </div>
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#16222f]/70 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)' }}>
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" style={{ boxShadow: 'inset 0 1px 3px rgba(20,40,80,0.08)' }}>
         {pill('High', high, '#f43f5e')}
         {pill('Med', medium, '#fbbf24')}
         {pill('Low', low, '#94a3b8')}
       </div>
 
-      <hr className="my-4 border-white/5" />
+      <hr className="my-4 border-slate-200" />
 
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">Leads</span>
-        <span className="text-2xl font-extrabold text-white">{leadsTotal}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">Leads</span>
+        <span className="text-2xl font-extrabold text-slate-900">{leadsTotal}</span>
       </div>
       <div className="mt-auto flex flex-col gap-2.5">
         {leadStages.length === 0 ? (
-          <div className="text-[11px] text-slate-300">No leads yet.</div>
+          <div className="text-[11px] text-slate-600">No leads yet.</div>
         ) : leadStages.map((st, i) => {
           const pct = Math.max(8, Math.min(100, (st.value / Math.max(1, leadsTotal)) * 100))
           return (
             <div key={st.label} className="space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="font-medium capitalize text-slate-200">{st.label}</span>
-                <span className="font-semibold text-slate-200">{st.value}</span>
+                <span className="font-medium capitalize text-slate-700">{st.label}</span>
+                <span className="font-semibold text-slate-700">{st.value}</span>
               </div>
-              <div className="h-2.5 w-full rounded-full border border-white/10 bg-[#16222f] p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }}>
+              <div className="h-2.5 w-full rounded-full border border-slate-200 bg-slate-200 p-[1px]" style={{ boxShadow: 'inset 0 1px 2px rgba(20,40,80,0.10)' }}>
                 <div className="h-full rounded-full" style={{ width: `${pct}%`, background: LEAD_BAR_GRADIENTS[i % LEAD_BAR_GRADIENTS.length], boxShadow: '0 0 10px rgba(95,184,224,0.4)' }} />
               </div>
             </div>
@@ -201,7 +201,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
 function DetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
-      <div className={`mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] ${actions ? 'lg:grid-cols-[1fr_260px]' : ''}`} style={{ background: NEXUS_BG, border: '1px solid rgba(150,180,210,0.22)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+      <div className={`mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] ${actions ? 'lg:grid-cols-[1fr_260px]' : ''}`} style={{ background: 'linear-gradient(160deg,#EEF3FA,#E7EEF7)', border: '1px solid rgba(70,100,140,0.16)', boxShadow: '0 30px 100px rgba(20,40,80,0.10), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="min-h-0 overflow-y-auto pr-1 pb-24" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to My Day" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>My Day</div>
@@ -210,8 +210,8 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
           <div className="mt-5 space-y-2">{children}</div>
         </div>
         {actions && (
-          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
+          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: '#ffffff', border: '1px solid rgba(70,100,140,0.16)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+            <div className="text-sm font-semibold" style={{ color: '#17293e' }}>Actions</div>
             <div className="mt-4 space-y-2">{actions}</div>
           </aside>
         )}
@@ -228,7 +228,7 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
       disabled={disabled}
       onClick={onClick}
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45 active:translate-y-0"
-      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(95,184,224,0.08))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(95,184,224,0.10), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.82)' } : { background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}
+      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(95,184,224,0.08))', border: '1px solid rgba(255,255,255,0.22)', color: '#17293e', boxShadow: '0 0 16px rgba(95,184,224,0.10), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.82)' } : { background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}
     >
       {displayLabel}
     </button>
@@ -237,7 +237,7 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
 
 function MessageChannelCard({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(20,40,80,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{title}</div>
       <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{subtitle}</div>
     </div>
@@ -246,24 +246,24 @@ function MessageChannelCard({ title, subtitle }: { title: string; subtitle: stri
 
 function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onOpen: () => void; onClose: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
-      <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Today&apos;s Schedule</span></div>
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: '#ffffff', borderColor: 'rgba(70,100,140,0.16)', boxShadow: '0 14px 30px rgba(20,40,80,0.08), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+      <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">Today&apos;s Schedule</span></div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-[#5FB8E0]/35 bg-[#26374a] px-2 py-0.5 text-[10px] text-[#9FD8EC]">Live data</span>
-          <button type="button" onClick={onClose} aria-label="Hide schedule preview" className="text-sm leading-none text-slate-300 hover:text-white">&times;</button>
+          <span className="rounded-full border border-[#5FB8E0]/35 bg-slate-100 px-2 py-0.5 text-[10px] text-[#2f7fb8]">Live data</span>
+          <button type="button" onClick={onClose} aria-label="Hide schedule preview" className="text-sm leading-none text-slate-600 hover:text-slate-900">&times;</button>
         </div>
       </div>
       {events.length === 0 ? (
-        <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-300 hover:text-white">Nothing scheduled today &mdash; open calendar</button>
+        <button type="button" onClick={onOpen} className="w-full py-6 text-center text-xs text-slate-600 hover:text-slate-900">Nothing scheduled today &mdash; open calendar</button>
       ) : (
         <div className="space-y-1.5">
           {events.slice(0, 5).map((e) => (
-            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 bg-[#1e2a3a] px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-[#26374a]" style={{ borderLeftColor: e.overdue ? '#f43f5e' : '#5FB8E0' }}>
+            <button key={e.id} type="button" onClick={onOpen} className="flex w-full items-center justify-between rounded-lg border-l-2 bg-slate-50 px-2.5 py-2 text-left text-xs text-slate-700 transition-colors hover:bg-slate-100" style={{ borderLeftColor: e.overdue ? '#f43f5e' : '#5FB8E0' }}>
               <span className="truncate">{e.title}</span>
               {e.overdue
-                ? <span className="ml-2 shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(244,63,94,0.16)', color: '#fda4af', border: '1px solid rgba(244,63,94,0.4)' }}>Overdue</span>
-                : <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-200">{formatEventTime(e)}</span>}
+                ? <span className="ml-2 shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(244,63,94,0.16)', color: '#b91c1c', border: '1px solid rgba(244,63,94,0.4)' }}>Overdue</span>
+                : <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-700">{formatEventTime(e)}</span>}
             </button>
           ))}
         </div>
@@ -279,24 +279,24 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
     { key: 'low', label: 'Later', accent: '#94a3b8' },
   ]
   return (
-    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
-      <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">To-Dos</span></div>
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: '#ffffff', borderColor: 'rgba(70,100,140,0.16)', boxShadow: '0 14px 30px rgba(20,40,80,0.08), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+      <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 8px #5FB8E0' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">To-Dos</span></div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={onOpen} className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-[10px] text-slate-300 hover:text-white">Open board</button>
-          <button type="button" onClick={onClose} aria-label="Hide to-dos preview" className="text-sm leading-none text-slate-300 hover:text-white">&times;</button>
+          <button type="button" onClick={onOpen} className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 hover:text-slate-900">Open board</button>
+          <button type="button" onClick={onClose} aria-label="Hide to-dos preview" className="text-sm leading-none text-slate-600 hover:text-slate-900">&times;</button>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {cols.map((c) => {
           const colItems = items.filter((i) => i.urgency === c.key).slice(0, 3)
           return (
-            <div key={c.key} className="space-y-1.5 rounded-xl border border-[rgba(140,170,200,0.18)] bg-[#1e2a3a] p-2">
-              <div className="flex items-center gap-1.5 border-b border-slate-800 pb-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: c.accent }} /><span className="text-[10px] font-bold uppercase tracking-wide text-slate-200">{c.label}</span></div>
+            <div key={c.key} className="space-y-1.5 rounded-xl border border-[rgba(140,170,200,0.18)] bg-slate-50 p-2">
+              <div className="flex items-center gap-1.5 border-b border-slate-200 pb-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: c.accent }} /><span className="text-[10px] font-bold uppercase tracking-wide text-slate-700">{c.label}</span></div>
               {colItems.length === 0 ? (
-                <div className="py-1.5 text-[10px] text-slate-300">&mdash;</div>
+                <div className="py-1.5 text-[10px] text-slate-600">&mdash;</div>
               ) : colItems.map((i) => (
-                <button key={i.id} type="button" onClick={onOpen} className="block w-full truncate rounded-md bg-[#26374a] px-1.5 py-1 text-left text-[11px] text-slate-300 hover:bg-[#2f4358]">{i.title}</button>
+                <button key={i.id} type="button" onClick={onOpen} className="block w-full truncate rounded-md bg-slate-100 px-1.5 py-1 text-left text-[11px] text-slate-600 hover:bg-slate-200">{i.title}</button>
               ))}
             </div>
           )
@@ -449,7 +449,7 @@ export function MyDaySurface() {
   }
 
   return (
-    <section className="mt-6 w-full px-3 sm:px-4">
+    <section className="mt-6 w-full px-3 sm:px-4 pb-6 pt-4 rounded-[2rem]" style={{ background: 'linear-gradient(160deg,#EEF3FA 0%,#E3EAF4 100%)' }}>
       {(popouts.schedule || popouts.todos) && (
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {popouts.schedule && <SchedulePopout events={todayEvents} onOpen={() => openCard(cards[0])} onClose={() => setPopout('schedule', false)} />}
@@ -457,12 +457,12 @@ export function MyDaySurface() {
         </div>
       )}
       {!popouts.schedule && !popouts.todos && (
-        <button type="button" onClick={() => { setPopout('schedule', true); setPopout('todos', true) }} className="mb-3 rounded-full border border-slate-700/60 bg-slate-800/50 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:text-white">Show previews</button>
+        <button type="button" onClick={() => { setPopout('schedule', true); setPopout('todos', true) }} className="mb-3 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-[11px] text-slate-600 transition-colors hover:text-slate-900">Show previews</button>
       )}
-      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
+      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(135deg,#0f1c30 0%,#132a45 100%)', border: '1px solid rgba(70,100,140,0.3)', boxShadow: '0 20px 44px rgba(20,40,80,0.18)' }}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(95,184,224,0.5), transparent)' }} />
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(224,232,241,0.92)', fontWeight: 400 }}>what are we working on today?</span></h2>
+          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(200,216,235,0.85)', fontWeight: 400 }}>what are we working on today?</span></h2>
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: 'rgba(6,78,59,0.45)', border: '1px solid rgba(16,185,129,0.45)', color: '#34d399', fontFamily: 'var(--font-mono, ui-monospace)' }}>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#34d399' }} />
             Live Connection
@@ -486,27 +486,27 @@ export function MyDaySurface() {
       </DetailShell>}
 
       {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.09)', border: '1px solid rgba(95,184,224,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(180deg,#EEF3FA,#E7EEF7)', border: '1px solid rgba(70,100,140,0.16)', boxShadow: '0 20px 44px rgba(20,40,80,0.08), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         {top10.length > 0 ? (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(244,63,94,0.12)', color: '#fda4af', border: '1px solid rgba(244,63,94,0.3)' }}>{highCount} high</span>
-              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(251,191,36,0.12)', color: '#fcd34d', border: '1px solid rgba(251,191,36,0.3)' }}>{medCount} medium</span>
-              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(148,163,184,0.14)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.32)' }}>{lowCount} low</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(244,63,94,0.12)', color: '#b91c1c', border: '1px solid rgba(244,63,94,0.3)' }}>{highCount} high</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(251,191,36,0.12)', color: '#b45309', border: '1px solid rgba(251,191,36,0.3)' }}>{medCount} medium</span>
+              <span className="rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(148,163,184,0.14)', color: '#475569', border: '1px solid rgba(148,163,184,0.32)' }}>{lowCount} low</span>
             </div>
             <div className="space-y-2">
               {sortedTop10.map((item, index) => {
                 const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#94a3b8'
                 return (
-                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-black/30 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>
+                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-slate-200 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: '#ffffff' }}>
                     <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-300">{index + 1}</span>
-                          <span className="truncate text-sm font-semibold text-white">{item.title}</span>
+                          <span className="text-[11px] font-bold text-slate-600">{index + 1}</span>
+                          <span className="truncate text-sm font-semibold text-slate-900">{item.title}</span>
                         </div>
-                        <div className="mt-1 truncate text-[10.5px] capitalize text-slate-200">{item.reason} · {item.type.replace(/_/g, ' ')}</div>
+                        <div className="mt-1 truncate text-[10.5px] capitalize text-slate-700">{item.reason} · {item.type.replace(/_/g, ' ')}</div>
                       </div>
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ background: `${accent}1f`, color: accent, border: `1px solid ${accent}59` }}>{item.urgency}</span>
                     </div>
@@ -516,7 +516,7 @@ export function MyDaySurface() {
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-black/30 px-3 py-6 text-center text-xs text-slate-300" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
+          <div className="rounded-2xl border border-slate-200 px-3 py-6 text-center text-xs text-slate-600" style={{ background: '#ffffff' }}>No priority items yet. Add an event or to-do to start building the day.</div>
         )}
         </div>
       </DetailShell>}
@@ -530,14 +530,14 @@ export function MyDaySurface() {
         />
       )}
 
-      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.22)', color: '#5a708c' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(180deg,#EEF3FA,#E7EEF7)', border: '1px solid rgba(70,100,140,0.16)', boxShadow: '0 20px 44px rgba(20,40,80,0.08), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <TodoBoard />
         </div>
       </DetailShell>}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(180deg,#EEF3FA,#E7EEF7)', border: '1px solid rgba(70,100,140,0.16)', boxShadow: '0 20px 44px rgba(20,40,80,0.08), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <MessagesShell />
         </div>
       </DetailShell>}
