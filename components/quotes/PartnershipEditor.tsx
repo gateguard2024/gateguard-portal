@@ -18,12 +18,14 @@ const numOrU = (v: string) => (v === '' ? undefined : Math.max(0, Number(v) || 0
 // ⚠️ These are defined at MODULE scope on purpose. When they lived inside the
 // component they were a brand-new component type on every render, so React
 // remounted every input on each keystroke — the "one letter at a time" bug.
-const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13 }
-const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9' }
+// Light "rich hybrid" palette — matches the ROI calculator and the client letter.
+const INK = '#17293e', MUT = '#5a708c', CYAN = '#2f7fb8'
+const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#f7fafd', border: '1px solid rgba(70,100,140,0.22)', color: INK, fontSize: 13 }
+const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: MUT }
 const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
-const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#5FB8E0', margin: '14px 0 6px' }}>{t}</div>
+const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: CYAN, margin: '14px 0 6px' }}>{t}</div>
 
-const stepBtn: React.CSSProperties = { width: 30, height: 34, borderRadius: 8, border: '1px solid rgba(140,170,200,0.3)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }
+const stepBtn: React.CSSProperties = { width: 30, height: 34, borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#eef4fb', color: CYAN, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }
 // Tap-friendly number control: [−] value [+]. Steppers keep the form 5th-grader simple.
 function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { label: string; value?: number; onChange: (v: number) => void; min?: number; step?: number; prefix?: string }) {
   const v = value ?? 0
@@ -33,17 +35,17 @@ function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { l
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
         <button type="button" onClick={() => onChange(Math.max(min, v - step))} style={stepBtn}>−</button>
         <div style={{ position: 'relative', flex: 1 }}>
-          {prefix && <span style={{ position: 'absolute', left: 8, top: 9, color: '#8fa4b8', fontSize: 12 }}>{prefix}</span>}
-          <input type="number" min={min} value={v} onChange={e => onChange(Math.max(min, Number(e.target.value) || 0))} style={{ display: 'block', width: '100%', padding: '8px 10px', paddingLeft: prefix ? 18 : 10, borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 13, textAlign: 'center' }} />
+          {prefix && <span style={{ position: 'absolute', left: 8, top: 9, color: MUT, fontSize: 12 }}>{prefix}</span>}
+          <input type="number" min={min} value={v} onChange={e => onChange(Math.max(min, Number(e.target.value) || 0))} style={{ display: 'block', width: '100%', padding: '8px 10px', paddingLeft: prefix ? 18 : 10, borderRadius: 9, background: '#f7fafd', border: '1px solid rgba(70,100,140,0.22)', color: INK, fontSize: 13, textAlign: 'center' }} />
         </div>
         <button type="button" onClick={() => onChange(v + step)} style={stepBtn}>+</button>
       </div>
     </div>
   )
 }
-const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'rgba(95,184,224,0.05)', border: '1px solid rgba(140,170,200,0.18)', marginBottom: 8 }
-const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#cfe0f0', marginBottom: 6 }
-const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: '#c3d3e2', fontWeight: 600 }
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: '#fff', border: '1px solid rgba(70,100,140,0.16)', marginBottom: 8, boxShadow: '0 1px 3px rgba(20,40,80,0.05)' }
+const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6 }
+const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: INK, fontWeight: 600 }
 
 export function PartnershipEditor({ id }: { id: string }) {
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -162,11 +164,11 @@ export function PartnershipEditor({ id }: { id: string }) {
   }
   const approved = reviewStatus === 'approved' || reviewStatus === null || reviewStatus === 'not_required'
 
-  if (err && !quote) return <div style={{ padding: 40, color: '#fca5a5' }}>{err}</div>
-  if (!quote) return <div style={{ padding: 40, color: '#9fb4c9' }}>Loading…</div>
+  if (err && !quote) return <div style={{ padding: 40, color: '#b91c1c' }}>{err}</div>
+  if (!quote) return <div style={{ padding: 40, color: MUT }}>Loading…</div>
 
   return (
-    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(180deg,#101b2e,#0b1322)', display: 'flex' }}>
+    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#E7EDF6 0%,#DCE5F1 55%,#E6EDF7 100%)', display: 'flex' }}>
       <style>{`@media print {
         .pp-form,.pp-bar{display:none!important}
         /* The preview is a 100vh scroll container on screen; in print it must grow
@@ -177,7 +179,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       }`}</style>
 
       {/* Left form */}
-      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(95,184,224,0.2)' }}>
+      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(70,100,140,0.16)' }}>
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
@@ -185,27 +187,27 @@ export function PartnershipEditor({ id }: { id: string }) {
               if (typeof window !== 'undefined' && window.history.length > 1) window.history.back()
               else window.location.href = oppId ? `/crm/opportunities/${oppId}` : '/'
             }}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(140,170,200,0.3)', background: 'transparent', color: '#9fb4c9', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
           >← Back to opportunity</button>
         </div>
         <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save proposal'}</button>
-          <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(95,184,224,0.35)', background: 'rgba(95,184,224,0.12)', color: '#9FD8EC', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
+          <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: CYAN, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
           {approved
-            ? <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
-            : <span title="Locked until approved" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(140,170,200,0.15)', color: 'rgba(207,224,240,0.4)', fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>🔒 Client link</span>}
+            ? <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
+            : <span title="Locked until approved" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.55)', fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>🔒 Client link</span>}
         </div>
         <div className="pp-bar" style={{ marginBottom: 12 }}>
-          <a href={`/quotes/${id}/agreement`} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', padding: '8px', borderRadius: 10, border: '1px solid rgba(95,184,224,0.28)', background: 'rgba(95,184,224,0.06)', color: '#9FD8EC', fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>View service agreement ↗ (auto-matches these terms)</a>
+          <a href={`/quotes/${id}/agreement`} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', padding: '8px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.3)', background: '#eef4fb', color: CYAN, fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>View service agreement ↗ (auto-matches these terms)</a>
         </div>
 
         {/* Review gate */}
         {(() => {
           const meta: Record<string, { bg: string; bd: string; fg: string; label: string; note: string }> = {
-            draft:             { bg: 'rgba(148,163,184,0.12)', bd: 'rgba(148,163,184,0.4)', fg: '#cbd5e1', label: 'Draft — not sent', note: 'Submit for GateGuard review before this can be sent to the client.' },
-            pending:           { bg: 'rgba(251,191,36,0.12)',  bd: 'rgba(251,191,36,0.45)', fg: '#fcd34d', label: 'Pending review', note: 'The GateGuard team has been notified. The client link is locked until approved.' },
-            changes_requested: { bg: 'rgba(248,113,113,0.12)', bd: 'rgba(248,113,113,0.45)', fg: '#fca5a5', label: 'Changes requested', note: reviewNote || 'GateGuard asked for changes. Update and re-submit.' },
-            approved:          { bg: 'rgba(52,211,153,0.12)',  bd: 'rgba(52,211,153,0.45)', fg: '#6ee7b7', label: 'Approved — cleared to send', note: 'The client link and PDF are unlocked.' },
+            draft:             { bg: 'rgba(100,116,139,0.10)', bd: 'rgba(100,116,139,0.35)', fg: '#475569', label: 'Draft — not sent', note: 'Submit for GateGuard review before this can be sent to the client.' },
+            pending:           { bg: 'rgba(245,158,11,0.12)',  bd: 'rgba(245,158,11,0.4)', fg: '#b45309', label: 'Pending review', note: 'The GateGuard team has been notified. The client link is locked until approved.' },
+            changes_requested: { bg: 'rgba(220,38,38,0.10)',   bd: 'rgba(220,38,38,0.35)', fg: '#b91c1c', label: 'Changes requested', note: reviewNote || 'GateGuard asked for changes. Update and re-submit.' },
+            approved:          { bg: 'rgba(18,133,95,0.10)',   bd: 'rgba(18,133,95,0.4)', fg: '#12855f', label: 'Approved — cleared to send', note: 'The client link and PDF are unlocked.' },
           }
           const m = meta[reviewStatus ?? 'draft'] ?? meta.draft
           const showGate = reviewStatus != null && reviewStatus !== 'not_required'
@@ -213,7 +215,7 @@ export function PartnershipEditor({ id }: { id: string }) {
           return (
             <div className="pp-bar" style={{ marginBottom: 12, padding: 10, borderRadius: 10, background: m.bg, border: `1px solid ${m.bd}` }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: m.fg }}>{m.label}</div>
-              <div style={{ fontSize: 11, color: '#a9bccf', marginTop: 3 }}>{m.note}</div>
+              <div style={{ fontSize: 11, color: MUT, marginTop: 3 }}>{m.note}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {!isCorporate && reviewStatus !== 'pending' && reviewStatus !== 'approved' && (
                   <button onClick={() => review('submit')} disabled={busy === 'submit'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#5FB8E0,#2f7fb8)', cursor: 'pointer' }}>{busy === 'submit' ? 'Submitting…' : 'Submit for review'}</button>
@@ -221,19 +223,19 @@ export function PartnershipEditor({ id }: { id: string }) {
                 {isCorporate && (
                   <>
                     <button onClick={() => review('approve')} disabled={busy === 'approve'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{busy === 'approve' ? 'Approving…' : 'Approve'}</button>
-                    <button onClick={() => review('request_changes', reviewNote)} disabled={busy === 'request_changes'} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.5)', fontWeight: 700, fontSize: 12, color: '#fca5a5', background: 'transparent', cursor: 'pointer' }}>Request changes</button>
+                    <button onClick={() => review('request_changes', reviewNote)} disabled={busy === 'request_changes'} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(220,38,38,0.5)', fontWeight: 700, fontSize: 12, color: '#b91c1c', background: '#fff', cursor: 'pointer' }}>Request changes</button>
                   </>
                 )}
               </div>
               {isCorporate && (
                 <input value={reviewNote} onChange={e => setReviewNote(e.target.value)} placeholder="Note to the dealer (optional, sent with 'Request changes')" style={{ ...inS, marginTop: 8, fontSize: 12 }} />
               )}
-              {reviewMsg && <div style={{ fontSize: 11, color: '#6ee7b7', marginTop: 6 }}>{reviewMsg}</div>}
+              {reviewMsg && <div style={{ fontSize: 11, color: '#12855f', marginTop: 6 }}>{reviewMsg}</div>}
             </div>
           )
         })()}
 
-        {err && <div style={{ color: '#fca5a5', fontSize: 12, marginBottom: 8 }}>{err}</div>}
+        {err && <div style={{ color: '#b91c1c', fontSize: 12, marginBottom: 8 }}>{err}</div>}
 
         <Sec t="Property & contact" />
         <Field l="Property name"><input value={propName} onChange={e => { setPropName(e.target.value); setSaved(false) }} style={inS} /></Field>
@@ -298,10 +300,10 @@ export function PartnershipEditor({ id }: { id: string }) {
             <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
           </div>
         )}
-        <div style={{ fontSize: 11.5, color: '#a9bccf', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 8 }}>
+        <div style={{ fontSize: 11.5, color: '#5a708c', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 8 }}>
           {r.pricingMode === 'flat'
-            ? <>{r.accessPoints} openings × {money(r.setupFlatPerOpening)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br /></>
-            : <>{r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#6ee7b7' }}>{money(r.setupFee)}</b> set-up<br /></>}
+            ? <>{r.accessPoints} openings × {money(r.setupFlatPerOpening)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>
+            : <>{r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>}
           deposit {money(r.deposit)} at signing · {money(r.goLive)} at Go-Live
         </div>
 
@@ -344,7 +346,7 @@ export function PartnershipEditor({ id }: { id: string }) {
             </label>
             {residentAuto ? (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#6ee7b7' }}>{suggestedFee != null ? money(suggestedFee) : '—'}<span style={{ fontSize: 12, color: '#8fa4b8', fontWeight: 400 }}> / unit</span></div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#12855f' }}>{suggestedFee != null ? money(suggestedFee) : '—'}<span style={{ fontSize: 12, color: '#8fa4b8', fontWeight: 400 }}> / unit</span></div>
                 <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 2 }}>{perUnitMonthly != null ? `${money(perUnitMonthly)}/unit/mo × 12 × 1.2, rounded up to $5` : 'Enter units + openings to calculate'}</div>
               </div>
             ) : (
