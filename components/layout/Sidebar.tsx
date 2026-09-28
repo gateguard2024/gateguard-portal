@@ -505,6 +505,19 @@ export function Sidebar() {
               <UserCheck size={13} />
               <span className="text-[8px] font-semibold leading-tight">Users</span>
             </Link>
+            <Link
+              href="/admin/integrations"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/integrations")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Integrations — live connection health (Google, QuickBooks, Resend, Stripe)"
+            >
+              <Activity size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Live</span>
+            </Link>
           </div>
         </div>
       )}

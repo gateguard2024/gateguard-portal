@@ -168,7 +168,7 @@ export function PartnershipEditor({ id }: { id: string }) {
   if (!quote) return <div style={{ padding: 40, color: MUT }}>Loading…</div>
 
   return (
-    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#E7EDF6 0%,#DCE5F1 55%,#E6EDF7 100%)', display: 'flex' }}>
+    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#D6E0EE 0%,#C7D5E8 55%,#D3DEEE 100%)', display: 'flex' }}>
       <style>{`@media print {
         .pp-form,.pp-bar{display:none!important}
         /* The preview is a 100vh scroll container on screen; in print it must grow
