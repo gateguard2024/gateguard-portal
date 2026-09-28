@@ -21,7 +21,9 @@ export interface RoiInputs {
   setupFee: number            // one-time, paid by the property
   monthlyPA: number           // resident parking & amenity, per unit (default 125)
   paOffset?: number           // added to monthlyPA in the revenue calc (default 0)
-  dealerPerPoint?: number     // dealer monthly payroll per access point (default 100)
+  dealerPerPoint?: number     // legacy flat per-point dealer pay (kept for back-compat)
+  dealerPerGate?: number      // servicing dealer, per vehicle/exit gate (default 150)
+  dealerPerDoor?: number      // servicing dealer, per pedestrian gate / amenity door (default 50)
   salesRepPerUnit?: number    // default 0
   msoPerUnit?: number         // default 0
   // Scope — gates & doors split working / non-working
@@ -81,7 +83,8 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const setupFee = n(input.setupFee)
   const monthlyPA = n(input.monthlyPA, 125)
   const paOffset = n(input.paOffset)
-  const dealerPerPoint = n(input.dealerPerPoint, 100)
+  const dealerPerGate = n(input.dealerPerGate, 150) // vehicle + exit gates
+  const dealerPerDoor = n(input.dealerPerDoor, 50)  // pedestrian gates + amenity doors
   const salesRepPerUnit = n(input.salesRepPerUnit)
   const msoPerUnit = n(input.msoPerUnit)
   const divisor = n(input.revenueDivisor, 14) || 14
@@ -122,8 +125,12 @@ export function computeRoi(input: RoiInputs): RoiResult {
   // ── Monthly recurring ───────────────────────────────────────────────────────
   const monthlyRevenue = r2((units / divisor) * (monthlyPA + paOffset))
 
+  // Servicing dealer pay: $150 per vehicle/exit gate, $50 per pedestrian gate or amenity door.
+  const payGates = vehGates + exit
+  const payDoors = wPed + nwPed + wDoor + nwDoor
   const payrollBreakdown: LineItem[] = [
-    { label: 'Dealer', amount: dealerPerPoint * points },
+    { label: `Dealer — gates (${payGates} × $${dealerPerGate})`, amount: dealerPerGate * payGates },
+    { label: `Dealer — pedestrian / doors (${payDoors} × $${dealerPerDoor})`, amount: dealerPerDoor * payDoors },
     { label: 'Sales rep', amount: salesRepPerUnit * units },
     { label: 'MSO', amount: msoPerUnit * units },
   ].map(l => ({ ...l, amount: r2(l.amount) })).filter(l => l.amount > 0)
