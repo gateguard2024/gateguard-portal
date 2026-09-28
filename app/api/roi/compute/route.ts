@@ -28,10 +28,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ result: full, corporate: true })
   }
 
-  // Dealer-safe subset — no COGS, profit, ROI, or cost breakdowns.
-  const { units, points, openings, setupFee, monthlyPA, annualResidentRevenue } = full
+  // Dealer-safe subset — no COGS, profit, ROI, or cost breakdowns. Resident-facing
+  // P&A figures are fine to show (they're what the resident pays).
+  const { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr } = full
   return NextResponse.json({
-    result: { units, points, openings, setupFee, monthlyPA, annualResidentRevenue },
+    result: { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr },
     corporate: false,
   })
 }

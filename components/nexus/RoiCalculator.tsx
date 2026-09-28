@@ -70,6 +70,7 @@ function Breakdown({ title, lines, total }: { title: string; lines: Line[]; tota
 
 type Inputs = {
   units: number; termMonths: number; setupFee: number; monthlyPA: number; dealerPerPoint: number
+  salesRepPerUnit: number; msoPerUnit: number; packagePerUnit: number
   workingVehGates: number; nonWorkingVehGates: number; workingPedGates: number; nonWorkingPedGates: number
   workingAccessDoors: number; nonWorkingAccessDoors: number; exitGates: number
   existingCameras: number; newCameras: number; conversionCameras: number; monitoredCameras: number; recorders: number
@@ -77,6 +78,7 @@ type Inputs = {
 }
 const SEED: Inputs = {
   units: 0, termMonths: 60, setupFee: 5000, monthlyPA: 125, dealerPerPoint: 100,
+  salesRepPerUnit: 0, msoPerUnit: 0, packagePerUnit: 0,
   workingVehGates: 0, nonWorkingVehGates: 0, workingPedGates: 0, nonWorkingPedGates: 0,
   workingAccessDoors: 0, nonWorkingAccessDoors: 0, exitGates: 0,
   existingCameras: 0, newCameras: 0, conversionCameras: 0, monitoredCameras: 0, recorders: 0,
@@ -151,6 +153,18 @@ export function RoiCalculator() {
               <Stepper label="Cell" value={inp.cell} onChange={v => set('cell', v)} />
             </div>
           </div>
+
+          <div style={cardS}>
+            <div style={secS}>Payouts → added to P&A ($ / unit / mo)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <Stepper label="Sales rep" value={inp.salesRepPerUnit} onChange={v => set('salesRepPerUnit', v)} prefix="$" />
+              <Stepper label="MSO" value={inp.msoPerUnit} onChange={v => set('msoPerUnit', v)} prefix="$" />
+              <Stepper label="Package room" value={inp.packagePerUnit} onChange={v => set('packagePerUnit', v)} prefix="$" />
+            </div>
+            {r && r.paAdditionsPerUnitYr > 0 && (
+              <div style={{ fontSize: 11, color: MUT, marginTop: 6 }}>× 12 → <b style={{ color: INK }}>+{usd(r.paAdditionsPerUnitYr)}/unit/yr</b> added to the resident P&A</div>
+            )}
+          </div>
         </div>
 
         {/* Results */}
@@ -160,7 +174,8 @@ export function RoiCalculator() {
               <StatCard label="Units" value={String(r.units)} />
               <StatCard label="Openings" value={String(r.openings)} sub={`${r.points} access points`} />
               <StatCard label="Set-up fee" value={usd(r.setupFee)} />
-              <StatCard label="Annual resident rev" value={usd(r.annualResidentRevenue)} sub={`${usd(r.monthlyPA)}/unit P&A`} />
+              <StatCard label="Resident P&A / unit / yr" value={usd(r.residentPaTotal ?? r.monthlyPA)} tone="good" sub={r.paAdditionsPerUnitYr > 0 ? `${usd(r.monthlyPA)} base + ${usd(r.paAdditionsPerUnitYr)} add-ons` : 'base P&A'} />
+              <StatCard label="Annual resident rev" value={usd(r.annualResidentRevenue)} sub={`${r.units} units × P&A`} />
             </div>
 
             {corp ? (<>

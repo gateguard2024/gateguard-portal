@@ -24,8 +24,9 @@ export interface RoiInputs {
   dealerPerPoint?: number     // legacy flat per-point dealer pay (kept for back-compat)
   dealerPerGate?: number      // servicing dealer, per vehicle/exit gate (default 150)
   dealerPerDoor?: number      // servicing dealer, per pedestrian gate / amenity door (default 50)
-  salesRepPerUnit?: number    // default 0
-  msoPerUnit?: number         // default 0
+  salesRepPerUnit?: number    // sales rep pay, $/unit/month (×12 → added to P&A)
+  msoPerUnit?: number         // MSO pay, $/unit/month (×12 → added to P&A)
+  packagePerUnit?: number     // package-room solution, $/unit/month (×12 → added to P&A)
   // Scope — gates & doors split working / non-working
   workingVehGates?: number
   nonWorkingVehGates?: number
@@ -58,6 +59,12 @@ export interface RoiResult {
   openings: number            // points + exit gates (total physical openings)
   setupFee: number
   monthlyPA: number
+  // Per-unit/month payouts, annualized (×12) and added onto the resident P&A fee.
+  salesAnnualPerUnit: number
+  msoAnnualPerUnit: number
+  packageAnnualPerUnit: number
+  paAdditionsPerUnitYr: number
+  residentPaTotal: number     // base P&A + all additions, $/unit/year
   // Corporate-only figures:
   startupCogs: number
   startupProfit: number       // set-up fee − startup COGS (can be negative)
@@ -87,6 +94,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const dealerPerDoor = n(input.dealerPerDoor, 50)  // pedestrian gates + amenity doors
   const salesRepPerUnit = n(input.salesRepPerUnit)
   const msoPerUnit = n(input.msoPerUnit)
+  const packagePerUnit = n(input.packagePerUnit)
   const divisor = n(input.revenueDivisor, 14) || 14
   const passThreshold = n(input.passThresholdMonths, 4)
 
@@ -133,6 +141,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
     { label: `Dealer — pedestrian / doors (${payDoors} × $${dealerPerDoor})`, amount: dealerPerDoor * payDoors },
     { label: 'Sales rep', amount: salesRepPerUnit * units },
     { label: 'MSO', amount: msoPerUnit * units },
+    { label: 'Package room', amount: packagePerUnit * units },
   ].map(l => ({ ...l, amount: r2(l.amount) })).filter(l => l.amount > 0)
   const payroll = r2(payrollBreakdown.reduce((s, l) => s + l.amount, 0))
 
@@ -159,12 +168,20 @@ export function computeRoi(input: RoiInputs): RoiResult {
   else roiMonths = r2(-startupProfit / monthlyProfit)
   const pass = roiMonths <= passThreshold
 
+  // Per-unit/month payouts annualize (×12) and stack onto the resident P&A fee.
+  const salesAnnualPerUnit = r2(salesRepPerUnit * 12)
+  const msoAnnualPerUnit = r2(msoPerUnit * 12)
+  const packageAnnualPerUnit = r2(packagePerUnit * 12)
+  const paAdditionsPerUnitYr = r2(salesAnnualPerUnit + msoAnnualPerUnit + packageAnnualPerUnit)
+  const residentPaTotal = r2(monthlyPA + paAdditionsPerUnitYr)
+
   return {
     units, points, openings, setupFee, monthlyPA,
+    salesAnnualPerUnit, msoAnnualPerUnit, packageAnnualPerUnit, paAdditionsPerUnitYr, residentPaTotal,
     startupCogs, startupProfit,
     monthlyRevenue, payroll, monthlyCogs, monthlyProfit, annualProfit,
     roiMonths, pass,
     startupBreakdown, monthlyBreakdown, payrollBreakdown,
-    annualResidentRevenue: r2(units * monthlyPA),
+    annualResidentRevenue: r2(units * residentPaTotal),
   }
 }
