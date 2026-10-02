@@ -1239,7 +1239,7 @@ export function OpportunityGlassWindow({
                             const qid = String(q.id ?? i)
                             const href = String(q.quote_mode) === 'partnership' ? `/quotes/${qid}/partnership` : `/quotes/${qid}`
                             const status = val(q.review_status && q.review_status !== 'approved' ? q.review_status : q.status, 'draft')
-                            const amt = Number(q.total ?? 0)
+                            const amt = Number(q.total_one_time ?? 0)
                             return (
                               <a key={qid} href={href} target="_blank" rel="noreferrer" className="block rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
                                 <div className="flex items-center justify-between gap-2">

@@ -206,13 +206,14 @@ export function PartnershipEditor({ id }: { id: string }) {
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
-              // Go straight to the opportunity when we know it. The editor is usually
-              // opened in a fresh tab (window.open('about:blank') → quote url), so
-              // history.back() lands on that blank page — the "blank white page" bug.
-              const oppId = quote?.opportunity_id
-              if (oppId) window.location.href = `/crm/opportunities/${oppId}`
-              else if (typeof window !== 'undefined' && window.history.length > 1) window.history.back()
-              else window.location.href = '/'
+              if (typeof window === 'undefined') return
+              // The editor opens in a tab spawned by the workbench (window.open →
+              // quote url). Closing it returns the user to the still-open opportunity
+              // window — the single Nexus interface. If this tab wasn't script-opened
+              // (direct link / same-tab fallback), close() is a no-op, so fall back to
+              // the Sales workbench — never the retired /crm detail page.
+              window.close()
+              setTimeout(() => { if (!window.closed) window.location.href = '/?tab=opps' }, 150)
             }}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
           >← Back to opportunity</button>

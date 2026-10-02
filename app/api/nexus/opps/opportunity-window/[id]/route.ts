@@ -147,7 +147,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       ? safe(
           supabase
             .from('quotes')
-            .select('id, status, total, mrr_total, created_at, updated_at')
+            .select('id, status, total_one_time, total_mrr, created_at, updated_at')
             .eq('id', opportunity.quote_id as string)
             .single(),
           null
@@ -160,7 +160,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     safe(
       supabase
         .from('quotes')
-        .select('id, quote_number, title, status, total, mrr_total, quote_mode, review_status, created_at, updated_at')
+        .select('id, quote_number, title, status, total_one_time, total_mrr, quote_mode, review_status, created_at, updated_at')
         .eq('opportunity_id', oppId)
         .order('created_at', { ascending: false })
         .limit(50),
