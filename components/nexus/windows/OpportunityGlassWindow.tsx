@@ -19,6 +19,7 @@ type OpportunityGlassData = {
   todos?: AnyRecord[]
   attachments?: AnyRecord[]
   quote?: AnyRecord | null
+  quotes?: AnyRecord[]
   nextBestActions?: Array<{ title: string; subtitle: string; action: string }>
   canReassign?: boolean
   canAssignDealer?: boolean
@@ -124,6 +125,7 @@ export function OpportunityGlassWindow({
   const activities = data.activities ?? []
   const todos = data.todos ?? []
   const attachments = data.attachments ?? []
+  const quotes = data.quotes ?? []
   const nextBestActions = data.nextBestActions ?? []
 
   const router = useRouter()
@@ -1216,7 +1218,7 @@ export function OpportunityGlassWindow({
                   const items = all.filter(a => inCat(a, b.key))
                   const busy = fileBusy === b.key
                   return (
-                    <Section key={b.key} title={b.label} count={items.length}>
+                    <Section key={b.key} title={b.label} count={items.length + (b.key === 'quote_survey' ? quotes.length : 0)}>
                       {b.key === 'quote_survey' && (
                         <button
                           type="button"
@@ -1229,6 +1231,29 @@ export function OpportunityGlassWindow({
                           <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>Build a quote from this opportunity</div>
                         </button>
                       )}
+                      {/* Proposals saved against this opportunity (from the quotes table,
+                          keyed on opportunity_id). These were previously invisible here. */}
+                      {b.key === 'quote_survey' && quotes.length > 0 && (
+                        <div className="mb-2 space-y-2">
+                          {quotes.map((q, i) => {
+                            const qid = String(q.id ?? i)
+                            const href = String(q.quote_mode) === 'partnership' ? `/quotes/${qid}/partnership` : `/quotes/${qid}`
+                            const status = val(q.review_status && q.review_status !== 'approved' ? q.review_status : q.status, 'draft')
+                            const amt = Number(q.total ?? 0)
+                            return (
+                              <a key={qid} href={href} target="_blank" rel="noreferrer" className="block rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-xs font-semibold" style={{ color: '#9FD8EC' }}>{val(q.title || q.quote_number, 'Proposal')}</div>
+                                    <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[String(status), fmtDate(q.created_at)].filter(Boolean).join(' · ')}</div>
+                                  </div>
+                                  {amt > 0 && <div className="shrink-0 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>${amt.toLocaleString()}</div>}
+                                </div>
+                              </a>
+                            )
+                          })}
+                        </div>
+                      )}
                       <button
                         type="button"
                         disabled={!!fileBusy}
@@ -1240,7 +1265,7 @@ export function OpportunityGlassWindow({
                         <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{b.hint}</div>
                       </button>
                       {items.length === 0 ? (
-                        <Empty text="Nothing here yet." />
+                        (b.key === 'quote_survey' && quotes.length > 0) ? null : <Empty text="Nothing here yet." />
                       ) : b.photo ? (
                         <div className="grid grid-cols-3 gap-2">
                           {items.map((f, i) => {

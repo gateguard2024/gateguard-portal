@@ -73,6 +73,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     todos,
     attachments,
     quote,
+    quotes,
   ] = await Promise.all([
     // Lead
     opportunity.lead_id
@@ -152,6 +153,19 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
           null
         )
       : Promise.resolve(null),
+
+    // Proposals / quotes created against THIS opportunity (keyed on quotes.opportunity_id —
+    // this is where createProposal() actually writes; the opportunity.quote_id single above
+    // only ever tracks one, so without this list a saved proposal is invisible in the window).
+    safe(
+      supabase
+        .from('quotes')
+        .select('id, quote_number, title, status, total, mrr_total, quote_mode, review_status, created_at, updated_at')
+        .eq('opportunity_id', oppId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      []
+    ),
   ])
 
   // Activity is now a single table (crm_activities) read above — no second source to merge.
@@ -182,6 +196,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     todos,
     attachments,
     quote,
+    quotes,
     dealerOrg,
     canAssignDealer,
     // Corporate + org admins + dealer principals (they run their own teams) can
