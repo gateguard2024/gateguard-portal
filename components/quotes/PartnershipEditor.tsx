@@ -206,9 +206,13 @@ export function PartnershipEditor({ id }: { id: string }) {
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
+              // Go straight to the opportunity when we know it. The editor is usually
+              // opened in a fresh tab (window.open('about:blank') → quote url), so
+              // history.back() lands on that blank page — the "blank white page" bug.
               const oppId = quote?.opportunity_id
-              if (typeof window !== 'undefined' && window.history.length > 1) window.history.back()
-              else window.location.href = oppId ? `/crm/opportunities/${oppId}` : '/'
+              if (oppId) window.location.href = `/crm/opportunities/${oppId}`
+              else if (typeof window !== 'undefined' && window.history.length > 1) window.history.back()
+              else window.location.href = '/'
             }}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
           >← Back to opportunity</button>
