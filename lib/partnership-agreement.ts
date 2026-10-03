@@ -10,6 +10,32 @@ type Quote = Record<string, any>
 export interface AgreementSection { h: string; p: string }
 export interface AgreementDoc { title: string; subtitle: string; sections: AgreementSection[] }
 
+/** Renders the partnership agreement to a PDF Buffer (for email attachment). */
+export async function agreementPdfBuffer(quote: Quote, cfg: PartnershipConfig = {}): Promise<Buffer> {
+  // Lazy require keeps pdfkit (Node-only) out of any client bundle that imports this module.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+  const PDFDocument = require('pdfkit') as any
+  const doc = buildPartnershipAgreement(quote, cfg)
+  return await new Promise<Buffer>((resolve, reject) => {
+    const pdf = new PDFDocument({ size: 'LETTER', margin: 54 })
+    const chunks: Buffer[] = []
+    pdf.on('data', (c: Buffer) => chunks.push(c))
+    pdf.on('end', () => resolve(Buffer.concat(chunks)))
+    pdf.on('error', reject)
+    pdf.fontSize(16).fillColor('#0B1728').text(doc.title)
+    pdf.moveDown(0.2)
+    pdf.fontSize(10).fillColor('#5a708c').text(doc.subtitle)
+    pdf.moveDown(0.7)
+    for (const s of doc.sections) {
+      pdf.fontSize(11).fillColor('#17293e').text(s.h)
+      pdf.moveDown(0.15)
+      pdf.fontSize(9.5).fillColor('#33465c').text(s.p, { align: 'left', lineGap: 1.5 })
+      pdf.moveDown(0.5)
+    }
+    pdf.end()
+  })
+}
+
 export function buildPartnershipAgreement(quote: Quote, cfg: PartnershipConfig = {}): AgreementDoc {
   const r = resolvePartnership(quote, cfg)
   const resident = r.billingMode === 'resident'
@@ -23,6 +49,29 @@ export function buildPartnershipAgreement(quote: Quote, cfg: PartnershipConfig =
   const feeLine = resident
     ? `7.3 Resident Parking & Amenity Fee. The program is funded by a parking & amenity fee of ${money(r.residentFee)} per unit, billed and collected by Gate Guard directly from residents at each lease signing and renewal, covering a 12-month parking and amenity term. The fee is never billed through the Property’s office. Customer authorizes Gate Guard to present the fee to residents in coordination with the Customer’s PMS.`
     : `7.3 Property Bulk Parking & Amenity Fee. In lieu of resident billing, the Property pays Gate Guard a flat ${money(r.propertyMonthly)} per month covering the parking & amenity program for all units, beginning on the 15th of the calendar month following the Go-Live Date. Residents are not billed individually. The monthly fee will not increase during the Initial Term.`
+
+  // Optional programs — built dynamically from the elected add-ons, numbered 8.x.
+  const addons: string[] = [
+    `8.1 Physical Gate & Hinge Coverage — ${money(r.addonGateRate)} per gate, per month, extends coverage to the Physical Gate panel, frame, posts, hinges, and welds.`,
+    `8.2 Additional Monitored Cameras — ${money(r.addonCameraRate)} per camera, per month, beyond the ${r.cameras} included.`,
+  ]
+  let ax = 3
+  if (r.offerSmartLocks) { addons.push(`8.${ax} Smart Locks. A smart access lock is installed on each apartment door as the unit flips — not all at once — so no resident is disturbed mid-lease. When elected, the resident parking & amenity fee is ${money(r.smartLockResidentFee)} per converted unit (in place of ${money(r.residentFee)}), and the Property pays ${money(r.smartLockInstallPerUnit)} per unit at each flip; once every unit is converted there is no further charge. Key boxes, key logs, rekeys at turn, and after-hours lockout calls are eliminated.`); ax++ }
+  if (r.offerPackageRoom) { addons.push(`8.${ax} Package / Parcel Room Access. The package room${r.packageRooms > 1 ? 's' : ''} join the same credential and platform as the gates, so package access uses the resident’s phone and never depends on a code that circulates.`); ax++ }
+  if (r.offerLpr) { addons.push(`8.${ax} License-Plate Recognition. LPR cameras at the vehicle entrances read and log plates for entry events and incident attribution.${r.lprNote ? ` ${r.lprNote}` : ''}`); ax++ }
+  if (r.offerConcessionBlock) { addons.push(`8.${ax} Concession Block. A negotiated block of parking & amenity concessions the Property may apply at its discretion.`); ax++ }
+  if (r.offerResidentServices) { addons.push(`8.${ax} Resident Services. Gate Guard may offer residents optional television, internet, home security, and video-doorbell service — billed and supported by Gate Guard, never touching the Property’s budget.`); ax++ }
+  const addonsP = `None of the following is required; each is included only if elected on the Proposal. ${addons.join(' ')} Where elected add-ons carry a recurring charge, the Parties will confirm in writing whether it is resident-funded or billed to the Property.`
+
+  // Bollard protection (capital, inside the set-up fee) — only when elected.
+  const bollardsLine = r.offerBollards
+    ? `\n2.4 Bollard Protection. Protective bollards${r.bollards ? ` (${r.bollards})` : ''} are installed at vulnerable operators as part of the one-time set-up fee to reduce vehicle-strike damage.`
+    : ''
+
+  // Early-termination buyout (equipment depreciation) — only when there is a base to recover.
+  const buyoutLine = r.buyoutBase > 0
+    ? `\n5.5 Early-Termination Buyout (Equipment Depreciation). Gate Guard funds all equipment and installation up front and recovers that investment through the first year of parking & amenity fees. If Customer terminates for any reason other than Gate Guard’s uncured material breach during the first ${r.buyoutMonths} months after Go-Live, Customer will pay an early-termination buyout equal to the undepreciated balance of one year of parking & amenity fees at full occupancy — a base of ${money(r.buyoutBase)} (${units} units × ${money(r.residentFee)}), depreciated straight-line at ${money(r.buyoutMonthly)} per month and reduced by each full month elapsed since Go-Live. After month ${r.buyoutMonths} the buyout is $0 and no early-termination amount is owed.`
+    : ''
 
   const sections: AgreementSection[] = [
     { h: 'What this agreement does, in plain English', p:
@@ -54,7 +103,7 @@ Effective Date: ____________   Target Go-Live Date: ____________. Gate Guard, LL
     { h: '2. Covered Access Points & Property Scope', p:
 `2.1 Gate Guard will bring to full operating condition and thereafter maintain the ${r.accessPoints} Access Points at the Property — ${r.gates} vehicle gate${r.gates === 1 ? '' : 's'}${r.gateNote ? ` (${r.gateNote})` : ''} and ${r.amenityDoors} amenity door${r.amenityDoors === 1 ? '' : 's'}. All work required to bring each opening online is included in the one-time set-up fee in Section 7, with no change orders for the scope described in the Proposal.
 2.2 Monitored Cameras. Gate Guard will install and monitor ${r.cameras} camera${r.cameras === 1 ? '' : 's'}${r.cameraNote ? ` (${r.cameraNote})` : ''}, monitored, not merely recorded, and included in the program. When an Access Point is struck or damaged, Gate Guard will make the relevant footage available so the damage can be attributed to the responsible driver and pursued as a chargeback. Gate Guard does not guarantee recovery from any third party.
-2.3 Unit Count. The program is based on ${units} residential units. If the unit count changes by more than five percent (5%), either Party may request a good-faith adjustment at the same per-unit basis.` },
+2.3 Unit Count. The program is based on ${units} residential units. If the unit count changes by more than five percent (5%), either Party may request a good-faith adjustment at the same per-unit basis.${bollardsLine}` },
 
     { h: '3. Services Provided', p:
 `3.1 Repair or Replace to Full Operating Condition. Gate Guard will do whatever is required to bring each listed Access Point online — parts, welding, operator repair, and replacement of failed components — as part of the one-time set-up. Thereafter every Covered Repair is Gate Guard’s responsibility: parts, labor, monthly preventative maintenance, and trip charges, at no additional cost.
@@ -72,7 +121,7 @@ THE ONE THING NOT COVERED. Gate Guard covers everything at each opening except t
 `5.1 Initial Term. The Initial Term is ${r.termYears} year${r.termYears === 1 ? '' : 's'} (${r.termMonths} months), beginning on the Go-Live Date.
 5.2 Automatic Renewal. After the Initial Term this Agreement renews for successive one-year terms unless either Party gives written notice of non-renewal at least sixty (60) days before the term expires.
 5.3 Termination for Cause. Either Party may terminate for material breach not cured within sixty (60) days after written notice. If an Access Point remains non-operational for more than thirty (30) consecutive days for reasons within Gate Guard’s control without a written remediation plan, that is a material breach by Gate Guard.
-5.4 Effect of Termination — Equipment Return. On expiration or termination and payment in full, Gate Guard may remove all Gate Guard Equipment within thirty (30) days, during business hours, leaving each opening safe and secured. Customer may instead elect to purchase the installed equipment in place at its then-current fair market value on written request before removal.` },
+5.4 Effect of Termination — Equipment Return. On expiration or termination and payment in full, Gate Guard may remove all Gate Guard Equipment within thirty (30) days, during business hours, leaving each opening safe and secured. Customer may instead elect to purchase the installed equipment in place at its then-current fair market value on written request before removal.${buyoutLine}` },
 
     { h: '6. User Accounts & Data', p:
 `Customer is responsible for the confidentiality of login credentials and all activity under its accounts. Access is granted solely for Customer’s internal business use during the Term. Customer must notify Gate Guard immediately of any unauthorized use or breach. Resident data synchronized from Customer’s PMS is used solely to operate the Services, is not sold, and is handled per applicable privacy laws. Camera footage is retained for the platform’s standard retention period, available to Customer on request, and may be released to law enforcement pursuant to lawful process.` },
@@ -83,8 +132,7 @@ THE ONE THING NOT COVERED. Gate Guard covers everything at each opening except t
 ${feeLine}
 7.4 Taxes are excluded and are the responsible Party’s obligation. Amounts more than thirty (30) days past due accrue interest at the lesser of 1.5% per month or the maximum permitted by law.` },
 
-    { h: '8. Optional Add-Ons — Customer Elections', p:
-`None of the following is required; each is included only if elected on the Proposal. 8.1 Physical Gate & Hinge Coverage — ${money(r.addonGateRate)} per gate, per month, extends coverage to the Physical Gate panel, frame, posts, hinges, and welds. 8.2 Additional Monitored Cameras — ${money(r.addonCameraRate)} per camera, per month, beyond the ${r.cameras} included. Where elected add-ons carry a recurring charge, the Parties will confirm in writing whether it is resident-funded or billed to the Property.` },
+    { h: '8. Optional Add-Ons — Customer Elections', p: addonsP },
 
     { h: '9. Implementation & Go-Live', p:
 `9.1 After signature and the deposit: (1) Customer approves the program and elected add-ons; (2) Customer signs and pays the deposit; (3) Gate Guard brings the openings to full operating condition; (4) the system integrates with Yardi, Entrata, or RealPage${resident ? ' and resident billing is configured' : ''}; (5) Go-Live — cameras come online, residents move to phone entry, monitoring begins, and the balance is due.

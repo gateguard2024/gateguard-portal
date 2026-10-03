@@ -16,6 +16,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { getProfileId } from '@/lib/org-scope'
 import { sendViaGmail } from '@/lib/mail-send'
+import { buildProposalEmail } from '@/lib/partnership-proposal'
+import { agreementPdfBuffer } from '@/lib/partnership-agreement'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -49,21 +51,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const property = quote.property_name || quote.client_name || 'your property'
-  const subject = String(body.subject || `Your GateGuard proposal — ${property}`)
-  const message = String(body.message || `Thank you again for your time. Please find our GateGuard Property Partnership proposal for ${property} at the link below — it includes the full terms and the matching service agreement, and you can review and sign online.`)
   const proposalLink = `${APP_URL}/quotes/${id}/proposal`
   const agreementLink = `${APP_URL}/quotes/${id}/agreement`
   const senderName = quote.created_by_name || 'Gate Guard'
 
-  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;color:#17293e;line-height:1.6">
-    <p>${message.replace(/\n/g, '<br>')}</p>
-    <p style="margin:20px 0">
-      <a href="${proposalLink}" style="display:inline-block;background:#2f7fb8;color:#fff;text-decoration:none;font-weight:600;padding:11px 20px;border-radius:10px">View &amp; sign your proposal ↗</a>
-    </p>
-    <p style="font-size:13px;color:#5a708c">Or paste this link: ${proposalLink}<br>Service agreement: ${agreementLink}</p>
-    <p style="margin-top:22px">Respectfully,<br><b>${senderName}</b><br><span style="color:#5a708c">Gate Guard, LLC · (770) 776-8095 · rfeldman@gateguard.co</span></p>
-  </div>`
-  const text = `${message}\n\nView & sign your proposal: ${proposalLink}\nService agreement: ${agreementLink}\n\n${senderName} — Gate Guard, LLC`
+  // CC — accepts an array or a comma/semicolon/space-separated string; keep only valid addresses.
+  const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+  const ccRaw = Array.isArray(body.cc) ? body.cc.map(String) : String(body.cc || '').split(/[,;\s]+/)
+  const ccList = ccRaw.map((s: string) => s.trim()).filter((s: string) => emailRe.test(s))
+
+  // Body IS the proposal (house-format subject + full letter) so nothing is copy-pasted.
+  const cfg = (quote.partnership && typeof quote.partnership === 'object') ? quote.partnership : {}
+  const built = buildProposalEmail(quote, cfg, { proposalLink, agreementLink })
+  const subject = String(body.subject || built.subject)
+  const html = built.html
+  const text = built.text
+
+  // Attach the matching service agreement as a PDF. Optional — if generation fails,
+  // send the proposal anyway rather than blocking the whole send.
+  const attachments: { filename: string; content: Buffer; contentType: string }[] = []
+  try {
+    const pdf = await agreementPdfBuffer(quote, cfg)
+    const safeName = String(property).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'Property'
+    attachments.push({ filename: `${safeName}_Service_Agreement.pdf`, content: pdf, contentType: 'application/pdf' })
+  } catch { /* attachment is best-effort */ }
 
   // Prefer the sender's connected Gmail so it comes from the rep; fall back to Resend.
   let via = ''
@@ -78,7 +89,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (gmail?.oauth_refresh_token) {
     const from = String(gmail.address || gmail.from_address || '')
-    const r = await sendViaGmail(String(gmail.oauth_refresh_token), from, { to, subject, html, text, fromName: senderName })
+    const r = await sendViaGmail(String(gmail.oauth_refresh_token), from, { to, cc: ccList, subject, html, text, fromName: senderName, attachments })
     sent = r.ok; via = 'gmail'; if (!r.ok) sendError = r.error ?? 'Gmail send failed'
   }
 
@@ -89,7 +100,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       try {
         const rr = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: `Gate Guard <${fromEmail}>`, to: [to], subject, html, reply_to: 'rfeldman@gateguard.co' }),
+          body: JSON.stringify({
+            from: `Gate Guard <${fromEmail}>`, to: [to],
+            cc: ccList.length ? ccList : undefined,
+            subject, html, reply_to: 'rfeldman@gateguard.co',
+            attachments: attachments.map(a => ({ filename: a.filename, content: a.content.toString('base64') })),
+          }),
         })
         sent = rr.ok; via = via || 'resend'; if (!rr.ok) sendError = `Resend failed: ${rr.status}`
       } catch (e) { sendError = e instanceof Error ? e.message : 'Resend exception' }
@@ -107,10 +123,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const profileId = await getProfileId(user.id)
     await supabase.from('crm_activities').insert({
       dealer_org_id: quote.dealer_org_id, created_by: profileId, type: 'email',
-      subject: `Proposal sent — ${property}`, body: `Sent to ${to} via ${via}.`,
+      subject: `Proposal sent — ${property}`,
+      body: `Sent to ${to}${ccList.length ? `, cc ${ccList.join(', ')}` : ''} via ${via}.${attachments.length ? ' Service agreement attached.' : ''}`,
       opportunity_id: quote.opportunity_id, completed_at: ts,
     })
   }
 
-  return NextResponse.json({ ok: true, via, to })
+  return NextResponse.json({ ok: true, via, to, cc: ccList, attached: attachments.length > 0 })
 }

@@ -69,6 +69,25 @@ export interface PartnershipConfig {
   addon_gate_hinge_rate?: number // default 150 /gate/mo
   addon_camera_rate?: number     // default 100 /camera/mo
   valid_days?: number       // default 30
+  // Optional programs — each shown only if elected on the proposal/agreement.
+  offer_smart_locks?: boolean
+  smart_lock_resident_fee?: number      // resident P&A/unit/yr once smart locks elected (default 150)
+  smart_lock_install_per_unit?: number  // property pays at each unit flip (default 375)
+  offer_package_room?: boolean          // parcel/package room access on the same credential
+  package_rooms?: number                // count of package/parcel rooms (informational)
+  offer_lpr?: boolean                   // license-plate recognition cameras
+  lpr_note?: string
+  offer_bollards?: boolean              // bollard protection at operators
+  bollards?: number                     // count installed (covered in the set-up fee)
+  offer_concession_block?: boolean      // concession block add-on
+  offer_resident_services?: boolean     // optional TV / internet / security / doorbell, resident-billed
+  // Cap-rate value-creation panel — eliminated costs → NOI → property-value uplift.
+  show_value_panel?: boolean            // default true when annual_savings > 0
+  cap_rate?: number                     // percent, default 6
+  annual_savings?: number               // estimated annual operating savings; default gates × 5000
+  // Early-termination buyout (depreciation). Base = 1 yr P&A at 100% of units,
+  // straight-line over buyout_months, $0 after. Protects GateGuard. Default 12 months.
+  buyout_months?: number                // default 12
 }
 
 export interface ResolvedPartnership {
@@ -118,6 +137,27 @@ export interface ResolvedPartnership {
   addonGateTotal: number
   validDays: number
   preparedBy: string
+  // Optional programs
+  offerSmartLocks: boolean
+  smartLockResidentFee: number
+  smartLockInstallPerUnit: number
+  offerPackageRoom: boolean
+  packageRooms: number
+  offerLpr: boolean
+  lprNote: string
+  offerBollards: boolean
+  bollards: number
+  offerConcessionBlock: boolean
+  offerResidentServices: boolean
+  // Cap-rate value panel
+  showValuePanel: boolean
+  capRate: number
+  annualSavings: number
+  valueUplift: number
+  // Early-termination buyout (depreciation)
+  buyoutMonths: number
+  buyoutBase: number
+  buyoutMonthly: number
 }
 
 const n = (v: unknown, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d }
@@ -160,6 +200,21 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
   const residentFee = cfg.resident_fee != null ? n(cfg.resident_fee) : 100
   const addonGateRate = n(cfg.addon_gate_hinge_rate, 150)
   const addonCameraRate = n(cfg.addon_camera_rate, 100)
+
+  // Optional programs
+  const smartLockResidentFee = n(cfg.smart_lock_resident_fee, 150)
+  const smartLockInstallPerUnit = n(cfg.smart_lock_install_per_unit, 375)
+
+  // Cap-rate value creation: annual operating savings → property value at a cap rate.
+  const capRate = n(cfg.cap_rate, 6)
+  const annualSavings = cfg.annual_savings != null ? n(cfg.annual_savings) : gates * 5000
+  const valueUplift = capRate > 0 ? Math.round(annualSavings / (capRate / 100)) : 0
+
+  // Early-termination buyout (depreciation): base = one year of P&A at 100% of units,
+  // depreciated straight-line over buyout_months (default 12), $0 owed thereafter.
+  const buyoutMonths = n(cfg.buyout_months, 12)
+  const buyoutBase = units * residentFee
+  const buyoutMonthly = buyoutMonths > 0 ? Math.round(buyoutBase / buyoutMonths) : 0
 
   const contactName = String(cfg.contact_name || quote?.client_name || '').trim()
   const property = String(quote?.property_name || quote?.client_name || 'the Property')
@@ -246,6 +301,22 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     addonGateRate, addonCameraRate, addonGateTotal: addonGateRate * gates,
     validDays: n(cfg.valid_days, 30),
     preparedBy: String(quote?.created_by_name || 'Russel Feldman'),
+    // Optional programs
+    offerSmartLocks: !!cfg.offer_smart_locks,
+    smartLockResidentFee, smartLockInstallPerUnit,
+    offerPackageRoom: !!cfg.offer_package_room,
+    packageRooms: n(cfg.package_rooms),
+    offerLpr: !!cfg.offer_lpr,
+    lprNote: String(cfg.lpr_note || ''),
+    offerBollards: !!cfg.offer_bollards,
+    bollards: n(cfg.bollards),
+    offerConcessionBlock: !!cfg.offer_concession_block,
+    offerResidentServices: !!cfg.offer_resident_services,
+    // Cap-rate value panel
+    showValuePanel: cfg.show_value_panel != null ? !!cfg.show_value_panel : annualSavings > 0,
+    capRate, annualSavings, valueUplift,
+    // Early-termination buyout (depreciation)
+    buyoutMonths, buyoutBase, buyoutMonthly,
   }
 }
 
@@ -259,4 +330,92 @@ export const money = (v: number) => '$' + Math.round(Number(v) || 0).toLocaleStr
 export const residentFeeFromMonthly = (perUnitMonthly: number) => {
   const annualPlus = (Number(perUnitMonthly) || 0) * 12 * 1.2
   return Math.ceil(annualPlus / 5) * 5
+}
+
+/**
+ * Builds the email the rep sends to the client: the subject in the house format,
+ * and an HTML + text body that IS the proposal (so nothing is copy-pasted). The
+ * agreement is attached separately by the send route.
+ */
+export function buildProposalEmail(
+  quote: Quote,
+  cfg: PartnershipConfig = {},
+  opts: { proposalLink?: string; agreementLink?: string } = {},
+): { subject: string; html: string; text: string } {
+  const r = resolvePartnership(quote, cfg)
+  const repFirst = (String(quote?.created_by_name || r.preparedBy || '').trim().split(/\s+/)[0]) || 'Gate Guard'
+  const contact = r.contactName || r.property
+  const subject = `${contact} - Your gate and camera repair and maintenance proposal from ${repFirst} at Gate Guard.`
+
+  const resident = r.billingMode === 'resident'
+  const li = (t: string) => `<li style="margin:0 0 6px">${t}</li>`
+  const delivers: string[] = [
+    `All ${r.accessPoints} access points brought online and kept that way — parts, welding, and operator repair at install, in the set-up fee with no change orders.`,
+    `Every repair for the full ${r.termYears}-year term — parts, labor, trip charges, and monthly preventative maintenance.`,
+    `Proactive monitoring and remote reset, so your team is not dispatched for every bump.`,
+    `Mobile access with PMS integration — no fobs or cards; move-ins and move-outs sync with Yardi, Entrata, or RealPage.`,
+  ]
+  if (r.camerasIncluded && r.cameras > 0) delivers.push(`${r.cameras} monitored camera${r.cameras === 1 ? '' : 's'}${r.cameraNote ? ` — ${r.cameraNote}` : ''}, so a struck gate can be attributed and pursued as a chargeback.`)
+  if (r.offerPackageRoom) delivers.push(`Package ${r.packageRooms > 1 ? 'rooms' : 'room'} on the same credential — package access never depends on a circulated code.`)
+  if (r.offerBollards) delivers.push(`Bollard protection${r.bollards ? ` (${r.bollards})` : ''} at the operators, installed in the set-up fee.`)
+  delivers.push(`Resident support handled by GateGuard directly, so your leasing office is not the help desk.`)
+
+  const addonLines: string[] = []
+  if (r.offerGateCoverage) addonLines.push(`Physical gate &amp; hinge coverage — ${money(r.addonGateRate)} / gate / mo (${r.gates} gate${r.gates === 1 ? '' : 's'} = ${money(r.addonGateTotal)} / mo).`)
+  if (r.offerExtraCameras) addonLines.push(`Additional monitored cameras — ${money(r.addonCameraRate)} / camera / mo.`)
+  if (r.offerSmartLocks) addonLines.push(`Smart locks at turn — ${money(r.smartLockResidentFee)}/unit resident fee, ${money(r.smartLockInstallPerUnit)}/unit install to the property.`)
+  if (r.offerLpr) addonLines.push(`License-plate recognition${r.lprNote ? ` — ${r.lprNote}` : ''}.`)
+  if (r.offerConcessionBlock) addonLines.push(`Concession block — parking &amp; amenity concessions the property may apply at its discretion.`)
+  if (r.offerResidentServices) addonLines.push(`Optional resident TV / internet / security / doorbell — billed and supported by us, never the property's budget.`)
+
+  const valuePanel = (r.showValuePanel && r.valueUplift > 0)
+    ? `<div style="background:#eef6f1;border:1px solid #bfe3d0;border-radius:10px;padding:12px 14px;margin:14px 0">
+        <div style="font-weight:700;color:#12855f;margin-bottom:4px">What this adds to the property's value</div>
+        <div>Eliminated repair, capital, fobs, and staff time are net operating income. At a ${r.capRate}% cap rate, ${money(r.annualSavings)} of annual savings is worth about <b>${money(r.valueUplift)}</b> in property value.</div>
+       </div>`
+    : ''
+
+  const fundingLine = resident
+    ? `After that, GateGuard does not invoice the property again. The program is funded by residents through a parking &amp; amenity fee of ${money(r.residentFee)} per unit, billed and collected by us at each lease signing and renewal — never through your office.`
+    : `After that, the property covers the program at a flat ${money(r.propertyMonthly)} per month, billed in bulk — residents are never billed individually.`
+
+  const proposalLink = opts.proposalLink || ''
+  const signBtn = proposalLink
+    ? `<p style="margin:18px 0"><a href="${proposalLink}" style="display:inline-block;background:#2f7fb8;color:#fff;text-decoration:none;font-weight:600;padding:11px 20px;border-radius:10px">View &amp; sign online ↗</a></p>`
+    : ''
+
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;color:#17293e;line-height:1.6;max-width:640px">
+    <p>Dear ${r.contactFirst},</p>
+    <p>Thank you for your time and for walking me through ${r.propertyShort}. This is our proposal to take over ${r.accessPoints ? `all ${r.accessPoints} openings` : 'the gates'}${r.openingsBreakdown ? ` — ${r.openingsBreakdown} —` : ' '} together with the access control${r.camerasIncluded ? ', cameras,' : ','} monitoring, and resident support behind them, under our Property Partnership model.</p>
+    <p>The structure is different from every gate quote you've received. The property pays a single, one-time set-up fee of <b>${money(r.setupFee)}</b>${r.setupNote ? ` — ${r.setupNote}` : ''}, half at signing and half at Go-Live. ${fundingLine}</p>
+    <table role="presentation" style="width:100%;border-collapse:collapse;margin:14px 0">
+      <tr>
+        <td style="padding:10px;border:1px solid #e5ebf1;border-radius:8px;vertical-align:top"><div style="font-size:11px;color:#5a708c;text-transform:uppercase;font-weight:700">One-time set-up</div><div style="font-size:20px;font-weight:800;color:#16283d">${money(r.setupFee)}</div><div style="font-size:12px;color:#5a708c">${money(r.deposit)} at signing · ${money(r.goLive)} at Go-Live</div></td>
+        <td style="padding:10px;border:1px solid #e5ebf1;vertical-align:top"><div style="font-size:11px;color:#5a708c;text-transform:uppercase;font-weight:700">Ongoing to property</div><div style="font-size:20px;font-weight:800;color:#16283d">${resident ? '$0' : money(r.propertyMonthly) + ' /mo'}</div></td>
+        <td style="padding:10px;border:1px solid #e5ebf1;vertical-align:top"><div style="font-size:11px;color:#5a708c;text-transform:uppercase;font-weight:700">${r.residentFeeLabel}</div><div style="font-size:20px;font-weight:800;color:#16283d">${resident ? money(r.residentFee) : '$0'}</div></td>
+      </tr>
+    </table>
+    <div style="font-weight:700;color:#16283d;margin:14px 0 4px">What GateGuard delivers</div>
+    <ul style="margin:0 0 10px;padding-left:20px">${delivers.map(li).join('')}</ul>
+    ${valuePanel}
+    ${addonLines.length ? `<div style="font-weight:700;color:#16283d;margin:14px 0 4px">Optional add-ons (none required)</div><ul style="margin:0 0 10px;padding-left:20px">${addonLines.map(li).join('')}</ul>` : ''}
+    <div style="font-weight:700;color:#16283d;margin:14px 0 4px">Term</div>
+    <p style="margin:0 0 10px">${r.termYears}-year term from Go-Live, renewing in one-year terms unless either party gives 60 days' notice. The matching service agreement is attached.</p>
+    ${signBtn}
+    <p style="margin-top:20px">Respectfully,<br><b>${quote?.created_by_name || 'Gate Guard'}</b><br><span style="color:#5a708c">Gate Guard, LLC · (770) 776-8095 · rfeldman@gateguard.co</span></p>
+  </div>`
+
+  const textLines = [
+    `Dear ${r.contactFirst},`, '',
+    `Thank you for your time and for walking me through ${r.propertyShort}. This is our proposal to take over ${r.accessPoints ? `all ${r.accessPoints} openings` : 'the gates'}, with the access control, monitoring, and resident support behind them, under our Property Partnership model.`, '',
+    `One-time set-up: ${money(r.setupFee)} (${money(r.deposit)} at signing, ${money(r.goLive)} at Go-Live).`,
+    `Ongoing to property: ${resident ? '$0' : money(r.propertyMonthly) + '/mo'}.`,
+    `${r.residentFeeLabel}: ${resident ? money(r.residentFee) : '$0'}.`, '',
+    'What GateGuard delivers:', ...delivers.map(d => `• ${d.replace(/&amp;/g, '&')}`), '',
+    ...(addonLines.length ? ['Optional add-ons (none required):', ...addonLines.map(a => `• ${a.replace(/&amp;/g, '&')}`), ''] : []),
+    `${r.termYears}-year term from Go-Live. The matching service agreement is attached.`,
+    ...(proposalLink ? ['', `View & sign online: ${proposalLink}`] : []),
+    '', 'Respectfully,', `${quote?.created_by_name || 'Gate Guard'} — Gate Guard, LLC`,
+  ]
+  return { subject, html, text: textLines.join('\n') }
 }

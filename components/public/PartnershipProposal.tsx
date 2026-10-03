@@ -112,6 +112,12 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       {r.camerasIncluded && r.cameras > 0 && (
         <Check>{r.cameras} new monitored camera{r.cameras === 1 ? '' : 's'}{r.cameraNote ? ` — ${r.cameraNote}` : ''}. Monitored, not merely recorded. When a gate is struck, the footage is there so the damage can be attributed and pursued as a chargeback.</Check>
       )}
+      {r.offerPackageRoom && (
+        <Check>Package {r.packageRooms > 1 ? 'rooms' : 'room'} on the same credential — residents open the parcel room with the same phone they use at the gate, so package access never depends on a code that circulates.</Check>
+      )}
+      {r.offerBollards && (
+        <Check>Bollard protection{r.bollards ? ` (${r.bollards})` : ''} at the operators — installed in the set-up fee to take the next vehicle strike instead of the gate.</Check>
+      )}
       <Check>Resident support. Access questions, credentials, and troubleshooting are handled by GateGuard directly, so your leasing office is not the help desk.</Check>
 
       <H>What the property stops paying</H>
@@ -119,6 +125,20 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <Check>Fobs, access cards, and clickers, including every replacement</Check>
       {r.camerasIncluded && r.cameras > 0 && <Check>Separate camera monitoring contracts</Check>}
       <Check>Staff hours spent adding and removing residents from the access system</Check>
+
+      {r.showValuePanel && r.valueUplift > 0 && (
+        <>
+          <H>What this adds to the property’s value</H>
+          <div style={{ background: '#eef6f1', border: '1px solid #bfe3d0', borderRadius: 10, padding: '12px 14px', margin: '0 0 8px' }}>
+            <p style={{ margin: '0 0 10px' }}>Every dollar of eliminated gate repair, emergency capital, fobs, callbox service, and staff time is a dollar of net operating income — and at a {r.capRate}% cap rate, that NOI is worth a multiple of itself in property value.</p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 150 }}><div style={{ fontSize: 11, color: MUT, textTransform: 'uppercase', fontWeight: 700 }}>Annual savings → NOI</div><div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{money(r.annualSavings)}</div></div>
+              <div style={{ flex: 1, minWidth: 150 }}><div style={{ fontSize: 11, color: MUT, textTransform: 'uppercase', fontWeight: 700 }}>Value at a {r.capRate}% cap rate</div><div style={{ fontSize: 22, fontWeight: 800, color: '#12855f' }}>{money(r.valueUplift)}</div></div>
+            </div>
+            <div style={{ fontSize: 11, color: MUT, marginTop: 8 }}>Estimate — {money(r.annualSavings)} ÷ {r.capRate}% = {money(r.valueUplift)} in value created. Your ownership group can run the same arithmetic on its own numbers.</div>
+          </div>
+        </>
+      )}
 
       {r.takeoverCompetitor && (
         <>
@@ -130,7 +150,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <H>The one thing not covered</H>
       <p style={{ margin: '0 0 8px' }}>GateGuard covers everything at each opening except the physical gate itself — the steel panel, frame, posts, hinges, and welds. That coverage is available below. Everything that operates the gate — motors, operators, controllers, readers, callboxes, cameras — is covered.</p>
 
-      {(r.offerGateCoverage || r.offerExtraCameras) && <>
+      {(r.offerGateCoverage || r.offerExtraCameras || r.offerSmartLocks || r.offerLpr || r.offerConcessionBlock) && <>
       <H>Optional add-ons</H>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
         <thead>
@@ -156,6 +176,30 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
               <td style={{ padding: '6px 10px' }}>as elected</td>
               <td style={{ padding: '6px 10px' }}>{money(r.addonCameraRate)} / camera / mo</td>
               <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.addonCameraRate)} / mo ea</td>
+            </tr>
+          )}
+          {r.offerSmartLocks && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>Smart locks — installed per unit at turn; keys, key boxes, rekeys, and lockout calls go away</td>
+              <td style={{ padding: '6px 10px' }}>per unit at flip</td>
+              <td style={{ padding: '6px 10px' }}>{money(r.smartLockResidentFee)}/unit resident · {money(r.smartLockInstallPerUnit)}/unit install</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>at turn</td>
+            </tr>
+          )}
+          {r.offerLpr && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>License-plate recognition at the entrances{r.lprNote ? ` — ${r.lprNote}` : ''}</td>
+              <td style={{ padding: '6px 10px' }}>as elected</td>
+              <td style={{ padding: '6px 10px' }}>quoted on election</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>—</td>
+            </tr>
+          )}
+          {r.offerConcessionBlock && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>Concession block — parking &amp; amenity concessions the property may apply at its discretion</td>
+              <td style={{ padding: '6px 10px' }}>as negotiated</td>
+              <td style={{ padding: '6px 10px' }}>—</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>—</td>
             </tr>
           )}
         </tbody>

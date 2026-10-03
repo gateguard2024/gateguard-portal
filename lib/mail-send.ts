@@ -6,6 +6,13 @@
 // Both paths take a normalized OutboundEmail and return a SendResult so the
 // /api/nexus/messages/send route can record the outbound message uniformly.
 
+export interface MailAttachment {
+  filename: string
+  content: Buffer | string // Buffer, or a base64 string when isBase64 is true
+  contentType?: string     // defaults to application/octet-stream
+  isBase64?: boolean       // true when content is already a base64 string
+}
+
 export interface OutboundEmail {
   to: string
   subject: string
@@ -13,6 +20,8 @@ export interface OutboundEmail {
   html?: string
   fromName?: string
   fromAddress?: string // the connector's own address; required for SMTP envelope
+  cc?: string[]        // optional carbon-copy recipients
+  attachments?: MailAttachment[]
 }
 
 export interface SmtpConfig {
@@ -49,9 +58,15 @@ export async function sendViaSmtp(cfg: SmtpConfig, email: OutboundEmail): Promis
     const info = await transport.sendMail({
       from,
       to: email.to,
+      cc: email.cc && email.cc.length ? email.cc : undefined,
       subject: email.subject,
       text: email.text,
       html: email.html ?? (email.text ? undefined : ' '),
+      attachments: (email.attachments ?? []).map(a => ({
+        filename: a.filename,
+        content: a.isBase64 ? Buffer.from(String(a.content), 'base64') : a.content,
+        contentType: a.contentType,
+      })),
     })
     return { ok: true, externalId: info?.messageId }
   } catch (err) {
@@ -92,19 +107,43 @@ function buildMime(email: OutboundEmail, fromAddress: string): string {
   const headers = [
     `From: ${from}`,
     `To: ${email.to}`,
-    `Subject: ${email.subject}`,
-    'MIME-Version: 1.0',
   ]
-  let bodyPart: string
-  if (email.html) {
-    headers.push('Content-Type: text/html; charset="UTF-8"')
-    bodyPart = email.html
-  } else {
-    headers.push('Content-Type: text/plain; charset="UTF-8"')
-    bodyPart = email.text ?? ''
+  if (email.cc && email.cc.length) headers.push(`Cc: ${email.cc.join(', ')}`)
+  headers.push(`Subject: ${email.subject}`, 'MIME-Version: 1.0')
+
+  const wrap76 = (s: string) => s.replace(/(.{76})/g, '$1\r\n')
+  const atts = email.attachments ?? []
+
+  // No attachments → single part (base64-encode the body so UTF-8 survives intact).
+  if (atts.length === 0) {
+    const ct = email.html ? 'text/html' : 'text/plain'
+    const content = email.html ?? email.text ?? ''
+    headers.push(`Content-Type: ${ct}; charset="UTF-8"`, 'Content-Transfer-Encoding: base64')
+    const b64 = wrap76(Buffer.from(content, 'utf8').toString('base64'))
+    return Buffer.from(`${headers.join('\r\n')}\r\n\r\n${b64}`).toString('base64url')
   }
-  const raw = `${headers.join('\r\n')}\r\n\r\n${bodyPart}`
-  return Buffer.from(raw).toString('base64url')
+
+  // Attachments → multipart/mixed. Body part first, then each file as base64.
+  const boundary = 'ggmix_' + Math.random().toString(36).slice(2)
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
+  const bodyCt = email.html ? 'text/html' : 'text/plain'
+  const bodyContent = email.html ?? email.text ?? ''
+  const parts: string[] = []
+  parts.push(
+    `--${boundary}\r\nContent-Type: ${bodyCt}; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
+    wrap76(Buffer.from(bodyContent, 'utf8').toString('base64'))
+  )
+  for (const a of atts) {
+    const b64 = a.isBase64 ? String(a.content) : Buffer.from(a.content as Buffer).toString('base64')
+    const ct = a.contentType || 'application/octet-stream'
+    parts.push(
+      `--${boundary}\r\nContent-Type: ${ct}; name="${a.filename}"\r\n` +
+      `Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${a.filename}"\r\n\r\n` +
+      wrap76(b64)
+    )
+  }
+  const bodyAll = parts.join('\r\n') + `\r\n--${boundary}--`
+  return Buffer.from(`${headers.join('\r\n')}\r\n\r\n${bodyAll}`).toString('base64url')
 }
 
 export async function sendViaGmail(

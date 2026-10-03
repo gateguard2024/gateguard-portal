@@ -67,8 +67,8 @@ export function PartnershipEditor({ id }: { id: string }) {
   // Send-to-client
   const [sendOpen, setSendOpen] = useState(false)
   const [sendTo, setSendTo] = useState('')
+  const [sendCc, setSendCc] = useState('')
   const [sendSubject, setSendSubject] = useState('')
-  const [sendMessage, setSendMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // Auto resident fee (from the rough calculator): perUnit/mo × 12 × 1.2, ceil $5.
@@ -177,7 +177,7 @@ export function PartnershipEditor({ id }: { id: string }) {
     try {
       const res = await fetch(`/api/quotes/${id}/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: sendTo, subject: sendSubject || undefined, message: sendMessage || undefined }),
+        body: JSON.stringify({ to: sendTo, cc: sendCc || undefined, subject: sendSubject || undefined }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) { setSendMsg({ ok: false, text: j?.error || 'Could not send.' }); return }
@@ -239,8 +239,9 @@ export function PartnershipEditor({ id }: { id: string }) {
           {approved && sendOpen && (
             <div style={{ ...groupCard, marginTop: 8 }}>
               <Field l="To"><input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@email.com" style={inS} /></Field>
-              <div style={{ height: 8 }} /><Field l="Subject (optional)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder="Auto: Your GateGuard proposal — {property}" style={inS} /></Field>
-              <div style={{ height: 8 }} /><Field l="Message (optional)"><textarea value={sendMessage} onChange={e => setSendMessage(e.target.value)} rows={3} placeholder="Auto: a short cover note with the proposal + agreement links." style={{ ...inS, resize: 'vertical' }} /></Field>
+              <div style={{ height: 8 }} /><Field l="CC (optional — comma-separated)"><input value={sendCc} onChange={e => setSendCc(e.target.value)} placeholder="you@gateguard.co, manager@…" style={inS} /></Field>
+              <div style={{ height: 8 }} /><Field l="Subject (optional — auto)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={`${r.contactName || r.property} - Your gate and camera repair and maintenance proposal from ${(String(quote?.created_by_name || '').trim().split(/\s+/)[0] || 'Gate Guard')} at Gate Guard.`} style={inS} /></Field>
+              <div style={{ fontSize: 11, color: '#5a708c', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.08)', border: '1px solid rgba(47,127,184,0.2)', borderRadius: 8 }}>The full proposal is written into the email body automatically, and the matching service agreement is attached as a PDF. A CRM activity is logged on the opportunity when you send.</div>
               <button onClick={sendProposal} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
               <div style={{ fontSize: 10.5, color: MUT, marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
               {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#b91c1c' }}>{sendMsg.text}</div>}
@@ -378,6 +379,80 @@ export function PartnershipEditor({ id }: { id: string }) {
             </div>
           )}
         </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_smart_locks ?? false} onChange={e => set('offer_smart_locks', e.target.checked)} />
+            Offer smart locks
+          </label>
+          {(cfg.offer_smart_locks ?? false) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="Resident fee / unit (locks elected)" value={cfg.smart_lock_resident_fee ?? 150} onChange={v => set('smart_lock_resident_fee', v)} step={5} prefix="$" />
+              <div style={{ height: 6 }} />
+              <Stepper label="Install / unit at flip (property pays)" value={cfg.smart_lock_install_per_unit ?? 375} onChange={v => set('smart_lock_install_per_unit', v)} step={25} prefix="$" />
+            </div>
+          )}
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_package_room ?? false} onChange={e => set('offer_package_room', e.target.checked)} />
+            Offer package / parcel room access
+          </label>
+          {(cfg.offer_package_room ?? false) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="How many rooms" value={cfg.package_rooms} onChange={v => set('package_rooms', v)} />
+            </div>
+          )}
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_lpr ?? false} onChange={e => set('offer_lpr', e.target.checked)} />
+            Offer license-plate recognition (LPR)
+          </label>
+          {(cfg.offer_lpr ?? false) && (
+            <div style={{ marginTop: 8 }}>
+              <Field l="LPR note (optional)"><input value={cfg.lpr_note ?? ''} onChange={e => set('lpr_note', e.target.value)} placeholder="entries covered · plate log retained" style={inS} /></Field>
+            </div>
+          )}
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_bollards ?? false} onChange={e => set('offer_bollards', e.target.checked)} />
+            Bollard protection (in set-up fee)
+          </label>
+          {(cfg.offer_bollards ?? false) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="How many bollards" value={cfg.bollards} onChange={v => set('bollards', v)} />
+            </div>
+          )}
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_concession_block ?? false} onChange={e => set('offer_concession_block', e.target.checked)} />
+            Concession block
+          </label>
+        </div>
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.offer_resident_services ?? false} onChange={e => set('offer_resident_services', e.target.checked)} />
+            Resident services (TV / internet / security / doorbell)
+          </label>
+        </div>
+
+        <Sec t="Value creation (cap rate)" />
+        <div style={groupCard}>
+          <label style={toggleRow}>
+            <input type="checkbox" checked={cfg.show_value_panel ?? (r.annualSavings > 0)} onChange={e => set('show_value_panel', e.target.checked)} />
+            Show value-creation panel on proposal
+          </label>
+          {(cfg.show_value_panel ?? (r.annualSavings > 0)) && (
+            <div style={{ marginTop: 8 }}>
+              <Stepper label="Est. annual operating savings" value={cfg.annual_savings ?? r.annualSavings} onChange={v => set('annual_savings', v)} step={1000} prefix="$" />
+              <div style={{ height: 6 }} />
+              <Stepper label="Cap rate %" value={cfg.cap_rate ?? 6} onChange={v => set('cap_rate', v)} step={1} />
+              <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 4 }}>{money(r.annualSavings)} ÷ {r.capRate}% = <b style={{ color: '#12855f' }}>{money(r.valueUplift)}</b> in property value</div>
+            </div>
+          )}
+        </div>
 
         <Sec t="Billing" />
         <div style={{ display: 'flex', gap: 6 }}>
@@ -416,6 +491,8 @@ export function PartnershipEditor({ id }: { id: string }) {
 
         <Sec t="Term" />
         <Field l="Term (months)"><input type="number" min={1} value={cfg.term_months ?? ''} onChange={e => set('term_months', numOrU(e.target.value))} placeholder="60" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Early-termination buyout window (months)"><input type="number" min={0} value={cfg.buyout_months ?? ''} onChange={e => set('buyout_months', numOrU(e.target.value))} placeholder="12" style={inS} /></Field>
+        <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>Buyout base {money(r.buyoutBase)} ({r.units} units × {money(r.residentFee)}) · straight-line {money(r.buyoutMonthly)}/mo · $0 after month {r.buyoutMonths}.</div>
 
         {/* Advanced — everything below auto-writes from the numbers above; only touch to override wording. */}
         <div style={{ marginTop: 16, borderTop: '1px solid rgba(140,170,200,0.15)', paddingTop: 12 }}>
