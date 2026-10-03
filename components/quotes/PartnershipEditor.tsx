@@ -20,10 +20,14 @@ const numOrU = (v: string) => (v === '' ? undefined : Math.max(0, Number(v) || 0
 // remounted every input on each keystroke — the "one letter at a time" bug.
 // Light "rich hybrid" palette — matches the ROI calculator and the client letter.
 const INK = '#17293e', MUT = '#5a708c', CYAN = '#2f7fb8'
+// Dark-rail palette — the editor's left rail matches the Nexus workbench (dark
+// steel). Labels/headers go light; inputs stay light cards and the proposal
+// letter on the right stays white.
+const LBL_DK = '#9fb4c9', SEC_DK = '#7fc4ec', TXT_DK = '#dbe4f0'
 const inS: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 9, background: '#f7fafd', border: '1px solid rgba(70,100,140,0.22)', color: INK, fontSize: 13 }
-const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: MUT }
+const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: LBL_DK }
 const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
-const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: CYAN, margin: '14px 0 6px' }}>{t}</div>
+const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: SEC_DK, margin: '14px 0 6px' }}>{t}</div>
 
 const stepBtn: React.CSSProperties = { width: 30, height: 34, borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#eef4fb', color: CYAN, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }
 // Tap-friendly number control: [−] value [+]. Steppers keep the form 5th-grader simple.
@@ -43,9 +47,9 @@ function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { l
     </div>
   )
 }
-const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: '#fff', border: '1px solid rgba(70,100,140,0.16)', marginBottom: 8, boxShadow: '0 1px 3px rgba(20,40,80,0.05)' }
-const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6 }
-const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: INK, fontWeight: 600 }
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)', marginBottom: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }
+const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: TXT_DK, marginBottom: 6 }
+const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: TXT_DK, fontWeight: 600 }
 
 export function PartnershipEditor({ id }: { id: string }) {
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -202,7 +206,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       }`}</style>
 
       {/* Left form */}
-      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(70,100,140,0.2)', background: 'linear-gradient(180deg,#B7C8DE 0%,#A4B9D4 100%)' }}>
+      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#2b3c52 0%,#16202e 100%)' }}>
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
@@ -241,9 +245,9 @@ export function PartnershipEditor({ id }: { id: string }) {
               <Field l="To"><input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@email.com" style={inS} /></Field>
               <div style={{ height: 8 }} /><Field l="CC (optional — comma-separated)"><input value={sendCc} onChange={e => setSendCc(e.target.value)} placeholder="you@gateguard.co, manager@…" style={inS} /></Field>
               <div style={{ height: 8 }} /><Field l="Subject (optional — auto)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={`${r.contactName || r.property} - Your gate and camera repair and maintenance proposal from ${(String(quote?.created_by_name || '').trim().split(/\s+/)[0] || 'Gate Guard')} at Gate Guard.`} style={inS} /></Field>
-              <div style={{ fontSize: 11, color: '#5a708c', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.08)', border: '1px solid rgba(47,127,184,0.2)', borderRadius: 8 }}>The full proposal is written into the email body automatically, and the matching service agreement is attached as a PDF. A CRM activity is logged on the opportunity when you send.</div>
+              <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>The full proposal is written into the email body automatically, and the matching service agreement is attached as a PDF. A CRM activity is logged on the opportunity when you send.</div>
               <button onClick={sendProposal} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
-              <div style={{ fontSize: 10.5, color: MUT, marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
+              <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
               {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#b91c1c' }}>{sendMsg.text}</div>}
             </div>
           )}
@@ -263,7 +267,7 @@ export function PartnershipEditor({ id }: { id: string }) {
           return (
             <div className="pp-bar" style={{ marginBottom: 12, padding: 10, borderRadius: 10, background: m.bg, border: `1px solid ${m.bd}` }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: m.fg }}>{m.label}</div>
-              <div style={{ fontSize: 11, color: MUT, marginTop: 3 }}>{m.note}</div>
+              <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 3 }}>{m.note}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {!isCorporate && reviewStatus !== 'pending' && reviewStatus !== 'approved' && (
                   <button onClick={() => review('submit')} disabled={busy === 'submit'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#5FB8E0,#2f7fb8)', cursor: 'pointer' }}>{busy === 'submit' ? 'Submitting…' : 'Submit for review'}</button>
@@ -348,7 +352,7 @@ export function PartnershipEditor({ id }: { id: string }) {
             <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
           </div>
         )}
-        <div style={{ fontSize: 11.5, color: '#5a708c', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 8 }}>
+        <div style={{ fontSize: 11.5, color: '#cfe8dd', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8 }}>
           {r.pricingMode === 'flat'
             ? <>{r.accessPoints} openings × {money(r.setupFlatPerOpening)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>
             : <>{r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>}
