@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, getProfileId } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,6 +62,8 @@ export async function PATCH(
     // AI-generated fields — all editable
     'ai_summary', 'ai_sow', 'ai_bom', 'ai_recommendations',
     'ai_urgent_items', 'ai_install_notes', 'ai_timeline',
+    // Survey record document variables + bookkeeping
+    'survey_doc', 'survey_number', 'sent_at',
   ]
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -77,6 +79,19 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Log an "edited" activity on the linked opportunity when the record doc changes.
+  if ('survey_doc' in body && data?.opportunity_id) {
+    const profileId = await getProfileId(user.id)
+    const ts = new Date().toISOString()
+    await supabase.from('crm_activities').insert({
+      dealer_org_id: data.dealer_org_id ?? null, created_by: profileId, type: 'note',
+      subject: `Survey record edited — ${data.property_name || 'property'}`,
+      body: 'Pre-proposal survey record updated.',
+      opportunity_id: data.opportunity_id, completed_at: ts,
+    })
+  }
+
   return NextResponse.json({ survey: data })
 }
 

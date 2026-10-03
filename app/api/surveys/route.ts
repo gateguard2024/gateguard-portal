@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
 
 function isTechAuthed(req: NextRequest): boolean {
   const code = req.headers.get('x-tech-code')
@@ -128,5 +128,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Log a "survey created" activity on the linked opportunity.
+  if (data?.opportunity_id) {
+    const profileId = await getProfileId(user.id)
+    await supabase.from('crm_activities').insert({
+      dealer_org_id: data.dealer_org_id ?? null, created_by: profileId, type: 'note',
+      subject: `Survey created — ${data.property_name || 'property'}`,
+      body: 'Pre-proposal survey started for this opportunity.',
+      opportunity_id: data.opportunity_id, completed_at: new Date().toISOString(),
+    })
+  }
+
   return NextResponse.json({ survey: data }, { status: 201 })
 }

@@ -74,6 +74,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     attachments,
     quote,
     quotes,
+    surveys,
   ] = await Promise.all([
     // Lead
     opportunity.lead_id
@@ -166,6 +167,17 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         .limit(50),
       []
     ),
+
+    // Pre-proposal surveys created against this opportunity.
+    safe(
+      supabase
+        .from('surveys')
+        .select('id, property_name, status, sent_at, devices, created_at, updated_at')
+        .eq('opportunity_id', oppId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      []
+    ),
   ])
 
   // Activity is now a single table (crm_activities) read above — no second source to merge.
@@ -197,6 +209,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     attachments,
     quote,
     quotes,
+    surveys,
     dealerOrg,
     canAssignDealer,
     // Corporate + org admins + dealer principals (they run their own teams) can

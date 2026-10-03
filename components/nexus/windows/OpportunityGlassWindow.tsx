@@ -20,6 +20,7 @@ type OpportunityGlassData = {
   attachments?: AnyRecord[]
   quote?: AnyRecord | null
   quotes?: AnyRecord[]
+  surveys?: AnyRecord[]
   nextBestActions?: Array<{ title: string; subtitle: string; action: string }>
   canReassign?: boolean
   canAssignDealer?: boolean
@@ -126,6 +127,7 @@ export function OpportunityGlassWindow({
   const todos = data.todos ?? []
   const attachments = data.attachments ?? []
   const quotes = data.quotes ?? []
+  const surveys = data.surveys ?? []
   const nextBestActions = data.nextBestActions ?? []
 
   const router = useRouter()
@@ -221,6 +223,35 @@ export function OpportunityGlassWindow({
       if (win) win.close()
       setMsg({ ok: false, text: 'Could not create proposal.' })
     } finally { setQuoteBusy(false) }
+  }
+
+  // Create a pre-proposal survey from this opportunity and open its record editor.
+  const [surveyBusy, setSurveyBusy] = useState(false)
+  async function createSurvey() {
+    if (!oppIdStr || surveyBusy) return
+    setSurveyBusy(true); setMsg(null)
+    const win = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyP: any = property ?? {}
+      const body = {
+        opportunity_id: oppIdStr,
+        property_name: anyP.name || opp.property_name || opp.account_name || anyP.address || 'New survey',
+        property_address: anyP.address || opp.property_address || null,
+      }
+      const r = await fetch('/api/surveys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      const sid = j?.survey?.id || j?.id
+      if (!r.ok || j?.error || !sid) { if (win) win.close(); setMsg({ ok: false, text: j?.error || 'Could not create survey.' }); return }
+      const url = `/survey/${sid}/record`
+      if (win) win.location.href = url
+      else if (typeof window !== 'undefined') window.location.href = url
+      setMsg({ ok: true, text: 'Survey created ✓ — opening the record editor' })
+      await onRefresh?.()
+    } catch {
+      if (win) win.close()
+      setMsg({ ok: false, text: 'Could not create survey.' })
+    } finally { setSurveyBusy(false) }
   }
 
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
@@ -1254,6 +1285,32 @@ export function OpportunityGlassWindow({
                           })}
                         </div>
                       )}
+                      {b.key === 'quote_survey' && (
+                        <button
+                          type="button"
+                          disabled={surveyBusy}
+                          onClick={createSurvey}
+                          className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg,#c2410c,#e0763f)', color: 'white' }}
+                        >
+                          <div className="text-xs font-semibold">{surveyBusy ? 'Creating…' : '✦ Create survey'}</div>
+                          <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>Start a pre-proposal survey record</div>
+                        </button>
+                      )}
+                      {b.key === 'quote_survey' && surveys.length > 0 && (
+                        <div className="mb-2 space-y-2">
+                          {surveys.map((sv, i) => {
+                            const sid = String(sv.id ?? i)
+                            const deviceCount = Array.isArray(sv.devices) ? sv.devices.length : 0
+                            return (
+                              <a key={sid} href={`/survey/${sid}/record`} target="_blank" rel="noreferrer" className="block rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#2e2016,#241a12)', border: '1px solid rgba(224,118,63,0.35)' }}>
+                                <div className="truncate text-xs font-semibold" style={{ color: '#f0a877' }}>Survey — {val(sv.property_name, 'property')}</div>
+                                <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[deviceCount ? `${deviceCount} device${deviceCount === 1 ? '' : 's'}` : 'no devices yet', sv.sent_at ? 'sent' : val(sv.status, 'draft'), fmtDate(sv.created_at)].filter(Boolean).join(' · ')}</div>
+                              </a>
+                            )
+                          })}
+                        </div>
+                      )}
                       <button
                         type="button"
                         disabled={!!fileBusy}
@@ -1265,7 +1322,7 @@ export function OpportunityGlassWindow({
                         <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{b.hint}</div>
                       </button>
                       {items.length === 0 ? (
-                        (b.key === 'quote_survey' && quotes.length > 0) ? null : <Empty text="Nothing here yet." />
+                        (b.key === 'quote_survey' && (quotes.length > 0 || surveys.length > 0)) ? null : <Empty text="Nothing here yet." />
                       ) : b.photo ? (
                         <div className="grid grid-cols-3 gap-2">
                           {items.map((f, i) => {

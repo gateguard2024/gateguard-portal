@@ -40,6 +40,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin
     // Proposal builder + the public proposal/approve pages run full-screen, no sidebar.
     || /^\/quotes\/[^/]+(\/proposal|\/approve|\/build|\/partnership|\/agreement)(\/|$)/.test(pathname)
+    // Survey record editor + the public survey document run full-screen, no sidebar.
+    || /^\/survey\/[^/]+(\/record|\/document)(\/|$)/.test(pathname)
   const isFullGlass = isAria || isDesignStudio || isDesignCanvas  // 100dvh flex-column, own internal scroll
 
   // Standalone: full-screen, no portal chrome

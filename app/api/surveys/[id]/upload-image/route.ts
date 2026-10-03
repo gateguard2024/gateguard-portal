@@ -39,7 +39,7 @@ export async function POST(
   // Verify survey access
   const { data: survey } = await supabase
     .from('surveys')
-    .select('org_id')
+    .select('org_id, opportunity_id, property_name')
     .eq('id', params.id)
     .single()
 
@@ -81,6 +81,19 @@ export async function POST(
   }
 
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path)
+
+  // Also save the image as an opportunity attachment (category: survey_photo) so
+  // survey photos live with the deal, not only on the survey record.
+  if (survey.opportunity_id) {
+    await supabase.from('attachments').insert({
+      opportunity_id: survey.opportunity_id,
+      file_name: `${survey.property_name || 'Survey'} — ${file.name}`,
+      url: publicUrl,
+      file_type: file.type || null,
+      size_bytes: file.size,
+      category: 'survey_photo',
+    })
+  }
 
   return NextResponse.json({
     url:       publicUrl,
