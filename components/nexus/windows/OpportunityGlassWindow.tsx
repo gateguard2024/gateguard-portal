@@ -254,6 +254,22 @@ export function OpportunityGlassWindow({
     } finally { setSurveyBusy(false) }
   }
 
+  // Delete a proposal (quote) from this opportunity.
+  const [quoteDelBusy, setQuoteDelBusy] = useState<string | null>(null)
+  async function deleteQuote(qid: string, label: string) {
+    if (quoteDelBusy) return
+    if (typeof window !== 'undefined' && !window.confirm(`Delete “${label}”? This can't be undone.`)) return
+    setQuoteDelBusy(qid); setMsg(null)
+    try {
+      const r = await fetch(`/api/quotes/${qid}`, { method: 'DELETE' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j?.error) { setMsg({ ok: false, text: j?.error || 'Could not delete proposal.' }); return }
+      setMsg({ ok: true, text: 'Proposal deleted' })
+      await onRefresh?.()
+    } catch { setMsg({ ok: false, text: 'Could not delete proposal.' }) }
+    finally { setQuoteDelBusy(null) }
+  }
+
   // ── Schedule follow-up (popup) ──────────────────────────────────────────────
   const [followupOpen, setFollowupOpen] = useState(false)
   const [fu, setFu] = useState({ title: '', due_date: '', notes: '', assigned_to: '', assigned_to_name: '' })
@@ -1271,16 +1287,20 @@ export function OpportunityGlassWindow({
                             const href = String(q.quote_mode) === 'partnership' ? `/quotes/${qid}/partnership` : `/quotes/${qid}`
                             const status = val(q.review_status && q.review_status !== 'approved' ? q.review_status : q.status, 'draft')
                             const amt = Number(q.total_one_time ?? 0)
+                            const qLabel = val(q.title || q.quote_number, 'Proposal')
                             return (
-                              <a key={qid} href={href} target="_blank" rel="noreferrer" className="block rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-xs font-semibold" style={{ color: '#9FD8EC' }}>{val(q.title || q.quote_number, 'Proposal')}</div>
-                                    <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[String(status), fmtDate(q.created_at)].filter(Boolean).join(' · ')}</div>
+                              <div key={qid} className="flex items-stretch gap-2">
+                                <a href={href} target="_blank" rel="noreferrer" className="block flex-1 min-w-0 rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-xs font-semibold" style={{ color: '#9FD8EC' }}>{qLabel}</div>
+                                      <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[String(status), fmtDate(q.created_at)].filter(Boolean).join(' · ')}</div>
+                                    </div>
+                                    {amt > 0 && <div className="shrink-0 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>${amt.toLocaleString()}</div>}
                                   </div>
-                                  {amt > 0 && <div className="shrink-0 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>${amt.toLocaleString()}</div>}
-                                </div>
-                              </a>
+                                </a>
+                                <button type="button" title="Delete proposal" disabled={quoteDelBusy === qid} onClick={() => deleteQuote(qid, qLabel)} className="shrink-0 rounded-2xl px-3 font-bold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{quoteDelBusy === qid ? '…' : '✕'}</button>
+                              </div>
                             )
                           })}
                         </div>

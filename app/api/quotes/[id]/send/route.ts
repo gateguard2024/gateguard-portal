@@ -18,9 +18,12 @@ import { getProfileId } from '@/lib/org-scope'
 import { sendViaGmail } from '@/lib/mail-send'
 import { buildProposalEmail } from '@/lib/partnership-proposal'
 import { agreementPdfBuffer } from '@/lib/partnership-agreement-pdf'
+import { proposalPdfBuffer } from '@/lib/partnership-proposal-pdf'
+import { surveyPdfBuffer } from '@/lib/survey-doc-pdf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 120
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
@@ -67,14 +70,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const html = built.html
   const text = built.text
 
-  // Attach the matching service agreement as a PDF. Optional — if generation fails,
-  // send the proposal anyway rather than blocking the whole send.
+  // Attachments — the rep chooses which PDFs ride along (proposal, agreement,
+  // survey). Each is best-effort: a failure skips that file, never the send.
+  const safeName = String(property).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'Property'
+  const wantProposal = body.attach_proposal !== false   // default on
+  const wantAgreement = body.attach_agreement !== false  // default on
+  const wantSurvey = body.attach_survey === true          // default off
   const attachments: { filename: string; content: Buffer; contentType: string }[] = []
-  try {
-    const pdf = await agreementPdfBuffer(quote, cfg)
-    const safeName = String(property).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'Property'
-    attachments.push({ filename: `${safeName}_Service_Agreement.pdf`, content: pdf, contentType: 'application/pdf' })
-  } catch { /* attachment is best-effort */ }
+
+  if (wantProposal) {
+    try { attachments.push({ filename: `${safeName}_Proposal.pdf`, content: await proposalPdfBuffer(quote, cfg), contentType: 'application/pdf' }) } catch { /* skip */ }
+  }
+  if (wantAgreement) {
+    try { attachments.push({ filename: `${safeName}_Service_Agreement.pdf`, content: await agreementPdfBuffer(quote, cfg), contentType: 'application/pdf' }) } catch { /* skip */ }
+  }
+  if (wantSurvey && quote.opportunity_id) {
+    try {
+      const { data: sv } = await supabase.from('surveys').select('*').eq('opportunity_id', quote.opportunity_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (sv) attachments.push({ filename: `${safeName}_Pre-Proposal_Survey.pdf`, content: await surveyPdfBuffer(sv, (sv.survey_doc && typeof sv.survey_doc === 'object') ? sv.survey_doc : {}), contentType: 'application/pdf' })
+    } catch { /* skip */ }
+  }
 
   // Prefer the sender's connected Gmail so it comes from the rep; fall back to Resend.
   let via = ''
@@ -124,7 +139,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await supabase.from('crm_activities').insert({
       dealer_org_id: quote.dealer_org_id, created_by: profileId, type: 'email',
       subject: `Proposal sent — ${property}`,
-      body: `Sent to ${to}${ccList.length ? `, cc ${ccList.join(', ')}` : ''} via ${via}.${attachments.length ? ' Service agreement attached.' : ''}`,
+      body: `Sent to ${to}${ccList.length ? `, cc ${ccList.join(', ')}` : ''} via ${via}.${attachments.length ? ` Attached: ${attachments.map(a => a.filename).join(', ')}.` : ''}`,
       opportunity_id: quote.opportunity_id, completed_at: ts,
     })
   }

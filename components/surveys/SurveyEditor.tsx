@@ -48,7 +48,15 @@ export function SurveyEditor({ id }: { id: string }) {
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const heroRef = useRef<HTMLInputElement>(null)
   const aerialRef = useRef<HTMLInputElement>(null)
+  const siteRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState<string | null>(null)
+  // Intake (survey columns)
+  const [propName, setPropName] = useState('')
+  const [propAddr, setPropAddr] = useState('')
+  // AI draft
+  const [notes, setNotes] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiMsg, setAiMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -61,6 +69,9 @@ export function SurveyEditor({ id }: { id: string }) {
       setFindingsTxt(serFindings(d.priority_findings))
       setOpenTxt(serOpen(d.open_items))
       setRecsTxt(serRecs(d.recommendations))
+      setNotes(sv.notes_raw ?? '')
+      setPropName(sv.property_name ?? '')
+      setPropAddr(sv.property_address ?? '')
       setSendTo(sv.client_email ?? '')
     }).catch(() => setErr('Could not load this survey.'))
   }, [id])
@@ -74,16 +85,60 @@ export function SurveyEditor({ id }: { id: string }) {
       const r = await fetch(`/api/surveys/${id}/upload-image`, { method: 'POST', body: fd })
       const j = await r.json()
       if (!r.ok || !j.url) { setErr(j.error || 'Upload failed.'); return }
-      set(which, j.url)
+      // Persist the image immediately so it survives without a separate Save click.
+      const newCfg = { ...cfg, [which]: j.url }
+      setCfg(newCfg)
+      const doc = { ...newCfg, priority_findings: parseFindings(findingsTxt), open_items: parseOpen(openTxt), recommendations: parseRecs(recsTxt) }
+      await fetch(`/api/surveys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ survey_doc: doc }) })
     } catch { setErr('Upload failed.') }
     finally { setUploading(null) }
+  }
+
+  // Bulk-upload site photos → stored on survey_doc.site_photos (EXIF + opportunity
+  // attachment captured server-side), so the AI draft can reason over them.
+  async function uploadSitePhotos(files: FileList) {
+    setUploading('site'); setErr(null)
+    try {
+      const urls: string[] = []
+      for (const file of Array.from(files)) {
+        const fd = new FormData(); fd.append('file', file)
+        const r = await fetch(`/api/surveys/${id}/upload-image`, { method: 'POST', body: fd })
+        const j = await r.json(); if (r.ok && j.url) urls.push(j.url)
+      }
+      if (urls.length) {
+        const existing = Array.isArray(cfg.site_photos) ? cfg.site_photos : []
+        const newCfg = { ...cfg, site_photos: [...existing, ...urls] }
+        setCfg(newCfg)
+        await fetch(`/api/surveys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ survey_doc: { ...newCfg, priority_findings: parseFindings(findingsTxt), open_items: parseOpen(openTxt), recommendations: parseRecs(recsTxt) } }) })
+      }
+    } catch { setErr('Photo upload failed.') }
+    finally { setUploading(null) }
+  }
+
+  async function aiDraft() {
+    if (aiBusy) return
+    setAiBusy(true); setAiMsg(null); setErr(null)
+    try {
+      // Persist notes + current doc first so the AI reads the latest.
+      await fetch(`/api/surveys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes_raw: notes, property_name: propName, property_address: propAddr, survey_doc: { ...cfg, priority_findings: parseFindings(findingsTxt), open_items: parseOpen(openTxt), recommendations: parseRecs(recsTxt) } }) })
+      const r = await fetch(`/api/surveys/${id}/generate-record`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: notes }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j?.error) { setAiMsg({ ok: false, text: j?.error || 'AI draft failed.' }); return }
+      const sv = j.survey || {}
+      setSurvey(sv)
+      const d: SurveyDocConfig = (sv.survey_doc && typeof sv.survey_doc === 'object') ? sv.survey_doc : {}
+      setCfg(d)
+      setFindingsTxt(serFindings(d.priority_findings)); setOpenTxt(serOpen(d.open_items)); setRecsTxt(serRecs(d.recommendations))
+      setAiMsg({ ok: true, text: `AI draft ready ✓ — ${j.devices_created || 0} openings identified` })
+    } catch { setAiMsg({ ok: false, text: 'AI draft failed.' }) }
+    finally { setAiBusy(false) }
   }
 
   async function save() {
     setSaving(true); setErr(null)
     try {
       const doc: SurveyDocConfig = { ...cfg, priority_findings: parseFindings(findingsTxt), open_items: parseOpen(openTxt), recommendations: parseRecs(recsTxt) }
-      const r = await fetch(`/api/surveys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ survey_doc: doc }) })
+      const r = await fetch(`/api/surveys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ survey_doc: doc, property_name: propName, property_address: propAddr, notes_raw: notes }) })
       if (!r.ok) { const j = await r.json().catch(() => ({})); setErr(j?.error || 'Save failed.'); return }
       setCfg(doc); setSaved(true)
     } catch { setErr('Save failed.') }
@@ -139,16 +194,42 @@ export function SurveyEditor({ id }: { id: string }) {
           </div>
         )}
 
+        <Sec t="1 · New survey — the basics" />
+        <Field l="Property name"><input value={propName} onChange={e => { setPropName(e.target.value); setSaved(false) }} placeholder="Elliot Norcross" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Address"><input value={propAddr} onChange={e => { setPropAddr(e.target.value); setSaved(false) }} placeholder="1355 Graves Rd, Norcross, GA 30093" style={inS} /></Field>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div style={{ flex: 1 }}><Field l="Contact"><input value={cfg.prepared_for_contact ?? ''} onChange={e => set('prepared_for_contact', e.target.value)} placeholder="Nelsy Marcelino" style={inS} /></Field></div>
+          <div style={{ flex: 1 }}><Field l="Title"><input value={cfg.contact_title ?? ''} onChange={e => set('contact_title', e.target.value)} placeholder="Property Manager" style={inS} /></Field></div>
+        </div>
+
+        <Sec t="2 · What you found" />
+        <div style={{ fontSize: 10.5, color: '#9fb4c9', marginBottom: 4 }}>One per line — just like you'd jot it. The AI turns these + the photos into the full record.</div>
+        <textarea value={notes} onChange={e => { setNotes(e.target.value); setSaved(false) }} rows={6} placeholder={'3 sets of gates not working\n1 pool gate not set up\n1 gym door'} style={taS} />
+
+        <Sec t="3 · Photos" />
+        <div style={groupCard}>
+          <input ref={heroRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'hero_url') }} />
+          <button onClick={() => heroRef.current?.click()} disabled={uploading === 'hero_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'hero_url' ? 'Uploading…' : (cfg.hero_url ? '✓ Replace cover photo' : '+ Cover photo')}</button>
+          <div style={{ height: 6 }} /><Field l="Cover caption"><input value={cfg.hero_caption ?? ''} onChange={e => set('hero_caption', e.target.value)} placeholder="Pool and clubhouse" style={inS} /></Field>
+          <div style={{ height: 8 }} />
+          <input ref={aerialRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'aerial_url') }} />
+          <button onClick={() => aerialRef.current?.click()} disabled={uploading === 'aerial_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'aerial_url' ? 'Uploading…' : (cfg.aerial_url ? '✓ Replace site map' : '+ Site map / aerial')}</button>
+          <div style={{ height: 8 }} />
+          <input ref={siteRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { const fs = e.target.files; if (fs && fs.length) void uploadSitePhotos(fs) }} />
+          <button onClick={() => siteRef.current?.click()} disabled={uploading === 'site'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'site' ? 'Uploading…' : `+ Site photos${cfg.site_photos?.length ? ` (${cfg.site_photos.length})` : ''}`}</button>
+          <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>GPS + capture time are read from each photo to place map pins automatically.</div>
+        </div>
+
+        <Sec t="4 · Let AI build it" />
+        <button onClick={aiDraft} disabled={aiBusy} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#c2410c,#e0763f)', cursor: 'pointer', opacity: aiBusy ? 0.7 : 1 }}>{aiBusy ? 'Drafting…' : '✦ AI draft from notes + photos'}</button>
+        {aiMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: aiMsg.ok ? '#12855f' : '#fca5a5' }}>{aiMsg.text}</div>}
+        <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>Claude reads your notes + photos and drafts the openings, findings, scope, and recommendations. Review and fine-tune everything below before sending.</div>
+
         <Sec t="Record header" />
         <Field l="Record no."><input value={cfg.record_no ?? ''} onChange={e => set('record_no', e.target.value)} placeholder="GG-EN-2026-01" style={inS} /></Field>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <div style={{ flex: 1 }}><Field l="Version"><input value={cfg.version ?? ''} onChange={e => set('version', e.target.value)} placeholder="1.0" style={inS} /></Field></div>
           <div style={{ flex: 2 }}><Field l="Issued date"><input value={cfg.issued_date ?? ''} onChange={e => set('issued_date', e.target.value)} placeholder="October 2, 2026" style={inS} /></Field></div>
-        </div>
-        <div style={{ height: 8 }} /><Field l="Prepared for"><input value={cfg.prepared_for_name ?? ''} onChange={e => set('prepared_for_name', e.target.value)} placeholder={survey.property_name} style={inS} /></Field>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <div style={{ flex: 1 }}><Field l="Contact"><input value={cfg.prepared_for_contact ?? ''} onChange={e => set('prepared_for_contact', e.target.value)} placeholder="Nelsy Marcelino" style={inS} /></Field></div>
-          <div style={{ flex: 1 }}><Field l="Title"><input value={cfg.contact_title ?? ''} onChange={e => set('contact_title', e.target.value)} placeholder="Property Manager" style={inS} /></Field></div>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <div style={{ flex: 1 }}><Field l="Surveyed by"><input value={cfg.surveyed_by ?? ''} onChange={e => set('surveyed_by', e.target.value)} placeholder="GateGuard" style={inS} /></Field></div>
@@ -159,17 +240,7 @@ export function SurveyEditor({ id }: { id: string }) {
           <div style={{ flex: 1 }}><Field l="Walk end"><input value={cfg.walk_end ?? ''} onChange={e => set('walk_end', e.target.value)} placeholder="12:58 pm" style={inS} /></Field></div>
         </div>
 
-        <Sec t="Cover + aerial images" />
-        <div style={groupCard}>
-          <input ref={heroRef} type="file" accept="image/*" className="hidden" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'hero_url') }} />
-          <button onClick={() => heroRef.current?.click()} disabled={uploading === 'hero_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'hero_url' ? 'Uploading…' : (cfg.hero_url ? '✓ Replace cover photo' : '+ Cover photo')}</button>
-          <div style={{ height: 8 }} /><Field l="Cover caption"><input value={cfg.hero_caption ?? ''} onChange={e => set('hero_caption', e.target.value)} placeholder="Pool and clubhouse" style={inS} /></Field>
-          <div style={{ height: 8 }} />
-          <input ref={aerialRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'aerial_url') }} />
-          <button onClick={() => aerialRef.current?.click()} disabled={uploading === 'aerial_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'aerial_url' ? 'Uploading…' : (cfg.aerial_url ? '✓ Replace aerial' : '+ Site aerial')}</button>
-        </div>
-
-        <Sec t="Narrative" />
+        <Sec t="Review — narrative" />
         <Field l="Executive summary"><textarea value={cfg.exec_summary ?? ''} onChange={e => set('exec_summary', e.target.value)} rows={6} placeholder="None of the three gated entrances is working…" style={taS} /></Field>
         <div style={{ height: 8 }} /><Field l="Scope note"><textarea value={cfg.scope_note ?? ''} onChange={e => set('scope_note', e.target.value)} rows={3} placeholder="auto — vehicle gates, operators, callboxes…" style={taS} /></Field>
         <div style={{ height: 8 }} /><Field l="Method note"><textarea value={cfg.method_note ?? ''} onChange={e => set('method_note', e.target.value)} rows={2} placeholder="auto — one on-site walk…" style={taS} /></Field>

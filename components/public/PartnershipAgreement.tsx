@@ -5,18 +5,19 @@
  * partnership config as the proposal so the two always match. Clean, print-ready.
  */
 import { buildPartnershipAgreement } from '@/lib/partnership-agreement'
-import type { PartnershipConfig } from '@/lib/partnership-proposal'
+import { resolvePartnership, money, type PartnershipConfig } from '@/lib/partnership-proposal'
 
-const NAVY = '#12233b'; const INK = '#1a2432'; const BODY = '#27364a'; const MUT = '#5a6c84'; const CYAN = '#2f7fb8'
+const NAVY = '#12233b'; const INK = '#1a2432'; const BODY = '#27364a'; const MUT = '#5a6c84'; const CYAN = '#2f7fb8'; const LINE = '#e5ebf1'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function PartnershipAgreement({ quote, cfg }: { quote: any; cfg?: PartnershipConfig }) {
   const doc = buildPartnershipAgreement(quote, cfg ?? {})
+  const r = resolvePartnership(quote, cfg ?? {})
+  const resident = r.billingMode === 'resident'
   const dateStr = new Date(quote?.sent_at || quote?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   const paper: React.CSSProperties = { maxWidth: 780, margin: '0 auto', background: '#fff', color: BODY, padding: '48px 56px', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif', fontSize: 13.5, lineHeight: 1.6 }
+  const termCell: React.CSSProperties = { flex: 1, padding: '12px 14px', border: `1px solid ${LINE}`, borderRadius: 10 }
 
-  // The plain-English preamble reads as a lead paragraph; the numbered sections
-  // read as the legal body. Both get the same roomy treatment as the proposal.
   return (
     <div style={paper}>
       {/* Letterhead — matches the proposal exactly */}
@@ -28,16 +29,49 @@ export function PartnershipAgreement({ quote, cfg }: { quote: any; cfg?: Partner
       </div>
 
       <div style={{ fontSize: 11.5, color: MUT, marginBottom: 10 }}>{dateStr}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: NAVY, lineHeight: 1.25 }}>{doc.title}</div>
-      <div style={{ fontSize: 13, color: MUT, marginBottom: 6 }}>{doc.subtitle}</div>
-      <div style={{ borderBottom: '1px solid #e5ebf1', margin: '10px 0 22px' }} />
+      <div style={{ fontSize: 22, fontWeight: 800, color: NAVY, lineHeight: 1.2 }}>{doc.title}</div>
+      <div style={{ fontSize: 13, color: MUT, marginBottom: 14 }}>{doc.subtitle}</div>
 
-      {doc.sections.map((s, i) => (
-        <div key={i} style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: NAVY, letterSpacing: '0.01em', marginBottom: 6 }}>{s.h}</div>
-          <div style={{ whiteSpace: 'pre-line', color: BODY, lineHeight: 1.65 }}>{s.p}</div>
+      {/* Terms summary strip — the same at-a-glance numbers as the proposal. */}
+      <div style={{ display: 'flex', gap: 10, margin: '0 0 24px' }}>
+        <div style={termCell}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: CYAN }}>One-time set-up</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{money(r.setupFee)}</div>
+          <div style={{ fontSize: 10.5, color: MUT }}>{money(r.deposit)} at signing · {money(r.goLive)} at Go-Live</div>
         </div>
-      ))}
+        <div style={termCell}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: CYAN }}>Ongoing to property</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{resident ? '$0' : money(r.propertyMonthly)}<span style={{ fontSize: 12, color: MUT }}>{resident ? '' : ' /mo'}</span></div>
+          <div style={{ fontSize: 10.5, color: MUT }}>{resident ? 'No monthly fee or service calls' : 'Billed in bulk'}</div>
+        </div>
+        <div style={{ ...termCell, background: NAVY, border: `1px solid ${NAVY}` }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#7fc4ec' }}>{r.residentFeeLabel}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{resident ? money(r.residentFee) : '$0'}</div>
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.65)' }}>{resident ? 'Per unit · signing + renewal' : ''}</div>
+        </div>
+      </div>
+
+      {doc.sections.map((s, i) => {
+        const m = s.h.match(/^(\d+)\.\s*(.*)$/)
+        const isLead = i === 0 // "What this agreement does, in plain English"
+        if (isLead) {
+          return (
+            <div key={i} style={{ marginBottom: 22, padding: '14px 16px', background: '#f2f7fb', border: `1px solid ${LINE}`, borderRadius: 10 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: CYAN, marginBottom: 6 }}>{s.h}</div>
+              <div style={{ whiteSpace: 'pre-line', color: BODY, lineHeight: 1.65 }}>{s.p}</div>
+            </div>
+          )
+        }
+        return (
+          <div key={i} style={{ marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, borderBottom: `1px solid ${LINE}`, paddingBottom: 5 }}>
+              {m && <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: CYAN, borderRadius: 5, padding: '1px 7px', flexShrink: 0 }}>{m[1]}</span>}
+              <span style={{ fontSize: 13.5, fontWeight: 800, color: NAVY, letterSpacing: '0.01em' }}>{m ? m[2] : s.h}</span>
+            </div>
+            <div style={{ whiteSpace: 'pre-line', color: BODY, lineHeight: 1.65 }}>{s.p}</div>
+          </div>
+        )
+      })}
 
       {/* Signatures */}
       <div style={{ marginTop: 26, borderTop: `2px solid ${CYAN}`, paddingTop: 18 }}>

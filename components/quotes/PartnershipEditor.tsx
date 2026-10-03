@@ -73,6 +73,9 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [sendTo, setSendTo] = useState('')
   const [sendCc, setSendCc] = useState('')
   const [sendSubject, setSendSubject] = useState('')
+  const [attachProposal, setAttachProposal] = useState(true)
+  const [attachAgreement, setAttachAgreement] = useState(true)
+  const [attachSurvey, setAttachSurvey] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [contacts, setContacts] = useState<any[]>([])
   const [contactId, setContactId] = useState('')
@@ -218,7 +221,7 @@ export function PartnershipEditor({ id }: { id: string }) {
     try {
       const res = await fetch(`/api/quotes/${id}/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: sendTo, cc: sendCc || undefined, subject: sendSubject || undefined }),
+        body: JSON.stringify({ to: sendTo, cc: sendCc || undefined, subject: sendSubject || undefined, attach_proposal: attachProposal, attach_agreement: attachAgreement, attach_survey: attachSurvey }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) { setSendMsg({ ok: false, text: j?.error || 'Could not send.' }); return }
@@ -305,7 +308,13 @@ export function PartnershipEditor({ id }: { id: string }) {
                 <button type="button" onClick={() => setSendSubject(autoSubject)} style={{ fontSize: 10.5, fontWeight: 700, color: '#7fc4ec', background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>↺ use auto</button>
               </div>
               <input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={autoSubject} style={inS} />
-              <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>The full proposal is written into the email body automatically, and the matching service agreement is attached as a PDF. A CRM activity is logged on the opportunity when you send.</div>
+              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9', marginBottom: 6 }}>Attach as PDF</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#dbe4f0', marginBottom: 4, cursor: 'pointer' }}><input type="checkbox" checked={attachProposal} onChange={e => setAttachProposal(e.target.checked)} /> Proposal</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#dbe4f0', marginBottom: 4, cursor: 'pointer' }}><input type="checkbox" checked={attachAgreement} onChange={e => setAttachAgreement(e.target.checked)} /> Service agreement</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#dbe4f0', cursor: 'pointer' }}><input type="checkbox" checked={attachSurvey} onChange={e => setAttachSurvey(e.target.checked)} /> Pre-proposal survey (latest on this opportunity)</label>
+                <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>The full proposal is also written into the email body. A CRM activity is logged when you send.</div>
+              </div>
               <button onClick={sendProposal} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
               <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
               {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#b91c1c' }}>{sendMsg.text}</div>}

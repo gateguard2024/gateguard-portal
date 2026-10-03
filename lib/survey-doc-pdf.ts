@@ -61,24 +61,27 @@ export async function surveyPdfBuffer(survey: AnyRec, cfg: SurveyDocConfig = {})
       try { pdf.save(); pdf.rect(x, y, w, h).clip(); pdf.image(buf, x, y, { cover: [w, h] }); pdf.restore() } catch { /* skip bad image */ }
     }
 
-    // ── Cover ─────────────────────────────────────────────
+    // ── Cover (dark) ──────────────────────────────────────
+    pdf.rect(0, 0, pdf.page.width, pdf.page.height).fill('#0f1c2e')
     const top = pdf.y
-    pdf.font('Helvetica-Bold').fontSize(16).fillColor(NAVY).text('GATEGUARD', L, top)
-    pdf.font('Helvetica').fontSize(8).fillColor(MUT).text(`SURVEY RECORD ${r.recordNo}\nVERSION ${r.version} · ISSUED ${r.issuedDate}`, L, top + 1, { align: 'right', width: W })
-    pdf.moveDown(0.8); rule(ORANGE, 2); pdf.moveDown(0.8)
+    pdf.font('Helvetica-Bold').fontSize(16).fillColor('#ffffff').text('GATEGUARD', L, top)
+    pdf.font('Helvetica').fontSize(8).fillColor('#9fb0c4').text(`SURVEY RECORD ${r.recordNo}\nVERSION ${r.version} · ISSUED ${r.issuedDate}`, L, top + 1, { align: 'right', width: W })
+    pdf.moveDown(0.8); rule('#f0763f', 2); pdf.moveDown(0.8)
 
     const hero = r.heroUrl ? imgMap.get(r.heroUrl) : null
     if (hero) { ensure(220); drawImage(hero, L, pdf.y, W, 210); pdf.y += 220 }
 
-    kicker('GateGuard Pre-Proposal Survey')
-    pdf.font('Helvetica-Bold').fontSize(28).fillColor(NAVY).text(r.property)
-    if (r.address) pdf.font('Helvetica').fontSize(11).fillColor(MUT).text(r.address)
-    pdf.moveDown(0.6); rule(LINE, 1); pdf.moveDown(0.5)
+    pdf.font('Helvetica-Bold').fontSize(9).fillColor('#f0763f').text('GATEGUARD PRE-PROPOSAL SURVEY', { characterSpacing: 1 }); pdf.moveDown(0.1)
+    pdf.font('Helvetica-Bold').fontSize(28).fillColor('#ffffff').text(r.property)
+    if (r.address) pdf.font('Helvetica').fontSize(11).fillColor('#b9c6d6').text(r.address)
+    pdf.moveDown(0.6)
+    { const y = pdf.y; pdf.moveTo(L, y).lineTo(R, y).strokeColor('#2b3a4d').lineWidth(1).stroke(); pdf.y = y + 1 }
+    pdf.moveDown(0.5)
 
     const cell = (label: string, value: string, sub: string, x: number, y: number, w: number) => {
-      pdf.font('Helvetica-Bold').fontSize(8).fillColor(MUT).text(label.toUpperCase(), x, y, { width: w, characterSpacing: 0.5 })
-      pdf.font('Helvetica-Bold').fontSize(12).fillColor(INK).text(value || '—', x, y + 12, { width: w })
-      if (sub) pdf.font('Helvetica').fontSize(9).fillColor(MUT).text(sub, x, y + 28, { width: w })
+      pdf.font('Helvetica-Bold').fontSize(8).fillColor('#8ea2b8').text(label.toUpperCase(), x, y, { width: w, characterSpacing: 0.5 })
+      pdf.font('Helvetica-Bold').fontSize(12).fillColor('#ffffff').text(value || '—', x, y + 12, { width: w })
+      if (sub) pdf.font('Helvetica').fontSize(9).fillColor('#b9c6d6').text(sub, x, y + 28, { width: w })
     }
     const cy = pdf.y
     const colW = (W - 24) / 2

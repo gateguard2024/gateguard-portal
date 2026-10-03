@@ -45,13 +45,20 @@ export async function PATCH(
   // Verify ownership first
   const { data: existing } = await supabase
     .from('surveys')
-    .select('org_id')
+    .select('org_id, survey_doc')
     .eq('id', params.id)
     .single()
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!user.isCorporate && !scope.ids.includes(existing.org_id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Preserve EXIF photo_meta (written by the upload route) if the incoming doc
+  // doesn't carry it — a plain Save from the editor must never wipe it.
+  if (body.survey_doc && typeof body.survey_doc === 'object' && !body.survey_doc.photo_meta) {
+    const existingMeta = (existing.survey_doc && typeof existing.survey_doc === 'object') ? existing.survey_doc.photo_meta : null
+    if (existingMeta) body.survey_doc = { ...body.survey_doc, photo_meta: existingMeta }
   }
 
   // Whitelist updatable fields

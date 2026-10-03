@@ -51,28 +51,28 @@ export function SurveyRecord({ survey, cfg }: { survey: any; cfg?: SurveyDocConf
     <div style={paper}>
       <style>{`@media print { .sr-break { page-break-before: always; } } .sr-photo { width:100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; display:block; background:#eef1f5; }`}</style>
 
-      {/* ── Cover ───────────────────────────────────────────── */}
-      <div style={{ padding: pad }}>
+      {/* ── Cover (dark) ────────────────────────────────────── */}
+      <div style={{ padding: '48px 52px', background: '#0f1c2e', color: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: NAVY, letterSpacing: '0.02em' }}>GATE<span style={{ color: ORANGE }}>GUARD</span></div>
-          <div style={{ textAlign: 'right', fontSize: 10.5, color: MUT, lineHeight: 1.5 }}>SURVEY RECORD {r.recordNo}<br />VERSION {r.version} · ISSUED {r.issuedDate}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '0.02em' }}>GATE<span style={{ color: '#f0763f' }}>GUARD</span></div>
+          <div style={{ textAlign: 'right', fontSize: 10.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5, borderTop: '2px solid #f0763f', paddingTop: 4 }}>SURVEY RECORD {r.recordNo}<br />VERSION {r.version} · ISSUED {r.issuedDate}</div>
         </div>
         {r.heroUrl ? (
-          <div style={{ position: 'relative', marginBottom: 20 }}>
+          <div style={{ position: 'relative', marginBottom: 22 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={r.heroUrl} alt={r.heroCaption || r.property} style={{ width: '100%', height: 320, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
+            <img src={r.heroUrl} alt={r.heroCaption || r.property} style={{ width: '100%', height: 330, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
             {r.heroCaption && <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(8,14,22,0.72)', color: '#fff', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 8px', borderRadius: 4, textTransform: 'uppercase' }}>{r.heroCaption}</div>}
           </div>
         ) : <div style={{ height: 8 }} />}
-        <Kicker>GateGuard Pre-Proposal Survey</Kicker>
-        <div style={{ fontSize: 40, fontWeight: 800, color: NAVY, lineHeight: 1.05 }}>{r.property}</div>
-        {r.address && <div style={{ fontSize: 14, color: MUT, marginTop: 6 }}>{r.address}</div>}
-        <div style={{ borderTop: `1px solid ${LINE}`, margin: '18px 0' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
-          <CoverCell label="Prepared for" value={r.preparedForName} sub={[r.preparedForContact, r.contactTitle].filter(Boolean).join(', ')} />
-          <CoverCell label="Survey date" value={r.surveyDate || '—'} sub={r.walkWindow ? `On-site walk, ${r.walkWindow}` : ''} />
-          <CoverCell label="Surveyed by" value={r.surveyedBy} sub={r.surveyorRole} />
-          <CoverCell label="Record" value={`${r.totalPhotos} photos`} sub={r.recordSummary} />
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: '#f0763f', textTransform: 'uppercase', marginBottom: 6 }}>GateGuard Pre-Proposal Survey</div>
+        <div style={{ fontSize: 44, fontWeight: 800, color: '#fff', lineHeight: 1.03 }}>{r.property}</div>
+        {r.address && <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 8 }}>{r.address}</div>}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '22px 0' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 24px' }}>
+          <CoverCell dark label="Prepared for" value={r.preparedForName} sub={[r.preparedForContact, r.contactTitle].filter(Boolean).join(', ')} />
+          <CoverCell dark label="Survey date" value={r.surveyDate || '—'} sub={r.walkWindow ? `On-site walk, ${r.walkWindow}` : ''} />
+          <CoverCell dark label="Surveyed by" value={r.surveyedBy} sub={r.surveyorRole} />
+          <CoverCell dark label="Record" value={`${r.totalPhotos} photos`} sub={r.recordSummary} />
         </div>
       </div>
 
@@ -306,12 +306,12 @@ export function SurveyRecord({ survey, cfg }: { survey: any; cfg?: SurveyDocConf
   )
 }
 
-function CoverCell({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function CoverCell({ label, value, sub, dark }: { label: string; value: string; sub?: string; dark?: boolean }) {
   return (
     <div>
-      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', color: MUT, textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginTop: 3 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: MUT, marginTop: 1 }}>{sub}</div>}
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', color: dark ? 'rgba(255,255,255,0.55)' : MUT, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: dark ? '#fff' : INK, marginTop: 3 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: dark ? 'rgba(255,255,255,0.65)' : MUT, marginTop: 1 }}>{sub}</div>}
     </div>
   )
 }

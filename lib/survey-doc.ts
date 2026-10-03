@@ -66,6 +66,7 @@ export interface SurveyDocConfig {
   priority_findings?: PriorityFinding[]
   pins?: Pin[]
   photo_meta?: Record<string, PhotoMeta>  // EXIF per photo url: GPS + capture time
+  site_photos?: string[]                  // bulk-uploaded site photos (for AI draft)
   openings?: OpeningRow[]   // overrides the derived openings table
   hardware_note?: string
   headend_note?: string
