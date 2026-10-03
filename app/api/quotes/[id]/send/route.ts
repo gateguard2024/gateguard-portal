@@ -17,7 +17,7 @@ import { getCurrentUser } from '@/lib/current-user'
 import { getProfileId } from '@/lib/org-scope'
 import { sendViaGmail } from '@/lib/mail-send'
 import { buildProposalEmail } from '@/lib/partnership-proposal'
-import { agreementPdfBuffer } from '@/lib/partnership-agreement'
+import { agreementPdfBuffer } from '@/lib/partnership-agreement-pdf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
