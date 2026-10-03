@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import exifr from 'exifr'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 
@@ -39,7 +40,7 @@ export async function POST(
   // Verify survey access
   const { data: survey } = await supabase
     .from('surveys')
-    .select('org_id, opportunity_id, property_name')
+    .select('org_id, opportunity_id, property_name, survey_doc')
     .eq('id', params.id)
     .single()
 
@@ -68,6 +69,18 @@ export async function POST(
   const path = `${slug}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
 
   const buffer = Buffer.from(await file.arrayBuffer())
+
+  // Pull location + capture time out of the image's EXIF (best-effort — many
+  // photos have it stripped). Used to auto-place map pins and fill capture times.
+  let lat: number | null = null, lng: number | null = null, takenAt: string | null = null
+  try {
+    const gps = await exifr.gps(buffer).catch(() => null)
+    if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) { lat = gps.latitude; lng = gps.longitude }
+    const parsed = await exifr.parse(buffer, ['DateTimeOriginal', 'CreateDate']).catch(() => null)
+    const dt = parsed?.DateTimeOriginal || parsed?.CreateDate
+    if (dt) takenAt = (dt instanceof Date ? dt : new Date(dt)).toISOString()
+  } catch { /* no EXIF — fine */ }
+
   const { error: uploadErr } = await supabase.storage
     .from(BUCKET)
     .upload(path, buffer, {
@@ -81,6 +94,15 @@ export async function POST(
   }
 
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path)
+
+  // Persist per-photo EXIF (GPS + capture time) on the survey record so the
+  // document can auto-place map pins and fill capture times, keyed by photo URL.
+  if (lat != null || takenAt) {
+    const doc = (survey.survey_doc && typeof survey.survey_doc === 'object') ? survey.survey_doc : {}
+    const photoMeta = { ...(doc.photo_meta || {}) }
+    photoMeta[publicUrl] = { lat, lng, taken_at: takenAt }
+    await supabase.from('surveys').update({ survey_doc: { ...doc, photo_meta: photoMeta }, updated_at: new Date().toISOString() }).eq('id', params.id)
+  }
 
   // Also save the image as an opportunity attachment (category: survey_photo) so
   // survey photos live with the deal, not only on the survey record.
@@ -99,5 +121,6 @@ export async function POST(
     url:       publicUrl,
     device_id: deviceId ?? null,
     path,
+    lat, lng, taken_at: takenAt,
   })
 }

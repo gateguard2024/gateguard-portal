@@ -32,13 +32,14 @@ export interface SurveyStat { num?: string | number; label?: string; sub?: strin
 export interface PriorityFinding { ref?: string; title?: string; detail?: string; priority?: FindingPriority }
 export interface OpeningRow { type?: string; opening?: string; pin?: string; photos?: string; status?: string; notes?: string }
 export interface EquipChip { tag?: string; label?: string; sub?: string }
-export interface AreaPhoto { code?: string; url?: string; caption?: string; sub?: string; time?: string }
+export interface AreaPhoto { code?: string; url?: string; caption?: string; sub?: string; time?: string; lat?: number | null; lng?: number | null }
+export interface PhotoMeta { lat?: number | null; lng?: number | null; taken_at?: string | null }
 export interface SurveyArea { no?: string; title?: string; pin?: string; subtitle?: string; statusTags?: string[]; narrative?: string; equipment?: EquipChip[]; observations?: string[]; photos?: AreaPhoto[] }
 export interface ScheduleRow { group?: string; device?: string; qty?: string | number; make?: string; condition?: string; disposition?: string }
 export interface OpenItem { ref?: string; item?: string; why?: string; owner?: string }
 export interface Recommendation { ref?: string; title?: string; detail?: string; owner?: string; priority?: FindingPriority }
 export interface Fact { label: string; value: string }
-export interface Pin { pin?: string; area?: string; kind?: 'vehicle' | 'amenity' }
+export interface Pin { pin?: string; area?: string; kind?: 'vehicle' | 'amenity'; lat?: number | null; lng?: number | null }
 
 export interface SurveyDocConfig {
   record_no?: string
@@ -64,6 +65,7 @@ export interface SurveyDocConfig {
   stats?: SurveyStat[]      // overrides the derived stat cards
   priority_findings?: PriorityFinding[]
   pins?: Pin[]
+  photo_meta?: Record<string, PhotoMeta>  // EXIF per photo url: GPS + capture time
   openings?: OpeningRow[]   // overrides the derived openings table
   hardware_note?: string
   headend_note?: string
@@ -114,6 +116,7 @@ export interface ResolvedSurvey {
   recommendations: Recommendation[]
   photoIndex: AreaPhoto[]
   totalPhotos: number
+  hasGeo: boolean
   preparedBy: string
 }
 
@@ -167,17 +170,18 @@ export function resolveSurvey(survey: AnyRec, cfg: SurveyDocConfig = {}): Resolv
   }
   const pinForLoc = (loc: string) => LETTERS[Math.max(0, locOrder.indexOf(loc))] || '—'
 
-  // Photo index — every device photo, coded E01.. in device order.
+  // Photo index — every device photo, coded E01.. in device order, enriched with
+  // EXIF capture time + GPS when the upload captured it.
+  const meta = cfg.photo_meta || {}
   const photoIndex: AreaPhoto[] = []
   let pc = 0
-  const codeForPhotos = (d: SurveyDevice): string[] => {
-    const urls = Array.isArray(d.photos) ? d.photos : []
-    return urls.map((url) => {
-      pc += 1
-      const code = 'E' + String(pc).padStart(2, '0')
-      photoIndex.push({ code, url, caption: s(d.name, 'Photo'), sub: s(d.location), time: '' })
-      return code
-    })
+  const takePhoto = (d: SurveyDevice, url: string): AreaPhoto => {
+    pc += 1
+    const code = 'E' + String(pc).padStart(2, '0')
+    const m = meta[url] || {}
+    const p: AreaPhoto = { code, url, caption: s(d.name, 'Photo'), sub: s(d.location), time: m.taken_at ? fmtDateTime(m.taken_at) : '', lat: m.lat ?? null, lng: m.lng ?? null }
+    photoIndex.push(p)
+    return p
   }
 
   // Build areas grouped by location (unless overridden).
@@ -187,11 +191,10 @@ export function resolveSurvey(survey: AnyRec, cfg: SurveyDocConfig = {}): Resolv
         const inLoc = devices.filter(d => (s(d.location).trim() || 'General') === loc)
         const photos: AreaPhoto[] = []
         const equipment: EquipChip[] = inLoc.map(d => {
-          const codes = codeForPhotos(d)
-          codes.forEach((code, idx) => {
-            const url = (d.photos || [])[idx]
-            if (url) photos.push({ code, url, caption: s(d.name, 'Photo'), sub: s(d.notes) })
-          })
+          for (const url of (Array.isArray(d.photos) ? d.photos : [])) {
+            const p = takePhoto(d, url)
+            photos.push({ ...p, sub: s(d.notes) })
+          }
           return { tag: equipTag(s(d.name)), label: s(d.name, 'Device'), sub: [d.brand, d.condition || d.action].filter(Boolean).join(' · ') }
         })
         const observations = inLoc.map(d => s(d.notes)).filter(Boolean)
@@ -274,6 +277,17 @@ export function resolveSurvey(survey: AnyRec, cfg: SurveyDocConfig = {}): Resolv
   const walkEnd = s(cfg.walk_end)
   const walkWindow = walkStart && walkEnd ? `${walkStart} to ${walkEnd}` : (walkStart || '')
 
+  // Geo pins — first GPS-tagged photo per location becomes that area's map pin.
+  const geoByLoc = new Map<string, { lat: number; lng: number }>()
+  for (const p of photoIndex) {
+    if (p.lat != null && p.lng != null && p.sub && !geoByLoc.has(p.sub)) geoByLoc.set(p.sub, { lat: p.lat, lng: p.lng })
+  }
+  const hasGeo = geoByLoc.size > 0
+  const derivedPins: Pin[] = locOrder.map((loc) => {
+    const g = geoByLoc.get(loc)
+    return { pin: pinForLoc(loc), area: loc, kind: /pool|gym|club|amenity|package|door/i.test(loc) ? 'amenity' : 'vehicle', lat: g?.lat ?? null, lng: g?.lng ?? null }
+  })
+
   return {
     property,
     address,
@@ -298,7 +312,7 @@ export function resolveSurvey(survey: AnyRec, cfg: SurveyDocConfig = {}): Resolv
     findingsIntro: s(cfg.findings_intro, 'Counts are from the site walk, the field notes and the photos.'),
     facts, stats,
     priorityFindings: Array.isArray(cfg.priority_findings) ? cfg.priority_findings : [],
-    pins: Array.isArray(cfg.pins) ? cfg.pins : locOrder.map((loc) => ({ pin: pinForLoc(loc), area: loc, kind: /pool|gym|club|amenity|package|door/i.test(loc) ? 'amenity' : 'vehicle' })),
+    pins: Array.isArray(cfg.pins) && cfg.pins.length ? cfg.pins : derivedPins,
     openings,
     hardwareNote: s(cfg.hardware_note),
     headendNote: s(cfg.headend_note),
@@ -310,8 +324,28 @@ export function resolveSurvey(survey: AnyRec, cfg: SurveyDocConfig = {}): Resolv
     recommendations: Array.isArray(cfg.recommendations) ? cfg.recommendations : [],
     photoIndex,
     totalPhotos: photoIndex.length,
+    hasGeo,
     preparedBy: s(survey?.surveyor_name, 'GateGuard'),
   }
+}
+
+/** "Oct 2 2026 · 12:46 PM" from an ISO timestamp. */
+export function fmtDateTime(iso?: string | null): string {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (isNaN(dt.getTime())) return ''
+  const date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const time = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `${date} · ${time}`
+}
+
+/** Mapbox Static Images URL with a pin per geo-located area, over satellite. */
+export function staticMapUrl(pins: Pin[], token?: string, w = 760, h = 360): string {
+  const t = token || (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_MAPBOX_TOKEN : '') || ''
+  const geo = pins.filter(p => p.lat != null && p.lng != null)
+  if (!t || geo.length === 0) return ''
+  const markers = geo.map(p => `pin-s-${(p.pin || 'a').toLowerCase()}+c2410c(${p.lng},${p.lat})`).join(',')
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${markers}/auto/${w}x${h}@2x?padding=60&access_token=${t}`
 }
 
 export function fmt(d?: string | null): string {

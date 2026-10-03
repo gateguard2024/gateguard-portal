@@ -6,7 +6,7 @@
  * records with photos, scope schedule, open items, recommendations, photo index)
  * from a survey + its stored survey_doc overrides. Screen view and print match.
  */
-import { resolveSurvey, type SurveyDocConfig, type AreaPhoto } from '@/lib/survey-doc'
+import { resolveSurvey, staticMapUrl, type SurveyDocConfig, type AreaPhoto } from '@/lib/survey-doc'
 
 const NAVY = '#12233b'
 const INK = '#1a2432'
@@ -128,14 +128,17 @@ export function SurveyRecord({ survey, cfg }: { survey: any; cfg?: SurveyDocConf
       </div>
 
       {/* ── Site layout ─────────────────────────────────────── */}
-      {(r.aerialUrl || r.pins.length > 0) && (
+      {(r.aerialUrl || r.pins.length > 0) && (() => {
+        const mapUrl = r.aerialUrl || (r.hasGeo ? staticMapUrl(r.pins) : '')
+        return (
         <div className="sr-break" style={sectionGap}>
           <Kicker>03 · Overview</Kicker>
           <H>Site layout</H>
-          {r.aerialUrl && (
+          {mapUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={r.aerialUrl} alt="Site aerial" style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 12 }} />
+            <img src={mapUrl} alt="Site aerial" style={{ width: '100%', borderRadius: 10, display: 'block', marginBottom: 12 }} />
           )}
+          {!r.aerialUrl && r.hasGeo && <div style={{ fontSize: 10.5, color: MUT, marginBottom: 10 }}>Pins placed from photo GPS · imagery © Mapbox, © OpenStreetMap</div>}
           {r.pins.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr><th style={th}>Pin</th><th style={th}>Area</th><th style={th}>Type</th></tr></thead>
@@ -147,7 +150,8 @@ export function SurveyRecord({ survey, cfg }: { survey: any; cfg?: SurveyDocConf
             </table>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── Openings as found ───────────────────────────────── */}
       {r.openings.length > 0 && (

@@ -6,7 +6,7 @@
  * never lands in a browser bundle. Only server routes import this file.
  */
 import PDFDocument from 'pdfkit'
-import { resolveSurvey, type SurveyDocConfig, type AreaPhoto } from '@/lib/survey-doc'
+import { resolveSurvey, staticMapUrl, type SurveyDocConfig, type AreaPhoto } from '@/lib/survey-doc'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRec = Record<string, any>
@@ -26,10 +26,14 @@ async function fetchImg(url: string): Promise<Buffer | null> {
 export async function surveyPdfBuffer(survey: AnyRec, cfg: SurveyDocConfig = {}): Promise<Buffer> {
   const r = resolveSurvey(survey, cfg)
 
+  // Site-layout image: the uploaded aerial, else a Mapbox satellite map with pins
+  // placed from photo GPS (when available).
+  const aerialUrl = r.aerialUrl || (r.hasGeo ? staticMapUrl(r.pins) : '')
+
   // Prefetch every photo we might embed (hero, aerial, area photos, index) up to a cap.
   const urls = new Set<string>()
   if (r.heroUrl) urls.add(r.heroUrl)
-  if (r.aerialUrl) urls.add(r.aerialUrl)
+  if (aerialUrl) urls.add(aerialUrl)
   for (const p of r.photoIndex) if (p.url) urls.add(p.url)
   const capped = Array.from(urls).slice(0, MAX_IMAGES)
   const imgMap = new Map<string, Buffer>()
@@ -110,6 +114,18 @@ export async function surveyPdfBuffer(survey: AnyRec, cfg: SurveyDocConfig = {})
         pdf.font('Helvetica-Bold').fontSize(8).fillColor(f.priority === 'HIGH' ? '#b4330f' : '#9a6b00').text(`    ${f.priority}`)
         if (f.detail) pdf.font('Helvetica').fontSize(9.5).fillColor(BODY).text(String(f.detail), { lineGap: 1 })
         pdf.moveDown(0.3)
+      }
+    }
+
+    // ── Site layout ───────────────────────────────────────
+    const aerialBuf = aerialUrl ? imgMap.get(aerialUrl) : null
+    if (aerialBuf || r.pins.length) {
+      pdf.addPage(); kicker('03 · Overview'); heading('Site layout')
+      if (aerialBuf) { ensure(300); drawImage(aerialBuf, L, pdf.y, W, 290); pdf.y += 300 }
+      for (const p of r.pins) {
+        pdf.font('Helvetica-Bold').fontSize(10).fillColor(ORANGE).text(`${p.pin}  `, { continued: true })
+        pdf.fillColor(INK).text(String(p.area || ''), { continued: true })
+        pdf.font('Helvetica').fontSize(9).fillColor(MUT).text(`   ${p.kind === 'amenity' ? 'Amenity' : 'Vehicle entrance'}`)
       }
     }
 
