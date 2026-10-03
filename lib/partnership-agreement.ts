@@ -31,16 +31,11 @@ export function buildPartnershipAgreement(quote: Quote, cfg: PartnershipConfig =
   ]
   let ax = 3
   if (r.offerSmartLocks) { addons.push(`8.${ax} Smart Locks. A smart access lock is installed on each apartment door as the unit flips — not all at once — so no resident is disturbed mid-lease. When elected, the resident parking & amenity fee is ${money(r.smartLockResidentFee)} per converted unit (in place of ${money(r.residentFee)}), and the Property pays ${money(r.smartLockInstallPerUnit)} per unit at each flip; once every unit is converted there is no further charge. Key boxes, key logs, rekeys at turn, and after-hours lockout calls are eliminated.`); ax++ }
-  if (r.offerPackageRoom) { addons.push(`8.${ax} Package / Parcel Room Access. The package room${r.packageRooms > 1 ? 's' : ''} join the same credential and platform as the gates, so package access uses the resident’s phone and never depends on a code that circulates.`); ax++ }
-  if (r.offerLpr) { addons.push(`8.${ax} License-Plate Recognition. LPR cameras at the vehicle entrances read and log plates for entry events and incident attribution.${r.lprNote ? ` ${r.lprNote}` : ''}`); ax++ }
-  if (r.offerConcessionBlock) { addons.push(`8.${ax} Concession Block. A negotiated block of parking & amenity concessions the Property may apply at its discretion.`); ax++ }
-  if (r.offerResidentServices) { addons.push(`8.${ax} Resident Services. Gate Guard may offer residents optional television, internet, home security, and video-doorbell service — billed and supported by Gate Guard, never touching the Property’s budget.`); ax++ }
+  if (r.offerPackageRoom) { addons.push(`8.${ax} Package / Parcel Room Access. The package room${r.packageRooms > 1 ? 's' : ''} join the same credential and platform as the gates, so package access uses the resident’s phone and never depends on a code that circulates. When elected, the resident parking & amenity fee increases by ${money(r.packageRoomFeeAdd)} per unit (to ${money(r.residentFeeWithPackage)}).`); ax++ }
+  if (r.offerLpr) { addons.push(`8.${ax} License-Plate Recognition — ${money(r.lprRate)} per camera, per month${r.lprCount ? ` (${r.lprCount} camera${r.lprCount === 1 ? '' : 's'} = ${money(r.lprMonthlyTotal)} per month)` : ''}. LPR cameras at the vehicle entrances read and log plates for entry events and incident attribution.${r.lprNote ? ` ${r.lprNote}` : ''}`); ax++ }
   const addonsP = `None of the following is required; each is included only if elected on the Proposal. ${addons.join(' ')} Where elected add-ons carry a recurring charge, the Parties will confirm in writing whether it is resident-funded or billed to the Property.`
 
-  // Bollard protection (capital, inside the set-up fee) — only when elected.
-  const bollardsLine = r.offerBollards
-    ? `\n2.4 Bollard Protection. Protective bollards${r.bollards ? ` (${r.bollards})` : ''} are installed at vulnerable operators as part of the one-time set-up fee to reduce vehicle-strike damage.`
-    : ''
+  const bollardsLine = ''
 
   // Early-termination buyout (equipment depreciation) — only when there is a base to recover.
   const buyoutLine = r.buyoutBase > 0

@@ -73,14 +73,13 @@ export interface PartnershipConfig {
   offer_smart_locks?: boolean
   smart_lock_resident_fee?: number      // resident P&A/unit/yr once smart locks elected (default 150)
   smart_lock_install_per_unit?: number  // property pays at each unit flip (default 375)
-  offer_package_room?: boolean          // parcel/package room access on the same credential
+  offer_package_room?: boolean          // parcel/package room access on the same credential (optional)
   package_rooms?: number                // count of package/parcel rooms (informational)
+  package_room_fee_add?: number         // $/unit/yr added to the resident P&A when elected (default 25)
   offer_lpr?: boolean                   // license-plate recognition cameras
+  lpr_count?: number                    // number of LPR cameras elected
+  lpr_rate?: number                     // $/camera/mo (default 200)
   lpr_note?: string
-  offer_bollards?: boolean              // bollard protection at operators
-  bollards?: number                     // count installed (covered in the set-up fee)
-  offer_concession_block?: boolean      // concession block add-on
-  offer_resident_services?: boolean     // optional TV / internet / security / doorbell, resident-billed
   // Cap-rate value-creation panel — eliminated costs → NOI → property-value uplift.
   show_value_panel?: boolean            // default true when annual_savings > 0
   cap_rate?: number                     // percent, default 6
@@ -143,12 +142,13 @@ export interface ResolvedPartnership {
   smartLockInstallPerUnit: number
   offerPackageRoom: boolean
   packageRooms: number
+  packageRoomFeeAdd: number
+  residentFeeWithPackage: number  // base resident fee + parcel-room add-on when elected
   offerLpr: boolean
+  lprCount: number
+  lprRate: number
+  lprMonthlyTotal: number
   lprNote: string
-  offerBollards: boolean
-  bollards: number
-  offerConcessionBlock: boolean
-  offerResidentServices: boolean
   // Cap-rate value panel
   showValuePanel: boolean
   capRate: number
@@ -204,6 +204,11 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
   // Optional programs
   const smartLockResidentFee = n(cfg.smart_lock_resident_fee, 150)
   const smartLockInstallPerUnit = n(cfg.smart_lock_install_per_unit, 375)
+  const packageRoomFeeAdd = n(cfg.package_room_fee_add, 25)
+  const residentFeeWithPackage = residentFee + (cfg.offer_package_room ? packageRoomFeeAdd : 0)
+  const lprCount = n(cfg.lpr_count)
+  const lprRate = n(cfg.lpr_rate, 200)
+  const lprMonthlyTotal = lprCount * lprRate
 
   // Cap-rate value creation: annual operating savings → property value at a cap rate.
   const capRate = n(cfg.cap_rate, 6)
@@ -306,12 +311,10 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     smartLockResidentFee, smartLockInstallPerUnit,
     offerPackageRoom: !!cfg.offer_package_room,
     packageRooms: n(cfg.package_rooms),
+    packageRoomFeeAdd, residentFeeWithPackage,
     offerLpr: !!cfg.offer_lpr,
+    lprCount, lprRate, lprMonthlyTotal,
     lprNote: String(cfg.lpr_note || ''),
-    offerBollards: !!cfg.offer_bollards,
-    bollards: n(cfg.bollards),
-    offerConcessionBlock: !!cfg.offer_concession_block,
-    offerResidentServices: !!cfg.offer_resident_services,
     // Cap-rate value panel
     showValuePanel: cfg.show_value_panel != null ? !!cfg.show_value_panel : annualSavings > 0,
     capRate, annualSavings, valueUplift,
@@ -344,8 +347,9 @@ export function buildProposalEmail(
 ): { subject: string; html: string; text: string } {
   const r = resolvePartnership(quote, cfg)
   const repFirst = (String(quote?.created_by_name || r.preparedBy || '').trim().split(/\s+/)[0]) || 'Gate Guard'
-  const contact = r.contactName || r.property
-  const subject = `${contact} - Your gate and camera repair and maintenance proposal from ${repFirst} at Gate Guard.`
+  // Subject uses the contact's FIRST name only (falls back to the property).
+  const who = r.contactName ? r.contactFirst : r.property
+  const subject = `${who} - Your gate and camera repair and maintenance proposal from ${repFirst} at Gate Guard.`
 
   const resident = r.billingMode === 'resident'
   const li = (t: string) => `<li style="margin:0 0 6px">${t}</li>`
@@ -356,17 +360,14 @@ export function buildProposalEmail(
     `Mobile access with PMS integration — no fobs or cards; move-ins and move-outs sync with Yardi, Entrata, or RealPage.`,
   ]
   if (r.camerasIncluded && r.cameras > 0) delivers.push(`${r.cameras} monitored camera${r.cameras === 1 ? '' : 's'}${r.cameraNote ? ` — ${r.cameraNote}` : ''}, so a struck gate can be attributed and pursued as a chargeback.`)
-  if (r.offerPackageRoom) delivers.push(`Package ${r.packageRooms > 1 ? 'rooms' : 'room'} on the same credential — package access never depends on a circulated code.`)
-  if (r.offerBollards) delivers.push(`Bollard protection${r.bollards ? ` (${r.bollards})` : ''} at the operators, installed in the set-up fee.`)
+  if (r.offerPackageRoom) delivers.push(`Package ${r.packageRooms > 1 ? 'rooms' : 'room'} on the same credential — optional, adds ${money(r.packageRoomFeeAdd)} per unit to the parking &amp; amenity fee (${money(r.residentFeeWithPackage)} total).`)
   delivers.push(`Resident support handled by GateGuard directly, so your leasing office is not the help desk.`)
 
   const addonLines: string[] = []
   if (r.offerGateCoverage) addonLines.push(`Physical gate &amp; hinge coverage — ${money(r.addonGateRate)} / gate / mo (${r.gates} gate${r.gates === 1 ? '' : 's'} = ${money(r.addonGateTotal)} / mo).`)
   if (r.offerExtraCameras) addonLines.push(`Additional monitored cameras — ${money(r.addonCameraRate)} / camera / mo.`)
   if (r.offerSmartLocks) addonLines.push(`Smart locks at turn — ${money(r.smartLockResidentFee)}/unit resident fee, ${money(r.smartLockInstallPerUnit)}/unit install to the property.`)
-  if (r.offerLpr) addonLines.push(`License-plate recognition${r.lprNote ? ` — ${r.lprNote}` : ''}.`)
-  if (r.offerConcessionBlock) addonLines.push(`Concession block — parking &amp; amenity concessions the property may apply at its discretion.`)
-  if (r.offerResidentServices) addonLines.push(`Optional resident TV / internet / security / doorbell — billed and supported by us, never the property's budget.`)
+  if (r.offerLpr) addonLines.push(`License-plate recognition — ${money(r.lprRate)} per camera / mo${r.lprCount ? ` (${r.lprCount} = ${money(r.lprMonthlyTotal)} / mo)` : ''}${r.lprNote ? `. ${r.lprNote}` : ''}.`)
 
   const valuePanel = (r.showValuePanel && r.valueUplift > 0)
     ? `<div style="background:#eef6f1;border:1px solid #bfe3d0;border-radius:10px;padding:12px 14px;margin:14px 0">

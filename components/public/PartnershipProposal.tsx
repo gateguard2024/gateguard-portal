@@ -112,12 +112,6 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       {r.camerasIncluded && r.cameras > 0 && (
         <Check>{r.cameras} new monitored camera{r.cameras === 1 ? '' : 's'}{r.cameraNote ? ` — ${r.cameraNote}` : ''}. Monitored, not merely recorded. When a gate is struck, the footage is there so the damage can be attributed and pursued as a chargeback.</Check>
       )}
-      {r.offerPackageRoom && (
-        <Check>Package {r.packageRooms > 1 ? 'rooms' : 'room'} on the same credential — residents open the parcel room with the same phone they use at the gate, so package access never depends on a code that circulates.</Check>
-      )}
-      {r.offerBollards && (
-        <Check>Bollard protection{r.bollards ? ` (${r.bollards})` : ''} at the operators — installed in the set-up fee to take the next vehicle strike instead of the gate.</Check>
-      )}
       <Check>Resident support. Access questions, credentials, and troubleshooting are handled by GateGuard directly, so your leasing office is not the help desk.</Check>
 
       <H>What the property stops paying</H>
@@ -150,7 +144,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
       <H>The one thing not covered</H>
       <p style={{ margin: '0 0 8px' }}>GateGuard covers everything at each opening except the physical gate itself — the steel panel, frame, posts, hinges, and welds. That coverage is available below. Everything that operates the gate — motors, operators, controllers, readers, callboxes, cameras — is covered.</p>
 
-      {(r.offerGateCoverage || r.offerExtraCameras || r.offerSmartLocks || r.offerLpr || r.offerConcessionBlock) && <>
+      {(r.offerGateCoverage || r.offerExtraCameras || r.offerSmartLocks || r.offerPackageRoom || r.offerLpr) && <>
       <H>Optional add-ons</H>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
         <thead>
@@ -186,32 +180,31 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
               <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>at turn</td>
             </tr>
           )}
+          {r.offerPackageRoom && (
+            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
+              <td style={{ padding: '6px 10px' }}>Package / parcel room{r.packageRooms > 1 ? 's' : ''} on the same credential — no circulated codes</td>
+              <td style={{ padding: '6px 10px' }}>{r.packageRooms || 1} room{(r.packageRooms || 1) === 1 ? '' : 's'}</td>
+              <td style={{ padding: '6px 10px' }}>+{money(r.packageRoomFeeAdd)} / unit / yr on the P&amp;A</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{money(r.residentFeeWithPackage)} / unit</td>
+            </tr>
+          )}
           {r.offerLpr && (
             <tr style={{ borderTop: '1px solid #e5ebf1' }}>
               <td style={{ padding: '6px 10px' }}>License-plate recognition at the entrances{r.lprNote ? ` — ${r.lprNote}` : ''}</td>
-              <td style={{ padding: '6px 10px' }}>as elected</td>
-              <td style={{ padding: '6px 10px' }}>quoted on election</td>
-              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>—</td>
-            </tr>
-          )}
-          {r.offerConcessionBlock && (
-            <tr style={{ borderTop: '1px solid #e5ebf1' }}>
-              <td style={{ padding: '6px 10px' }}>Concession block — parking &amp; amenity concessions the property may apply at its discretion</td>
-              <td style={{ padding: '6px 10px' }}>as negotiated</td>
-              <td style={{ padding: '6px 10px' }}>—</td>
-              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>—</td>
+              <td style={{ padding: '6px 10px' }}>{r.lprCount ? `${r.lprCount} camera${r.lprCount === 1 ? '' : 's'}` : 'as elected'}</td>
+              <td style={{ padding: '6px 10px' }}>{money(r.lprRate)} / camera / mo</td>
+              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>{r.lprCount ? `${money(r.lprMonthlyTotal)} / mo` : `${money(r.lprRate)} / mo ea`}</td>
             </tr>
           )}
         </tbody>
       </table>
-      <div style={{ fontSize: 11.5, color: MUT, marginTop: 6 }}>Neither is required. The set-up fee and ongoing terms above are unchanged either way.</div>
+      <div style={{ fontSize: 11.5, color: MUT, marginTop: 6 }}>None is required. The set-up fee and base terms above are unchanged either way.</div>
       </>}
 
       <H>Term and what we need from you</H>
       <Check>{r.termYears}-year term. The initial term runs {r.termMonths} months from the Go-Live Date, then renews for one-year terms unless either party gives 60 days’ written notice.</Check>
       <Check>Power and internet at each access point. The property provides and maintains these; everything else at the opening is ours.</Check>
       <Check>Unit count. Pricing is based on {r.units} units. If that changes by more than 5%, either party may request a good-faith adjustment at the same per-unit basis.</Check>
-      <Check>Resident services. GateGuard reserves the right to offer residents optional television and streaming, internet, home security, and video doorbell service — billed and supported by us, never touching the property’s budget or leasing office.</Check>
 
       <p style={{ margin: '14px 0 12px' }}><b>Why we structure it this way.</b> Traditional vendors are paid when your gate breaks. We are paid whether it breaks or not, so our incentive is to keep it running rather than to return and repair it again. We are taking responsibility for your asset and serving your residents directly.</p>
 

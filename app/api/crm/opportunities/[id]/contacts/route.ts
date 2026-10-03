@@ -69,6 +69,49 @@ export async function POST(
 }
 
 /**
+ * PATCH /api/crm/opportunities/[id]/contacts
+ * Update a contact. Body: { contactId (required), ...fields }.
+ * Setting { is_primary: true } makes this the sole primary (clears the others).
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const body = await req.json()
+    const { contactId, name, title, phone, email, role, is_primary } = body
+    if (!contactId) return NextResponse.json({ error: 'contactId is required' }, { status: 400 })
+
+    // Exactly one primary per opportunity — clear the others first.
+    if (is_primary === true) {
+      await supabase.from('opportunity_contacts').update({ is_primary: false }).eq('opportunity_id', params.id)
+    }
+
+    const patch: Record<string, unknown> = {}
+    if (name !== undefined) patch.contact_name = name
+    if (title !== undefined) patch.contact_title = title
+    if (email !== undefined) patch.contact_email = email
+    if (phone !== undefined) patch.contact_phone = phone
+    if (role !== undefined) patch.role = role
+    if (is_primary !== undefined) patch.is_primary = is_primary
+
+    const { data, error } = await supabase
+      .from('opportunity_contacts')
+      .update(patch)
+      .eq('id', contactId)
+      .eq('opportunity_id', params.id) // scope to this opportunity for safety
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'update failed' }, { status: 500 })
+  }
+}
+
+/**
  * DELETE /api/crm/opportunities/[id]/contacts?contactId=<uuid>
  * Deletes a contact, scoped to this opportunity for safety.
  */

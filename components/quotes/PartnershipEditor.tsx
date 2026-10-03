@@ -73,6 +73,9 @@ export function PartnershipEditor({ id }: { id: string }) {
   const [sendTo, setSendTo] = useState('')
   const [sendCc, setSendCc] = useState('')
   const [sendSubject, setSendSubject] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [contacts, setContacts] = useState<any[]>([])
+  const [contactId, setContactId] = useState('')
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // Auto resident fee (from the rough calculator): perUnit/mo × 12 × 1.2, ceil $5.
@@ -95,6 +98,40 @@ export function PartnershipEditor({ id }: { id: string }) {
       setSendTo(q.client_email ?? '')
     }).catch(() => setErr('Could not load this quote.'))
   }, [id])
+
+  // Load the opportunity's contacts so the rep can auto-fill "To" with the primary
+  // contact (or pick another) and choose which contact is primary.
+  useEffect(() => {
+    const oppId = quote?.opportunity_id
+    if (!oppId) return
+    fetch(`/api/crm/opportunities/${oppId}/contacts`).then(r => (r.ok ? r.json() : [])).then((cs) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const list: any[] = Array.isArray(cs) ? cs : []
+      setContacts(list)
+      const primary = list.find(c => c.is_primary) || list[0]
+      if (primary) {
+        setContactId(String(primary.id))
+        if (primary.contact_email) setSendTo(primary.contact_email)
+      }
+    }).catch(() => {})
+  }, [quote?.opportunity_id])
+
+  // Pick a contact as the recipient (fills "To"). Does not change the primary.
+  function pickContact(cid: string) {
+    setContactId(cid)
+    const c = contacts.find(x => String(x.id) === cid)
+    if (c?.contact_email) setSendTo(c.contact_email)
+  }
+  // Persist the selected contact as the opportunity's primary.
+  async function makePrimary() {
+    const oppId = quote?.opportunity_id
+    if (!oppId || !contactId) return
+    setContacts(prev => prev.map(x => ({ ...x, is_primary: String(x.id) === contactId })))
+    await fetch(`/api/crm/opportunities/${oppId}/contacts`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactId, is_primary: true }),
+    }).catch(() => {})
+  }
 
   const set = (k: keyof PartnershipConfig, v: unknown) => { setCfg(p => ({ ...p, [k]: v })); setSaved(false) }
   // Scope-grid override rows (up to 4). Blank rows are ignored — the letter then
@@ -240,17 +277,41 @@ export function PartnershipEditor({ id }: { id: string }) {
           ) : (
             <div title="Approve the proposal first" style={{ width: '100%', textAlign: 'center', padding: '10px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.6)', fontSize: 12.5, cursor: 'not-allowed' }}>🔒 Send unlocks once approved</div>
           )}
-          {approved && sendOpen && (
+          {approved && sendOpen && (() => {
+            const selContact = contacts.find(c => String(c.id) === contactId)
+            const recipFirst = (String(selContact?.contact_name || cfg.contact_name || '').trim().split(/\s+/)[0]) || r.property
+            const repFirst = (String(quote?.created_by_name || '').trim().split(/\s+/)[0]) || 'Gate Guard'
+            const autoSubject = `${recipFirst} - Your gate and camera repair and maintenance proposal from ${repFirst} at Gate Guard.`
+            return (
             <div style={{ ...groupCard, marginTop: 8 }}>
+              {contacts.length > 0 && (
+                <>
+                  <Field l="Recipient (from contacts)">
+                    <select value={contactId} onChange={e => pickContact(e.target.value)} style={{ ...inS, cursor: 'pointer' }}>
+                      {contacts.map(c => (
+                        <option key={String(c.id)} value={String(c.id)}>{c.contact_name}{c.is_primary ? ' ★ primary' : ''}{c.contact_email ? ` · ${c.contact_email}` : ' · (no email)'}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <button type="button" onClick={makePrimary} disabled={!contactId || !!selContact?.is_primary} style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: selContact?.is_primary ? '#9fb4c9' : '#7fc4ec', background: 'transparent', border: 0, padding: 0, cursor: selContact?.is_primary ? 'default' : 'pointer' }}>{selContact?.is_primary ? '★ This is the primary contact' : '★ Make this the primary contact'}</button>
+                  <div style={{ height: 8 }} />
+                </>
+              )}
               <Field l="To"><input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@email.com" style={inS} /></Field>
               <div style={{ height: 8 }} /><Field l="CC (optional — comma-separated)"><input value={sendCc} onChange={e => setSendCc(e.target.value)} placeholder="you@gateguard.co, manager@…" style={inS} /></Field>
-              <div style={{ height: 8 }} /><Field l="Subject (optional — auto)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={`${r.contactName || r.property} - Your gate and camera repair and maintenance proposal from ${(String(quote?.created_by_name || '').trim().split(/\s+/)[0] || 'Gate Guard')} at Gate Guard.`} style={inS} /></Field>
+              <div style={{ height: 8 }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={lbl}>Subject</div>
+                <button type="button" onClick={() => setSendSubject(autoSubject)} style={{ fontSize: 10.5, fontWeight: 700, color: '#7fc4ec', background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>↺ use auto</button>
+              </div>
+              <input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={autoSubject} style={inS} />
               <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>The full proposal is written into the email body automatically, and the matching service agreement is attached as a PDF. A CRM activity is logged on the opportunity when you send.</div>
               <button onClick={sendProposal} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
               <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>Sends from your connected Gmail if available, and marks the proposal as sent.</div>
               {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#b91c1c' }}>{sendMsg.text}</div>}
             </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* Review gate */}
@@ -404,6 +465,9 @@ export function PartnershipEditor({ id }: { id: string }) {
           {(cfg.offer_package_room ?? false) && (
             <div style={{ marginTop: 8 }}>
               <Stepper label="How many rooms" value={cfg.package_rooms} onChange={v => set('package_rooms', v)} />
+              <div style={{ height: 6 }} />
+              <Stepper label="Adds $ / unit to P&A" value={cfg.package_room_fee_add ?? 25} onChange={v => set('package_room_fee_add', v)} step={5} prefix="$" />
+              <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 4 }}>Resident P&A becomes {money(r.residentFeeWithPackage)} / unit when elected.</div>
             </div>
           )}
         </div>
@@ -414,32 +478,14 @@ export function PartnershipEditor({ id }: { id: string }) {
           </label>
           {(cfg.offer_lpr ?? false) && (
             <div style={{ marginTop: 8 }}>
+              <Stepper label="How many LPR cameras" value={cfg.lpr_count} onChange={v => set('lpr_count', v)} />
+              <div style={{ height: 6 }} />
+              <Stepper label="$ / camera / mo" value={cfg.lpr_rate ?? 200} onChange={v => set('lpr_rate', v)} step={25} prefix="$" />
+              {r.lprCount > 0 && <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 4 }}>{r.lprCount} × {money(r.lprRate)} = {money(r.lprMonthlyTotal)} / mo</div>}
+              <div style={{ height: 6 }} />
               <Field l="LPR note (optional)"><input value={cfg.lpr_note ?? ''} onChange={e => set('lpr_note', e.target.value)} placeholder="entries covered · plate log retained" style={inS} /></Field>
             </div>
           )}
-        </div>
-        <div style={groupCard}>
-          <label style={toggleRow}>
-            <input type="checkbox" checked={cfg.offer_bollards ?? false} onChange={e => set('offer_bollards', e.target.checked)} />
-            Bollard protection (in set-up fee)
-          </label>
-          {(cfg.offer_bollards ?? false) && (
-            <div style={{ marginTop: 8 }}>
-              <Stepper label="How many bollards" value={cfg.bollards} onChange={v => set('bollards', v)} />
-            </div>
-          )}
-        </div>
-        <div style={groupCard}>
-          <label style={toggleRow}>
-            <input type="checkbox" checked={cfg.offer_concession_block ?? false} onChange={e => set('offer_concession_block', e.target.checked)} />
-            Concession block
-          </label>
-        </div>
-        <div style={groupCard}>
-          <label style={toggleRow}>
-            <input type="checkbox" checked={cfg.offer_resident_services ?? false} onChange={e => set('offer_resident_services', e.target.checked)} />
-            Resident services (TV / internet / security / doorbell)
-          </label>
         </div>
 
         <Sec t="Value creation (cap rate)" />
