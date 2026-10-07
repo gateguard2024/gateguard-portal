@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { CustomerPortalTemplate, type PortalConfig } from '@/components/portal/CustomerPortalTemplate'
 import { PinGate } from '@/components/portal/PinGate'
+import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,12 +36,20 @@ export default async function ClientPortalPage({ params }: { params: { slug: str
     slug: params.slug,
   }
 
-  // Live data (real cameras, activity, balance) is wired in the next pass — for now
-  // the template renders from config with the site's camera list + sensible demos.
-  const camCfg = (portal.camera_ids as string[] | null) ?? null
-  const cameras = (camCfg && camCfg.length)
-    ? camCfg.map((c) => ({ id: c, name: c }))
-    : [{ id: 'gate', name: 'Front gate' }, { id: 'lobby', name: 'Lobby' }, { id: 'pool', name: 'Pool' }, { id: 'garage', name: 'Garage' }]
+  // Live cameras straight from the site's Eagle Eye account (same source as /summary).
+  // Respect the per-portal camera whitelist; empty list if EEN isn't connected yet —
+  // never fall back to placeholder IDs (they 502 against the real EEN API).
+  const camWhitelist = (portal.camera_ids as string[] | null)?.length ? new Set(portal.camera_ids as string[]) : null
+  const cameras = portal.site_id
+    ? await (async () => {
+        try {
+          const { token, baseHost } = await getSiteEagleEyeAccess(portal.site_id as string)
+          const all = await listEagleEyeCameras(token, baseHost)
+          const scoped = camWhitelist ? all.filter((c) => camWhitelist.has(c.id)) : all
+          return scoped.map((c) => ({ id: c.id, name: c.name }))
+        } catch { return [] }
+      })()
+    : []
 
   return (
     <CustomerPortalTemplate
