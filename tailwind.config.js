@@ -64,6 +64,28 @@ module.exports = {
           card:    "#0d1f38",
           border:  "#1a3050",
         },
+        // Ops portal — obsidian / cyber-cyan control-room palette (PRD v1.0)
+        canvas: "#07090E",
+        surface: {
+          DEFAULT: "#0F131C",
+          card:    "#141A26",
+          border:  "#1E2638",
+        },
+        obsidian: {
+          cyan: "#00A3E0",
+          blue: "#0072CE",
+          glow: "rgba(0,163,224,0.25)",
+        },
+        status: {
+          safe:   "#10B981",
+          warn:   "#F59E0B",
+          alert:  "#EF4444",
+          active: "#00A3E0",
+        },
+      },
+      boxShadow: {
+        "glass-glow": "0 0 15px -3px rgba(0,163,224,0.15)",
+        "alert-glow": "0 0 20px 2px rgba(239,68,68,0.3)",
       },
       fontFamily: {
         sans: ["var(--font-dm-sans)", "Inter", "system-ui", "sans-serif"],

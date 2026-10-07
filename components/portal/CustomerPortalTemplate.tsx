@@ -11,11 +11,12 @@ import { useState, useEffect, useRef } from 'react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Home, Video, Ticket, ListChecks, CreditCard, Settings, LockOpen, History, LifeBuoy, ShieldCheck, Maximize2, Camera, Users, Search, UserPlus, X, Mail, Phone, Zap, RotateCcw } = require('lucide-react') as any
 
+// Obsidian / cyber-cyan — the PRD control-room palette (#07090E canvas, #00A3E0 cyan).
 const THEME = {
-  bg: '#0f1822', nav: '#141d28', panel: 'linear-gradient(180deg,#1d2a39,#141d28)',
-  tile: '#16232f', well: '#0c1420', border: 'rgba(140,170,200,0.24)',
-  ink: '#eaf2fb', ink2: '#c3d3e2', label: '#9FD8EC', accent: '#5FB8E0',
-  ok: '#7ee0a8', warn: '#fbbf24', alarm: '#f87171', chrome: '#1c1917',
+  bg: '#07090E', nav: '#0F131C', panel: 'linear-gradient(180deg,#141A26,#0F131C)',
+  tile: '#141A26', well: '#0B0F17', border: '#1E2638',
+  ink: '#eaf2fb', ink2: '#c3d3e2', label: '#00A3E0', accent: '#00A3E0',
+  ok: '#10B981', warn: '#F59E0B', alarm: '#EF4444', chrome: '#07090E',
 } as const
 
 export type PortalConfig = {
@@ -181,7 +182,7 @@ export function CustomerPortalTemplate({
     color: THEME.label, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
   } as const
   // Ambient top glow behind all content — the faint cyan bloom the dealer shell has.
-  const pageBg = `radial-gradient(1100px 460px at 50% -8%, rgba(95,184,224,0.10), transparent 62%), ${THEME.bg}`
+  const pageBg = `radial-gradient(1100px 460px at 50% -8%, rgba(0,163,224,0.10), transparent 62%), ${THEME.bg}`
 
   return (
     <div style={{ ...font, minHeight: '100dvh', background: pageBg, color: THEME.ink, display: 'grid', gridTemplateColumns: '58px 1fr' }}>
@@ -190,7 +191,7 @@ export function CustomerPortalTemplate({
         {NAV.filter(n => !n.module || has(n.module)).map((n) => {
           const active = activeNav === n.key
           return (
-            <button key={n.key} aria-label={n.label} title={n.label} onClick={() => goToSection(n.key)} style={{ width: 40, height: 40, borderRadius: 10, border: active ? `1px solid rgba(95,184,224,0.4)` : '1px solid transparent', background: active ? 'rgba(95,184,224,0.18)' : 'transparent', color: active ? accent : '#7f96ab', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s, color 0.15s' }}><n.Icon size={19} /></button>
+            <button key={n.key} aria-label={n.label} title={n.label} onClick={() => goToSection(n.key)} style={{ width: 40, height: 40, borderRadius: 10, border: active ? `1px solid rgba(0,163,224,0.4)` : '1px solid transparent', background: active ? 'rgba(0,163,224,0.18)' : 'transparent', color: active ? accent : '#7f96ab', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s, color 0.15s' }}><n.Icon size={19} /></button>
           )
         })}
         <button aria-label="settings" title="Settings" style={{ marginTop: 'auto', width: 40, height: 40, borderRadius: 10, border: '1px solid transparent', background: 'transparent', color: '#7f96ab', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Settings size={19} /></button>
@@ -203,15 +204,15 @@ export function CustomerPortalTemplate({
             <div style={{ fontSize: 12, color: THEME.label }}>{greeting()}{user ? `, ${user.name.split(' ')[0]}` : ''}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: THEME.ok, background: 'rgba(126,224,168,0.10)', border: '1px solid rgba(126,224,168,0.3)', borderRadius: 999, padding: '4px 10px' }}><ShieldCheck size={13} /> All secure</span>
-            {user && <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#292524', border: `1px solid rgba(95,184,224,0.4)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: THEME.label, fontSize: 11, fontWeight: 600 }}>{user.initials}</div>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: THEME.ok, background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 999, padding: '4px 10px' }}><ShieldCheck size={13} /> All secure</span>
+            {user && <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#292524', border: `1px solid rgba(0,163,224,0.4)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: THEME.label, fontSize: 11, fontWeight: 600 }}>{user.initials}</div>}
           </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: activeNav === 'home' ? '1.55fr 1fr' : '1fr', gap: 14 }}>
           <div style={{ display: (show('cameras') || show('passes')) ? 'block' : 'none' }}>
             {(has('cameras') || has('gate')) && activeNav === 'home' && (
-              <div id="sec-cameras" ref={camViewRef} style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${THEME.border}`, boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)', background: `radial-gradient(120% 90% at 50% 8%, rgba(95,184,224,0.10), transparent 55%), radial-gradient(circle at 50% 42%, #1b2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <div id="sec-cameras" ref={camViewRef} style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${THEME.border}`, boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)', background: `radial-gradient(120% 90% at 50% 8%, rgba(0,163,224,0.10), transparent 55%), radial-gradient(circle at 50% 42%, #1b2c3e, #0a121d)`, aspectRatio: '16 / 9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {config.slug && primaryCam?.id
                   ? <PortalCamImg slug={config.slug} cameraId={primaryCam.id} alt={primaryCam.name} intervalMs={2500} />
                   : (<><Camera size={32} style={{ color: '#46617a' }} /><span style={{ fontSize: 11, color: THEME.label, letterSpacing: '0.04em' }}>Live view</span></>)}
@@ -279,7 +280,7 @@ export function CustomerPortalTemplate({
           <div style={{ display: (show('activity') || show('billing')) ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
             {/* Request service — pinned to the TOP of the events column, above the feed. */}
             {has('service') && (show('billing') || show('activity')) && (
-              <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(95,184,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
+              <button onClick={() => config.slug ? setSvc(s => ({ ...s, open: true, done: false, err: null })) : onRequestService?.()} style={{ ...tile, border: `1px solid rgba(0,163,224,0.35)`, padding: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, ...font }}>
                 <LifeBuoy size={20} style={{ color: accent }} />
                 <div><div style={{ fontSize: 13, fontWeight: 600 }}>Request service</div><div style={{ fontSize: 11, color: THEME.ink2 }}>Report a broken gate, camera, or lock</div></div>
               </button>
@@ -503,7 +504,7 @@ export function CustomerPortalTemplate({
 
       {/* Action toast */}
       {toast && (
-        <div style={{ ...font, position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 95, background: THEME.panel, border: `1px solid ${toast.kind === 'ok' ? 'rgba(126,224,168,0.4)' : 'rgba(248,113,113,0.4)'}`, color: toast.kind === 'ok' ? THEME.ok : THEME.alarm, borderRadius: 999, padding: '10px 18px', fontSize: 13, fontWeight: 600, boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>{toast.msg}</div>
+        <div style={{ ...font, position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 95, background: THEME.panel, border: `1px solid ${toast.kind === 'ok' ? 'rgba(16,185,129,0.4)' : 'rgba(248,113,113,0.4)'}`, color: toast.kind === 'ok' ? THEME.ok : THEME.alarm, borderRadius: 999, padding: '10px 18px', fontSize: 13, fontWeight: 600, boxShadow: '0 10px 30px -10px rgba(0,0,0,0.8)' }}>{toast.msg}</div>
       )}
     </div>
   )
@@ -638,7 +639,7 @@ function AccessManager({ slug, accent, onUnlock, onGuest }: { slug: string; acce
       </div>
 
       {err && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: THEME.alarm }}>{err}</div>}
-      {notice && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(126,224,168,0.12)', border: '1px solid rgba(126,224,168,0.35)', color: THEME.ok }}>{notice}</div>}
+      {notice && <div style={{ marginBottom: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', color: THEME.ok }}>{notice}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: sel ? 'minmax(280px, 1fr) minmax(300px, 1fr)' : '1fr', gap: 12 }}>
         {/* Directory */}
@@ -658,7 +659,7 @@ function AccessManager({ slug, accent, onUnlock, onGuest }: { slug: string; acce
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                       <span style={{ fontSize: 13.5, fontWeight: 600, color: THEME.ink }}>{`${u.firstName} ${u.lastName}`.trim() || 'Unnamed'}</span>
-                      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', borderRadius: 999, padding: '2px 7px', ...(u.active ? { background: 'rgba(126,224,168,0.14)', color: THEME.ok, border: '1px solid rgba(126,224,168,0.35)' } : { background: 'rgba(248,113,113,0.14)', color: THEME.alarm, border: '1px solid rgba(248,113,113,0.35)' }) }}>{u.active ? 'Active' : 'Suspended'}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', borderRadius: 999, padding: '2px 7px', ...(u.active ? { background: 'rgba(16,185,129,0.14)', color: THEME.ok, border: '1px solid rgba(16,185,129,0.35)' } : { background: 'rgba(248,113,113,0.14)', color: THEME.alarm, border: '1px solid rgba(248,113,113,0.35)' }) }}>{u.active ? 'Active' : 'Suspended'}</span>
                     </div>
                     <div style={{ marginTop: 2, fontSize: 11, color: THEME.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[u.unitNumber ? `Unit ${u.unitNumber}` : null, u.email, u.phone].filter(Boolean).join(' · ') || 'No contact info'}</div>
                   </div>
@@ -705,7 +706,7 @@ function AccessManager({ slug, accent, onUnlock, onGuest }: { slug: string; acce
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
               <button disabled={busy === 'pass'} onClick={() => patch(sel.id, { action: 'issue_pass', email: edit.email || sel.email }, 'Mobile pass sent.', 'pass').then(ok => ok && selectUser(sel))} style={{ ...tileS, color: THEME.ink, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', flex: '1 1 auto' }}>{busy === 'pass' ? '…' : 'Issue mobile pass'}</button>
               <button disabled={busy === 'revoke'} onClick={() => patch(sel.id, { action: 'revoke_pass' }, 'Pass revoked.', 'revoke').then(ok => ok && selectUser(sel))} style={{ ...tileS, color: THEME.ink2, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{busy === 'revoke' ? '…' : 'Revoke pass'}</button>
-              <button disabled={busy === 'susp'} onClick={() => patch(sel.id, { action: sel.active ? 'suspend' : 'reactivate' }, sel.active ? 'User suspended.' : 'User reactivated.', 'susp').then(ok => ok && load())} style={{ ...tileS, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: sel.active ? THEME.alarm : THEME.ok, border: `1px solid ${sel.active ? 'rgba(248,113,113,0.35)' : 'rgba(126,224,168,0.35)'}` }}>{busy === 'susp' ? '…' : sel.active ? 'Suspend' : 'Reactivate'}</button>
+              <button disabled={busy === 'susp'} onClick={() => patch(sel.id, { action: sel.active ? 'suspend' : 'reactivate' }, sel.active ? 'User suspended.' : 'User reactivated.', 'susp').then(ok => ok && load())} style={{ ...tileS, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: sel.active ? THEME.alarm : THEME.ok, border: `1px solid ${sel.active ? 'rgba(248,113,113,0.35)' : 'rgba(16,185,129,0.35)'}` }}>{busy === 'susp' ? '…' : sel.active ? 'Suspend' : 'Reactivate'}</button>
             </div>
           </div>
         )}
