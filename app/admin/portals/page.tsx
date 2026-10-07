@@ -30,6 +30,7 @@ type Portal = {
   login_type: 'property' | 'resident'
   modules: string[]
   camera_ids: string[] | null
+  door_ids: string[] | null
   branding: { display_name?: string; accent?: string; logo_url?: string }
   status: 'draft' | 'live' | 'disabled'
   sites?: { name?: string; city?: string; state?: string } | null
@@ -148,6 +149,95 @@ export default function PortalsAdminPage() {
   )
 }
 
+// ── Device picker ────────────────────────────────────────────────────────────
+// Lists every camera + gate the site's Brivo / Eagle Eye accounts expose and lets
+// corporate toggle each in/out. Semantics: an EMPTY id list = "all" (nothing hidden).
+// Toggling off the first device converts the set to an explicit whitelist.
+type DevCam = { id: string; name: string; online?: boolean }
+type DevDoor = { id: string; name: string }
+function DevicePicker({ siteId, cameraIds, doorIds, onCameras, onDoors }: { siteId: string; cameraIds: string[]; doorIds: string[]; onCameras: (v: string[]) => void; onDoors: (v: string[]) => void }) {
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [cams, setCams] = useState<DevCam[]>([])
+  const [doors, setDoors] = useState<DevDoor[]>([])
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true); setErr(null)
+    fetch(`/api/admin/portals/devices?site_id=${encodeURIComponent(siteId)}`)
+      .then(r => r.json())
+      .then(j => { if (!alive) return; if (j.error) { setErr(j.error); } setCams(j.cameras || []); setDoors(j.doors || []); setLoading(false) })
+      .catch(() => { if (alive) { setErr('Could not load devices'); setLoading(false) } })
+    return () => { alive = false }
+  }, [siteId])
+
+  const camOn = (id: string) => cameraIds.length === 0 || cameraIds.includes(id)
+  const doorOn = (id: string) => doorIds.length === 0 || doorIds.includes(id)
+  function toggleCam(id: string) {
+    const base = cameraIds.length === 0 ? cams.map(c => c.id) : [...cameraIds]
+    const next = base.includes(id) ? base.filter(x => x !== id) : [...base, id]
+    onCameras(next.length === cams.length ? [] : next)
+  }
+  function toggleDoor(id: string) {
+    const base = doorIds.length === 0 ? doors.map(d => d.id) : [...doorIds]
+    const next = base.includes(id) ? base.filter(x => x !== id) : [...base, id]
+    onDoors(next.length === doors.length ? [] : next)
+  }
+
+  const box = (on: boolean): React.CSSProperties => ({ width: 16, height: 16, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${on ? T.accent : T.border}`, background: on ? T.accent : 'transparent' })
+  const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${T.border}`, background: T.well, marginBottom: 6 }
+
+  function Group({ title, count, total, onAll, children }: { title: string; count: number; total: number; onAll: () => void; children: React.ReactNode }) {
+    const partial = count < total
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>{title} <span style={{ color: T.ink2, fontWeight: 500 }}>· {count} of {total} shown</span></span>
+          {partial && <button type="button" onClick={onAll} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Show all</button>}
+        </div>
+        {children}
+      </div>
+    )
+  }
+
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.ink2, padding: '10px 2px' }}><Loader2 size={14} className="spin" /> Loading devices from Brivo &amp; Eagle Eye…</div>
+
+  return (
+    <div>
+      {err && <div style={{ fontSize: 11.5, color: T.warn, marginBottom: 8 }}>{err}</div>}
+      {cams.length === 0 && doors.length === 0 ? (
+        <div style={{ fontSize: 12, color: T.ink2, padding: '10px 11px', borderRadius: 9, border: `1px dashed ${T.border}`, background: T.well }}>No cameras or gates are reporting for this site yet. Connect Brivo / Eagle Eye in Systems → Setup &amp; keys, then reopen this.</div>
+      ) : (
+        <>
+          {doors.length > 0 && (
+            <Group title="Gates & doors" count={doors.filter(d => doorOn(d.id)).length} total={doors.length} onAll={() => onDoors([])}>
+              {doors.map(d => (
+                <div key={d.id} style={row} onClick={() => toggleDoor(d.id)}>
+                  <span style={box(doorOn(d.id))}>{doorOn(d.id) && <Check size={11} style={{ color: '#08192b' }} />}</span>
+                  <span style={{ fontSize: 13, color: T.ink }}>{d.name}</span>
+                </div>
+              ))}
+            </Group>
+          )}
+          {cams.length > 0 && (
+            <Group title="Cameras" count={cams.filter(c => camOn(c.id)).length} total={cams.length} onAll={() => onCameras([])}>
+              {cams.map(c => (
+                <div key={c.id} style={row} onClick={() => toggleCam(c.id)}>
+                  <span style={box(camOn(c.id))}>{camOn(c.id) && <Check size={11} style={{ color: '#08192b' }} />}</span>
+                  <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: c.online === false ? T.alarm : T.ok }} />
+                  <span style={{ fontSize: 13, color: T.ink }}>{c.name}</span>
+                </div>
+              ))}
+            </Group>
+          )}
+          <div style={{ fontSize: 11, color: T.ink2 }}>Everything is included by default. Uncheck anything this property manager shouldn&apos;t see.</div>
+        </>
+      )}
+      <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+}
+
 // ── Add / Edit drawer ────────────────────────────────────────────────────────
 function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'; portal?: Portal; onClose: () => void; onSaved: () => void }) {
   const [site, setSite] = useState<SiteLite | null>(portal?.site_id ? { id: portal.site_id, name: portal.sites?.name || '', city: portal.sites?.city, state: portal.sites?.state } : null)
@@ -157,7 +247,8 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'
   const [loginType, setLoginType] = useState<'property' | 'resident'>(portal?.login_type || 'property')
   const [modules, setModules] = useState<string[]>(portal?.modules || MODULES.map(m => m.key))
   const [accent, setAccent] = useState(portal?.branding?.accent || '')
-  const [cameras, setCameras] = useState((portal?.camera_ids || []).join(', '))
+  const [cameraIds, setCameraIds] = useState<string[]>(portal?.camera_ids || [])
+  const [doorIds, setDoorIds] = useState<string[]>(portal?.door_ids || [])
   const [status, setStatus] = useState<Portal['status']>(portal?.status || 'draft')
   const [pin, setPin] = useState('')
   const [saving, setSaving] = useState(false)
@@ -174,7 +265,7 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'
     setSaving(true)
     const payload = {
       site_id: site?.id, slug, login_type: loginType, modules,
-      camera_ids: cameras.split(',').map(c => c.trim()).filter(Boolean),
+      camera_ids: cameraIds, door_ids: doorIds,
       branding: { display_name: displayName || site?.name, ...(accent ? { accent } : {}) },
       status, ...(pin.trim() ? { access_pin: pin.trim() } : {}),
     }
@@ -245,9 +336,10 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'
             </div>
           </L>
 
-          <L label="Cameras (optional)">
-            <input value={cameras} onChange={e => setCameras(e.target.value)} placeholder="Blank = all cameras. Or paste camera IDs, comma-separated" style={inp} />
-            <div style={{ fontSize: 11, color: T.ink2, marginTop: 5 }}>Blank shows every Eagle Eye camera the site exposes.</div>
+          <L label="Devices on this portal">
+            {site?.id
+              ? <DevicePicker siteId={site.id} cameraIds={cameraIds} doorIds={doorIds} onCameras={setCameraIds} onDoors={setDoorIds} />
+              : <div style={{ fontSize: 12, color: T.ink2, padding: '10px 11px', borderRadius: 9, border: `1px dashed ${T.border}`, background: T.well }}>Pick a site to choose which cameras &amp; gates appear.</div>}
           </L>
 
           <L label="Status">

@@ -32,6 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   if (!siteId) return NextResponse.json({ cameras: [], doors: [], activity: [], balanceDue: null })
 
   const camWhitelist = v.portal.camera_ids && v.portal.camera_ids.length ? new Set(v.portal.camera_ids) : null
+  const doorWhitelist = v.portal.door_ids && v.portal.door_ids.length ? new Set(v.portal.door_ids) : null
 
   // ── Cameras (Eagle Eye) ──────────────────────────────────────────────────
   const cameras = await (async () => {
@@ -49,7 +50,8 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   try {
     const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
     try {
-      doors = (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name }))
+      const allDoors = (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name }))
+      doors = doorWhitelist ? allDoors.filter(d => doorWhitelist.has(d.id)) : allDoors
     } catch { /* doors optional */ }
     try {
       const events = await listBrivoEvents(token, apiKey, 12)

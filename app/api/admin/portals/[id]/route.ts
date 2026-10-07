@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.login_type === 'property' || body.login_type === 'resident') update.login_type = body.login_type
   if (Array.isArray(body.modules)) update.modules = body.modules.filter((m: string) => ALL_MODULES.includes(m))
   if ('camera_ids' in body) update.camera_ids = Array.isArray(body.camera_ids) && body.camera_ids.length ? body.camera_ids : null
+  if ('door_ids' in body) update.door_ids = Array.isArray(body.door_ids) && body.door_ids.length ? body.door_ids : null
   if (body.branding && typeof body.branding === 'object') update.branding = body.branding
   if (['draft', 'live', 'disabled'].includes(body.status)) update.status = body.status
   // Only touch the PIN when a non-empty value is sent; blank on edit keeps the current code.

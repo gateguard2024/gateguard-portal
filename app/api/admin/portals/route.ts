@@ -27,7 +27,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('client_portals')
-    .select('id, org_id, site_id, slug, login_type, modules, camera_ids, branding, status, created_at, updated_at, sites(name, city, state)')
+    .select('id, org_id, site_id, slug, login_type, modules, camera_ids, door_ids, branding, status, created_at, updated_at, sites(name, city, state)')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
   const cameraIds: string[] | null = Array.isArray(body.camera_ids) && body.camera_ids.length
     ? body.camera_ids
     : null
+  const doorIds: string[] | null = Array.isArray(body.door_ids) && body.door_ids.length
+    ? body.door_ids
+    : null
 
   const row = {
     org_id: site.org_id,
@@ -79,6 +82,7 @@ export async function POST(req: NextRequest) {
     login_type: body.login_type === 'resident' ? 'resident' : 'property',
     modules,
     camera_ids: cameraIds,
+    door_ids: doorIds,
     branding,
     status: ['draft', 'live', 'disabled'].includes(body.status) ? body.status : 'draft',
     access_pin: body.access_pin ? hashPin(String(body.access_pin)) : null,

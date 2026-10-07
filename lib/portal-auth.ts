@@ -21,6 +21,7 @@ export type PortalCtx = {
   slug: string
   modules: string[]
   camera_ids: string[] | null
+  door_ids: string[] | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   branding: any
 }
@@ -32,7 +33,7 @@ export type PortalVerify =
 export async function verifyPortal(req: NextRequest, slug: string): Promise<PortalVerify> {
   const { data: portal } = await db()
     .from('client_portals')
-    .select('site_id, org_id, slug, modules, camera_ids, branding, access_pin, status')
+    .select('site_id, org_id, slug, modules, camera_ids, door_ids, branding, access_pin, status')
     .ilike('slug', slug)
     .maybeSingle()
 
@@ -52,6 +53,7 @@ export async function verifyPortal(req: NextRequest, slug: string): Promise<Port
       slug: portal.slug,
       modules: (portal.modules as string[]) ?? [],
       camera_ids: (portal.camera_ids as string[] | null) ?? null,
+      door_ids: (portal.door_ids as string[] | null) ?? null,
       branding: portal.branding ?? {},
     },
   }
