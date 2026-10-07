@@ -67,6 +67,15 @@ export async function eagleEyeRefresh(clientId: string, clientSecret: string, re
 }
 
 /** Get a valid access token + base host for a site, refreshing + persisting if expired. */
+// Single-flight refresh guard. The customer portal renders a whole camera wall at
+// once, firing many camera-preview requests in parallel. Eagle Eye rotates the
+// refresh token (single-use), so a parallel stampede would make the first refresh
+// win and the rest fail with invalid_client (and concurrent credential writes can
+// clobber the vault blob). We coalesce concurrent refreshes per site into ONE, and
+// if a refresh still fails we re-read the vault once in case a sibling just
+// refreshed successfully.
+const eenRefreshInFlight = new Map<string, Promise<{ token: string; baseHost: string }>>()
+
 export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: string; baseHost: string }> {
   const c = await getSiteVendorCreds(siteId, 'eagle_eye')
   if (!c?.client_id || !c?.client_secret) throw new Error('Eagle Eye client ID/secret are not set for this site.')
@@ -76,16 +85,38 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
   if (c.access_token && c.base_host && exp - Date.now() > 60_000) {
     return { token: c.access_token, baseHost: c.base_host }
   }
-  // Refresh.
-  const t = await eagleEyeRefresh(c.client_id, c.client_secret, c.refresh_token)
-  const baseHost = t.httpsBaseUrl?.hostname || c.base_host
-  await mergeSiteVendorCreds(siteId, 'eagle_eye', {
-    access_token: t.access_token,
-    refresh_token: t.refresh_token || c.refresh_token,
-    expires_at: new Date(Date.now() + (t.expires_in ?? 3600) * 1000).toISOString(),
-    base_host: baseHost,
-  })
-  return { token: t.access_token, baseHost }
+
+  // Coalesce concurrent refreshes within this instance into one.
+  const existing = eenRefreshInFlight.get(siteId)
+  if (existing) return existing
+
+  const p = (async () => {
+    try {
+      const t = await eagleEyeRefresh(c.client_id as string, c.client_secret as string, c.refresh_token as string)
+      const baseHost = t.httpsBaseUrl?.hostname || c.base_host
+      await mergeSiteVendorCreds(siteId, 'eagle_eye', {
+        access_token: t.access_token,
+        refresh_token: t.refresh_token || c.refresh_token,
+        expires_at: new Date(Date.now() + (t.expires_in ?? 3600) * 1000).toISOString(),
+        base_host: baseHost,
+      })
+      return { token: t.access_token, baseHost }
+    } catch (e) {
+      // A sibling request (another instance) may have just refreshed and rotated
+      // the token out from under us. Re-read the vault; if it now holds a valid
+      // access token, use it instead of failing.
+      const c2 = await getSiteVendorCreds(siteId, 'eagle_eye')
+      const exp2 = c2?.expires_at ? new Date(c2.expires_at).getTime() : 0
+      if (c2?.access_token && c2.base_host && exp2 - Date.now() > 60_000) {
+        return { token: c2.access_token, baseHost: c2.base_host }
+      }
+      throw e
+    } finally {
+      eenRefreshInFlight.delete(siteId)
+    }
+  })()
+  eenRefreshInFlight.set(siteId, p)
+  return p
 }
 
 export interface EagleEyeCamera { id: string; name: string; tags: string[]; esn: string | null; online: boolean | null }
