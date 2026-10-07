@@ -13,9 +13,10 @@ import { useRouter } from 'next/navigation'
 const { LayoutDashboard, DoorOpen, Users, Home, ShieldCheck, LogOut, X, KeyRound } = require('lucide-react') as any
 
 export const C = {
-  canvas: '#07090E', surface: '#0F131C', card: '#141A26', border: '#1E2638',
-  ink: '#eef3fb', ink2: '#9fb1c6', cyan: '#00A3E0', blue: '#0072CE',
-  safe: '#10B981', warn: '#F59E0B', alert: '#EF4444',
+  canvas: '#0A0E16', nav: '#0C111B', surface: '#131B29', panel: '#111826',
+  card: '#161F2E', well: '#0B111C', border: '#1E2A3C', border2: '#273548',
+  ink: '#eef4fb', ink2: '#9fb0c4', ink3: '#6d7f94', cyan: '#00A3E0', blue: '#0072CE',
+  safe: '#22C55E', warn: '#F59E0B', alert: '#EF4444',
 }
 
 type Manager = { id: string; name: string; email: string | null }
