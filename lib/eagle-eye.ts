@@ -102,13 +102,17 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
       })
       return { token: t.access_token, baseHost }
     } catch (e) {
-      // A sibling request (another instance) may have just refreshed and rotated
-      // the token out from under us. Re-read the vault; if it now holds a valid
-      // access token, use it instead of failing.
-      const c2 = await getSiteVendorCreds(siteId, 'eagle_eye')
-      const exp2 = c2?.expires_at ? new Date(c2.expires_at).getTime() : 0
-      if (c2?.access_token && c2.base_host && exp2 - Date.now() > 60_000) {
-        return { token: c2.access_token, baseHost: c2.base_host }
+      // A sibling request (possibly on another serverless instance) may have just
+      // refreshed and rotated the single-use token out from under us. Poll the
+      // vault a few times — the winner's fresh access token becomes visible within
+      // ~1-2s — and use it instead of failing the tile.
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 600))
+        const c2 = await getSiteVendorCreds(siteId, 'eagle_eye')
+        const exp2 = c2?.expires_at ? new Date(c2.expires_at).getTime() : 0
+        if (c2?.access_token && c2.base_host && exp2 - Date.now() > 60_000) {
+          return { token: c2.access_token, baseHost: c2.base_host }
+        }
       }
       throw e
     } finally {
