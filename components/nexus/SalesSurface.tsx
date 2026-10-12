@@ -1,13 +1,12 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
 import { LeadsHub } from '@/components/nexus/LeadsHub'
 import { OpportunityHub } from '@/components/nexus/OpportunityHub'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
-import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
 import { RoiCalculator } from '@/components/nexus/RoiCalculator'
@@ -16,12 +15,27 @@ import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'opps-workbench' | 'rough-calc'
 
-// ---- Dashboard console tokens (identical to My Day home) ----
-const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-// Elevated glass (matches the customer portal + NEXUS landing design language).
+// ---- Elevated glass tokens + control-center helpers ----
+const BRAND = 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)'
 const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
 const TILE_STYLE = { background: TILE_BG, backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' } as const
-const WELL = 'linear-gradient(180deg,rgba(20,28,43,0.7),rgba(13,19,28,0.7))'
+const STAGE_ORDER = ['contract', 'deposit', 'negotiate', 'propose', 'survey', 'meet_present']
+const STAGE_META: Record<string, { label: string; c: string }> = {
+  meet_present: { label: 'Meet', c: 'indigo' }, survey: { label: 'Survey', c: 'cyan' }, propose: { label: 'Proposal', c: 'warn' },
+  negotiate: { label: 'Negotiate', c: 'warn' }, contract: { label: 'Contract', c: 'safe' }, deposit: { label: 'Deposit', c: 'safe' },
+}
+function Ring({ size, pct, color, stroke, children }: { size: number; pct: number; color: string; stroke: number; children?: ReactNode }) {
+  const r = (size - stroke) / 2 - 1, c = 2 * Math.PI * r, off = c * (1 - pct / 100)
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
+    </div>
+  )
+}
 
 type Activity = { id: string; type: string; subject: string | null; due_at: string | null; completed_at: string | null; opportunity_id: string | null; opportunity_name: string | null }
 type OppRow = { id: string; name?: string | null }
@@ -45,25 +59,6 @@ function timeLabel(iso: string | null): string {
   if (day < today) return `Overdue · ${t}`
   if (day.getTime() === today.getTime()) return `Today · ${t}`
   return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${t}`
-}
-
-// A dashboard-style card tile (glyph + title + subtitle + "Open →"), matching MyDayCardButton.
-function HubTile({ glyph, hex, title, subtitle, badge, onClick }: { glyph: NexusGlyphKind; hex: string; title: string; subtitle: string; badge?: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick}
-      className="group relative flex flex-1 flex-col overflow-hidden rounded-2xl p-5 text-left transition-all duration-200 hover:-translate-y-0.5"
-      style={TILE_STYLE}>
-      {badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(255,255,255,0.18)', color: '#DCE6F0' }}>{badge}</div>
-      )}
-      <NexusGlyphTile kind={glyph} color={hex} />
-      <div className="text-[17px] font-semibold leading-tight" style={{ color: '#F1F6FB' }}>{title}</div>
-      <div className="mt-1.5 text-[13px] leading-relaxed" style={{ color: 'rgba(201,213,227,0.96)' }}>{subtitle}</div>
-      <div className="mt-auto flex items-center pt-4">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold transition-all duration-200 group-hover:gap-2.5" style={{ color: '#8FD3EC' }}>Open <span aria-hidden className="text-[15px] leading-none">&rarr;</span></span>
-      </div>
-    </button>
-  )
 }
 
 // Popup detail shell (leads/opps workbench, rough calc).
@@ -151,112 +146,115 @@ export function SalesSurface() {
   const winRate = (wonN + lostN) > 0 ? Math.round((wonN / (wonN + lostN)) * 100) : 0
   const avgDeal = (counts.open > 0 && opp.pipelineTotal != null) ? Math.round(opp.pipelineTotal / counts.open) : null
 
-  const stageBar = ['meet_present', 'survey', 'propose', 'negotiate', 'contract', 'deposit', 'won']
-  const barMax = Math.max(1, ...stageBar.map(stageN))
+  const barMax = Math.max(1, ...STAGE_ORDER.map(stageN))
 
-  // Gauge arc = win rate; ring = win rate too.
-  const gaugeFrac = Math.max(0, Math.min(1, winRate / 100))
-  const SEMI = 251.3
-
-  function openStatus() { setOppsHub(true) }
+  // Flatten open-stage opportunities into an "active deals" list (closest-to-close first).
+  const activeDeals = STAGE_ORDER.flatMap(k => stageRecords(k).map(r => ({ id: r.id, name: r.name || 'Untitled', stage: k }))).slice(0, 8)
+  const col = (c: string) => ({ safe: '#22C55E', warn: '#F59E0B', cyan: '#00A3E0', indigo: '#6B7EFF' }[c] || '#9fb0c4')
 
   return (
-    <section className="mt-6 w-full px-3 sm:px-4">
-      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
+    <section className="mt-4 w-full px-3 sm:px-5">
+      <div className="mx-auto w-full" style={{ maxWidth: 1340, color: '#eef4fb' }}>
 
-        {/* Header — identical to dashboard */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(224,232,241,0.92)', fontWeight: 400 }}>what are we closing today?</span></h2>
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: 'rgba(6,78,59,0.45)', border: '1px solid rgba(16,185,129,0.45)', color: '#34d399', fontFamily: 'var(--font-mono, ui-monospace)' }}>
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#34d399' }} />
-            Live Connection
-          </span>
-        </div>
-
-        {/* Top row — Today's Follow-ups + Opportunities by status */}
-        <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className="rounded-2xl p-4" style={TILE_STYLE}>
-            <div className="mb-2.5 flex items-center justify-between">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#9FD8EC' }}>Today&apos;s follow-ups</div>
-              {followups.length > 0 && <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{followups.length} due</div>}
+        {/* Sales status hero */}
+        <div className="mb-5 grid grid-cols-1 items-center gap-5 rounded-[22px] p-5 sm:p-6 lg:grid-cols-[1.15fr_1fr_1.05fr]"
+          style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.08),rgba(107,126,255,0.07)), linear-gradient(180deg,rgba(26,36,54,0.78),rgba(15,22,36,0.82))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -30px rgba(0,0,0,0.8)' }}>
+          <div className="flex items-center gap-4">
+            <div className="flex h-[66px] w-[66px] shrink-0 items-center justify-center rounded-[19px]" style={{ background: BRAND, boxShadow: '0 0 28px rgba(74,140,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3)', color: '#eafaff' }}>
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M6 20V10M12 20V4M18 20v-6" /></svg>
             </div>
-            {loading ? <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading…</div>
-              : followups.length === 0 ? <div className="rounded-xl px-3 py-4 text-xs" style={{ background: 'rgba(15,26,38,0.5)', color: 'rgba(255,255,255,0.5)' }}>No follow-ups due. Nice and clear.</div>
-              : <div className="space-y-1.5">
-                  {followups.slice(0, 4).map(a => (
-                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(15,26,38,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#f87171' : '#5FB8E0' }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px]" style={{ color: '#eaf2fb' }}>{a.subject || a.type}</div>
-                        <div className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>
-                          {a.opportunity_name || 'General'}
-                          {(() => {
-                            const [status, time] = timeLabel(a.due_at).split(' · ')
-                            const overdue = status === 'Overdue'
-                            return <> · <span style={overdue ? { color: '#f87171', fontWeight: 600 } : undefined}>{status}</span>{time ? ` · ${time}` : ''}</>
-                          })()}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>}
-          </div>
-
-          <div className="rounded-2xl p-4" style={TILE_STYLE}>
-            <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#9FD8EC' }}>Opportunities by status</div>
-            <div className="grid grid-cols-3 gap-2">
-              {([['Survey', 'survey'], ['Propose', 'propose'], ['Contract', 'contract']] as const).map(([label, key]) => {
-                const recs = stageRecords(key)
-                return (
-                  <button key={key} type="button" onClick={openStatus} className="rounded-xl p-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: WELL, border: '1px solid rgba(95,184,224,0.25)' }}>
-                    <div className="text-[22px] font-bold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : recs.length}</div>
-                    <div className="mb-1.5 mt-0.5 text-[9px] uppercase tracking-wide" style={{ color: '#9FD8EC' }}>{label}</div>
-                    <div className="space-y-0.5">
-                      {recs.slice(0, 2).map(r => <div key={r.id} className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>{r.name || 'Untitled'}</div>)}
-                      {recs.length > 2 && <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>+{recs.length - 2} more</div>}
-                    </div>
-                  </button>
-                )
-              })}
+            <div>
+              <div className="text-[10.5px] font-extrabold uppercase tracking-[0.14em]" style={{ color: '#6d7f94' }}>Pipeline</div>
+              <div className="text-[27px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{money(opp.pipelineTotal)} · On Pace</div>
+              <div className="mt-1 text-[12.5px]" style={{ color: '#9fb0c4' }}>Hi {firstName} — {counts.open} open deals · {wonN} won</div>
             </div>
           </div>
-        </div>
-
-        {/* 3-column row — identical to dashboard [1fr 1.3fr 1fr] */}
-        <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
-          <div className="flex flex-col gap-3">
-            <HubTile glyph="lead" hex="#5FB8E0" title="Leads Hub" subtitle={`${leadCount ?? '—'} leads · capture, qualify, convert.`} onClick={() => setLeadsHub(true)} />
-            <HubTile glyph="pipeline" hex="#3f7fb8" title="Opportunity Hub" subtitle={`${counts.open} open · drive all 7 stages to won.`} onClick={() => setOppsHub(true)} />
-          </div>
-
-          {/* Center — Sales Performance */}
-          <div className="flex flex-col rounded-2xl p-5" style={TILE_STYLE}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#9FD8EC' }}>Sales performance</div>
-            <div className="flex flex-col items-center">
-              <svg viewBox="0 0 200 118" style={{ width: 210, marginTop: 4 }} role="img" aria-label={`Win rate ${winRate} percent`}>
-                <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#16222f" strokeWidth={14} strokeLinecap="round" />
-                <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#5FB8E0" strokeWidth={14} strokeLinecap="round" strokeDasharray={`${(gaugeFrac * SEMI).toFixed(1)} ${SEMI}`} />
-                <text x="100" y="84" textAnchor="middle" fill="#eaf2fb" fontSize="30" fontWeight="600">{winRate}%</text>
-                <text x="100" y="100" textAnchor="middle" fill="#9FD8EC" fontSize="9" letterSpacing="1.5">WIN RATE</text>
-              </svg>
-              <div className="mt-1 flex items-center gap-5">
-                <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#9FD8EC' }}>{money(opp.pipelineTotal)}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Pipeline</div></div>
-                <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#7ee0a8' }}>{counts.won}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Won</div></div>
-                <div className="text-center"><div className="text-[20px] font-bold" style={{ color: '#e7b15c' }}>{money(avgDeal)}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Avg deal</div></div>
-              </div>
-            </div>
-            <div className="mt-auto flex items-end gap-1 pt-4" style={{ height: 34 }}>
-              {stageBar.map((k, i) => (
-                <div key={k} className="flex-1 rounded-sm" style={{ height: `${Math.max(8, (stageN(k) / barMax) * 100)}%`, background: i === stageBar.length - 1 ? '#5FB8E0' : '#3f7fb8' }} title={`${grouped[k]?.label ?? k}: ${stageN(k)}`} />
+          <div className="flex items-center justify-center gap-4 lg:border-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <Ring size={92} pct={winRate} color={col('safe')} stroke={8}>
+              <b style={{ fontSize: 23, fontWeight: 800 }}>{winRate}%</b>
+              <span style={{ fontSize: 9, fontWeight: 700, color: col('safe'), letterSpacing: '0.04em' }}>WIN RATE</span>
+            </Ring>
+            <div className="flex flex-col gap-1.5">
+              {[['Open deals', String(counts.open), 'cyan'], ['Won', String(wonN), 'safe'], ['Avg deal', money(avgDeal), 'warn']].map(([l, v, c]) => (
+                <div key={l} className="flex items-center gap-2 text-[12px]" style={{ color: '#9fb0c4' }}><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col(c) }} />{l} · <b style={{ color: '#eef4fb', fontWeight: 600 }}>{v}</b></div>
               ))}
             </div>
-            <div className="mt-1 text-[9px]" style={{ color: '#7d93a8' }}>Meet · Survey · Propose · Negotiate · Contract · Deposit · Won</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button type="button" onClick={() => router.push('/quotes/new')} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: BRAND, color: '#041018' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Quote</button>
+            <button type="button" onClick={() => setLeadsHub(true)} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> New Lead</button>
+            <button type="button" onClick={() => setActivePanel('rough-calc')} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M9 7h6M9 11h6M9 15h4M5 3h14v18H5z" /></svg> ROI</button>
+          </div>
+        </div>
+
+        {/* Metrics */}
+        <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[
+            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'weighted open', pct: 72, c: 'safe', ic: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
+            { l: 'Open Deals', v: String(counts.open), s: `${stageN('contract')} contracts out`, pct: 100, c: 'cyan', ic: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6' },
+            { l: 'Win Rate', v: `${winRate}%`, s: 'won vs lost', pct: winRate, c: 'indigo', ic: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M6 3h12v6a6 6 0 0 1-12 0z' },
+            { l: 'Avg Deal', v: money(avgDeal), s: `${wonN} won to date`, pct: 55, c: 'warn', ic: 'M13 2 3 14h7l-1 8 10-12h-7z' },
+          ].map((m, i) => (
+            <div key={i} className="flex items-center gap-4 rounded-2xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%),rgba(20,28,43,0.5)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <Ring size={58} pct={m.pct} color={col(m.c)} stroke={5}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke={col(m.c)} strokeWidth={1.9}><path d={m.ic} /></svg></Ring>
+              <div><div className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: '#9fb0c4' }}>{m.l}</div><div className="mt-1.5 text-[23px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{loading ? '—' : m.v}</div><div className="mt-1.5 text-[11px]" style={{ color: '#6d7f94' }}>{m.s}</div></div>
+            </div>
+          ))}
+        </div>
+
+        {/* Active deals + pipeline/follow-ups */}
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
+          {/* Active deals */}
+          <div className="rounded-2xl" style={TILE_STYLE}>
+            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Active Sales Deals</span><button type="button" onClick={() => setOppsHub(true)} className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: 'rgba(0,163,224,0.12)', color: '#00A3E0', border: '1px solid rgba(0,163,224,0.3)' }}>Open board →</button></div>
+            <div className="p-4">
+              {loading ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>Loading deals…</div>
+                : activeDeals.length === 0 ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>No open deals yet. Start a quote to build pipeline.</div>
+                : activeDeals.map(d => {
+                  const meta = STAGE_META[d.stage] || { label: d.stage, c: 'cyan' }
+                  return (
+                    <button key={d.id} type="button" onClick={() => openLifecycle(d.id)} className="mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: '#161f2e', border: '1px solid #1e2a3c', borderLeft: `3px solid ${col(meta.c)}` }}>
+                      <span className="truncate text-[13.5px] font-semibold">{d.name}</span>
+                      <span className="shrink-0 rounded-full px-3 py-1 text-[10px] font-extrabold" style={{ background: `${col(meta.c)}22`, color: col(meta.c) }}>{meta.label}</span>
+                    </button>
+                  )
+                })}
+            </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <HubTile glyph="quote" hex="#5FB8E0" title="ROI Calculator" subtitle="Deal profitability from scope + terms — start-up, monthly, ROI." onClick={() => setActivePanel('rough-calc')} />
-            <HubTile glyph="research" hex="#5FB8E0" title="ARIA Research" subtitle="Property, owner, contacts, and proptech intel." badge="ARIA" onClick={() => router.push('/aria')} />
+          {/* Pipeline by stage + follow-ups */}
+          <div className="flex flex-col gap-5">
+            <div className="rounded-2xl" style={TILE_STYLE}>
+              <div className="border-b px-5 py-4 text-[14px] font-bold" style={{ borderColor: '#1e2a3c' }}>Pipeline by stage</div>
+              <div className="flex items-center gap-4 p-5">
+                <Ring size={100} pct={100} color={col('cyan')} stroke={9}><b style={{ fontSize: 28, fontWeight: 800 }}>{counts.open}</b><span style={{ fontSize: 9, fontWeight: 700, color: '#6d7f94', letterSpacing: '0.04em' }}>DEALS</span></Ring>
+                <div className="flex-1">
+                  {STAGE_ORDER.map(k => {
+                    const meta = STAGE_META[k]; const n = stageN(k)
+                    return (
+                      <div key={k} className="mb-2">
+                        <div className="mb-1 flex justify-between text-[12px]"><span style={{ color: '#9fb0c4' }}>{meta.label}</span><b>{n}</b></div>
+                        <div className="h-2 overflow-hidden rounded-full" style={{ background: '#0b111c' }}><i className="block h-full" style={{ width: `${(n / barMax) * 100}%`, background: col(meta.c) }} /></div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl" style={TILE_STYLE}>
+              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Follow-ups</span>{followups.length > 0 && <span className="text-[11px]" style={{ color: '#6d7f94' }}>{followups.length} due</span>}</div>
+              <div className="p-4">
+                {loading ? <div className="text-xs" style={{ color: '#9fb0c4' }}>Loading…</div>
+                  : followups.length === 0 ? <div className="rounded-xl px-3 py-4 text-xs" style={{ background: '#0b111c', color: '#9fb0c4' }}>No follow-ups due. Nice and clear.</div>
+                  : followups.slice(0, 5).map(a => (
+                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="mb-1.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: '#0b111c', border: '1px solid #1e2a3c' }}>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#EF4444' : '#00A3E0' }} />
+                      <div className="min-w-0 flex-1"><div className="truncate text-[12px]" style={{ color: '#eef4fb' }}>{a.subject || a.type}</div><div className="truncate text-[10px]" style={{ color: '#9fb0c4' }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div></div>
+                    </button>
+                  ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>

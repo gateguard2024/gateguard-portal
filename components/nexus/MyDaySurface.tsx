@@ -306,6 +306,25 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
   )
 }
 
+const C = { cyan: '#00A3E0', indigo: '#6B7EFF', safe: '#22C55E', warn: '#F59E0B', alert: '#EF4444', ink: '#eef4fb', ink2: '#9fb0c4', ink3: '#6d7f94' }
+const BRAND = 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)'
+const GLASS: React.CSSProperties = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' }
+
+function MyRing({ size, pct, color, stroke = 6, children }: { size: number; pct: number; color: string; stroke?: number; children: React.ReactNode }) {
+  const r = (size - stroke) / 2 - 1
+  const circ = 2 * Math.PI * r
+  const off = circ * (1 - Math.max(0, Math.min(100, pct)) / 100)
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
+    </div>
+  )
+}
+
 export function MyDaySurface() {
   const { user } = useUser()
   const firstName = user?.firstName ?? 'there'
@@ -378,6 +397,9 @@ export function MyDaySurface() {
   const sortedTop10 = [...top10].sort((a, b) => (({ high: 0, medium: 1, low: 2 } as Record<string, number>)[a.urgency] ?? 1) - (({ high: 0, medium: 1, low: 2 } as Record<string, number>)[b.urgency] ?? 1))
   const leadStageCounts = leads.reduce<Record<string, number>>((acc, l) => { const st = (l.stage || 'new'); acc[st] = (acc[st] || 0) + 1; return acc }, {})
   const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value]) => ({ label, value }))
+  const overdueCount = todayEvents.filter(e => e.overdue).length
+  const heroState = overdueCount > 0 ? 'Attention Needed' : 'On Track'
+  const openLoadPct = Math.min(100, (workSignalCount / 12) * 100)
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
@@ -450,33 +472,108 @@ export function MyDaySurface() {
 
   return (
     <section className="mt-6 w-full px-3 sm:px-4">
-      {(popouts.schedule || popouts.todos) && (
-        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {popouts.schedule && <SchedulePopout events={todayEvents} onOpen={() => openCard(cards[0])} onClose={() => setPopout('schedule', false)} />}
-          {popouts.todos && <TodosPopout items={todoItems} onOpen={() => openCard(cards[2])} onClose={() => setPopout('todos', false)} />}
-        </div>
-      )}
-      {!popouts.schedule && !popouts.todos && (
-        <button type="button" onClick={() => { setPopout('schedule', true); setPopout('todos', true) }} className="mb-3 rounded-full border border-slate-700/60 bg-slate-800/50 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:text-white">Show previews</button>
-      )}
-      <div className="relative overflow-hidden rounded-[2rem] p-5 sm:p-6" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.45), transparent)' }} />
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-          <h2 className="text-base font-medium leading-tight sm:text-lg" style={{ color: 'rgba(226,232,240,0.94)' }}>Hi <span style={{ color: '#ffffff', fontWeight: 600 }}>{firstName}</span>, <span style={{ color: 'rgba(224,232,241,0.92)', fontWeight: 400 }}>what are we working on today?</span></h2>
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: 'rgba(6,78,59,0.45)', border: '1px solid rgba(16,185,129,0.45)', color: '#34d399', fontFamily: 'var(--font-mono, ui-monospace)' }}>
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: '#34d399' }} />
-            Live Connection
-          </span>
-        </div>
-        <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1fr_1.3fr_1fr]">
-          <div className="flex flex-col gap-3">
-            <MyDayCardButton card={cards[0]} fill onClick={() => openCard(cards[0])} />
-            <MyDayCardButton card={cards[1]} fill onClick={() => openCard(cards[1])} />
+      {/* Workspace status hero */}
+      <div className="mb-5 grid grid-cols-1 items-center gap-5 rounded-[1.75rem] p-5 sm:p-6 lg:grid-cols-[1.2fr_1fr_1.1fr]"
+        style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.08),rgba(107,126,255,0.07)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -30px rgba(0,0,0,0.8)' }}>
+        <div className="flex items-center gap-4">
+          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-[1.1rem]" style={{ background: BRAND, boxShadow: '0 0 28px rgba(74,140,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3)', color: '#eafaff' }}>
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
           </div>
-          <DaySummaryBlock openTasks={workSignalCount} high={highCount} medium={medCount} low={lowCount} leadsTotal={leads.length} leadStages={leadStages} />
-          <div className="flex flex-col gap-3">
-            <MyDayCardButton card={cards[2]} fill onClick={() => openCard(cards[2])} />
-            <MyDayCardButton card={cards[3]} fill onClick={() => openCard(cards[3])} />
+          <div>
+            <div className="text-[10.5px] font-extrabold uppercase tracking-[0.14em]" style={{ color: C.ink3 }}>Workspace status</div>
+            <div className="mt-0.5 text-[24px] font-extrabold leading-tight tracking-tight sm:text-[26px]" style={{ color: C.ink }}>Hi {firstName} — {heroState}</div>
+            <div className="mt-1 text-[12.5px]" style={{ color: C.ink2 }}>{top10.length} priorities · {todayCount} scheduled today{overdueCount ? ` · ${overdueCount} overdue` : ''}</div>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-4 lg:border-x lg:border-white/10 lg:px-4">
+          <MyRing size={92} pct={openLoadPct} color={C.cyan} stroke={8}>
+            <b style={{ fontSize: 24, fontWeight: 800, color: C.ink }}>{workSignalCount}</b>
+            <span style={{ fontSize: 9, fontWeight: 700, color: C.cyan, letterSpacing: '0.04em' }}>OPEN</span>
+          </MyRing>
+          <div className="flex flex-col gap-1.5">
+            {([['Open tasks', workSignalCount, C.warn], ['Overdue', overdueCount, C.alert], ['Leads', leads.length, C.safe]] as const).map(([l, v, col]) => (
+              <div key={l} className="flex items-center gap-2 text-[12px]" style={{ color: C.ink2 }}>
+                <span className="h-2 w-2 rounded-full" style={{ background: col }} />
+                {l} · <b style={{ color: C.ink, fontWeight: 600 }}>{v}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <button type="button" onClick={() => { window.location.href = '/quotes/new' }} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: BRAND, color: '#041018' }}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#041018" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg> New Quote
+          </button>
+          <button type="button" onClick={() => { window.location.href = '/dispatch' }} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: C.ink }}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={C.cyan} strokeWidth="2"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg> Work Order
+          </button>
+          <button type="button" onClick={() => { window.location.href = '/crm/leads' }} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: C.ink }}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={C.cyan} strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> Add Lead
+          </button>
+        </div>
+      </div>
+
+      {/* Metric ring gauges */}
+      <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
+          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: C.safe, ic: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
+        ].map((m) => (
+          <div key={m.l} className="flex items-center gap-3.5 rounded-2xl p-4" style={GLASS}>
+            <MyRing size={58} pct={m.pct} color={m.col} stroke={5}>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke={m.col} strokeWidth="1.9">{m.ic}</svg>
+            </MyRing>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: C.ink2 }}>{m.l}</div>
+              <div className="mt-1 text-[24px] font-extrabold leading-none tracking-tight sm:text-[26px]" style={{ color: C.ink }}>{m.v}</div>
+              <div className="mt-1.5 text-[11px]" style={{ color: C.ink3 }}>{m.s}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Schedule + To-Dos */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.3fr_1fr]">
+        <div className="overflow-hidden rounded-2xl" style={GLASS}>
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <span className="text-[14px] font-bold" style={{ color: C.ink }}>Today&apos;s Schedule</span>
+            <button type="button" onClick={() => openCard(cards[0])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(0,163,224,0.12)', color: C.cyan, border: '1px solid rgba(0,163,224,0.3)' }}>Open calendar →</button>
+          </div>
+          <div className="p-4">
+            {todayEvents.length === 0 ? (
+              <button type="button" onClick={() => setAddEventOpen(true)} className="w-full rounded-xl py-8 text-center text-[12.5px]" style={{ color: C.ink2, border: '1px dashed rgba(255,255,255,0.12)' }}>Nothing scheduled today — add an event</button>
+            ) : todayEvents.slice(0, 6).map((e) => (
+              <button key={e.id} type="button" onClick={() => openCard(cards[0])} className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left text-[13px] transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)', borderLeft: `3px solid ${e.overdue ? C.alert : C.cyan}`, color: C.ink }}>
+                <span className="truncate">{e.title}</span>
+                {e.overdue
+                  ? <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase" style={{ background: 'rgba(239,68,68,0.14)', color: C.alert }}>Overdue</span>
+                  : <span className="shrink-0 font-mono text-[11px]" style={{ color: C.ink2 }}>{formatEventTime(e)}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-2xl" style={GLASS}>
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <span className="text-[14px] font-bold" style={{ color: C.ink }}>To-Dos</span>
+            <button type="button" onClick={() => openCard(cards[2])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: C.ink2, border: '1px solid rgba(255,255,255,0.14)' }}>Open board →</button>
+          </div>
+          <div className="space-y-3 p-4">
+            {([['NOW', 'high', C.alert], ['NEXT', 'medium', C.warn], ['LATER', 'low', C.ink3]] as const).map(([label, key, dot]) => {
+              const colItems = todoItems.filter((i) => i.urgency === key).slice(0, 3)
+              return (
+                <div key={label} className="rounded-xl p-3" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wide" style={{ color: C.ink3 }}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: dot }} />{label}
+                  </div>
+                  {colItems.length === 0 ? (
+                    <div className="text-[12px]" style={{ color: C.ink3 }}>—</div>
+                  ) : colItems.map((i) => (
+                    <button key={i.id} type="button" onClick={() => openCard(cards[2])} className="mb-1.5 block w-full truncate rounded-lg px-2.5 py-2 text-left text-[12.5px]" style={{ background: 'rgba(11,17,28,0.6)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>{i.title}</button>
+                  ))}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
