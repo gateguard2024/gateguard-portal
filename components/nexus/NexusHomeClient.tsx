@@ -75,13 +75,13 @@ function NexusMark() {
         </svg>
       </div>
       <div className="text-center">
-        <h1 className="text-4xl font-bold uppercase" style={{ color: 'rgba(255,255,255,0.97)', letterSpacing: '0.28em', lineHeight: 1, textShadow: '0 0 20px rgba(95,184,224,0.45)' }}>NEXUS</h1>
+        <h1 className="text-5xl font-extrabold uppercase" style={{ letterSpacing: '0.3em', lineHeight: 1, backgroundImage: 'linear-gradient(135deg,#9EE8FF 0%,#4A8CFF 50%,#9A8CFF 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent', filter: 'drop-shadow(0 0 24px rgba(74,140,255,0.6)) drop-shadow(0 1px 0 rgba(255,255,255,0.25))' }}>NEXUS</h1>
         <div className="mt-2 flex justify-center">
           <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.45)', color: '#7DE5FF' }}>Professional</span>
         </div>
         <p className="uppercase" style={{ letterSpacing: '0.22em', marginTop: 6 }}>
           <span className="text-xs" style={{ color: 'rgba(125,229,255,0.74)' }}>by </span>
-          <span className="text-[13px] font-bold" style={{ color: '#FFFFFF' }}>Gate Guard</span>
+          <span className="text-[15px] font-extrabold" style={{ backgroundImage: 'linear-gradient(135deg,#19C8F5,#6B7EFF)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent', filter: 'drop-shadow(0 0 12px rgba(74,140,255,0.55))' }}>Gate Guard</span>
         </p>
         <div className="mt-2 flex justify-center">
           <span className="rounded-md px-2 py-0.5 text-[10px] tracking-[0.14em]" style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', color: 'rgba(226,232,240,0.72)', background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(148,163,184,0.3)' }}>{NEXUS_VERSION}</span>

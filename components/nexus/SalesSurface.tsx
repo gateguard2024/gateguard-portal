@@ -18,9 +18,10 @@ type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' 
 
 // ---- Dashboard console tokens (identical to My Day home) ----
 const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.32)', boxShadow: '0 14px 30px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const WELL = 'linear-gradient(180deg,#26374a,#1e2c3c)'
+// Elevated glass (matches the customer portal + NEXUS landing design language).
+const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
+const TILE_STYLE = { background: TILE_BG, backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' } as const
+const WELL = 'linear-gradient(180deg,rgba(20,28,43,0.7),rgba(13,19,28,0.7))'
 
 type Activity = { id: string; type: string; subject: string | null; due_at: string | null; completed_at: string | null; opportunity_id: string | null; opportunity_name: string | null }
 type OppRow = { id: string; name?: string | null }
@@ -70,7 +71,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
       <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[minmax(0,1fr)_260px]"
-        style={{ background: NEXUS_BG, border: '1px solid rgba(150,180,210,0.22)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+        style={{ background: NEXUS_BG, border: '1px solid rgba(255,255,255,0.085)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Sales</div>
@@ -78,7 +79,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(255,255,255,0.085)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
