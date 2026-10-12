@@ -543,14 +543,31 @@ export function MyDaySurface() {
           <div className="p-4">
             {todayEvents.length === 0 ? (
               <button type="button" onClick={() => setAddEventOpen(true)} className="w-full rounded-xl py-8 text-center text-[12.5px]" style={{ color: C.ink2, border: '1px dashed rgba(255,255,255,0.12)' }}>Nothing scheduled today — add an event</button>
-            ) : todayEvents.slice(0, 6).map((e) => (
-              <button key={e.id} type="button" onClick={() => openCard(cards[0])} className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left text-[13px] transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)', borderLeft: `3px solid ${e.overdue ? C.alert : C.cyan}`, color: C.ink }}>
-                <span className="truncate">{e.title}</span>
-                {e.overdue
-                  ? <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase" style={{ background: 'rgba(239,68,68,0.14)', color: C.alert }}>Overdue</span>
-                  : <span className="shrink-0 font-mono text-[11px]" style={{ color: C.ink2 }}>{formatEventTime(e)}</span>}
-              </button>
-            ))}
+            ) : todayEvents.slice(0, 6).map((e) => {
+              const col = e.overdue ? C.alert : C.cyan
+              const isWO = e.type === 'work_order'
+              const meta = [e.type?.replace(/_/g, ' '), e.reason].filter(Boolean).join(' · ')
+              return (
+                <button key={e.id} type="button" onClick={() => openCard(cards[0])} className="mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[0.6rem]" style={{ background: `${col}22`, border: `1px solid ${col}55`, color: col }}>
+                      {isWO
+                        ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg>
+                        : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /></svg>}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-semibold">{e.title}</span>
+                      {meta && <span className="mt-0.5 block truncate text-[11px] capitalize" style={{ color: C.ink3 }}>{meta}</span>}
+                    </span>
+                  </span>
+                  <span className="shrink-0">
+                    {e.overdue
+                      ? <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase" style={{ background: 'rgba(239,68,68,0.14)', color: C.alert }}>Overdue</span>
+                      : <span className="font-mono text-[11px]" style={{ color: C.ink2 }}>{formatEventTime(e)}</span>}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
         <div className="overflow-hidden rounded-2xl" style={GLASS}>
@@ -569,12 +586,44 @@ export function MyDaySurface() {
                   {colItems.length === 0 ? (
                     <div className="text-[12px]" style={{ color: C.ink3 }}>—</div>
                   ) : colItems.map((i) => (
-                    <button key={i.id} type="button" onClick={() => openCard(cards[2])} className="mb-1.5 block w-full truncate rounded-lg px-2.5 py-2 text-left text-[12.5px]" style={{ background: 'rgba(11,17,28,0.6)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>{i.title}</button>
+                    <button key={i.id} type="button" onClick={() => openCard(cards[2])} className="mb-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(11,17,28,0.6)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: `${dot}22`, border: `1px solid ${dot}55`, color: dot }}>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.1"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /></svg>
+                      </span>
+                      <span className="truncate text-[12.5px] font-medium">{i.title}</span>
+                    </button>
                   ))}
                 </div>
               )
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Messages board */}
+      <div className="mt-5 overflow-hidden rounded-2xl" style={GLASS}>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <span className="text-[14px] font-bold" style={{ color: C.ink }}>Messages</span>
+          <button type="button" onClick={() => openCard(cards[3])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(0,163,224,0.12)', color: C.cyan, border: '1px solid rgba(0,163,224,0.3)' }}>Open messages →</button>
+        </div>
+        <div className="p-4">
+          {messageNotes.length === 0 ? (
+            <button type="button" onClick={() => openCard(cards[3])} className="w-full rounded-xl py-8 text-center text-[12.5px]" style={{ color: C.ink2, border: '1px dashed rgba(255,255,255,0.12)' }}>No messages yet — customer calls, emails, texts and notes land here</button>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {messageNotes.slice(0, 6).map((note) => (
+                <button key={note.id} type="button" onClick={() => openCard(cards[3])} className="rounded-xl p-3 text-left" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: C.indigo, color: '#fff' }}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                    </span>
+                    <span className="text-[10px]" style={{ color: C.ink3 }}>{new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                  <div className="line-clamp-3 text-[11.5px] leading-relaxed" style={{ color: C.ink2 }}>{note.text}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
