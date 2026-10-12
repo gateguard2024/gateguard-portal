@@ -490,6 +490,30 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 ## PENDING TASKS (prioritized)
 
+### 🔴 OPEN ISSUE (carry into next session) — Brivo events not loading on portal
+- **Symptom:** dashboard Event Tracker + Events page come back empty; diag showed `brivo_site_token.events` = `400 "At least one of uuid, occurredAfter, or occurredBefore must be provided"`.
+- **Fix (in code, needs deploy):** `lib/brivo.ts` `listBrivoEvents()` now sends `occurredAfter`/`occurredBefore` (last 7 days, ISO 8601 **without** milliseconds — `…ssZ`). `brivoGet` forwards them.
+- **To verify after deploy:** hit `…/api/portal/<slug>/diag` → `brivo_site_token.events` should be a NUMBER. If still 400, the `lib/brivo.ts` change isn't in the deploy. If a NEW error, capture it.
+- Everything else (cameras, gates, billing) is confirmed working on the Marbella site.
+
+### NEXT UP (session 18 queue, in order)
+Portal Dashboard (polish) → **Sales Tab** → **rough estimator** → **Quotes** sections.
+Remaining portal pages still to build in the approved style: **Doors/Gates**, **Users**, **Package Room**, **Settings** (demo-first pattern, then production).
+
+### Completed — October 12, 2026 (session 17) — Property-Manager Ops Portal UI (approved design)
+**Design language locked:** elevated glass theme — lifted graded-navy canvas + ambient depth glow, glass panels, signature brand gradient `linear-gradient(135deg,#19C8F5,#4A8CFF,#8A5CFF)` (`BRAND` in OpsShell), ring-gauge KPIs, Alarm.com-style Security hero. A merge of Brivo (data backbone) + ButterflyMX (warmth) + Alarm.com (status hero / control tiles) + PDK (device clarity). NOT Brivo-clone, NOT generic. Live clickable demo = the `ops-portal-demo` artifact (Marbella data).
+- ✅ **OpsShell.tsx** — rewritten chrome: lifted bg + ambient, glass app bar, `BRAND` gradient, 60px nav rail with full IA (Dashboard · Activity · Video · Gates & Doors · Residents · Settings), personal-PIN manager sign-in, `lockdown` prop drives header badge. Exports `C` (palette) + `BRAND`.
+- ✅ **DashboardClient.tsx** — approved command center: Security hero (gradient shield, health ring, subsystem dots, hold-to-lockdown + Issue pass / Open gate), ring-gauge KPIs, camera wall, Event Tracker, Gates/Packages/Network trio, **Billing & Payments**, Site Health. Live `/summary`. Lives at `/portal/<slug>/dashboard`.
+- ✅ **Billing** — `lib/portal-billing.ts` + `app/api/portal/[slug]/billing/route.ts`: real open balance from `invoices`; funding-model badge (bulk vs resident); unpaid-resident list w/ Remind (mock-swappable, flagged "sample" until billing tables wired). TODO(billing) swap point in lib.
+- ✅ **Events page** — `app/api/portal/[slug]/events/route.ts` (categorized Brivo events: access/denied/admin/schedule), `EventsClient.tsx` (stat cards + filter chips + search + table + per-event camera button), `app/portal/[slug]/activity/page.tsx`.
+- ✅ **Cameras/Video page** — `VideoClient.tsx` + `app/portal/[slug]/video/page.tsx`: **Gate is always the large featured view**, scrollable grid of all cameras, double-click (or Rewind) → popup viewer + Eagle Eye **recorded-history** browser (`camera-history`), **black-frame detection** (client-side luminance <11 → flag "No signal" even if EEN reports online).
+- ✅ **Portal root live cameras** — `app/portal/[slug]/page.tsx` now pulls real Eagle Eye camera list (no placeholder IDs that 502'd).
+- ✅ **Eagle Eye refresh hardened** — `lib/eagle-eye.ts` `getSiteEagleEyeAccess`: single-flight refresh + rotation-recovery (re-reads vault on `invalid_client`) so the camera-wall burst doesn't stampede the single-use token.
+- ✅ **Admin device picker** — `/admin/portals` now lists the site's real cameras + gates with per-device include toggles (migration 192 `client_portals.door_ids`; `/api/admin/portals/devices`).
+- **Live slug for testing:** `supabase/provision_marbella_live.sql` → `/portal/marbella` (site `020c185f-…`), view PIN `650100`, Russel control PIN `4921`. Run on **beta** Supabase after the code deploys.
+- **Migrations pending on beta/prod:** 192 (door_ids) + 173–177 + 191 (portal foundation) per earlier status.
+- **Deploy note:** all of the above is on `beta` — push + redeploy, then run `provision_marbella_live.sql`. The Brivo-events OPEN ISSUE above resolves on deploy.
+
 ### Completed — July 2026 (session 16) — Customer Portal + Systems + Sales fixes
 - ✅ **Brivo remote unlock FIXED** — switched `unlockBrivoDoor()` to `/access-points/{id}/activate` (admin activation, no credentialValue). Gate trigger confirmed working. See INTEGRATION GOTCHAS. Requires per-door "Control From Browser" in Brivo Account Config Tool.
 - ✅ **Customer portal foundation** — `client_portals` table (173) + `CustomerPortalTemplate.tsx` (single design source of truth, steel theme matching dealer shell) + `app/portal/[slug]/page.tsx` + corporate **Customer Portals admin tool** (`/admin/portals`, site-picker provisioning) + **Phase 1 PIN gate** (migration 177, `/api/portal/[slug]/verify`, `PinGate.tsx`, admin PIN field). Decisions: per-portal PIN auth + view + safe-actions (pay/request-service) only. **Phase 2 (read-only data sections via `/api/portal/[slug]/*`) + Phase 3 (Pay + Request Service) PENDING.**
