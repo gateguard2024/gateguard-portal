@@ -100,7 +100,7 @@ function MyDayCardButton({ card, onClick, fill }: { card: MyDayCard; onClick: ()
       type="button"
       onClick={onClick}
       className={`group relative flex flex-col overflow-hidden rounded-2xl p-5 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60 ${fill ? 'flex-1 min-h-[128px]' : 'min-h-[184px]'}`}
-      style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.32)', boxShadow: '0 14px 30px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 2px rgba(0,0,0,0.4)' }}
+      style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' }}
     >
       {card.badge && (
         <div className="absolute right-4 top-4 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(13,20,32,0.5)', border: '1px solid rgba(255,255,255,0.18)', color: '#DCE6F0' }}>
@@ -136,7 +136,7 @@ function DaySummaryBlock({ openTasks, high, medium, low, leadsTotal, leadStages 
     </div>
   )
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.34)', boxShadow: 'inset 0 4px 16px rgba(0,0,0,0.4), 0 16px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(150,180,210,0.12)' }}>
+    <div className="relative flex flex-col overflow-hidden rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' }}>
 
       <div className="mb-4 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-widest text-[#9FD8EC]">Summary</span>
@@ -210,7 +210,7 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
           <div className="mt-5 space-y-2">{children}</div>
         </div>
         {actions && (
-          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(140,170,200,0.28)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
             <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
             <div className="mt-4 space-y-2">{actions}</div>
           </aside>
@@ -498,7 +498,7 @@ export function MyDaySurface() {
               {sortedTop10.map((item, index) => {
                 const accent = item.urgency === 'high' ? '#f43f5e' : item.urgency === 'medium' ? '#fbbf24' : '#94a3b8'
                 return (
-                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-black/30 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>
+                  <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="group relative w-full overflow-hidden rounded-2xl border border-black/30 py-3 pl-4 pr-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#5FB8E0]/45" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))' }}>
                     <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -516,7 +516,7 @@ export function MyDaySurface() {
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-black/30 px-3 py-6 text-center text-xs text-slate-300" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)' }}>No priority items yet. Add an event or to-do to start building the day.</div>
+          <div className="rounded-2xl border border-black/30 px-3 py-6 text-center text-xs text-slate-300" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))' }}>No priority items yet. Add an event or to-do to start building the day.</div>
         )}
         </div>
       </DetailShell>}
