@@ -20,6 +20,7 @@ export interface RoiInputs {
   termMonths: number          // default 60
   setupFee: number            // one-time, paid by the property
   monthlyPA: number           // resident parking & amenity, per unit (default 125)
+  monthlyBulkFee?: number     // bulk fee per unit / month — billed at 100% penetration
   paOffset?: number           // added to monthlyPA in the revenue calc (default 0)
   dealerPerPoint?: number     // legacy flat per-point dealer pay (kept for back-compat)
   dealerPerGate?: number      // servicing dealer, per vehicle/exit gate (default 150)
@@ -69,6 +70,8 @@ export interface RoiResult {
   startupCogs: number
   startupProfit: number       // set-up fee − startup COGS (can be negative)
   monthlyRevenue: number
+  bulkRevenue: number         // units × bulk fee, billed at 100% penetration
+  paRevenue: number           // P&A @ 75% penetration × 80% pay ÷ 12
   payroll: number
   monthlyCogs: number
   monthlyProfit: number
@@ -78,6 +81,7 @@ export interface RoiResult {
   startupBreakdown: LineItem[]
   monthlyBreakdown: LineItem[]
   payrollBreakdown: LineItem[]
+  revenueBreakdown: LineItem[]
   // Dealer-safe figures:
   annualResidentRevenue: number // units × monthlyPA (full-turnover P&A collected / yr)
 }
@@ -130,8 +134,21 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const startupCogs = r2(startupBreakdown.reduce((s, l) => s + l.amount, 0))
   const startupProfit = r2(setupFee - startupCogs)
 
-  // ── Monthly recurring ───────────────────────────────────────────────────────
-  const monthlyRevenue = r2((units / divisor) * (monthlyPA + paOffset))
+  // ── Monthly recurring revenue ───────────────────────────────────────────────
+  // Bulk fee: every unit pays (100% penetration).
+  const bulkPerUnit = n(input.monthlyBulkFee)
+  const bulkRevenue = r2(units * bulkPerUnit)
+  // P&A: assume 75% penetration; of those, 20% never pay (→ 80% pay); of the
+  // payers, 1/12 pay in any given month. Net monthly factor = .75 × .80 ÷ 12.
+  const PA_PENETRATION = 0.75
+  const PA_PAY_RATE = 0.80
+  const paMonthlyUnits = (units * PA_PENETRATION * PA_PAY_RATE) / 12
+  const paRevenue = r2(paMonthlyUnits * (monthlyPA + paOffset))
+  const monthlyRevenue = r2(bulkRevenue + paRevenue)
+  const revenueBreakdown: LineItem[] = [
+    { label: `Bulk fee (100% × ${units} units)`, amount: bulkRevenue },
+    { label: 'P&A (75% pen. × 80% pay ÷ 12)', amount: paRevenue },
+  ].map(l => ({ ...l, amount: r2(l.amount) })).filter(l => l.amount > 0)
 
   // Dealer pay — Servicing Fee AND Parts each = greater of $1.50/unit/mo
   // or ($150 per gate + $25 per additional door), where:
@@ -187,9 +204,9 @@ export function computeRoi(input: RoiInputs): RoiResult {
     units, points, openings, setupFee, monthlyPA,
     salesAnnualPerUnit, msoAnnualPerUnit, packageAnnualPerUnit, paAdditionsPerUnitYr, residentPaTotal,
     startupCogs, startupProfit,
-    monthlyRevenue, payroll, monthlyCogs, monthlyProfit, annualProfit,
+    monthlyRevenue, bulkRevenue, paRevenue, payroll, monthlyCogs, monthlyProfit, annualProfit,
     roiMonths, pass,
-    startupBreakdown, monthlyBreakdown, payrollBreakdown,
+    startupBreakdown, monthlyBreakdown, payrollBreakdown, revenueBreakdown,
     annualResidentRevenue: r2(units * residentPaTotal),
   }
 }
