@@ -77,6 +77,7 @@ export interface RoiResult {
   monthlyCogs: number
   monthlyProfit: number
   annualProfit: number
+  netMargin: number           // monthlyProfit ÷ monthlyRevenue (fraction; ≥ 0.30 to pass)
   roiMonths: number           // 0 when already profitable at signing
   pass: boolean
   startupBreakdown: LineItem[]
@@ -185,14 +186,20 @@ export function computeRoi(input: RoiInputs): RoiResult {
 
   const monthlyProfit = r2(monthlyRevenue - payroll - monthlyCogs)
   const annualProfit = r2(monthlyProfit * 12)
+  // Net profit as a share of the billed amount (bulk + P&A revenue). Corporate
+  // requires this to clear 30% on top of a ≤ 4-month payback.
+  const netMargin = monthlyRevenue > 0 ? Math.round((monthlyProfit / monthlyRevenue) * 1000) / 1000 : 0
+  const MARGIN_FLOOR = 0.30
 
   // ROI months to recover a start-up deficit. If start-up is already positive,
   // the deal is profitable at signing → 0 months. If monthly ≤ 0 it never pays back.
   let roiMonths: number
-  if (startupProfit >= 0) roiMonths = 0
-  else if (monthlyProfit <= 0) roiMonths = Infinity
+  if (monthlyProfit <= 0) roiMonths = startupProfit >= 0 ? 0 : Infinity
+  else if (startupProfit >= 0) roiMonths = 0
   else roiMonths = r2(-startupProfit / monthlyProfit)
-  const pass = roiMonths <= passThreshold
+  // Viable only if it earns money every month, recovers start-up within the
+  // threshold, AND nets more than 30% of the billed amount.
+  const pass = monthlyProfit > 0 && roiMonths <= passThreshold && netMargin >= MARGIN_FLOOR
 
   // Per-unit/month payouts annualize (×12) and stack onto the resident P&A fee.
   const salesAnnualPerUnit = r2(salesRepPerUnit * 12)
@@ -206,7 +213,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
     salesAnnualPerUnit, msoAnnualPerUnit, packageAnnualPerUnit, paAdditionsPerUnitYr, residentPaTotal,
     startupCogs, startupProfit,
     monthlyRevenue, bulkRevenue, paRevenue, dealerFee, payroll, monthlyCogs, monthlyProfit, annualProfit,
-    roiMonths, pass,
+    netMargin, roiMonths, pass,
     startupBreakdown, monthlyBreakdown, payrollBreakdown, revenueBreakdown,
     annualResidentRevenue: r2(units * residentPaTotal),
   }

@@ -140,7 +140,7 @@ export function RoiCalculator() {
   const r = data?.result
   const corp = data?.corporate
   const roiLabel = r ? (r.roiMonths === null || !isFinite(r.roiMonths) ? '∞' : String(r.roiMonths)) : '0'
-  const roiPct = r ? (r.startupProfit >= 0 ? 100 : r.pass ? 80 : 30) : 0
+  const roiPct = r ? (r.pass ? 100 : 30) : 0
   const dealerAnnual = r ? (r.dealerFee || 0) * 12 + (inp.additionalDealerInstall || 0) : 0
 
   return (
@@ -188,8 +188,14 @@ export function RoiCalculator() {
 
       {/* RIGHT — OUTPUTS */}
       <div style={{ display: 'grid', gap: 16 }}>
-        {!r ? (
-          <div style={{ ...glass, borderRadius: 16, padding: 20, color: C.ink2, fontSize: 13 }}>Enter a site to model the deal.</div>
+        {!r || !inp.units ? (
+          <div style={{ ...glass, borderRadius: 18, padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 260 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, boxShadow: '0 0 24px rgba(74,140,255,0.35)' }}>
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#041018" strokeWidth="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>Model a deal</div>
+            <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 6, maxWidth: 320, lineHeight: 1.5 }}>Enter the unit count and site scope on the left. Start-up, monthly profit, payback, and the dealer breakdown update live.</div>
+          </div>
         ) : (<>
 
           {/* Verdict hero (corporate) */}
@@ -203,12 +209,12 @@ export function RoiCalculator() {
               </Ring>
               <div>
                 <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.ink3 }}>Payback period</div>
-                <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2, color: C.ink }}>{usd(r.monthlyProfit)}/mo profit</div>
-                <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{r.startupProfit >= 0 ? 'Profitable at signing · ' : ''}{usd(r.annualProfit)}/yr · start-up {usd(r.startupProfit)}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2, color: r.monthlyProfit >= 0 ? C.ink : C.alert }}>{r.monthlyProfit >= 0 ? `${usd(r.monthlyProfit)}/mo profit` : `${usd(Math.abs(r.monthlyProfit))}/mo loss`}</div>
+                <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{r.monthlyProfit < 0 ? 'Loses money monthly — not viable · ' : r.startupProfit >= 0 ? 'Profitable at signing · ' : ''}{usd(r.annualProfit)}/yr · start-up {usd(r.startupProfit)}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 22px', borderRadius: 14, background: r.pass ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)', border: `1px solid ${r.pass ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }}>
                 <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '0.04em', color: r.pass ? C.safe : C.alert }}>{r.pass ? 'PASS' : 'FAIL'}</div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.ink3 }}>≤ 4 mo target</div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.ink3, textAlign: 'center' }}>ROI ≤ 4mo · margin ≥ 30%</div>
               </div>
             </div>
           )}
@@ -229,6 +235,7 @@ export function RoiCalculator() {
                 <Stat label="Monthly payroll" value={usd(r.payroll)} sub="dealers + reps" />
                 <Stat label="Monthly profit" value={usd(r.monthlyProfit)} tone={r.monthlyProfit >= 0 ? 'good' : 'bad'} />
                 <Stat label="Annual profit" value={usd(r.annualProfit)} tone={r.annualProfit >= 0 ? 'good' : 'bad'} />
+                <Stat label="Net margin" value={`${Math.round((r.netMargin || 0) * 100)}%`} tone={(r.netMargin || 0) >= 0.30 ? 'good' : 'bad'} sub="of billed · ≥30% to pass" />
                 <Stat label="Start-up profit" value={usd(r.startupProfit)} tone={r.startupProfit >= 0 ? 'good' : 'bad'} sub={`fees − ${usd(r.startupCogs)} install`} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 11 }}>
@@ -250,13 +257,18 @@ export function RoiCalculator() {
               <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.cyan, background: 'rgba(0,163,224,0.12)', border: '1px solid rgba(0,163,224,0.3)', padding: '4px 9px', borderRadius: 999 }}>Visible to dealers</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(135px,1fr))', gap: 11 }}>
+              <Stat label="Equipment cost (setup)" value={usd(r.startupCogs)} sub="gear + install, one-time" tone="brand" />
               <Stat label="Dealer install fee" value={usd(inp.additionalDealerInstall)} sub="one-time" tone="brand" />
               <Stat label="Servicing fee / mo" value={usd(r.dealerFee)} tone="brand" />
               <Stat label="Parts / mo" value={usd(r.dealerFee)} sub="same basis" tone="brand" />
               <Stat label="Dealer annual" value={usd(dealerAnnual)} sub="servicing×12 + install" tone="brand" />
-              <Stat label="Resident P&A / unit / yr" value={usd(r.residentPaTotal ?? r.monthlyPA)} />
               <Stat label="Units / openings" value={`${r.units} / ${r.openings}`} sub={`${r.points} access points`} />
             </div>
+            {Array.isArray(r.startupBreakdown) && r.startupBreakdown.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <Breakdown title="Equipment & install — setup cost" lines={r.startupBreakdown} total={r.startupCogs} />
+              </div>
+            )}
           </div>
         </>)}
       </div>

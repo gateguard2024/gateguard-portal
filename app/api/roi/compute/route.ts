@@ -28,11 +28,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ result: full, corporate: true })
   }
 
-  // Dealer-safe subset — no COGS, profit, ROI, or cost breakdowns. Resident-facing
-  // P&A figures are fine to show (they're what the resident pays).
-  const { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr } = full
+  // Dealer-safe subset — no GateGuard profit, revenue, ROI, or margin. Dealers DO
+  // get: resident-facing P&A (what the resident pays), their own servicing fee,
+  // and their equipment/install cost for the set-up (so they can plan the job).
+  const { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr, dealerFee, startupCogs, startupBreakdown } = full
   return NextResponse.json({
-    result: { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr },
+    result: { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr, dealerFee, startupCogs, startupBreakdown },
     corporate: false,
   })
 }
