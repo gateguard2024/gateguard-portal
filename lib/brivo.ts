@@ -448,8 +448,10 @@ export interface BrivoEvent { id: string; occurred: string | null; action: strin
 export async function listBrivoEvents(token: string, apiKey: string, pageSize = 40, sinceDays = 7): Promise<BrivoEvent[]> {
   // Brivo /events REQUIRES a time window (uuid, occurredAfter, or occurredBefore) —
   // without one it 400s. Default to the last `sinceDays` up to now.
-  const occurredBefore = new Date().toISOString()
-  const occurredAfter = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString()
+  // Brivo wants ISO 8601 WITHOUT milliseconds (…ssZ). The .000Z form is rejected on some accounts.
+  const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const occurredBefore = iso(new Date())
+  const occurredAfter = iso(new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000))
   const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize), occurredAfter, occurredBefore })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = (data.data ?? data.events ?? []) as any[]
