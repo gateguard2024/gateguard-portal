@@ -67,7 +67,9 @@ export interface RoiResult {
   paAdditionsPerUnitYr: number
   residentPaTotal: number     // base P&A + all additions, $/unit/year
   // Corporate-only figures:
-  startupCogs: number
+  startupCogs: number         // dealer's equipment/install cost (dealer price)
+  corpInstallCost: number     // GateGuard's own equipment cost (corporate-only)
+  ggEquipmentMargin: number   // startupCogs − corpInstallCost (corporate-only)
   startupProfit: number       // set-up fee − startup COGS (can be negative)
   monthlyRevenue: number
   bulkRevenue: number         // units × bulk fee, billed at 100% penetration
@@ -120,20 +122,26 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const openings = points + exit
 
   // ── One-time install COGS (Work Sheet "Set Up" column) ──────────────────────
-  const startupBreakdown: LineItem[] = [
-    { label: 'Door controllers', amount: 450 * (points - exit) },
-    { label: 'Readers', amount: 250 * (points - exit) },
-    { label: 'Remote openers', amount: 150 * (vehGates - exit) },
-    { label: 'Shelly kits', amount: 75 * vehGates },
-    { label: 'Recorder', amount: 60 * rec },
-    { label: 'New cameras', amount: 20 * newCam },
-    { label: 'Analog / conversion cameras', amount: 100 * convCam },
-    { label: 'Security base unit', amount: 350 * secPanel },
-    { label: 'Security doors', amount: 45 * (secDoors + addlDoors) },
-    { label: 'Security motions', amount: 65 * addlMotions },
-    { label: 'Security cell radio', amount: 75 * cell },
-  ].map(l => ({ ...l, amount: Math.max(0, r2(l.amount)) })).filter(l => l.amount > 0)
-  const startupCogs = r2(startupBreakdown.reduce((s, l) => s + l.amount, 0))
+  // Install has TWO price schedules: `dealer` = what the dealer pays for the gear
+  // (drives the dealer P&L and the set-up net), `corp` = GateGuard's own cost.
+  // The gap (dealer − corp) is GateGuard's equipment margin on the hardware sale.
+  const INSTALL: { label: string; qty: number; dealer: number; corp: number }[] = [
+    { label: 'Door controllers', qty: points - exit, dealer: 500, corp: 450 },
+    { label: 'Readers', qty: points - exit, dealer: 300, corp: 250 },
+    { label: 'Remote openers', qty: vehGates - exit, dealer: 200, corp: 150 },
+    { label: 'Shelly kits', qty: vehGates, dealer: 150, corp: 75 },
+    { label: 'Recorder', qty: rec, dealer: 100, corp: 60 },
+    { label: 'New cameras', qty: newCam, dealer: 40, corp: 20 },
+    { label: 'Analog / conversion cameras', qty: convCam, dealer: 100, corp: 100 },
+    { label: 'Security base unit', qty: secPanel, dealer: 550, corp: 350 },
+    { label: 'Security doors', qty: secDoors + addlDoors, dealer: 60, corp: 45 },
+    { label: 'Security motions', qty: addlMotions, dealer: 95, corp: 65 },
+    { label: 'Security cell radio', qty: cell, dealer: 150, corp: 75 },
+  ]
+  const startupBreakdown: LineItem[] = INSTALL.map(l => ({ label: l.label, amount: Math.max(0, r2(l.dealer * l.qty)) })).filter(l => l.amount > 0)
+  const startupCogs = r2(startupBreakdown.reduce((s, l) => s + l.amount, 0))                 // dealer pays this
+  const corpInstallCost = r2(INSTALL.reduce((s, l) => s + Math.max(0, l.corp * l.qty), 0))   // GateGuard's own cost
+  const ggEquipmentMargin = r2(startupCogs - corpInstallCost)                                // GG margin on hardware
   const startupProfit = r2(setupFee - startupCogs)
 
   // ── Monthly recurring revenue ───────────────────────────────────────────────
@@ -211,7 +219,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
   return {
     units, points, openings, setupFee, monthlyPA,
     salesAnnualPerUnit, msoAnnualPerUnit, packageAnnualPerUnit, paAdditionsPerUnitYr, residentPaTotal,
-    startupCogs, startupProfit,
+    startupCogs, corpInstallCost, ggEquipmentMargin, startupProfit,
     monthlyRevenue, bulkRevenue, paRevenue, dealerFee, payroll, monthlyCogs, monthlyProfit, annualProfit,
     netMargin, roiMonths, pass,
     startupBreakdown, monthlyBreakdown, payrollBreakdown, revenueBreakdown,

@@ -42,7 +42,7 @@ function Field({ label, value, onChange, prefix }: { label: string; value: numbe
       <div style={{ fontSize: 10, color: C.ink2, marginBottom: 4, fontWeight: 600, lineHeight: 1.25, minHeight: 24, display: 'flex', alignItems: 'flex-end' }}>{label}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         {prefix && <span style={{ position: 'absolute', left: 10, fontSize: 12, color: C.ink3 }}>{prefix}</span>}
-        <input type="number" min={0} value={value || 0} onChange={e => onChange(Math.max(0, Number(e.target.value) || 0))}
+        <input type="number" min={0} inputMode="decimal" value={value === 0 ? '' : value} placeholder="0" onChange={e => onChange(Math.max(0, Number(e.target.value) || 0))}
           style={{ width: '100%', background: 'rgba(11,17,28,0.6)', border: '1px solid #273548', borderRadius: 9, color: C.ink, fontSize: 13, fontWeight: 700, padding: prefix ? '8px 9px 8px 18px' : '8px 9px', outline: 'none' }} />
       </div>
     </div>
@@ -237,6 +237,7 @@ export function RoiCalculator() {
                 <Stat label="Annual profit" value={usd(r.annualProfit)} tone={r.annualProfit >= 0 ? 'good' : 'bad'} />
                 <Stat label="Net margin" value={`${Math.round((r.netMargin || 0) * 100)}%`} tone={(r.netMargin || 0) >= 0.30 ? 'good' : 'bad'} sub="of billed · ≥30% to pass" />
                 <Stat label="Start-up profit" value={usd(r.startupProfit)} tone={r.startupProfit >= 0 ? 'good' : 'bad'} sub={`fees − ${usd(r.startupCogs)} install`} />
+                <Stat label="GG equipment margin" value={usd(r.ggEquipmentMargin)} tone="good" sub={`dealer ${usd(r.startupCogs)} − GG cost ${usd(r.corpInstallCost)}`} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 11 }}>
                 <Breakdown title="Monthly revenue" lines={r.revenueBreakdown} total={r.monthlyRevenue} />

@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
 
   // The dealer owns the deal: they pay all set-up + monthly costs and collect the
   // set-up fee and all income. So the full P&L IS the dealer's — they see it.
-  // `corporate` only unlocks the extra detailed-breakdown section + cross-deal views.
-  return NextResponse.json({ result: full, corporate: user.isCorporate })
+  // The ONLY things held back from dealers are GateGuard's own equipment cost and
+  // the hardware margin GG makes selling the gear to the dealer.
+  if (user.isCorporate) return NextResponse.json({ result: full, corporate: true })
+  const { corpInstallCost: _c, ggEquipmentMargin: _m, ...dealerResult } = full
+  return NextResponse.json({ result: dealerResult, corporate: false })
 }
