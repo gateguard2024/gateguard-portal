@@ -24,16 +24,8 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   const full = computeRoi(body)
 
-  if (user.isCorporate) {
-    return NextResponse.json({ result: full, corporate: true })
-  }
-
-  // Dealer-safe subset — no GateGuard profit, revenue, ROI, or margin. Dealers DO
-  // get: resident-facing P&A (what the resident pays), their own servicing fee,
-  // and their equipment/install cost for the set-up (so they can plan the job).
-  const { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr, dealerFee, startupCogs, startupBreakdown } = full
-  return NextResponse.json({
-    result: { units, points, openings, setupFee, monthlyPA, annualResidentRevenue, residentPaTotal, paAdditionsPerUnitYr, dealerFee, startupCogs, startupBreakdown },
-    corporate: false,
-  })
+  // The dealer owns the deal: they pay all set-up + monthly costs and collect the
+  // set-up fee and all income. So the full P&L IS the dealer's — they see it.
+  // `corporate` only unlocks the extra detailed-breakdown section + cross-deal views.
+  return NextResponse.json({ result: full, corporate: user.isCorporate })
 }

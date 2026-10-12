@@ -256,19 +256,21 @@ export function RoiCalculator() {
               </div>
               <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.cyan, background: 'rgba(0,163,224,0.12)', border: '1px solid rgba(0,163,224,0.3)', padding: '4px 9px', borderRadius: 999 }}>Visible to dealers</span>
             </div>
+            <div style={{ fontSize: 11, color: C.ink3, marginBottom: 11, marginTop: -4 }}>The dealer pays all set-up + monthly costs and collects the set-up fee and all income (bulk + P&A).</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(135px,1fr))', gap: 11 }}>
-              <Stat label="Equipment cost (setup)" value={usd(r.startupCogs)} sub="gear + install, one-time" tone="brand" />
-              <Stat label="Dealer install fee" value={usd(inp.additionalDealerInstall)} sub="one-time" tone="brand" />
-              <Stat label="Servicing fee / mo" value={usd(r.dealerFee)} tone="brand" />
-              <Stat label="Parts / mo" value={usd(r.dealerFee)} sub="same basis" tone="brand" />
-              <Stat label="Dealer annual" value={usd(dealerAnnual)} sub="servicing×12 + install" tone="brand" />
-              <Stat label="Units / openings" value={`${r.units} / ${r.openings}`} sub={`${r.points} access points`} />
+              <Stat label="Set-up fee (income)" value={usd(r.setupFee)} sub="collected by dealer" tone="brand" />
+              <Stat label="Set-up cost" value={usd(r.startupCogs)} sub="equipment + install" />
+              <Stat label="Start-up net" value={usd(r.startupProfit)} tone={r.startupProfit >= 0 ? 'good' : 'bad'} />
+              <Stat label="Monthly income" value={usd(r.monthlyRevenue)} sub="bulk + P&A" tone="brand" />
+              <Stat label="Monthly cost" value={usd((r.monthlyCogs || 0) + (r.payroll || 0))} sub="platform + payouts" />
+              <Stat label="Monthly net" value={usd(r.monthlyProfit)} tone={r.monthlyProfit >= 0 ? 'good' : 'bad'} />
+              <Stat label="Payback" value={`${roiLabel} mo`} />
+              <Stat label="Net margin" value={`${Math.round((r.netMargin || 0) * 100)}%`} tone={(r.netMargin || 0) >= 0.30 ? 'good' : 'bad'} sub="of billed" />
             </div>
-            {Array.isArray(r.startupBreakdown) && r.startupBreakdown.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <Breakdown title="Equipment & install — setup cost" lines={r.startupBreakdown} total={r.startupCogs} />
-              </div>
-            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 11, marginTop: 12 }}>
+              {Array.isArray(r.revenueBreakdown) && r.revenueBreakdown.length > 0 && <Breakdown title="Monthly income" lines={r.revenueBreakdown} total={r.monthlyRevenue} />}
+              {Array.isArray(r.startupBreakdown) && r.startupBreakdown.length > 0 && <Breakdown title="Equipment & install — setup cost" lines={r.startupBreakdown} total={r.startupCogs} />}
+            </div>
           </div>
         </>)}
       </div>

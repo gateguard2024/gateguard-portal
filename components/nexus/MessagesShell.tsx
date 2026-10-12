@@ -143,7 +143,13 @@ const RECORD_BADGE: Record<string, { label: string; color: string }> = {
   opportunity: { label: 'Deal', color: '#818cf8' },
   contact: { label: 'Contact', color: '#60a5fa' },
   job: { label: 'Job', color: '#2dd4bf' },
-  dealer: { label: 'Dealer', color: '#5FB8E0' },
+  dealer: { label: 'Dealer', color: '#00A3FF' },
+};
+// Per-channel indicator (flat neon). Email=cyan, Text=green, Call=violet.
+const CHAN: Record<Channel, { c: string; bg: string; ab: string }> = {
+  email: { c: '#00A3FF', bg: 'rgba(0,163,255,0.14)', ab: '✉' },
+  text:  { c: '#00E699', bg: 'rgba(0,230,153,0.14)', ab: '✍' },
+  call:  { c: '#8B7BFF', bg: 'rgba(139,123,255,0.14)', ab: '☎' },
 };
 // Bucket a conversation by day for the Today / Yesterday / Earlier list grouping.
 const dayBucket = (iso: string) => {
@@ -156,7 +162,7 @@ const dayBucket = (iso: string) => {
 const initials = (name: string) =>
   (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '✉';
 // Soft, deterministic avatar tint per contact so the list reads at a glance.
-const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#5FB8E0'];
+const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#00A3FF'];
 const tintFor = (s: string) => AVATAR_TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
 // Render real email HTML safely: drop scripts, global <style> (would leak into the
 // app), iframes, and inline event handlers — keep inline styles so formatting shows.
@@ -397,11 +403,32 @@ export default function MessagesShell() {
       setSending(false);
     }
   };
-  const glassPanel = { backgroundColor: 'rgba(95,184,224,0.06)', border: '1px solid rgba(140,170,200,0.18)' };
+  // Convert a thread into a To-Do, mark a thread handled, + a tiny toast.
+  const [toast, setToast] = useState<string | null>(null);
+  const convertToTodo = async (conv: Conversation) => {
+    setToast('Adding to-do…');
+    try {
+      const r = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `Follow up: ${conv.contact_name}${conv.subject ? ' — ' + conv.subject : ''}` }) });
+      setToast(r.ok ? 'Added to your To-Dos ✓' : 'Could not add to-do');
+    } catch { setToast('Could not add to-do'); }
+    setTimeout(() => setToast(null), 2200);
+  };
+  const markHandled = (conv: Conversation) => {
+    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false, needs_reply: false } : c));
+    void fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }) }).catch(() => {});
+  };
+  // Inbox health KPIs.
+  const kTotal = conversations.length;
+  const kUnread = conversations.filter(c => c.unread).length;
+  const kFollow = conversations.filter(c => c.needs_reply).length;
+  const kDeals = conversations.filter(c => c.linked_type === 'opportunity').length;
+  const kHandled = kTotal > 0 ? Math.round(((kTotal - kUnread) / kTotal) * 100) : 100;
+
+  const glassPanel = { backgroundColor: 'rgba(0,163,255,0.06)', border: '1px solid #1E293B' };
   const textPrimary = { color: 'rgba(255,255,255,0.9)' };
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
   const textFaint = { color: 'rgba(255,255,255,0.82)' };
-  const brandBlue = '#5FB8E0';
+  const brandBlue = '#00A3FF';
   if (showSetup) {
     return (
       <div className="w-full h-[78dvh] overflow-y-auto rounded-2xl p-4" style={{ ...textPrimary, ...glassPanel }}>
@@ -420,11 +447,28 @@ export default function MessagesShell() {
     );
   }
   return (
-    <div className="flex w-full h-[78dvh] font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, background: '#1e2a3a', border: '1px solid rgba(140,170,200,0.22)' }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {toast && <div style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#04130d', background: '#00E699', borderRadius: 8, padding: '8px 14px' }}>{toast}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+        {(() => {
+          const r = (pct: number, col: string) => { const s = 44, sw = 4, rr = (s - sw) / 2 - 1, c = 2 * Math.PI * rr, o = c * (1 - pct / 100); return (<svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{ transform: 'rotate(-90deg)' }}><circle cx="22" cy="22" r={rr} fill="none" stroke="#1E293B" strokeWidth={sw} /><circle cx="22" cy="22" r={rr} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={o} /></svg>); };
+          const kc: React.CSSProperties = { background: '#151D2A', border: '1px solid #1E293B', borderRadius: 12, padding: '13px 15px', display: 'flex', alignItems: 'center', gap: 12 };
+          const kl: React.CSSProperties = { fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#5B6B80' };
+          const kv: React.CSSProperties = { fontSize: 21, fontWeight: 800, color: '#E6EDF5', marginTop: 3, lineHeight: 1 };
+          const ic = (bg: string, cl: string, g: string) => (<div style={{ width: 40, height: 40, borderRadius: 11, background: bg, color: cl, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{g}</div>);
+          return (<>
+            <div style={kc}><div style={{ position: 'relative', width: 44, height: 44 }}>{r(kHandled, '#00E699')}<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#00E699' }}>{kHandled}%</div></div><div><div style={kl}>Inbox health</div><div style={{ fontSize: 11, color: '#5B6B80', marginTop: 6 }}>handled</div></div></div>
+            <div style={kc}>{ic('rgba(0,163,255,0.12)', '#00A3FF', '✉')}<div><div style={kl}>Unread</div><div style={kv}>{kUnread}</div></div></div>
+            <div style={kc}>{ic('rgba(255,184,0,0.12)', '#FFB800', '⏱')}<div><div style={kl}>Needs follow-up</div><div style={kv}>{kFollow}</div></div></div>
+            <div style={kc}>{ic('rgba(0,230,153,0.12)', '#00E699', '📈')}<div><div style={kl}>Logged to deals</div><div style={kv}>{kDeals}</div></div></div>
+          </>);
+        })()}
+      </div>
+      <div className="flex w-full font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, height: '72dvh', background: '#151D2A', border: '1px solid #1E293B' }}>
       <style>{`.nexus-email-html img{max-width:100%!important;height:auto!important} .nexus-email-html table{max-width:100%!important} .nexus-email-html a{color:#2563eb} .nexus-email-html *{max-width:100%} @keyframes spin{to{transform:rotate(360deg)}} .hide-scrollbar::-webkit-scrollbar{display:none} .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
 
       {/* ── LEFT: Inbox ──────────────────────────────────────────── */}
-      <div className={`w-full md:w-[320px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(140,170,200,0.2)', background: '#1e2a3a' }}>
+      <div className={`w-full md:w-[320px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: '#1E293B', background: '#151D2A' }}>
         <div className="px-4 pt-4 pb-3 flex flex-col gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div className="flex items-center justify-between">
             <h1 className="text-[15px] font-semibold tracking-tight">Inbox</h1>
@@ -441,7 +485,7 @@ export default function MessagesShell() {
           </div>
           <div className="flex items-center gap-1.5">
             {FILTERS.map(filter => (
-              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(95,184,224,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(95,184,224,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#9FD8EC' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
+              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(0,163,255,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(0,163,255,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#00A3FF' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
             ))}
           </div>
           {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
@@ -458,19 +502,20 @@ export default function MessagesShell() {
             }
             return groups.map(group => (
               <div key={group.label}>
-                <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10" style={{ color: 'rgba(255,255,255,0.4)', background: '#1e2a3a', borderBottom: '1px solid rgba(140,170,200,0.12)' }}>{group.label}</div>
+                <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10" style={{ color: 'rgba(255,255,255,0.4)', background: '#151D2A', borderBottom: '1px solid #1E293B' }}>{group.label}</div>
                 {group.items.map(conv => {
                   const sel = selectedId === conv.id;
                   const badge = conv.linked_type ? RECORD_BADGE[conv.linked_type] : null;
                   const indent = conv.unread ? 16 : 0;
                   return (
-                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(95,184,224,0.10)' : 'transparent', borderLeft: sel ? '2px solid #5FB8E0' : '2px solid transparent' }}>
+                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(0,163,255,0.10)' : 'transparent', borderLeft: sel ? '2px solid #00A3FF' : '2px solid transparent' }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#5FB8E0' }} />}
+                          <span className="flex items-center justify-center flex-shrink-0" style={{ width: 18, height: 18, borderRadius: 5, background: CHAN[conv.channel].bg, color: CHAN[conv.channel].c, fontSize: 9 }}>{CHAN[conv.channel].ab}</span>
+                          {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#00A3FF' }} />}
                           <span className="truncate text-[14px]" style={{ color: conv.unread ? '#f4f4f5' : 'rgba(255,255,255,0.7)', fontWeight: conv.unread ? 700 : 500 }}>{conv.contact_name}</span>
                         </div>
-                        <span className="text-[12px] flex-shrink-0" style={{ color: sel ? '#9FD8EC' : 'rgba(255,255,255,0.4)' }}>{formatRelativeTime(conv.last_at)}</span>
+                        <span className="text-[12px] flex-shrink-0" style={{ color: sel ? '#00A3FF' : 'rgba(255,255,255,0.4)' }}>{formatRelativeTime(conv.last_at)}</span>
                       </div>
                       <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: indent }}>
                         {badge && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide flex-shrink-0" style={{ background: `${badge.color}22`, color: badge.color, border: `1px solid ${badge.color}33` }}>{badge.label}</span>}
@@ -486,7 +531,7 @@ export default function MessagesShell() {
         </div>
       </div>
       {/* ── CENTER: Thread ───────────────────────────────────────── */}
-      <div className={`flex-1 min-w-0 min-h-0 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#16222f' }}>
+      <div className={`flex-1 min-w-0 min-h-0 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#0B111E' }}>
         {!selectedConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={glassPanel}>
@@ -512,7 +557,7 @@ export default function MessagesShell() {
                   return (
                     <div key={msg.id} className="shrink-0 flex justify-center my-4">
                       <div className="px-4 py-3 rounded-2xl flex items-center gap-4 min-w-[240px]" style={glassPanel}>
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: isInbound ? 'rgba(255,255,255,0.05)' : 'rgba(95,184,224,0.12)' }}>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: isInbound ? 'rgba(255,255,255,0.05)' : 'rgba(0,163,255,0.12)' }}>
                           {isInbound ? <PhoneMissed size={18} style={textSecondary} /> : <PhoneForwarded size={18} style={{ color: brandBlue }} />}
                         </div>
                         <div>
@@ -533,7 +578,7 @@ export default function MessagesShell() {
                     <div key={msg.id} className="shrink-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(95,184,224,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#9FD8EC' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(0,163,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#00A3FF' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
                           <span className="text-xs truncate" style={textSecondary}>{isInbound ? selectedConversation.contact_name : 'You'}</span>
                         </div>
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -554,13 +599,18 @@ export default function MessagesShell() {
                 );
               })}
             </div>
+            <div style={{ display: 'flex', gap: 8, padding: '10px 16px', borderTop: '1px solid #1E293B', flexWrap: 'wrap' }}>
+              <button onClick={() => openOppModal(selectedConversation)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, padding: '8px 12px', borderRadius: 8, background: '#00A3FF', color: '#041018', border: 0, cursor: 'pointer' }}>▲ Log to Deal</button>
+              <button onClick={() => convertToTodo(selectedConversation)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, padding: '8px 12px', borderRadius: 8, background: '#111826', color: '#E6EDF5', border: '1px solid #1E293B', cursor: 'pointer' }}>✓ Convert to To-Do</button>
+              <button onClick={() => markHandled(selectedConversation)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, padding: '8px 12px', borderRadius: 8, background: '#111826', color: '#E6EDF5', border: '1px solid #1E293B', cursor: 'pointer' }}>✓ Mark Done</button>
+            </div>
             {selectedConversation.channel === 'email' ? (
             <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="flex flex-col overflow-hidden rounded-2xl border border-[#5FB8E0]/30" style={{ background: '#1e2a3a' }}>
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-[#00A3FF]/30" style={{ background: '#151D2A' }}>
                 <div className="flex items-center justify-between px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center gap-4">
-                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-[#9FD8EC]' : 'text-slate-200 hover:text-slate-200'}`}>↩ Reply</button>
-                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-[#9FD8EC]' : 'text-slate-200 hover:text-slate-200'}`}>↪ Forward</button>
+                    <button type="button" onClick={() => setComposerMode('reply')} className={`font-semibold ${composerMode === 'reply' ? 'text-[#00A3FF]' : 'text-slate-200 hover:text-slate-200'}`}>↩ Reply</button>
+                    <button type="button" onClick={() => setComposerMode('forward')} className={`font-semibold ${composerMode === 'forward' ? 'text-[#00A3FF]' : 'text-slate-200 hover:text-slate-200'}`}>↪ Forward</button>
                   </div>
                   <span className="text-[10px] text-slate-300">Signature added automatically</span>
                 </div>
@@ -585,7 +635,7 @@ export default function MessagesShell() {
                 )}
                 <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <button type="button" onClick={() => { setReplyText(''); setForwardTo(''); if (editorRef.current) editorRef.current.innerHTML = ''; }} className="text-[12px] text-slate-200 hover:text-white">Discard</button>
-                  <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(95,184,224,0.2)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
+                  <button onClick={handleSend} disabled={!replyText.trim() || sending || (composerMode === 'forward' && !forwardTo.trim())} className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-bold disabled:opacity-40" style={{ background: 'rgba(0,163,255,0.2)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>{sending ? 'Sending…' : (composerMode === 'forward' ? 'Forward →' : 'Send Reply ↵')}</button>
                 </div>
               </div>
             </div>
@@ -598,7 +648,7 @@ export default function MessagesShell() {
 
       {/* ── RIGHT: Context ───────────────────────────────────────── */}
       {selectedConversation && (
-        <div className="hidden lg:flex w-[280px] flex-shrink-0 border-l flex-col overflow-y-auto hide-scrollbar" style={{ borderColor: 'rgba(140,170,200,0.2)', background: '#1e2a3a' }}>
+        <div className="hidden lg:flex w-[280px] flex-shrink-0 border-l flex-col overflow-y-auto hide-scrollbar" style={{ borderColor: '#1E293B', background: '#151D2A' }}>
           <div className="p-5 flex flex-col items-center text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl mb-3" style={{ background: `${tintFor(selectedConversation.contact_name)}22`, color: tintFor(selectedConversation.contact_name) }}>{initials(selectedConversation.contact_name)}</div>
             <h3 className="font-bold text-[15px]">{selectedConversation.contact_name}</h3>
@@ -612,15 +662,15 @@ export default function MessagesShell() {
                 {selectedConversation.linked_label && <button onClick={() => void patchLink(selectedConversation, { linked_type: null })} className="text-[11px]" style={{ color: '#fca5a5' }}>Unlink</button>}
               </div>
               {selectedConversation.linked_label ? (
-                <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#26374a', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#1E293B', border: '1px solid rgba(255,255,255,0.1)' }}>
                   {(() => { const b = selectedConversation.linked_type ? RECORD_BADGE[selectedConversation.linked_type] : null; return b ? <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase flex-shrink-0" style={{ background: `${b.color}22`, color: b.color }}>{b.label}</span> : null; })()}
                   <span className="font-semibold text-[13px] truncate">{selectedConversation.linked_label}</span>
                 </div>
               ) : (
-                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#26374a', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
+                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#1E293B', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
               )}
               {linkOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#16222f', border: '1px solid rgba(95,184,224,0.3)' }}>
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#0B111E', border: '1px solid rgba(0,163,255,0.3)' }}>
                   <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search…" className="w-full rounded-lg px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
                   <div className="max-h-56 overflow-y-auto flex flex-col gap-1 hide-scrollbar">
                     {linkResults.map(r => (
@@ -642,7 +692,7 @@ export default function MessagesShell() {
                 <div className="flex flex-col gap-1.5">
                   {([['contact', 'Contact', '#60a5fa'], ['lead', 'Lead', '#f59e0b'], ['opportunity', 'Opportunity', '#818cf8'], ['customer', 'Customer', '#34d399']] as const).map(([type, label, color]) => (
                     <button key={type} onClick={() => type === 'opportunity' ? openOppModal(selectedConversation) : createAndLink(selectedConversation, type)} disabled={creating !== null}
-                      className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#26374a', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#1E293B', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <span className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
                         New {label}
@@ -667,7 +717,7 @@ export default function MessagesShell() {
       {/* New opportunity from email — center popup to name it + add the basics */}
       {oppModal && (
         <div onClick={() => !oppBusy && setOppModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#26374a,#1e2c3c)', border: '1px solid rgba(150,180,210,0.32)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid rgba(150,180,210,0.32)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ fontSize: 17, margin: 0 }}>New opportunity</h2>
               <button onClick={() => setOppModal(null)} aria-label="Close" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: 'white', borderRadius: 9, width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>×</button>
@@ -687,12 +737,13 @@ export default function MessagesShell() {
                   <div style={{ flex: 1 }}><div style={lbl}>Contact name</div><input value={oppForm.contact_name} onChange={e => setOppForm({ ...oppForm, contact_name: e.target.value })} style={inp} /></div>
                   <div style={{ flex: 1 }}><div style={lbl}>Contact email</div><input value={oppForm.contact_email} onChange={e => setOppForm({ ...oppForm, contact_email: e.target.value })} style={inp} /></div>
                 </div>
-                <button onClick={submitOpportunity} disabled={oppBusy} style={{ marginTop: 4, background: '#2f7fb8', color: 'white', border: 0, borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: oppBusy ? 0.5 : 1 }}>{oppBusy ? 'Creating…' : 'Create opportunity & link email'}</button>
+                <button onClick={submitOpportunity} disabled={oppBusy} style={{ marginTop: 4, background: '#00A3FF', color: 'white', border: 0, borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: oppBusy ? 0.5 : 1 }}>{oppBusy ? 'Creating…' : 'Create opportunity & link email'}</button>
               </div>;
             })()}
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
