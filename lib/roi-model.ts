@@ -133,20 +133,28 @@ export function computeRoi(input: RoiInputs): RoiResult {
   // ── Monthly recurring ───────────────────────────────────────────────────────
   const monthlyRevenue = r2((units / divisor) * (monthlyPA + paOffset))
 
-  // Servicing dealer pay: $150 per vehicle/exit gate, $50 per pedestrian gate or amenity door.
+  // Dealer pay — Servicing Fee AND Parts each = greater of $1.50/unit/mo
+  // or ($150 per gate + $25 per additional door), where:
+  //   gate           = vehicle entry + exit gates  (payGates)
+  //   additional door = other gates/doors (ped + amenity)  (payDoors)
+  // Both lines are paid to the servicing dealer. Package room costs $2/unit/mo.
   const payGates = vehGates + exit
   const payDoors = wPed + nwPed + wDoor + nwDoor
+  const servicingPerUnit = 1.5 * units
+  const servicingPerOpening = 150 * payGates + 25 * payDoors
+  const dealerFee = r2(Math.max(servicingPerUnit, servicingPerOpening))
+  const packageRoomCost = packagePerUnit > 0 ? 2 * units : 0
   const payrollBreakdown: LineItem[] = [
-    { label: `Dealer — gates (${payGates} × $${dealerPerGate})`, amount: dealerPerGate * payGates },
-    { label: `Dealer — pedestrian / doors (${payDoors} × $${dealerPerDoor})`, amount: dealerPerDoor * payDoors },
+    { label: `Dealer servicing fee (max $1.50×${units} units vs $150×${payGates} gates + $25×${payDoors} doors)`, amount: dealerFee },
+    { label: 'Parts — to dealer (same basis)', amount: dealerFee },
     { label: 'Sales rep', amount: salesRepPerUnit * units },
     { label: 'MSO', amount: msoPerUnit * units },
-    { label: 'Package room', amount: packagePerUnit * units },
+    { label: 'Package room ($2/unit)', amount: packageRoomCost },
   ].map(l => ({ ...l, amount: r2(l.amount) })).filter(l => l.amount > 0)
   const payroll = r2(payrollBreakdown.reduce((s, l) => s + l.amount, 0))
 
   const monthlyBreakdown: LineItem[] = [
-    { label: 'Brivo site fee', amount: 100 },
+    { label: 'Brivo site fee', amount: 180 },
     { label: 'Entry-point fee', amount: 8 * points },
     { label: 'Recorder', amount: 60 * rec },
     { label: 'Existing cameras', amount: 10 * (existCam + convCam) },
