@@ -22,7 +22,7 @@ async function oppInScope(id: string): Promise<boolean> {
   if (!row) return false
   // Assigned rep may open the deal even if it lives in another org (cross-org sell).
   if (row.rep_id) {
-    const profileId = await getProfileId(user.id)
+    const profileId = await getProfileId(user.id, user.email)
     if (profileId && row.rep_id === profileId) return true
   }
   return isInScope(scope, row.dealer_org_id)

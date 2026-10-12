@@ -21,7 +21,7 @@ export async function opportunityInScope(id: string): Promise<boolean> {
   const row = data as { dealer_org_id?: string | null; rep_id?: string | null } | null
   if (!row) return false
   if (row.rep_id) {
-    const profileId = await getProfileId(user.id)
+    const profileId = await getProfileId(user.id, user.email)
     if (profileId && row.rep_id === profileId) return true
   }
   return isInScope(scope, row.dealer_org_id)

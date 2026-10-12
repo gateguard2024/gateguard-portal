@@ -209,14 +209,22 @@ const NO_MATCH = '00000000-0000-0000-0000-000000000000'
  * Resolve the internal profiles.id (UUID) for a Clerk user id.
  * Returns null if no profile row exists. Service-role read, server-side only.
  */
-export async function getProfileId(clerkUserId: string): Promise<string | null> {
-  if (!clerkUserId || clerkUserId === 'system') return null
-  const { data } = await getSupabase()
-    .from('profiles')
-    .select('id')
-    .eq('clerk_user_id', clerkUserId)
-    .maybeSingle()
-  return data?.id ?? null
+export async function getProfileId(clerkUserId: string, email?: string | null): Promise<string | null> {
+  const sb = getSupabase()
+  if (clerkUserId && clerkUserId !== 'system') {
+    const { data } = await sb.from('profiles').select('id').eq('clerk_user_id', clerkUserId).maybeSingle()
+    if (data?.id) return data.id
+  }
+  // Fallback: resolve by email. Handles profiles whose clerk_user_id is stale or
+  // unset (e.g. users invited under shared Clerk across beta/main) so a rep still
+  // matches their own assigned rows instead of failing closed. Email is unique
+  // per profile, so this never resolves to someone else's record.
+  const e = (email ?? '').trim()
+  if (e) {
+    const { data } = await sb.from('profiles').select('id').ilike('email', e).maybeSingle()
+    if (data?.id) return data.id
+  }
+  return null
 }
 
 /**

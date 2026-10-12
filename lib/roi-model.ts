@@ -72,6 +72,7 @@ export interface RoiResult {
   monthlyRevenue: number
   bulkRevenue: number         // units × bulk fee, billed at 100% penetration
   paRevenue: number           // P&A @ 75% penetration × 80% pay ÷ 12
+  dealerFee: number           // servicing fee (= parts) paid to the dealer, $/mo
   payroll: number
   monthlyCogs: number
   monthlyProfit: number
@@ -204,7 +205,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
     units, points, openings, setupFee, monthlyPA,
     salesAnnualPerUnit, msoAnnualPerUnit, packageAnnualPerUnit, paAdditionsPerUnitYr, residentPaTotal,
     startupCogs, startupProfit,
-    monthlyRevenue, bulkRevenue, paRevenue, payroll, monthlyCogs, monthlyProfit, annualProfit,
+    monthlyRevenue, bulkRevenue, paRevenue, dealerFee, payroll, monthlyCogs, monthlyProfit, annualProfit,
     roiMonths, pass,
     startupBreakdown, monthlyBreakdown, payrollBreakdown, revenueBreakdown,
     annualResidentRevenue: r2(units * residentPaTotal),

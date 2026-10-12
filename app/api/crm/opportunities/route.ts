@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     // Normal: opps in your org subtree. PLUS any opp where you are the rep,
     // even if it belongs to another org (e.g. a Channel Sales Partner selling
     // a corporate or dealer deal assigned to them).
-    const profileId = await getProfileId(user.id)
+    const profileId = await getProfileId(user.id, user.email)
     if (!scope.all) {
       const parts: string[] = []
       if (scope.ids.length > 0) parts.push(`dealer_org_id.in.(${scope.ids.join(',')})`)
