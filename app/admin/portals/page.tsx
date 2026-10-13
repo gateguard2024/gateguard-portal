@@ -12,15 +12,15 @@ const { Edit2, Eye, EyeOff } = require('lucide-react') as any
 
 const T = {
   bg: '#0f1822', panel: 'linear-gradient(180deg,#1d2a39,#141d28)', tile: '#16232f', well: '#0c1420',
-  border: 'rgba(140,170,200,0.24)', ink: '#eaf2fb', ink2: 'rgba(195,211,226,0.72)', label: '#9FD8EC',
-  accent: '#5FB8E0', ok: '#7ee0a8', warn: '#fbbf24', alarm: '#f87171',
+  border: '#1E293B', ink: '#eaf2fb', ink2: 'rgba(195,211,226,0.72)', label: '#00A3FF',
+  accent: '#00A3FF', ok: '#00E699', warn: '#fbbf24', alarm: '#f87171',
 }
 const inp: React.CSSProperties = { width: '100%', background: T.well, border: `1px solid ${T.border}`, borderRadius: 9, padding: '9px 11px', color: T.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { display: 'block', fontSize: 10.5, fontWeight: 600, color: T.label, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }
 const btnPrimary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, background: T.accent, border: 'none', color: '#08192b', borderRadius: 9, padding: '7px 13px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }
 const iconBtn: React.CSSProperties = { display: 'inline-flex', padding: 6, borderRadius: 8, background: 'transparent', border: 'none', color: T.ink2, cursor: 'pointer' }
 function seg(active: boolean): React.CSSProperties {
-  return { padding: '8px 10px', borderRadius: 9, border: `1px solid ${active ? 'rgba(95,184,224,0.5)' : T.border}`, background: active ? 'rgba(95,184,224,0.16)' : 'transparent', color: active ? T.accent : T.ink2, fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }
+  return { padding: '8px 10px', borderRadius: 9, border: `1px solid ${active ? 'rgba(0,163,255,0.5)' : T.border}`, background: active ? 'rgba(0,163,255,0.16)' : 'transparent', color: active ? T.accent : T.ink2, fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }
 }
 
 type Portal = {
@@ -47,7 +47,7 @@ const MODULES: { key: string; label: string }[] = [
 ]
 
 const STATUS_META: Record<Portal['status'], { label: string; color: string; bg: string }> = {
-  live:     { label: 'Live',     color: T.ok,   bg: 'rgba(126,224,168,0.12)' },
+  live:     { label: 'Live',     color: T.ok,   bg: 'rgba(0,230,153,0.12)' },
   draft:    { label: 'Draft',    color: T.ink2, bg: 'rgba(255,255,255,0.06)' },
   disabled: { label: 'Disabled', color: T.warn, bg: 'rgba(251,191,36,0.12)' },
 }
@@ -86,10 +86,10 @@ export default function PortalsAdminPage() {
   }
 
   const th: React.CSSProperties = { textAlign: 'left', padding: '11px 16px', fontSize: 10.5, fontWeight: 600, color: T.label, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }
-  const td: React.CSSProperties = { padding: '12px 16px', color: T.ink2, fontSize: 13, borderTop: `1px solid rgba(140,170,200,0.12)` }
+  const td: React.CSSProperties = { padding: '12px 16px', color: T.ink2, fontSize: 13, borderTop: `1px solid #1E293B` }
 
   return (
-    <div style={{ minHeight: '100%', background: `radial-gradient(1100px 460px at 50% -8%, rgba(95,184,224,0.08), transparent 62%), ${T.bg}`, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100%', background: `radial-gradient(1100px 460px at 50% -8%, rgba(0,163,255,0.08), transparent 62%), ${T.bg}`, display: 'flex', flexDirection: 'column' }}>
       <TopBar
         title="Customer Portals"
         subtitle="Put a site online as a branded customer portal — one shared design, per-site config"
@@ -97,7 +97,7 @@ export default function PortalsAdminPage() {
       />
 
       <div style={{ flex: 1, padding: 24 }}>
-        {error && <div style={{ marginBottom: 14, borderRadius: 10, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)', padding: '10px 14px', color: T.alarm, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 14, borderRadius: 10, border: '1px solid rgba(255,77,77,0.35)', background: 'rgba(255,77,77,0.1)', padding: '10px 14px', color: T.alarm, fontSize: 13 }}>{error}</div>}
 
         <div style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.05)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -115,7 +115,7 @@ export default function PortalsAdminPage() {
                 <tr key={p.id}>
                   <td style={td}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Globe size={13} style={{ color: T.accent }} /></div>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Globe size={13} style={{ color: T.accent }} /></div>
                       <span style={{ fontWeight: 600, color: T.ink }}>{p.branding?.display_name || p.slug}</span>
                     </div>
                   </td>
@@ -330,8 +330,8 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'
 
           <L label="Accent color (optional)">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="color" value={accent || '#5FB8E0'} onChange={e => setAccent(e.target.value)} style={{ height: 36, width: 48, borderRadius: 8, border: `1px solid ${T.border}`, background: T.well, cursor: 'pointer' }} />
-              <input value={accent} onChange={e => setAccent(e.target.value)} placeholder="#5FB8E0 (default steel)" style={{ ...inp, fontFamily: 'var(--font-plex-mono, monospace)' }} />
+              <input type="color" value={accent || '#00A3FF'} onChange={e => setAccent(e.target.value)} style={{ height: 36, width: 48, borderRadius: 8, border: `1px solid ${T.border}`, background: T.well, cursor: 'pointer' }} />
+              <input value={accent} onChange={e => setAccent(e.target.value)} placeholder="#00A3FF (default steel)" style={{ ...inp, fontFamily: 'var(--font-plex-mono, monospace)' }} />
               {accent && <button onClick={() => setAccent('')} style={{ fontSize: 12, color: T.ink2, background: 'none', border: 'none', cursor: 'pointer' }}>Reset</button>}
             </div>
           </L>
@@ -354,7 +354,7 @@ function PortalDrawer({ mode, portal, onClose, onSaved }: { mode: 'add' | 'edit'
             <div style={{ fontSize: 11, color: T.ink2, marginTop: 5 }}>At least 6 digits. Share it with the property manager.</div>
           </L>
 
-          {err && <div style={{ borderRadius: 9, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.1)', padding: '9px 11px', fontSize: 13, color: T.alarm }}>{err}</div>}
+          {err && <div style={{ borderRadius: 9, border: '1px solid rgba(255,77,77,0.35)', background: 'rgba(255,77,77,0.1)', padding: '9px 11px', fontSize: 13, color: T.alarm }}>{err}</div>}
         </div>
 
         <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, display: 'flex', gap: 10 }}>
@@ -398,7 +398,7 @@ function SitePicker({ onPick }: { onPick: (s: SiteLite) => void }) {
         ) : results.length === 0 ? (
           <div style={{ padding: 12, fontSize: 12, color: T.ink2 }}>No sites found.</div>
         ) : results.map(s => (
-          <button key={s.id} onClick={() => onPick(s)} style={{ width: '100%', textAlign: 'left', padding: '9px 11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderTop: `1px solid rgba(140,170,200,0.12)`, cursor: 'pointer' }}>
+          <button key={s.id} onClick={() => onPick(s)} style={{ width: '100%', textAlign: 'left', padding: '9px 11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderTop: `1px solid #1E293B`, cursor: 'pointer' }}>
             <span style={{ fontSize: 13, color: T.ink }}>{s.name}</span>
             {s.city && <span style={{ fontSize: 11, color: T.ink2 }}>{s.city}, {s.state}</span>}
           </button>

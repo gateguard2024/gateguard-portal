@@ -80,10 +80,10 @@ export function NexusConsoleRail({
         style={{
           ...(isLeft ? { left: open ? 232 : 0 } : { right: open ? 232 : 0 }),
           background: 'linear-gradient(180deg,#1d2a39,#141d28)',
-          border: '1px solid rgba(140,170,200,0.28)',
+          border: '1px solid #1E293B',
           ...(isLeft ? { borderLeft: 'none' } : { borderRight: 'none' }),
-          color: '#9FD8EC',
-          boxShadow: '0 0 18px rgba(95,184,224,0.16)',
+          color: '#00A3FF',
+          boxShadow: '0 0 18px rgba(0,163,255,0.16)',
         }}
       >
         {chevron}
@@ -97,12 +97,12 @@ export function NexusConsoleRail({
           transform: hydrated && open ? 'translateX(0)' : `translateX(${isLeft ? '-100%' : '100%'})`,
           background: 'linear-gradient(180deg,#1d2a39,#141d28)',
           ...(isLeft
-            ? { borderRight: '1px solid rgba(140,170,200,0.22)', boxShadow: '18px 0 60px rgba(0,0,0,0.45)' }
-            : { borderLeft: '1px solid rgba(140,170,200,0.22)', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }),
+            ? { borderRight: '1px solid #1E293B', boxShadow: '18px 0 60px rgba(0,0,0,0.45)' }
+            : { borderLeft: '1px solid #1E293B', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }),
         }}
       >
         <div className="px-5 pb-5">
-          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: '#5FB8E0' }}>
+          <div className="text-[10px] font-semibold uppercase leading-relaxed tracking-[0.28em]" style={{ color: '#00A3FF' }}>
             Launch
             <br />
             Pad
@@ -119,10 +119,10 @@ export function NexusConsoleRail({
                 onClick={() => onSelect(item.id)}
                 className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-all"
                 style={active
-                  ? { background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.32)', color: '#eaf2fb' }
+                  ? { background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.32)', color: '#eaf2fb' }
                   : { border: '1px solid transparent', color: '#c3d3e2' }}
               >
-                <Icon size={15} style={{ color: active ? '#5FB8E0' : 'rgba(159,216,236,0.55)' }} />
+                <Icon size={15} style={{ color: active ? '#00A3FF' : 'rgba(0,163,255,0.55)' }} />
                 {item.label}
               </button>
             )

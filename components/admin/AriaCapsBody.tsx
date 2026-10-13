@@ -53,7 +53,7 @@ export function AriaCapsBody() {
   const filtered = rows.filter((r) => r.name?.toLowerCase().includes(q.toLowerCase()))
 
   const cell = 'px-3 py-2.5 text-sm'
-  const border = '1px solid rgba(140,170,200,0.18)'
+  const border = '1px solid #1E293B'
 
   return (
     <div>

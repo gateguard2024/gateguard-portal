@@ -8,11 +8,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 
 const FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)', borderRadius: 32, padding: 22 } as const;
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
-const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
-const ICE = { background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC', borderRadius: 9, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' } as const;
-const GO = { background: '#26374a', border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0', borderRadius: 9, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' } as const;
+const INPUT = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
+const ICE = { background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF', borderRadius: 9, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' } as const;
+const GO = { background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0', borderRadius: 9, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = Record<string, any>;
@@ -23,7 +23,7 @@ const TIERS = [
   { id: 'service_dealer', label: 'Service Dealer' }, { id: 'install_contractor', label: 'Install Contractor' },
   { id: 'sales_partner', label: 'Sales Partner' }, { id: 'client', label: 'Client' },
 ];
-const STATUS_COLOR: Record<string, string> = { out_for_signature: '#fbbf24', sent: '#9FD8EC', signed: '#7ee0a8', completed: '#7ee0a8', cancelled: '#f87171' };
+const STATUS_COLOR: Record<string, string> = { out_for_signature: '#fbbf24', sent: '#00A3FF', signed: '#00E699', completed: '#00E699', cancelled: '#f87171' };
 
 export function DocumentLibrary() {
   const { user } = useUser();
@@ -51,7 +51,7 @@ export function DocumentLibrary() {
     if (d.visibility !== 'shared') return null;
     const at: string[] | null = d.allowed_tiers;
     const label = !at || at.length === 0 ? 'All tiers' : at.length === 1 && at[0] === 'corporate' ? 'Corporate only' : `${at.length} tiers`;
-    return <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#9FD8EC', border: '1px solid rgba(95,184,224,0.4)', borderRadius: 999, padding: '1px 7px' }}>{label}</span>;
+    return <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#00A3FF', border: '1px solid rgba(0,163,255,0.4)', borderRadius: 999, padding: '1px 7px' }}>{label}</span>;
   }
 
   return (
@@ -66,7 +66,7 @@ export function DocumentLibrary() {
           <button onClick={() => setUploadOpen(true)} style={{ ...GO, padding: '9px 16px', fontSize: 13 }}>＋ Upload document</button>
         </div>
 
-        {flash && <div style={{ marginBottom: 10, fontSize: 12, color: '#7ee0a8' }}>{flash}</div>}
+        {flash && <div style={{ marginBottom: 10, fontSize: 12, color: '#00E699' }}>{flash}</div>}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search documents…" style={{ ...INPUT, flex: 1, minWidth: 180 }} />
@@ -100,15 +100,15 @@ export function DocumentLibrary() {
 
         {/* Out for signature */}
         {agreements.length > 0 && (
-          <div style={{ marginTop: 18, background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 14 }}>
-            <div style={{ color: '#9FD8EC', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Out for signature</div>
+          <div style={{ marginTop: 18, background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 14 }}>
+            <div style={{ color: '#00A3FF', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Out for signature</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {agreements.slice(0, 30).map(a => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 0', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLOR[a.status] ?? '#9FD8EC', flexShrink: 0 }} />
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLOR[a.status] ?? '#00A3FF', flexShrink: 0 }} />
                   <span style={{ color: '#e2ebf4' }}>{a.name}</span>
                   <span style={{ color: '#c3d3e2' }}>· {a.signer_email}</span>
-                  <span style={{ color: '#9FD8EC', marginLeft: 'auto', textTransform: 'capitalize' }}>{String(a.status ?? '').replace(/_/g, ' ')}</span>
+                  <span style={{ color: '#00A3FF', marginLeft: 'auto', textTransform: 'capitalize' }}>{String(a.status ?? '').replace(/_/g, ' ')}</span>
                 </div>
               ))}
             </div>
@@ -158,7 +158,7 @@ function UploadModal({ isCorporate, onClose, onDone }: { isCorporate: boolean; o
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '88dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRadius: 22, padding: 18 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '88dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRadius: 22, padding: 18 }}>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb', marginBottom: 12 }}>Upload document</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input type="file" accept="application/pdf,image/*,.doc,.docx" onChange={e => { const x = e.target.files?.[0] ?? null; setFile(x); if (x && !f.name) setF({ ...f, name: x.name.replace(/\.[^.]+$/, '') }); }} style={{ ...INPUT, padding: 8 }} />
@@ -204,7 +204,7 @@ function UploadModal({ isCorporate, onClose, onDone }: { isCorporate: boolean; o
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                       {TIERS.map(t => {
                         const on = tiers.includes(t.id);
-                        return <button key={t.id} onClick={() => setTiers(on ? tiers.filter(x => x !== t.id) : [...tiers, t.id])} style={{ borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: on ? 'rgba(95,184,224,0.2)' : '#16232f', border: `1px solid ${on ? 'rgba(95,184,224,0.5)' : 'rgba(140,170,200,0.2)'}`, color: on ? '#bfe6ff' : '#8ba0b4' }}>{t.label}</button>;
+                        return <button key={t.id} onClick={() => setTiers(on ? tiers.filter(x => x !== t.id) : [...tiers, t.id])} style={{ borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: on ? 'rgba(0,163,255,0.2)' : '#16232f', border: `1px solid ${on ? 'rgba(0,163,255,0.5)' : '#1E293B'}`, color: on ? '#bfe6ff' : '#8ba0b4' }}>{t.label}</button>;
                       })}
                     </div>
                   )}
@@ -247,13 +247,13 @@ function SignModal({ doc, onClose, onSent }: { doc: Any; onClose: () => void; on
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: signUrl ? 900 : 440, maxHeight: '90dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRadius: 22, padding: 18 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: signUrl ? 900 : 440, maxHeight: '90dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRadius: 22, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb' }}>Send for signature</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12.5, cursor: 'pointer' }}>Close</button>
         </div>
         {signUrl ? (
-          <iframe src={signUrl} title="Sign document" style={{ width: '100%', height: '70dvh', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 12, background: '#fff' }} />
+          <iframe src={signUrl} title="Sign document" style={{ width: '100%', height: '70dvh', border: '1px solid #1E293B', borderRadius: 12, background: '#fff' }} />
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: '#c3d3e2', marginBottom: 10 }}>{doc.name}</div>
@@ -266,7 +266,7 @@ function SignModal({ doc, onClose, onSent }: { doc: Any; onClose: () => void; on
               <button onClick={() => send('adobe')} disabled={busy || !email.trim()} style={{ ...ICE, padding: '8px 14px', opacity: busy || !email.trim() ? 0.4 : 1 }}>{busy ? '…' : 'Acrobat Sign'}</button>
               <button onClick={() => send('builtin')} disabled={busy || !email.trim()} style={{ ...GO, padding: '8px 16px', opacity: busy || !email.trim() ? 0.4 : 1 }}>{busy ? 'Sending…' : 'Send for signature'}</button>
             </div>
-            <div style={{ fontSize: 9.5, color: '#9FD8EC', marginTop: 8 }}>“Send for signature” emails a secure signing link (built-in). “Acrobat Sign” uses Adobe once your plan/keys are set — otherwise it will report it isn’t configured.</div>
+            <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>“Send for signature” emails a secure signing link (built-in). “Acrobat Sign” uses Adobe once your plan/keys are set — otherwise it will report it isn’t configured.</div>
           </>
         )}
       </div>

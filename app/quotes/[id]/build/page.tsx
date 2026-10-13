@@ -27,9 +27,9 @@ import { ModuleCard } from '@/components/quotes/ModuleCard'
 type Quote = Record<string, any>
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 
-const FRAME = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
-const HEADER = 'linear-gradient(180deg,#33465e,#1e2a3a)'
-const ACCENT = '#5FB8E0'
+const FRAME = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const HEADER = 'linear-gradient(180deg,#33465e,#151D2A)'
+const ACCENT = '#00A3FF'
 
 export default function ProposalBuilder() {
   const params = useParams()
@@ -268,14 +268,14 @@ export default function ProposalBuilder() {
     <div className="flex flex-col h-screen w-full" style={{ background: 'linear-gradient(180deg,#33465e,#26313f)', color: '#eef4fb' }}>
       {calcOpen && <GateProgramCalc defaultUnits={Number(quote.units) || 0} onClose={() => setCalcOpen(false)} onGenerate={addGateProgram} />}
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3" style={{ background: HEADER, borderBottom: '1px solid rgba(140,170,200,0.2)' }}>
-        <a href={`/quotes/${id}`} className="text-[13px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>← Line items</a>
+      <div className="flex items-center gap-3 px-5 py-3" style={{ background: HEADER, borderBottom: '1px solid #1E293B' }}>
+        <a href={`/quotes/${id}`} className="text-[13px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #1E293B', color: '#cfe0f0' }}>← Line items</a>
         <div className="min-w-0">
           <div className="text-[15px] font-extrabold truncate">{quote.title || 'Proposal'} <span className="text-[12px] font-semibold" style={{ color: ACCENT }}>· builder</span></div>
           <div className="text-[11px]" style={{ color: '#9fb4c9' }}>{quote.property_name || quote.client_name || '—'}{quote.units ? ` · ${quote.units} units` : ''}</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" className="text-[12px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>Open customer view ↗</a>
+          <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" className="text-[12px] font-semibold rounded-lg px-3 py-1.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #1E293B', color: '#cfe0f0' }}>Open customer view ↗</a>
           <button onClick={save} disabled={saving || !dirty} className="text-[12px] font-bold rounded-lg px-4 py-1.5" style={{ background: dirty ? ACCENT : 'rgba(255,255,255,0.08)', color: dirty ? '#04202e' : '#7f93a6', cursor: dirty ? 'pointer' : 'default' }}>
             {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
           </button>
@@ -290,7 +290,7 @@ export default function ProposalBuilder() {
             const def = moduleDef(b.type)
             const core = def?.core
             return (
-              <div key={b.type + i} className="flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)', opacity: b.enabled ? 1 : 0.45 }}>
+              <div key={b.type + i} className="flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5" style={{ background: FRAME, border: '1px solid #1E293B', opacity: b.enabled ? 1 : 0.45 }}>
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: b.enabled ? ACCENT : '#5f7186' }} />
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 <span className="flex-1 text-[12.5px] font-semibold">{b.type === 'offering' ? String((b.vars as any)?.title ?? 'Offering') : (def?.label ?? b.type)}</span>
@@ -305,11 +305,11 @@ export default function ProposalBuilder() {
           })}
 
           {/* Add an OFFERING — benefits + its own pricing section, together. */}
-          <button onClick={() => setOfferOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1 text-[12.5px] font-bold" style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', color: '#04202e' }}>
+          <button onClick={() => setOfferOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1 text-[12.5px] font-bold" style={{ background: 'linear-gradient(135deg,#00A3FF,#00A3FF)', color: '#04202e' }}>
             ✦ Add offering (talking points + pricing)
           </button>
           {offerOpen && (
-            <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.2)' }}>
+            <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid #1E293B' }}>
               {OFFERING_LIBRARY.map(o => (
                 <button key={o.id} onClick={() => addOffering(o)} className="block w-full text-left rounded-lg px-2.5 py-1.5 text-[12px]" style={{ color: '#cfe0f0' }}>{o.label}</button>
               ))}
@@ -317,18 +317,18 @@ export default function ProposalBuilder() {
           )}
 
           {/* Add a plain content block */}
-          <button onClick={() => setAddOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1.5 text-[12.5px] font-semibold" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: ACCENT }}>
+          <button onClick={() => setAddOpen(o => !o)} className="w-full text-left rounded-xl px-2.5 py-2 mt-1.5 text-[12.5px] font-semibold" style={{ background: 'rgba(0,163,255,0.10)', border: '1px dashed rgba(0,163,255,0.4)', color: ACCENT }}>
             + Add content block
           </button>
           {addOpen && (
-            <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.2)' }}>
+            <div className="mt-1.5 rounded-xl p-1.5" style={{ background: '#0c1420', border: '1px solid #1E293B' }}>
               {MODULE_LIBRARY.filter(m => !m.core).map(m => (
                 <button key={m.type} onClick={() => add(m.type)} className="block w-full text-left rounded-lg px-2.5 py-1.5 text-[12px]" style={{ color: '#cfe0f0' }}>{m.label}</button>
               ))}
             </div>
           )}
 
-          <div className="text-[11px] mt-3 leading-relaxed" style={{ color: '#6f8299' }}>An <b style={{ color: '#9FD8EC' }}>offering</b> adds its benefits story <i>and</i> a matching pricing section. Reorder with the arrows, hide with the checkbox. The client sees exactly the center preview.</div>
+          <div className="text-[11px] mt-3 leading-relaxed" style={{ color: '#6f8299' }}>An <b style={{ color: '#00A3FF' }}>offering</b> adds its benefits story <i>and</i> a matching pricing section. Reorder with the arrows, hide with the checkbox. The client sees exactly the center preview.</div>
         </aside>
 
         {/* CENTER — live customer preview */}
@@ -340,9 +340,9 @@ export default function ProposalBuilder() {
         <aside className="w-96 shrink-0 overflow-y-auto p-3" style={{ background: 'linear-gradient(180deg,#2c3d52,#243141)', borderLeft: '1px solid rgba(170,198,222,0.28)' }}>
           <div className="flex items-center mb-2">
             <div className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: '#8fa4b8' }}>Pricing</div>
-            <button onClick={() => setShowCosts(s => !s)} className="ml-auto text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: showCosts ? 'rgba(18,184,134,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${showCosts ? 'rgba(18,184,134,0.4)' : 'rgba(140,170,200,0.24)'}`, color: showCosts ? '#7fe0b8' : '#9fb4c9' }}>{showCosts ? '✓ Costs & P&L' : 'Costs & P&L'}</button>
+            <button onClick={() => setShowCosts(s => !s)} className="ml-auto text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: showCosts ? 'rgba(18,184,134,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${showCosts ? 'rgba(18,184,134,0.4)' : '#1E293B'}`, color: showCosts ? '#7fe0b8' : '#9fb4c9' }}>{showCosts ? '✓ Costs & P&L' : 'Costs & P&L'}</button>
           </div>
-          <div className="rounded-xl p-3 mb-3" style={{ background: FRAME, border: '1px solid rgba(140,170,200,0.2)' }}>
+          <div className="rounded-xl p-3 mb-3" style={{ background: FRAME, border: '1px solid #1E293B' }}>
             <Row k="Monthly" v={money(totals.monthly)} strong />
             <Row k="One-time setup" v={money(totals.setup)} />
             <Row k="Due today" v={money(totals.dueToday)} strong />
@@ -367,10 +367,10 @@ export default function ProposalBuilder() {
               <div className="flex items-center gap-2 mb-2">
                 <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#7fe0b8' }}>Dealer P&amp;L</div>
                 <label className="ml-auto text-[10px]" style={{ color: '#9fb4c9' }}>Labor $/hr
-                  <input type="number" value={laborRate} onChange={e => setLaborRate(Math.max(0, Number(e.target.value) || 0))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                  <input type="number" value={laborRate} onChange={e => setLaborRate(Math.max(0, Number(e.target.value) || 0))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid #1E293B', color: '#e7eef7' }} />
                 </label>
                 <label className="text-[10px]" style={{ color: '#9fb4c9' }}>Term mo
-                  <input type="number" value={termMonths} onChange={e => setTermMonths(Math.max(1, Number(e.target.value) || 60))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                  <input type="number" value={termMonths} onChange={e => setTermMonths(Math.max(1, Number(e.target.value) || 60))} className="w-12 ml-1 rounded px-1 py-0.5 text-[11px] text-center" style={{ background: '#0c1420', border: '1px solid #1E293B', color: '#e7eef7' }} />
                 </label>
               </div>
               <div className="text-[10px] font-bold uppercase tracking-[0.08em] mb-0.5" style={{ color: '#8fa4b8' }}>One-time setup</div>
@@ -381,7 +381,7 @@ export default function ProposalBuilder() {
               <Row k="Recurring revenue" v={money(pl.termRevenue)} />
               <Row k="Recurring cost" v={money(pl.termCost)} />
               <Row k="Term profit" v={money(pl.termProfit)} strong pos={pl.termProfit >= 0} />
-              <div className="mt-2 pt-2" style={{ borderTop: '1px dashed rgba(140,170,200,0.24)' }}>
+              <div className="mt-2 pt-2" style={{ borderTop: '1px dashed #1E293B' }}>
                 <Row k="Total contract profit" v={money(pl.totalProfit)} strong pos={pl.totalProfit >= 0} />
               </div>
             </div>
@@ -390,28 +390,28 @@ export default function ProposalBuilder() {
           {sections.map(sname => {
             const rows = linesIn(sname)
             return (
-              <div key={sname} className="mb-3 rounded-xl p-2" style={{ background: 'rgba(12,20,32,0.28)', border: '1px solid rgba(140,170,200,0.16)' }}>
+              <div key={sname} className="mb-3 rounded-xl p-2" style={{ background: 'rgba(12,20,32,0.28)', border: '1px solid #1E293B' }}>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <button onClick={() => renameSection(sname)} title="Rename section" className="flex-1 text-left text-[12px] font-bold uppercase tracking-[0.06em]" style={{ color: '#cfe0f0' }}>{sname} <span style={{ color: '#6f8299' }}>· {rows.length}</span></button>
-                  <button onClick={() => addLine(sname)} disabled={addingIn === sname} className="text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.4)', color: ACCENT }}>{addingIn === sname ? '…' : '+ Line'}</button>
+                  <button onClick={() => addLine(sname)} disabled={addingIn === sname} className="text-[11px] font-bold rounded-lg px-2 py-1" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.4)', color: ACCENT }}>{addingIn === sname ? '…' : '+ Line'}</button>
                   <button onClick={() => removeSection(sname)} title="Remove section" className="text-[12px] px-1" style={{ color: '#e6808a' }}>✕</button>
                 </div>
                 {rows.length === 0 && <div className="text-[11px] mb-1.5 px-1" style={{ color: '#6f8299' }}>Empty — add a line.</div>}
                 {rows.map(l => (
-                  <div key={l.id} className="rounded-lg p-2 mb-1.5" style={{ background: 'rgba(12,20,32,0.5)', border: `1px solid ${l.is_optional ? 'rgba(95,184,224,0.4)' : 'rgba(140,170,200,0.18)'}` }}>
+                  <div key={l.id} className="rounded-lg p-2 mb-1.5" style={{ background: 'rgba(12,20,32,0.5)', border: `1px solid ${l.is_optional ? 'rgba(0,163,255,0.4)' : '#1E293B'}` }}>
                     <input value={l.description} onChange={e => patchLocal(l.id, { description: e.target.value })} onBlur={e => persist(l.id, { description: e.target.value })}
                       className="w-full bg-transparent text-[12.5px] font-semibold outline-none" style={{ color: '#eef4fb' }} placeholder="Description" />
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <input type="number" value={l.qty} onChange={e => patchLocal(l.id, { qty: Number(e.target.value) })} onBlur={e => persist(l.id, { qty: Number(e.target.value) })}
-                        className="w-11 rounded px-1 py-1 text-[12px] text-center outline-none" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#e7eef7' }} />
+                        className="w-11 rounded px-1 py-1 text-[12px] text-center outline-none" style={{ background: '#0c1420', border: '1px solid #1E293B', color: '#e7eef7' }} />
                       <span className="text-[11px]" style={{ color: '#6f8299' }}>×</span>
-                      <div className="flex items-center rounded px-1.5 py-1" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                      <div className="flex items-center rounded px-1.5 py-1" style={{ background: '#0c1420', border: '1px solid #1E293B' }}>
                         <span className="text-[11px]" style={{ color: '#6f8299' }}>$</span>
                         <input type="number" value={l.unitPrice} onChange={e => patchLocal(l.id, { unitPrice: Number(e.target.value) })} onBlur={e => persist(l.id, { unit_price: Number(e.target.value) })}
                           className="w-14 bg-transparent text-[12px] outline-none" style={{ color: '#e7eef7' }} />
                       </div>
-                      <button onClick={() => toggleRecurring(l)} title="Monthly vs one-time" className="text-[10px] font-bold rounded px-1.5 py-1" style={{ background: l.recurring ? 'rgba(95,184,224,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${l.recurring ? 'rgba(95,184,224,0.4)' : 'rgba(140,170,200,0.24)'}`, color: l.recurring ? ACCENT : '#9fb4c9' }}>{l.recurring ? '/mo' : 'once'}</button>
-                      <button onClick={() => toggleOptional(l)} title="Optional (client can select)" className="text-[10px] font-bold rounded px-1.5 py-1" style={{ background: l.is_optional ? 'rgba(95,184,224,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${l.is_optional ? 'rgba(95,184,224,0.4)' : 'rgba(140,170,200,0.24)'}`, color: l.is_optional ? ACCENT : '#9fb4c9' }}>{l.is_optional ? '★ opt' : 'req'}</button>
+                      <button onClick={() => toggleRecurring(l)} title="Monthly vs one-time" className="text-[10px] font-bold rounded px-1.5 py-1" style={{ background: l.recurring ? 'rgba(0,163,255,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${l.recurring ? 'rgba(0,163,255,0.4)' : '#1E293B'}`, color: l.recurring ? ACCENT : '#9fb4c9' }}>{l.recurring ? '/mo' : 'once'}</button>
+                      <button onClick={() => toggleOptional(l)} title="Optional (client can select)" className="text-[10px] font-bold rounded px-1.5 py-1" style={{ background: l.is_optional ? 'rgba(0,163,255,0.16)' : 'rgba(255,255,255,0.06)', border: `1px solid ${l.is_optional ? 'rgba(0,163,255,0.4)' : '#1E293B'}`, color: l.is_optional ? ACCENT : '#9fb4c9' }}>{l.is_optional ? '★ opt' : 'req'}</button>
                       <button onClick={() => deleteLine(l.id)} title="Remove" className="ml-auto text-[12px]" style={{ color: '#e6808a' }}>✕</button>
                     </div>
                     <div className="text-right text-[11px] mt-1" style={{ color: '#9fb4c9' }}>{money(l.total)}{l.recurring ? '/mo' : ''}{l.is_optional ? ' · optional' : ''}</div>
@@ -420,19 +420,19 @@ export default function ProposalBuilder() {
                       const lineCost = l.recurring ? l.qty * uc : l.qty * (uc + lh * laborRate)
                       const profit = l.total - lineCost
                       return (
-                        <div className="mt-1.5 pt-1.5 flex items-center gap-1.5" style={{ borderTop: '1px dashed rgba(140,170,200,0.16)' }}>
+                        <div className="mt-1.5 pt-1.5 flex items-center gap-1.5" style={{ borderTop: '1px dashed #1E293B' }}>
                           <span className="text-[9px] uppercase tracking-wide" style={{ color: '#6f8299' }}>cost</span>
-                          <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                          <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid #1E293B' }}>
                             <span className="text-[10px]" style={{ color: '#6f8299' }}>$</span>
                             <input type="number" value={uc} onChange={e => patchLocal(l.id, { unit_cost: Number(e.target.value) })} onBlur={e => persist(l.id, { unit_cost: Number(e.target.value) })} className="w-12 bg-transparent text-[11px] outline-none" style={{ color: '#e7eef7' }} title="Material cost / unit" />
                           </div>
                           {!l.recurring && (
-                            <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)' }}>
+                            <div className="flex items-center rounded px-1 py-0.5" style={{ background: '#0c1420', border: '1px solid #1E293B' }}>
                               <input type="number" value={lh} onChange={e => patchLocal(l.id, { labor_hours: Number(e.target.value) })} onBlur={e => persist(l.id, { labor_hours: Number(e.target.value) })} className="w-10 bg-transparent text-[11px] outline-none text-center" style={{ color: '#e7eef7' }} title="Labor hours / unit" />
                               <span className="text-[10px]" style={{ color: '#6f8299' }}>h</span>
                             </div>
                           )}
-                          <span className="ml-auto text-[11px] font-bold" style={{ color: profit >= 0 ? '#7fe0b8' : '#fca5a5' }}>{money(profit)}{l.recurring ? '/mo' : ''}</span>
+                          <span className="ml-auto text-[11px] font-bold" style={{ color: profit >= 0 ? '#7fe0b8' : '#FF4D4D' }}>{money(profit)}{l.recurring ? '/mo' : ''}</span>
                         </div>
                       )
                     })()}
@@ -441,7 +441,7 @@ export default function ProposalBuilder() {
               </div>
             )
           })}
-          <button onClick={addSection} className="w-full text-left rounded-xl px-3 py-2.5 text-[12.5px] font-semibold" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: ACCENT }}>+ Add section</button>
+          <button onClick={addSection} className="w-full text-left rounded-xl px-3 py-2.5 text-[12.5px] font-semibold" style={{ background: 'rgba(0,163,255,0.10)', border: '1px dashed rgba(0,163,255,0.4)', color: ACCENT }}>+ Add section</button>
           <div className="text-[11px] leading-relaxed mt-3" style={{ color: '#6f8299' }}>Add any number of sections (Cameras, Smart Locks, Bulk Internet…). Mark a line <b style={{ color: '#a9bed1' }}>★ opt</b> and the client sees it as a selectable add-on. Preview updates live.</div>
         </aside>
       </div>
@@ -450,9 +450,9 @@ export default function ProposalBuilder() {
 }
 
 function Row({ k, v, strong, pos }: { k: string; v: string; strong?: boolean; pos?: boolean }) {
-  const color = pos === undefined ? (strong ? '#eaf3fb' : '#cfe0f0') : (pos ? '#7fe0b8' : '#fca5a5')
+  const color = pos === undefined ? (strong ? '#eaf3fb' : '#cfe0f0') : (pos ? '#7fe0b8' : '#FF4D4D')
   return (
-    <div className="flex justify-between py-1.5" style={{ borderBottom: '1px solid rgba(140,170,200,0.12)' }}>
+    <div className="flex justify-between py-1.5" style={{ borderBottom: '1px solid #1E293B' }}>
       <span className="text-[12px]" style={{ color: '#9fb4c9' }}>{k}</span>
       <span className={strong ? 'text-[13px] font-extrabold' : 'text-[12px] font-semibold'} style={{ color }}>{v}</span>
     </div>

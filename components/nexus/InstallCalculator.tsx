@@ -80,7 +80,7 @@ export function InstallCalculator({ initialWorkingGates, initialBrokenGates, ini
   return (
     <div className="space-y-5">
       {/* 1. Charge (guideline) */}
-      <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(95,184,224,0.16)' }}>
+      <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,163,255,0.16)' }}>
         <div className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>1. What you charge</div>
         <div className="mb-3 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Working gate $500 · broken gate $750 · first camera free · extra cameras $100.</div>
         <div className="grid grid-cols-3 gap-3">
@@ -113,10 +113,10 @@ export function InstallCalculator({ initialWorkingGates, initialBrokenGates, ini
           <div className="text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>{usd(r.cost)}</div>
           <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>parts {usd(r.parts)} + {r.hours}h labor</div>
         </div>
-        <div className="rounded-3xl p-4" style={{ background: good ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${good ? 'rgba(52,211,153,0.4)' : 'rgba(248,113,113,0.45)'}` }}>
-          <div className="text-[12px]" style={{ color: good ? '#6ee7b7' : '#fca5a5' }}>Your profit</div>
-          <div className="text-2xl font-bold" style={{ color: good ? '#6ee7b7' : '#fca5a5' }}>{usd(r.profit)}</div>
-          <div className="text-[11px] font-semibold" style={{ color: good ? '#6ee7b7' : '#fca5a5' }}>{good ? 'Makes money ✓' : 'Loses money — raise charge or cut parts'}</div>
+        <div className="rounded-3xl p-4" style={{ background: good ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.12)', border: `1px solid ${good ? 'rgba(0,230,153,0.4)' : 'rgba(255,77,77,0.45)'}` }}>
+          <div className="text-[12px]" style={{ color: good ? '#00E699' : '#FF4D4D' }}>Your profit</div>
+          <div className="text-2xl font-bold" style={{ color: good ? '#00E699' : '#FF4D4D' }}>{usd(r.profit)}</div>
+          <div className="text-[11px] font-semibold" style={{ color: good ? '#00E699' : '#FF4D4D' }}>{good ? 'Makes money ✓' : 'Loses money — raise charge or cut parts'}</div>
         </div>
       </div>
 

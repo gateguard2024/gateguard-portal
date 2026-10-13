@@ -9,13 +9,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 const BTN = { borderRadius: 8, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' } as const;
-const ICE = { ...BTN, background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
-const GO = { ...BTN, background: 'rgba(126,224,168,0.14)', border: '1px solid rgba(126,224,168,0.4)', color: '#7ee0a8' } as const;
-const WARN = { ...BTN, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' } as const;
-const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
+const ICE = { ...BTN, background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' } as const;
+const GO = { ...BTN, background: 'rgba(0,230,153,0.14)', border: '1px solid rgba(0,230,153,0.4)', color: '#00E699' } as const;
+const WARN = { ...BTN, background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.4)', color: '#f87171' } as const;
+const INPUT = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = Record<string, any>;
@@ -58,18 +58,18 @@ export function SiteAccessControl({ siteId }: { siteId: string }) {
   useEffect(() => { if ((tab === 'users' || tab === 'guests') && !brivo) loadBrivo(); }, [tab, brivo, loadBrivo]);
 
   return (
-    <div style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 14 }}>
+    <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
         <div>
-          <div style={{ color: '#9FD8EC', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access &amp; control</div>
+          <div style={{ color: '#00A3FF', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access &amp; control</div>
           <div style={{ color: '#c3d3e2', fontSize: 12 }}>Reset a gate, unlock a door, manage users &amp; passes, read door activity.</div>
         </div>
-        {flash && <span style={{ fontSize: 11.5, fontWeight: 600, color: flash.ok ? '#7ee0a8' : '#f87171' }}>{flash.msg}</span>}
+        {flash && <span style={{ fontSize: 11.5, fontWeight: 600, color: flash.ok ? '#00E699' : '#f87171' }}>{flash.msg}</span>}
       </div>
 
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', background: '#16232f', border: '1px solid rgba(140,170,200,0.18)', borderRadius: 12, padding: 3, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', background: '#16232f', border: '1px solid #1E293B', borderRadius: 12, padding: 3, marginBottom: 12 }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ borderRadius: 9, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: tab === t.id ? 'rgba(95,184,224,0.2)' : 'transparent', color: tab === t.id ? '#bfe6ff' : '#8ba0b4' }}>
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ borderRadius: 9, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: tab === t.id ? 'rgba(0,163,255,0.2)' : 'transparent', color: tab === t.id ? '#bfe6ff' : '#8ba0b4' }}>
             <span aria-hidden>{t.icon}</span> {t.label}
           </button>
         ))}
@@ -84,8 +84,8 @@ export function SiteAccessControl({ siteId }: { siteId: string }) {
   );
 }
 
-function Loader() { return <div style={{ fontSize: 12, color: '#9FD8EC', padding: '10px 2px' }}>Loading…</div>; }
-function NotConnected({ what }: { what: string }) { return <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>{what} isn’t connected for this site (or you don’t have access). A corporate admin can connect it under Setup &amp; keys.</div>; }
+function Loader() { return <div style={{ fontSize: 12, color: '#00A3FF', padding: '10px 2px' }}>Loading…</div>; }
+function NotConnected({ what }: { what: string }) { return <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '10px 2px' }}>{what} isn’t connected for this site (or you don’t have access). A corporate admin can connect it under Setup &amp; keys.</div>; }
 
 function GateRelays({ siteId, notify }: { siteId: string; notify: (m: string, ok?: boolean) => void }) {
   const [relays, setRelays] = useState<Any[] | null>(null);
@@ -102,13 +102,13 @@ function GateRelays({ siteId, notify }: { siteId: string; notify: (m: string, ok
   }
   if (err && !relays?.length) return <NotConnected what="Shelly relays" />;
   if (relays == null) return <Loader />;
-  if (relays.length === 0) return <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>No relays found at this site.</div>;
+  if (relays.length === 0) return <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '10px 2px' }}>No relays found at this site.</div>;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 8 }}>
       {relays.map(r => (
         <div key={`${r.id}:${r.channel ?? 0}`} style={TILE}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: (r.on ?? r.ison) ? '#7ee0a8' : '#9FD8EC' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: (r.on ?? r.ison) ? '#00E699' : '#00A3FF' }} />
             <span style={{ color: '#eaf2fb', fontSize: 13, fontWeight: 600 }}>{r.name ?? 'Relay'}</span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -135,7 +135,7 @@ function Doors({ siteId, notify }: { siteId: string; notify: (m: string, ok?: bo
   }
   if (err && !doors?.length) return <NotConnected what="Brivo access control" />;
   if (doors == null) return <Loader />;
-  if (doors.length === 0) return <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>No doors found at this site.</div>;
+  if (doors.length === 0) return <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '10px 2px' }}>No doors found at this site.</div>;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 8 }}>
       {doors.map(d => (
@@ -219,12 +219,12 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
         </div>
       )}
 
-      {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '6px 2px' }}>No users match.</div> : (
+      {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '6px 2px' }}>No users match.</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
           {shown.map(u => (
             <div key={u.id} style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <button onClick={() => setCardUser(String(u.id))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, textDecoration: 'underline', textDecorationColor: 'rgba(95,184,224,0.4)' }}>{name(u)}</button>{u.active === false && <span style={{ color: '#f87171', fontSize: 9.5, fontWeight: 700 }}> · SUSPENDED</span>}
+                <button onClick={() => setCardUser(String(u.id))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: '#eaf2fb', fontSize: 12.5, fontWeight: 600, textDecoration: 'underline', textDecorationColor: 'rgba(0,163,255,0.4)' }}>{name(u)}</button>{u.active === false && <span style={{ color: '#f87171', fontSize: 9.5, fontWeight: 700 }}> · SUSPENDED</span>}
                 <div style={{ color: '#c3d3e2', fontSize: 10.5 }}>{u.email ?? 'no email'}{u.phone ? ` · ${u.phone}` : ''}{u.unitNumber ? ` · Unit ${u.unitNumber}` : ''}{(u.groupNames?.length ? ` · ${u.groupNames.slice(0, 2).join(', ')}` : '')}</div>
               </div>
               <select defaultValue="" onChange={e => { const g = groups.find(x => x.id === e.target.value); if (g) assignGroup(u, g.id, g.name); e.currentTarget.selectedIndex = 0; }} style={{ ...INPUT, padding: '5px 6px', fontSize: 11 }} title="Assign to group">
@@ -239,7 +239,7 @@ function Users({ siteId, data, err, msg, reload, notify, onActivity }: { siteId:
           ))}
         </div>
       )}
-      <div style={{ fontSize: 9.5, color: '#9FD8EC', marginTop: 8 }}>Send/resend issues a fresh Brivo Mobile Pass invite. Revoke turns the pass off. Suspend blocks all access.</div>
+      <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>Send/resend issues a fresh Brivo Mobile Pass invite. Revoke turns the pass off. Suspend blocks all access.</div>
       {cardUser && <UserCard siteId={siteId} userId={cardUser} listUser={data.users.find(u => String(u.id) === cardUser)} groups={groups} onClose={() => setCardUser(null)} onChanged={reload} notify={notify} onActivity={onActivity} />}
     </div>
   );
@@ -303,10 +303,10 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
   const roStyle = { ...INPUT, opacity: canManage ? 1 : 0.7 } as const;
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 540, maxHeight: '90dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRadius: 22, padding: 18 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 540, maxHeight: '90dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRadius: 22, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#5FB8E0' }}>Resident / admin</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#00A3FF' }}>Resident / admin</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb' }}>{form.firstName} {form.lastName}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12.5, cursor: 'pointer' }}>Close</button>
@@ -330,10 +330,10 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
             <div style={{ ...TILE, marginBottom: 8 }}>
               <Lbl>Groups (access)</Lbl>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {detail == null ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>Loading…</span>
-                  : assigned.length === 0 ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>No groups</span>
+                {detail == null ? <span style={{ fontSize: 11, color: '#00A3FF' }}>Loading…</span>
+                  : assigned.length === 0 ? <span style={{ fontSize: 11, color: '#00A3FF' }}>No groups</span>
                   : assigned.map((g: Any, i: number) => (
-                    <span key={g.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 999, padding: '3px 9px' }}>
+                    <span key={g.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#c3d3e2', background: '#16232f', border: '1px solid #1E293B', borderRadius: 999, padding: '3px 9px' }}>
                       {g.name}
                       {canManage && g.id && (
                         <button onClick={() => removeGroup(g.id, g.name)} disabled={busy === 'rmgroup' + g.id} title={`Remove from ${g.name}`} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, opacity: busy === 'rmgroup' + g.id ? 0.4 : 0.85 }}>✕</button>
@@ -372,14 +372,14 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
           )}
 
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {detail == null ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>Loading…</span>
-              : detail.credentials.length === 0 ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>No credentials issued.</span>
+            {detail == null ? <span style={{ fontSize: 11, color: '#00A3FF' }}>Loading…</span>
+              : detail.credentials.length === 0 ? <span style={{ fontSize: 11, color: '#00A3FF' }}>No credentials issued.</span>
               : detail.credentials.map((c: Any) => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#7ee0a8' : '#f87171', flexShrink: 0 }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.active ? '#00E699' : '#f87171', flexShrink: 0 }} />
                   <span style={{ color: '#e2ebf4' }}>{c.label}</span>
-                  <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9FD8EC', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 5, padding: '1px 5px' }}>{c.isPass ? 'Mobile Pass' : 'Card / Fob'}</span>
-                  <span style={{ color: c.active ? '#7ee0a8' : '#f87171', marginLeft: 'auto', fontSize: 10.5 }}>{c.active ? 'active' : 'revoked'}</span>
+                  <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00A3FF', border: '1px solid #1E293B', borderRadius: 5, padding: '1px 5px' }}>{c.isPass ? 'Mobile Pass' : 'Card / Fob'}</span>
+                  <span style={{ color: c.active ? '#00E699' : '#f87171', marginLeft: 'auto', fontSize: 10.5 }}>{c.active ? 'active' : 'revoked'}</span>
                   {canManage && (
                     c.active
                       ? <button onClick={() => credAction('revoke', { credential_id: c.id })} disabled={busy === 'revoke' + c.id} style={{ ...WARN, padding: '3px 8px', opacity: busy === 'revoke' + c.id ? 0.5 : 1 }}>Revoke</button>
@@ -388,7 +388,7 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
                 </div>
               ))}
           </div>
-          <div style={{ fontSize: 9.5, color: '#9FD8EC', marginTop: 8 }}>Mobile passes email a Brivo invite. Fobs assign a physical card number. Revoke turns a single credential off without deleting it — reinstate turns it back on.</div>
+          <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>Mobile passes email a Brivo invite. Fobs assign a physical card number. Revoke turns a single credential off without deleting it — reinstate turns it back on.</div>
         </div>
 
         {/* Activity */}
@@ -398,8 +398,8 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
             <button onClick={() => { onActivity(`${form.firstName} ${form.lastName}`.trim()); onClose(); }} style={ICE}>Full log →</button>
           </div>
           <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {detail == null ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>Loading…</span>
-              : detail.activity.length === 0 ? <span style={{ fontSize: 11, color: '#9FD8EC' }}>No recent activity for this user.</span>
+            {detail == null ? <span style={{ fontSize: 11, color: '#00A3FF' }}>Loading…</span>
+              : detail.activity.length === 0 ? <span style={{ fontSize: 11, color: '#00A3FF' }}>No recent activity for this user.</span>
               : detail.activity.slice(0, 12).map((e: Any, i: number) => (
                 <div key={i} style={{ fontSize: 11, color: '#c3d3e2' }}>{e.summary ?? e.eventDescription ?? 'Access event'}{e.occurred ? ` · ${new Date(e.occurred).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</div>
               ))}
@@ -409,7 +409,7 @@ function UserCard({ siteId, userId, listUser, groups, onClose, onChanged, notify
     </div>
   );
 }
-function Lbl({ children }: { children: React.ReactNode }) { return <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC' }}>{children}</div>; }
+function Lbl({ children }: { children: React.ReactNode }) { return <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF' }}>{children}</div>; }
 
 function Guests({ siteId, groups, err, notify, onIssued }: { siteId: string; groups: Any[]; err: boolean; notify: (m: string, ok?: boolean) => void; onIssued: () => void }) {
   const [g, setG] = useState({ firstName: '', lastName: '', email: '', from: '', to: '', groupId: '' });
@@ -425,7 +425,7 @@ function Guests({ siteId, groups, err, notify, onIssued }: { siteId: string; gro
   if (err) return <NotConnected what="Brivo access control" />;
   return (
     <div style={TILE}>
-      <div style={{ color: '#9FD8EC', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Issue a visitor pass</div>
+      <div style={{ color: '#00A3FF', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Issue a visitor pass</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 8, marginBottom: 8 }}>
         <input value={g.firstName} onChange={e => setG({ ...g, firstName: e.target.value })} placeholder="First name" style={INPUT} />
         <input value={g.lastName} onChange={e => setG({ ...g, lastName: e.target.value })} placeholder="Last name" style={INPUT} />
@@ -436,13 +436,13 @@ function Guests({ siteId, groups, err, notify, onIssued }: { siteId: string; gro
         </select>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div><div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#9FD8EC', marginBottom: 3 }}>Valid from</div><input type="datetime-local" value={g.from} onChange={e => setG({ ...g, from: e.target.value })} style={{ ...INPUT, width: '100%' }} /></div>
-        <div><div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#9FD8EC', marginBottom: 3 }}>Valid to</div><input type="datetime-local" value={g.to} onChange={e => setG({ ...g, to: e.target.value })} style={{ ...INPUT, width: '100%' }} /></div>
+        <div><div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#00A3FF', marginBottom: 3 }}>Valid from</div><input type="datetime-local" value={g.from} onChange={e => setG({ ...g, from: e.target.value })} style={{ ...INPUT, width: '100%' }} /></div>
+        <div><div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#00A3FF', marginBottom: 3 }}>Valid to</div><input type="datetime-local" value={g.to} onChange={e => setG({ ...g, to: e.target.value })} style={{ ...INPUT, width: '100%' }} /></div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={issue} disabled={busy} style={{ ...GO, opacity: busy ? 0.5 : 1 }}>{busy ? 'Issuing…' : '🎟 Send visitor pass'}</button>
       </div>
-      <div style={{ fontSize: 9.5, color: '#9FD8EC', marginTop: 8 }}>Creates the guest in Brivo and emails a time-boxed Mobile Pass. They’ll appear in Users and the Event tracker.</div>
+      <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>Creates the guest in Brivo and emails a time-boxed Mobile Pass. They’ll appear in Users and the Event tracker.</div>
     </div>
   );
 }
@@ -476,21 +476,21 @@ function Activity({ siteId, userFilter, setUserFilter }: { siteId: string; userF
           <option value="" style={{ background: '#111a24' }}>All events</option>
           {types.map(t => <option key={t} value={t} style={{ background: '#111a24' }}>{t}</option>)}
         </select>
-        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(248,113,113,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(248,113,113,0.5)' : 'rgba(140,170,200,0.22)'}`, color: deniedOnly ? '#f87171' : '#9FD8EC' }}>Denied only</button>
+        <button onClick={() => setDeniedOnly(v => !v)} style={{ ...BTN, background: deniedOnly ? 'rgba(255,77,77,0.16)' : '#22303f', border: `1px solid ${deniedOnly ? 'rgba(255,77,77,0.5)' : '#1E293B'}`, color: deniedOnly ? '#f87171' : '#00A3FF' }}>Denied only</button>
         {(userFilter || type || deniedOnly) && <button onClick={() => { setUserFilter(''); setType(''); setDeniedOnly(false); }} style={{ ...BTN, background: 'transparent', border: 'none', color: '#8ba0b4' }}>Clear</button>}
       </div>
-      {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '10px 2px' }}>No events match.</div> : (
+      {shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '10px 2px' }}>No events match.</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflowY: 'auto' }}>
           {shown.map((e, i) => {
             const when = e.occurred ?? e.eventOccurred ?? e.created ?? e.timestamp;
             const denied = /denied|reject|fail/i.test(label(e));
             return (
-              <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: denied ? '#f87171' : '#7ee0a8', flexShrink: 0 }} />
+              <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: denied ? '#f87171' : '#00E699', flexShrink: 0 }} />
                 <span style={{ color: '#e2ebf4' }}>{label(e)}</span>
                 {who(e) && <span style={{ color: '#c3d3e2' }}>· {who(e)}</span>}
-                {device(e) && <span style={{ color: '#9FD8EC' }}>· {device(e)}</span>}
-                {when && <span style={{ color: '#9FD8EC', marginLeft: 'auto' }}>{fmt(String(when))}</span>}
+                {device(e) && <span style={{ color: '#00A3FF' }}>· {device(e)}</span>}
+                {when && <span style={{ color: '#00A3FF', marginLeft: 'auto' }}>{fmt(String(when))}</span>}
               </div>
             );
           })}

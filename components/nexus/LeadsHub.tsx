@@ -28,15 +28,15 @@ type Dash = {
 type WbLead = { id: string; contact_name?: string | null; company_name?: string | null; stage?: string | null; location?: string | null; source?: string | null; updated_at?: string | null }
 
 const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
-const TILE_STYLE = { background: TILE, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
-const CELL_INPUT = { background: '#0f1a26', border: '1px solid rgba(95,184,224,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', width: 74, fontSize: 12, outline: 'none' } as const
+const TILE = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const TILE_STYLE = { background: TILE, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const CELL_INPUT = { background: '#0f1a26', border: '1px solid rgba(0,163,255,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', width: 74, fontSize: 12, outline: 'none' } as const
 
 const LEAD_TYPES = ['MDU', 'SFH', 'Commercial', 'Mixed-Use', 'Gated', 'HOA']
 const FU_STYLE: Record<FollowUp['type'], { fg: string; bg: string; label: string }> = {
-  call: { fg: '#5FB8E0', bg: 'rgba(95,184,224,0.16)', label: 'Call' },
-  email: { fg: '#9FD8EC', bg: 'rgba(159,216,236,0.16)', label: 'Email' },
-  visit: { fg: '#7ee0a8', bg: 'rgba(126,224,168,0.16)', label: 'Visit' },
+  call: { fg: '#00A3FF', bg: 'rgba(0,163,255,0.16)', label: 'Call' },
+  email: { fg: '#00A3FF', bg: 'rgba(0,163,255,0.16)', label: 'Email' },
+  visit: { fg: '#00E699', bg: 'rgba(0,230,153,0.16)', label: 'Visit' },
   task: { fg: '#c3d3e2', bg: 'rgba(148,163,184,0.16)', label: 'Task' },
 }
 
@@ -164,7 +164,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   const fuToday = dash.followupsToday ?? []
   const fuWeek = dash.followupsWeek ?? []
 
-  const kpiCard = (icon: string, value: string | number, label: string, accent = '#9FD8EC') => (
+  const kpiCard = (icon: string, value: string | number, label: string, accent = '#00A3FF') => (
     <div className="rounded-2xl p-3" style={TILE_STYLE}>
       <div className="text-[16px]" aria-hidden style={{ color: accent }}>{icon}</div>
       <div className="mt-1 text-[22px] font-bold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : value}</div>
@@ -180,7 +180,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
         <div className="mt-3 rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Sales</div><h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Leads Hub</h2></div>
-            <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span> Search leads…</button>
+            <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#1E293B', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#00A3FF' }}>⌕</span> Search leads…</button>
           </div>
 
           {/* KPI ROW */}
@@ -188,21 +188,21 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
             {kpiCard('⊕', k.newLeadIds, 'New Lead IDs')}
             {kpiCard('◎', k.leadsVisited, 'Leads Visited')}
             {kpiCard('☰', k.leadsCount, 'Leads Count')}
-            {kpiCard('◑', `${k.conversionPct}%`, 'Conversion', '#7ee0a8')}
+            {kpiCard('◑', `${k.conversionPct}%`, 'Conversion', '#00E699')}
             <div className="col-span-2 flex items-center gap-3 rounded-2xl p-3 sm:col-span-4 lg:col-span-1" style={TILE_STYLE}>
               <div className="flex-1">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#9FD8EC' }}>Pipeline Breakdown</div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#00A3FF' }}>Pipeline Breakdown</div>
                 <div className="space-y-0.5 text-[11px]" style={{ color: '#c3d3e2' }}>
-                  <div><span style={{ color: '#5FB8E0' }}>●</span> Identified · {bd.identified}</div>
+                  <div><span style={{ color: '#00A3FF' }}>●</span> Identified · {bd.identified}</div>
                   <div><span style={{ color: '#3f7fb8' }}>●</span> Contacted · {bd.contacted}</div>
-                  <div><span style={{ color: '#7ee0a8' }}>●</span> Sent Info · {bd.sentInfo}</div>
+                  <div><span style={{ color: '#00E699' }}>●</span> Sent Info · {bd.sentInfo}</div>
                 </div>
               </div>
               <svg viewBox="0 0 42 42" width={78} height={78} role="img" aria-label="Lead pipeline breakdown">
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#16222f" strokeWidth={7} />
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#5FB8E0" strokeWidth={7} strokeDasharray={`${seg(bd.identified).toFixed(1)} ${(100 - seg(bd.identified)).toFixed(1)}`} strokeDashoffset="0" transform="rotate(-90 21 21)" />
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#0B111E" strokeWidth={7} />
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00A3FF" strokeWidth={7} strokeDasharray={`${seg(bd.identified).toFixed(1)} ${(100 - seg(bd.identified)).toFixed(1)}`} strokeDashoffset="0" transform="rotate(-90 21 21)" />
                 <circle cx="21" cy="21" r="15.9" fill="none" stroke="#3f7fb8" strokeWidth={7} strokeDasharray={`${seg(bd.contacted).toFixed(1)} ${(100 - seg(bd.contacted)).toFixed(1)}`} strokeDashoffset={`${(-seg(bd.identified)).toFixed(1)}`} transform="rotate(-90 21 21)" />
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#7ee0a8" strokeWidth={7} strokeDasharray={`${seg(bd.sentInfo).toFixed(1)} ${(100 - seg(bd.sentInfo)).toFixed(1)}`} strokeDashoffset={`${(-(seg(bd.identified) + seg(bd.contacted))).toFixed(1)}`} transform="rotate(-90 21 21)" />
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00E699" strokeWidth={7} strokeDasharray={`${seg(bd.sentInfo).toFixed(1)} ${(100 - seg(bd.sentInfo)).toFixed(1)}`} strokeDashoffset={`${(-(seg(bd.identified) + seg(bd.contacted))).toFixed(1)}`} transform="rotate(-90 21 21)" />
                 <text x="21" y="23.5" textAnchor="middle" fill="#eaf2fb" fontSize="8" fontWeight="700">{k.leadsCount}</text>
               </svg>
             </div>
@@ -227,7 +227,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
                   ) : analysis.length === 0 ? (
                     <tr><td colSpan={7} className="py-6 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>No open leads yet. Enter a new lead below.</td></tr>
                   ) : analysis.map(row => (
-                    <tr key={row.id} className="border-b" style={{ borderColor: 'rgba(140,170,200,0.1)' }}>
+                    <tr key={row.id} className="border-b" style={{ borderColor: '#1E293B' }}>
                       <td className="cursor-pointer py-2 font-semibold" onClick={() => void openLead(row.id)} style={{ color: '#eaf2fb' }}>{row.name}</td>
                       {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(field => {
                         const editing = edit && edit.id === row.id && edit.field === field
@@ -244,7 +244,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
                                 <input autoFocus value={edit.value} disabled={savingCell} onChange={e => setEdit({ ...edit, value: e.target.value })} onBlur={() => void saveCell()} onKeyDown={e => { if (e.key === 'Enter') void saveCell(); if (e.key === 'Escape') setEdit(null) }} inputMode={field === 'mrr' || field === 'pcr' ? 'decimal' : 'numeric'} style={CELL_INPUT} />
                               )
                             ) : (
-                              <span className="rounded px-1.5 py-0.5 transition-colors hover:bg-white/5" style={{ color: raw == null ? '#7d93a8' : (field === 'mrr' ? '#7ee0a8' : '#dbeaf7') }}>{display}</span>
+                              <span className="rounded px-1.5 py-0.5 transition-colors hover:bg-white/5" style={{ color: raw == null ? '#7d93a8' : (field === 'mrr' ? '#00E699' : '#dbeaf7') }}>{display}</span>
                             )}
                           </td>
                         )
@@ -260,7 +260,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_2fr_2fr]">
             <div className="flex flex-col gap-3">
               <button type="button" onClick={() => setShowNew(true)} className="flex flex-1 flex-col items-center justify-center rounded-2xl p-4 text-center transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#3f7fb8,#2f6d94)', border: '1px solid rgba(150,200,230,0.4)', color: '#eaf6ff', minHeight: 84 }}><span className="text-[22px]" aria-hidden>＋</span><span className="mt-1 text-[12px] font-bold">Enter New Lead</span></button>
-              <button type="button" onClick={() => setWork('')} className="flex flex-1 flex-col items-center justify-center rounded-2xl p-4 text-center transition-all hover:-translate-y-0.5" style={{ ...TILE_STYLE, minHeight: 84 }}><span className="text-[22px]" aria-hidden style={{ color: '#9FD8EC' }}>⌕</span><span className="mt-1 text-[12px] font-bold" style={{ color: '#eaf2fb' }}>Work Existing Lead</span></button>
+              <button type="button" onClick={() => setWork('')} className="flex flex-1 flex-col items-center justify-center rounded-2xl p-4 text-center transition-all hover:-translate-y-0.5" style={{ ...TILE_STYLE, minHeight: 84 }}><span className="text-[22px]" aria-hidden style={{ color: '#00A3FF' }}>⌕</span><span className="mt-1 text-[12px] font-bold" style={{ color: '#eaf2fb' }}>Work Existing Lead</span></button>
             </div>
             <FollowUpColumn title="Today's Follow-ups" items={fuToday} loading={loading} onOpen={() => setWork('')} />
             <FollowUpColumn title="This Week's Follow-ups" items={fuWeek} loading={loading} onOpen={() => setWork('')} />
@@ -277,7 +277,7 @@ function FollowUpColumn({ title, items, loading, onOpen }: { title: string; item
   return (
     <div className="rounded-2xl p-4" style={TILE_STYLE}>
       <div className="mb-2.5 flex items-center justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#9FD8EC' }}>{title}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#00A3FF' }}>{title}</div>
         <span className="text-[10px]" style={{ color: '#7d93a8' }}>{items.length}</span>
       </div>
       <div className="space-y-1.5 overflow-y-auto pr-1" style={{ maxHeight: 168 }}>
@@ -321,21 +321,21 @@ function WorkExistingLead({ initialQuery, onBack, onOpen }: { initialQuery: stri
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onBack}>
-      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#9FD8EC' }}>Work Existing Lead</div>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Work Existing Lead</div>
         <h3 className="mb-3 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Pick a lead to work</h3>
-        <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>
-          <span aria-hidden style={{ color: '#9FD8EC' }}>⌕</span>
+        <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>
+          <span aria-hidden style={{ color: '#00A3FF' }}>⌕</span>
           <input autoFocus value={q} onChange={e => { setQ(e.target.value); void load(e.target.value) }} placeholder="Search or pick a lead…" className="w-full bg-transparent text-[13px] outline-none placeholder:text-white/35" style={{ color: 'rgba(255,255,255,0.92)' }} />
         </div>
-        <div className="overflow-y-auto rounded-xl" style={{ maxHeight: 300, border: '1px solid rgba(140,170,200,0.18)' }}>
+        <div className="overflow-y-auto rounded-xl" style={{ maxHeight: 300, border: '1px solid #1E293B' }}>
           {loading ? (
             <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading…</div>
           ) : rows.length === 0 ? (
             <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>No leads found.</div>
           ) : rows.map(l => (
-            <button key={l.id} type="button" onClick={() => onOpen(l.id)} className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/5" style={{ borderColor: 'rgba(140,170,200,0.1)' }}>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: '#2f7fb8', color: '#eaf6ff' }}>{initials(l.contact_name ?? l.company_name)}</div>
+            <button key={l.id} type="button" onClick={() => onOpen(l.id)} className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/5" style={{ borderColor: '#1E293B' }}>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: '#00A3FF', color: '#eaf6ff' }}>{initials(l.contact_name ?? l.company_name)}</div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold" style={{ color: '#eaf2fb' }}>{l.company_name || l.contact_name || 'Unnamed lead'}</div>
                 <div className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>{[l.contact_name, l.location, l.stage].filter(Boolean).join(' · ') || '—'}</div>
@@ -370,18 +370,18 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not create the lead.'); setBusy(false) }
   }
   const input = 'w-full rounded-xl px-3 py-2 text-sm outline-none'
-  const inStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
+  const inStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#9FD8EC' }}>New Lead</div>
+      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>New Lead</div>
         <h3 className="mb-4 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Add a lead</h3>
 
         <div className="mb-1.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Where did it come from?</div>
         <div className="mb-3 grid grid-cols-2 gap-1.5">
           {SOURCES.map(([val, label]) => {
             const on = f.source === val
-            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', color: '#c3d3e2' }}>{label}</button>
+            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: '#c3d3e2' }}>{label}</button>
           })}
         </div>
 
@@ -397,7 +397,7 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
         <div className="mb-2 mt-3.5 flex items-center gap-2">
           <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Quick sizing</div>
-          <div className="h-px flex-1" style={{ background: 'rgba(140,170,200,0.18)' }} />
+          <div className="h-px flex-1" style={{ background: '#1E293B' }} />
           <div className="text-[9px]" style={{ color: '#7d93a8' }}>optional · carries to the deal</div>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
@@ -407,7 +407,7 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <input className={input} style={inStyle} inputMode="numeric" placeholder="Cameras" value={f.cameras} onChange={set('cameras')} />
         </div>
 
-        {err && <div className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', color: '#fca5a5' }}>{err}</div>}
+        {err && <div className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.3)', color: '#FF4D4D' }}>{err}</div>}
         <div className="mt-4 flex items-center justify-between">
           <span className="text-[10px]" style={{ color: '#7d93a8' }}>Saves to your leads database</span>
           <div className="flex gap-2">

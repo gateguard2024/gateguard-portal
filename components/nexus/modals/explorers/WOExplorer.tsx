@@ -62,11 +62,11 @@ function WOGridRow({
   if (phase === 'done') {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-        style={{ background: 'rgba(52,211,153,0.07)', border: '0.5px solid rgba(52,211,153,0.2)' }}>
+        style={{ background: 'rgba(0,230,153,0.07)', border: '0.5px solid rgba(0,230,153,0.2)' }}>
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
           <path d="M1.5 5.5l3 3 5-5" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        <span className="text-[10px] font-mono" style={{ color: 'rgba(52,211,153,0.8)' }}>
+        <span className="text-[10px] font-mono" style={{ color: 'rgba(0,230,153,0.8)' }}>
           {wo.wo_number} → Assigned
         </span>
       </div>
@@ -79,9 +79,9 @@ function WOGridRow({
         className="grid items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all"
         style={{
           gridTemplateColumns: '8px 80px 1fr 80px 68px 80px 38px 28px',
-          background: expanded ? 'rgba(95,184,224,0.08)' : 'rgba(255,255,255,0.025)',
+          background: expanded ? 'rgba(0,163,255,0.08)' : 'rgba(255,255,255,0.025)',
           border: expanded
-            ? '0.5px solid rgba(95,184,224,0.25)'
+            ? '0.5px solid rgba(0,163,255,0.25)'
             : '0.5px solid rgba(255,255,255,0.06)',
         }}
         onClick={() => setExp(e => !e)}
@@ -94,9 +94,9 @@ function WOGridRow({
         <button
           onClick={e => { e.stopPropagation(); onOpenDetail() }}
           className="text-[10px] font-mono truncate text-left transition-all underline decoration-dotted underline-offset-2"
-          style={{ color: 'rgba(95,184,224,0.8)', textDecorationColor: 'rgba(95,184,224,0.4)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(95,184,224,1)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(95,184,224,0.8)')}
+          style={{ color: 'rgba(0,163,255,0.8)', textDecorationColor: 'rgba(0,163,255,0.4)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(0,163,255,1)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,163,255,0.8)')}
         >
           {wo.wo_number}
         </button>
@@ -128,7 +128,7 @@ function WOGridRow({
             phase === 'confirm'
               ? { background: 'rgba(251,191,36,0.2)', border: '0.5px solid rgba(251,191,36,0.4)', color: '#fbbf24' }
               : wo.recommended_tech
-              ? { background: 'rgba(95,184,224,0.12)', border: '0.5px solid rgba(95,184,224,0.28)', color: '#a5b4ff' }
+              ? { background: 'rgba(0,163,255,0.12)', border: '0.5px solid rgba(0,163,255,0.28)', color: '#a5b4ff' }
               : { background: 'transparent', color: 'rgba(255,255,255,0.2)', cursor: 'default' }
           }
         >
@@ -160,9 +160,9 @@ function WOGridRow({
       {expanded && (
         <div
           className="px-4 py-2.5 rounded-b-lg -mt-1 mb-1"
-          style={{ background: 'rgba(95,184,224,0.05)', borderLeft: '2px solid rgba(95,184,224,0.3)' }}
+          style={{ background: 'rgba(0,163,255,0.05)', borderLeft: '2px solid rgba(0,163,255,0.3)' }}
         >
-          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(95,184,224,0.5)' }}>
+          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(0,163,255,0.5)' }}>
             AI Reasoning
           </p>
           <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
@@ -209,9 +209,9 @@ function WODetailPane({
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 transition-colors"
-          style={{ color: 'rgba(95,184,224,0.5)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(95,184,224,0.9)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(95,184,224,0.5)')}
+          style={{ color: 'rgba(0,163,255,0.5)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(0,163,255,0.9)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,163,255,0.5)')}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
             <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -233,7 +233,7 @@ function WODetailPane({
               className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ background: dot, boxShadow: `0 0 6px ${dot}90` }}
             />
-            <span className="text-[11px] font-mono font-semibold" style={{ color: 'rgba(95,184,224,0.9)' }}>
+            <span className="text-[11px] font-mono font-semibold" style={{ color: 'rgba(0,163,255,0.9)' }}>
               {wo.wo_number}
             </span>
             <span
@@ -270,12 +270,12 @@ function WODetailPane({
         <div
           className="rounded-xl p-3.5 space-y-1.5"
           style={{
-            background: 'rgba(95,184,224,0.04)',
-            border: '0.5px solid rgba(95,184,224,0.12)',
-            borderLeft: '2px solid rgba(95,184,224,0.4)',
+            background: 'rgba(0,163,255,0.04)',
+            border: '0.5px solid rgba(0,163,255,0.12)',
+            borderLeft: '2px solid rgba(0,163,255,0.4)',
           }}
         >
-          <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: 'rgba(95,184,224,0.45)' }}>
+          <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: 'rgba(0,163,255,0.45)' }}>
             AI Reasoning
           </p>
           <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.62)' }}>
@@ -306,7 +306,7 @@ function WODetailPane({
               {phase === 'done' ? (
                 <div
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px]"
-                  style={{ background: 'rgba(52,211,153,0.1)', border: '0.5px solid rgba(52,211,153,0.25)', color: '#34d399' }}
+                  style={{ background: 'rgba(0,230,153,0.1)', border: '0.5px solid rgba(0,230,153,0.25)', color: '#34d399' }}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
                     <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -321,7 +321,7 @@ function WODetailPane({
                   style={
                     phase === 'confirm'
                       ? { background: 'rgba(251,191,36,0.2)', border: '0.5px solid rgba(251,191,36,0.4)', color: '#fbbf24' }
-                      : { background: 'rgba(95,184,224,0.18)', border: '0.5px solid rgba(95,184,224,0.4)', color: '#a5b4ff' }
+                      : { background: 'rgba(0,163,255,0.18)', border: '0.5px solid rgba(0,163,255,0.4)', color: '#a5b4ff' }
                   }
                 >
                   {phase === 'busy' ? '…' : phase === 'confirm' ? 'Confirm Assignment' : 'Assign Tech'}
@@ -341,8 +341,8 @@ function WODetailPane({
             href="/dispatch"
             className="flex-1 text-center text-[11px] py-2 rounded-lg font-medium transition-all"
             style={{
-              background: 'rgba(95,184,224,0.12)',
-              border: '0.5px solid rgba(95,184,224,0.3)',
+              background: 'rgba(0,163,255,0.12)',
+              border: '0.5px solid rgba(0,163,255,0.3)',
               color: '#a5b4ff',
             }}
           >
@@ -419,7 +419,7 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
     <button
       onClick={() => toggleSort(col)}
       className="text-[9px] uppercase tracking-wider flex items-center gap-0.5 transition-colors"
-      style={{ color: sortBy === col ? 'rgba(95,184,224,0.9)' : 'rgba(255,255,255,0.25)' }}
+      style={{ color: sortBy === col ? 'rgba(0,163,255,0.9)' : 'rgba(255,255,255,0.25)' }}
     >
       {label}
       {sortBy === col && (
@@ -447,9 +447,9 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 transition-colors"
-            style={{ color: 'rgba(95,184,224,0.55)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(95,184,224,0.95)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(95,184,224,0.55)')}
+            style={{ color: 'rgba(0,163,255,0.55)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(0,163,255,0.95)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,163,255,0.55)')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -458,11 +458,11 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
           </button>
           <div
             className="flex-1 h-px"
-            style={{ background: 'rgba(95,184,224,0.15)' }}
+            style={{ background: 'rgba(0,163,255,0.15)' }}
           />
           <span
             className="text-[9px] uppercase tracking-widest font-mono px-2 py-0.5 rounded"
-            style={{ background: 'rgba(95,184,224,0.1)', color: 'rgba(95,184,224,0.6)', border: '0.5px solid rgba(95,184,224,0.2)' }}
+            style={{ background: 'rgba(0,163,255,0.1)', color: 'rgba(0,163,255,0.6)', border: '0.5px solid rgba(0,163,255,0.2)' }}
           >
             Explorer
           </span>
@@ -477,7 +477,7 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
               className="px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all"
               style={
                 filter === f.key
-                  ? { background: 'rgba(95,184,224,0.22)', border: '0.5px solid rgba(95,184,224,0.5)', color: '#a5b4ff' }
+                  ? { background: 'rgba(0,163,255,0.22)', border: '0.5px solid rgba(0,163,255,0.5)', color: '#a5b4ff' }
                   : { background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.3)' }
               }
             >
@@ -529,7 +529,7 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
           </span>
           <span
             className="text-[9px] uppercase tracking-widest"
-            style={{ color: 'rgba(95,184,224,0.35)' }}
+            style={{ color: 'rgba(0,163,255,0.35)' }}
           >
             Nexus Dispatch · Explorer Mode
           </span>

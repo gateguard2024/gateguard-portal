@@ -64,7 +64,7 @@ function QueueSection({ title, endpoint, normalize }: { title: string; endpoint:
     <div className="border-t border-white/5">
       <button type="button" onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between px-1 py-2.5 transition-colors hover:text-white">
         <span className="flex items-center gap-2 text-[12.5px] font-medium text-slate-200">
-          <ChevronRight size={13} className="transition-transform" style={{ color: '#9FD8EC', transform: open ? 'rotate(90deg)' : 'none' }} />
+          <ChevronRight size={13} className="transition-transform" style={{ color: '#00A3FF', transform: open ? 'rotate(90deg)' : 'none' }} />
           {title}
         </span>
         <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-slate-300" style={{ background: 'rgba(255,255,255,0.06)' }}>{rows === null ? '·' : rows.length}</span>
@@ -125,7 +125,7 @@ export function NexusActionsRail({ open: openProp, onToggle }: { onOpenList?: ()
         onClick={toggle}
         aria-label={open ? 'Hide actions' : 'Show actions'}
         className="fixed z-40 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-xl transition-all duration-300"
-        style={{ top: 'calc(50% - 84px)', right: open ? 300 : 0, background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRight: 'none', color: '#9FD8EC', boxShadow: '0 0 18px rgba(95,184,224,0.16)' }}
+        style={{ top: 'calc(50% - 84px)', right: open ? 300 : 0, background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRight: 'none', color: '#00A3FF', boxShadow: '0 0 18px rgba(0,163,255,0.16)' }}
       >
         {open ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>
@@ -133,7 +133,7 @@ export function NexusActionsRail({ open: openProp, onToggle }: { onOpenList?: ()
       <aside
         aria-hidden={!open}
         className="fixed bottom-0 right-0 top-0 z-30 flex w-[300px] flex-col pt-6 transition-transform duration-300"
-        style={{ transform: hydrated && open ? 'translateX(0)' : 'translateX(100%)', background: 'linear-gradient(180deg,#1d2a39,#141d28)', borderLeft: '1px solid rgba(140,170,200,0.22)', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }}
+        style={{ transform: hydrated && open ? 'translateX(0)' : 'translateX(100%)', background: 'linear-gradient(180deg,#1d2a39,#141d28)', borderLeft: '1px solid #1E293B', boxShadow: '-18px 0 60px rgba(0,0,0,0.45)' }}
       >
         <div className="px-4 pb-3">
           <div className="text-[13px] font-semibold text-white">Priorities</div>

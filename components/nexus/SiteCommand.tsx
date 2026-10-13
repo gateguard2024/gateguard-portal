@@ -21,7 +21,7 @@ import { GateReboots } from '@/components/nexus/GateReboots';
 import { SiteCameraEvents } from '@/components/nexus/SiteCameraEvents';
 import { SiteNetworkDevices } from '@/components/nexus/SiteNetworkDevices';
 
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 
 type Summary = {
@@ -79,7 +79,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
     return () => { cancelled = true; };
   }, [siteId]);
 
-  const gear = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: '7px 14px', cursor: 'pointer', background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' } as const;
+  const gear = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: '7px 14px', cursor: 'pointer', background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' } as const;
   // Prefer LIVE vendor counts; fall back to the fast local summary until they land.
   const camOnline = live.cameras ? live.cameras.online : (s ? s.devices.camerasOnline : null);
   const camTotal  = live.cameras ? live.cameras.total  : (s ? s.devices.camera : null);
@@ -89,14 +89,14 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
   const hs = (live.cameras && live.cameras.total > 0)
     ? Math.max(0, Math.round((live.cameras.online / live.cameras.total) * 100 - (s?.faults.open ?? 0) * 4))
     : (s?.healthScore ?? null);
-  const hsColor = hs == null ? '#9FD8EC' : hs >= 85 ? '#7ee0a8' : hs >= 60 ? '#fbbf24' : '#f87171';
+  const hsColor = hs == null ? '#00A3FF' : hs >= 85 ? '#00E699' : hs >= 60 ? '#fbbf24' : '#f87171';
   const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: { label: string; icon: any; color: string; onClick: () => void }[] = [
-    { label: 'Unlock door', icon: LockOpen, color: '#7ee0a8', onClick: () => jump('sec-access') },
-    { label: 'Open / reset gate', icon: RotateCcw, color: '#5FB8E0', onClick: () => setShowReboot(true) },
-    { label: 'Cameras', icon: Camera, color: '#9FD8EC', onClick: () => jump('sec-cameras') },
+    { label: 'Unlock door', icon: LockOpen, color: '#00E699', onClick: () => jump('sec-access') },
+    { label: 'Open / reset gate', icon: RotateCcw, color: '#00A3FF', onClick: () => setShowReboot(true) },
+    { label: 'Cameras', icon: Camera, color: '#00A3FF', onClick: () => jump('sec-cameras') },
     { label: 'Access & passes', icon: Key, color: '#fbbf24', onClick: () => jump('sec-access') },
     { label: 'Report a fault', icon: AlertTriangle, color: '#f87171', onClick: () => jump('sec-faults') },
     { label: 'Activity log', icon: History, color: '#8FD3EC', onClick: () => jump('sec-access') },
@@ -121,20 +121,20 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
             <text x="26" y="30" textAnchor="middle" fontSize="13" fontWeight="700" fill="#eaf2fb">{hs ?? '—'}</text>
           </svg>
           <div>
-            <div style={{ color: '#9FD8EC', fontSize: 11 }}>Site health</div>
+            <div style={{ color: '#00A3FF', fontSize: 11 }}>Site health</div>
             <div style={{ color: hsColor, fontSize: 12, fontWeight: 600 }}>{hs == null ? '—' : hs >= 85 ? 'Good' : hs >= 60 ? 'Watch' : 'Attention'}</div>
-            <div style={{ color: '#9FD8EC', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
+            <div style={{ color: '#00A3FF', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
           </div>
         </div>
-        <StripTile icon={Camera} label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#7ee0a8'} />
+        <StripTile icon={Camera} label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#00E699'} />
         <StripTile icon={DoorOpen} label="Doors / gates" value={doorCount != null ? String(doorCount) : '—'} sub={live.doors != null ? 'live · Brivo' : (s ? `${s.doors.panelsLive} controllers live` : '')} subColor="#c3d3e2" />
         <StripTile icon={TrendingUp} label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={live.cameras ? `${live.cameras.online} cam online${live.doors != null ? ` · ${live.doors} doors` : ''}` : (s ? `${s.devices.online}/${s.devices.total} devices online` : '')} subColor="#c3d3e2" />
-        <StripTile icon={Zap} label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#9FD8EC" />
+        <StripTile icon={Zap} label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#00A3FF" />
       </div>
 
       {/* Quick tools */}
-      <div style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 12 }}>
-        <div style={{ color: '#9FD8EC', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Quick tools</div>
+      <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 12 }}>
+        <div style={{ color: '#00A3FF', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Quick tools</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8 }}>
           {tools.map(t => (
             <button key={t.label} onClick={t.onClick} style={{ ...TILE, textAlign: 'center', cursor: 'pointer' }}>
@@ -171,7 +171,7 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
 
       {/* Network — UniFi. Own defining section per request. */}
       <div id="sec-network">
-        <SectionHead icon={Wifi} title="Network" desc="Internet, clients & gear health — UniFi" accent="#5FB8E0" />
+        <SectionHead icon={Wifi} title="Network" desc="Internet, clients & gear health — UniFi" accent="#00A3FF" />
         <SiteNetwork siteId={siteId} />
         <SiteNetworkDevices siteId={siteId} />
       </div>
@@ -200,9 +200,9 @@ export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorpora
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SectionHead({ icon: Icon, title, desc, accent = '#9FD8EC' }: { icon: any; title: string; desc: string; accent?: string }) {
+function SectionHead({ icon: Icon, title, desc, accent = '#00A3FF' }: { icon: any; title: string; desc: string; accent?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 10, background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderLeft: `3px solid ${accent}`, borderRadius: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 10, background: WELL, border: '1px solid #1E293B', borderLeft: `3px solid ${accent}`, borderRadius: 12 }}>
       <Icon size={16} style={{ color: accent }} aria-hidden />
       <div>
         <div style={{ color: '#eaf2fb', fontSize: 13, fontWeight: 700, letterSpacing: '0.01em' }}>{title}</div>
@@ -216,7 +216,7 @@ function SectionHead({ icon: Icon, title, desc, accent = '#9FD8EC' }: { icon: an
 function StripTile({ icon: Icon, label, value, sub, subColor }: { icon: any; label: string; value: string; sub: string; subColor: string }) {
   return (
     <div style={TILE}>
-      <div style={{ color: '#9FD8EC', fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}><Icon size={13} aria-hidden /> {label}</div>
+      <div style={{ color: '#00A3FF', fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}><Icon size={13} aria-hidden /> {label}</div>
       <div style={{ color: '#eaf2fb', fontSize: 22, fontWeight: 700, lineHeight: 1.1, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ color: subColor, fontSize: 10, marginTop: 1 }}>{sub}</div>}
     </div>

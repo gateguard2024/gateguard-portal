@@ -92,7 +92,7 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
   const marginColor = calc.margin >= 0.4 ? '#12b886' : calc.margin >= 0.25 ? '#f0a020' : '#f0556a'
   const showStd = mode !== 'itemized'
 
-  const inputS = { display: 'block', width: '100%', marginTop: 4, padding: '9px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 15, fontWeight: 600 } as const
+  const inputS = { display: 'block', width: '100%', marginTop: 4, padding: '9px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid #1E293B', color: '#eef4fb', fontSize: 15, fontWeight: 600 } as const
   const lblS = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: '#9fb4c9' } as const
 
   const modes: { v: Mode; l: string }[] = [
@@ -113,7 +113,7 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
         {/* Mode selector */}
         <div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
           {modes.map(m => (
-            <button key={m.v} onClick={() => setMode(m.v)} style={{ flex: 1, padding: '8px 6px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', ...(mode === m.v ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m.l}</button>
+            <button key={m.v} onClick={() => setMode(m.v)} style={{ flex: 1, padding: '8px 6px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', ...(mode === m.v ? { background: '#00A3FF', border: '1px solid #00A3FF', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m.l}</button>
           ))}
         </div>
         <div style={{ fontSize: 11.5, color: '#9fb4c9', marginBottom: 12 }}>
@@ -125,10 +125,10 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
         {/* Standard rate + gate counts (standard modes) */}
         {showStd && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <label style={{ ...lblS, color: '#9FD8EC' }}>Working gates<input type="number" min={0} value={workingGates === 0 ? '' : workingGates} placeholder="0" onFocus={e => e.target.select()} onChange={e => setWorkingGates(num(e.target.value))} style={inputS} /></label>
-            <label style={{ ...lblS, color: '#9FD8EC' }}>Non-working<input type="number" min={0} value={nonWorkingGates === 0 ? '' : nonWorkingGates} placeholder="0" onFocus={e => e.target.select()} onChange={e => setNonWorkingGates(num(e.target.value))} style={inputS} /></label>
-            <label style={{ ...lblS, color: '#9FD8EC' }}>Rate — working<input type="number" min={0} value={workRate === 0 ? '' : workRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setWorkRate, LS.setupWorking)(num(e.target.value))} style={inputS} /></label>
-            <label style={{ ...lblS, color: '#9FD8EC' }}>Rate — non-work<input type="number" min={0} value={nonWorkRate === 0 ? '' : nonWorkRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setNonWorkRate, LS.setupNonWorking)(num(e.target.value))} style={inputS} /></label>
+            <label style={{ ...lblS, color: '#00A3FF' }}>Working gates<input type="number" min={0} value={workingGates === 0 ? '' : workingGates} placeholder="0" onFocus={e => e.target.select()} onChange={e => setWorkingGates(num(e.target.value))} style={inputS} /></label>
+            <label style={{ ...lblS, color: '#00A3FF' }}>Non-working<input type="number" min={0} value={nonWorkingGates === 0 ? '' : nonWorkingGates} placeholder="0" onFocus={e => e.target.select()} onChange={e => setNonWorkingGates(num(e.target.value))} style={inputS} /></label>
+            <label style={{ ...lblS, color: '#00A3FF' }}>Rate — working<input type="number" min={0} value={workRate === 0 ? '' : workRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setWorkRate, LS.setupWorking)(num(e.target.value))} style={inputS} /></label>
+            <label style={{ ...lblS, color: '#00A3FF' }}>Rate — non-work<input type="number" min={0} value={nonWorkRate === 0 ? '' : nonWorkRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setNonWorkRate, LS.setupNonWorking)(num(e.target.value))} style={inputS} /></label>
           </div>
         )}
 
@@ -147,20 +147,20 @@ export function InstallCalculator({ defaultWorkingGates, defaultNonWorkingGates,
 
         {/* Labor */}
         <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <label style={{ ...lblS, color: '#9FD8EC' }}>Labor hours<input type="number" min={0} value={hours === 0 ? '' : hours} placeholder="0" onFocus={e => e.target.select()} onChange={e => setHours(num(e.target.value))} style={inputS} /></label>
-          <label style={{ ...lblS, color: '#9FD8EC' }}>Your cost $/hr<input type="number" min={0} value={costRate === 0 ? '' : costRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setCostRate, LS.laborCost)(num(e.target.value))} style={inputS} /></label>
-          <label style={{ ...lblS, color: '#9FD8EC' }}>Your bill $/hr<input type="number" min={0} value={retailRate === 0 ? '' : retailRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setRetailRate, LS.laborRetail)(num(e.target.value))} style={inputS} /></label>
+          <label style={{ ...lblS, color: '#00A3FF' }}>Labor hours<input type="number" min={0} value={hours === 0 ? '' : hours} placeholder="0" onFocus={e => e.target.select()} onChange={e => setHours(num(e.target.value))} style={inputS} /></label>
+          <label style={{ ...lblS, color: '#00A3FF' }}>Your cost $/hr<input type="number" min={0} value={costRate === 0 ? '' : costRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setCostRate, LS.laborCost)(num(e.target.value))} style={inputS} /></label>
+          <label style={{ ...lblS, color: '#00A3FF' }}>Your bill $/hr<input type="number" min={0} value={retailRate === 0 ? '' : retailRate} placeholder="0" onFocus={e => e.target.select()} onChange={e => persist(setRetailRate, LS.laborRetail)(num(e.target.value))} style={inputS} /></label>
         </div>
 
         {/* Totals */}
         <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-          <div style={{ borderRadius: 10, padding: '8px 10px', background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(140,170,200,0.2)' }}>
+          <div style={{ borderRadius: 10, padding: '8px 10px', background: 'rgba(0,0,0,0.24)', border: '1px solid #1E293B' }}>
             <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', color: '#8fa4b8' }}>Your cost</div>
             <div style={{ fontSize: 17, fontWeight: 800 }}>{money(calc.totalCost)}</div>
           </div>
-          <div style={{ borderRadius: 10, padding: '8px 10px', background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(140,170,200,0.2)' }}>
+          <div style={{ borderRadius: 10, padding: '8px 10px', background: 'rgba(0,0,0,0.24)', border: '1px solid #1E293B' }}>
             <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', color: '#8fa4b8' }}>Setup charged</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#5FB8E0' }}>{money(calc.totalRetail)}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#00A3FF' }}>{money(calc.totalRetail)}</div>
           </div>
           <div style={{ borderRadius: 10, padding: '8px 10px', background: `${marginColor}18`, border: `1px solid ${marginColor}` }}>
             <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', color: marginColor }}>Profit · {Math.round(calc.margin * 100)}%</div>

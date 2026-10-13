@@ -65,11 +65,11 @@ function DoorTile({ door, cam, siteId, tick, busy, onUnlock, events, setClip, no
           <div style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 12, padding: 10 }}>{cam?.camera_name ? `📹 ${cam.camera_name}` : "No camera linked"}<div style={{ fontSize: 10, marginTop: 4 }}>{camId ? "live preview unavailable" : "link a camera in the Doors card"}</div></div>
         )}
         <span style={{ position: "absolute", top: 6, left: 6, fontSize: 10, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.55)", borderRadius: 6, padding: "2px 7px" }}>{door.name}</span>
-        {showPreview && <span style={{ position: "absolute", top: 6, right: 6, fontSize: 9, fontWeight: 700, color: "#fca5a5" }}>● LIVE</span>}
+        {showPreview && <span style={{ position: "absolute", top: 6, right: 6, fontSize: 9, fontWeight: 700, color: "#FF4D4D" }}>● LIVE</span>}
       </div>
       <div style={{ display: "flex", gap: 6, padding: 8 }}>
         <button onClick={() => onUnlock(door)} disabled={busy === door.id} style={{ flex: 1, fontSize: 12, fontWeight: 600, background: "rgba(251,191,36,0.16)", border: "1px solid rgba(251,191,36,0.45)", color: "#fde68a", borderRadius: 9, padding: "7px 0", cursor: "pointer", opacity: busy === door.id ? 0.5 : 1 }}>{busy === door.id ? "…" : "Unlock"}</button>
-        {camId && <button onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.14)", border: "1px solid rgba(95,184,224,0.4)", color: "#5FB8E0", borderRadius: 9, padding: "7px 12px", cursor: "pointer" }}>Live recording</button>}
+        {camId && <button onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,163,255,0.14)", border: "1px solid rgba(0,163,255,0.4)", color: "#00A3FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer" }}>Live recording</button>}
       </div>
       {camId && (() => {
         const recent = events.filter(e => e.metadata?.door_id === door.id).slice(0, 3);
@@ -79,7 +79,7 @@ function DoorTile({ door, cam, siteId, tick, busy, onUnlock, events, setClip, no
             {recent.map((e, i) => (
               <button key={i} onClick={() => setClip({ camId, name: cam!.camera_name, ts: new Date(new Date(e.created_at).getTime() - 8000).toISOString() })} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 11, padding: "3px 0", cursor: "pointer" }}>
                 <span>🔓 unlocked {new Date(e.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-                <span style={{ color: "#5FB8E0" }}>▶ clip</span>
+                <span style={{ color: "#00A3FF" }}>▶ clip</span>
               </button>
             ))}
           </div>
@@ -139,12 +139,12 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
     setMsg(r?.ok ? `Unlocked "${d.name}" ✓ — logged.` : (r?.error || "Couldn't unlock."));
   }
 
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18 } as const;
   const bumpTick = React.useCallback(() => setTick(n => n + 1), []);
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Shield size={17} color="#5FB8E0" /> Site Security</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Shield size={17} color="#00A3FF" /> Site Security</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Watch each door, unlock, and pull recent footage — all here, no Eagle Eye needed.</div>
 
       {/* All cameras — 9-up grid, paginated. Shows everything Eagle Eye sees at this site. */}
@@ -172,7 +172,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
                       {ok ? (
                         <LiveCam alt={name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} />
                       ) : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>preview unavailable</div>}
-                      {ok && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 8.5, fontWeight: 700, color: "#fca5a5" }}>● LIVE</span>}
+                      {ok && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 8.5, fontWeight: 700, color: "#FF4D4D" }}>● LIVE</span>}
                       <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 10.5, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "3px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
                     </div>
                   </button>
@@ -194,7 +194,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
                 ? "Eagle Eye isn’t connected for this site yet. Enter the client ID/secret in the 🔑 Setup tab, then click “Connect Eagle Eye →” and approve."
                 : `Connected, but couldn’t load cameras: ${camErr}`}
             </div>
-            <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ marginTop: 9, fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 9, padding: "7px 14px", cursor: "pointer" }}>Connect Eagle Eye →</button>
+            <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ marginTop: 9, fontSize: 12, fontWeight: 600, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", borderRadius: 9, padding: "7px 14px", cursor: "pointer" }}>Connect Eagle Eye →</button>
           </div>
         );
       })()}
@@ -206,14 +206,14 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
         // (Brivo) box below, so this stays purposeful instead of duplicating it.
         const camDoors = doors.filter(d => cams[d.id]?.camera_id);
         if (loading) return <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>;
-        if (camDoors.length === 0) return <div style={{ fontSize: 13, color: "#9FD8EC" }}>No doors have a camera linked yet — link a camera to a door in the Doors box below and it will appear here.</div>;
+        if (camDoors.length === 0) return <div style={{ fontSize: 13, color: "#00A3FF" }}>No doors have a camera linked yet — link a camera to a door in the Doors box below and it will appear here.</div>;
         return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>{camDoors.map(d => <DoorTile key={d.id} door={d} cam={cams[d.id]} siteId={siteId} tick={tick} busy={busy} onUnlock={unlock} events={events} setClip={setClip} noPreview={noPreview} bumpTick={bumpTick} />)}</div>;
       })()}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fca5a5", marginTop: 10 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#FF4D4D", marginTop: 10 }}>{msg}</div>}
 
       {clip && (
         <div onClick={() => setClip(null)} style={{ position: "fixed", inset: 0, zIndex: 140, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", background: "#0a1426", border: "1px solid rgba(95,184,224,0.3)", borderRadius: 16, padding: 14 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", background: "#0a1426", border: "1px solid rgba(0,163,255,0.3)", borderRadius: 16, padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <b style={{ color: "#fff", fontSize: 14 }}>{clip.name} — recent recording</b>
               <button onClick={() => setClip(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 18, cursor: "pointer" }}>✕</button>

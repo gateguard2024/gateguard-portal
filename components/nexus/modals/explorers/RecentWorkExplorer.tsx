@@ -17,7 +17,7 @@ interface Props { onBack: () => void }
 const STATUS_HEX: Record<string, string> = {
   draft: '#6B7EFF', sent: '#fbbf24', viewed: '#34d399', accepted: '#10b981', declined: '#f87171',
   open: '#f87171', scheduled: '#6B7EFF', in_progress: '#fbbf24', completed: '#34d399',
-  call: '#0B7285', email: '#6B7EFF', meeting: '#5FB8E0', task: '#fbbf24', note: '#94a3b8',
+  call: '#0B7285', email: '#6B7EFF', meeting: '#00A3FF', task: '#fbbf24', note: '#94a3b8',
   critical: '#f87171', high: '#fbbf24', normal: '#6B7EFF', low: '#34d399',
 }
 
@@ -58,7 +58,7 @@ export function RecentWorkExplorer({ onBack }: Props) {
   const TABS = [
     { key: 'quotes'   as RWTab, label: 'Quotes',      hex: '#6B7EFF', count: quotes.length  },
     { key: 'orders'   as RWTab, label: 'Work Orders',  hex: '#34d399', count: orders.length  },
-    { key: 'activity' as RWTab, label: 'CRM Activity', hex: '#5FB8E0', count: acts.length    },
+    { key: 'activity' as RWTab, label: 'CRM Activity', hex: '#00A3FF', count: acts.length    },
   ]
   const activeHex = TABS.find(t => t.key === tab)?.hex ?? '#6B7EFF'
   const rgb = hexRgb(activeHex)
@@ -171,7 +171,7 @@ export function RecentWorkExplorer({ onBack }: Props) {
               return (
                 <div key={wo.id} className="grid items-center gap-2 px-3 py-2 rounded-lg"
                   style={{ gridTemplateColumns: '68px 1fr 80px 58px', background: 'rgba(255,255,255,0.025)', border: '0.5px solid rgba(255,255,255,0.06)' }}>
-                  <span className="text-[10px] font-mono truncate" style={{ color: 'rgba(52,211,153,0.8)' }}>{wo.wo_number ?? '—'}</span>
+                  <span className="text-[10px] font-mono truncate" style={{ color: 'rgba(0,230,153,0.8)' }}>{wo.wo_number ?? '—'}</span>
                   <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>{wo.title ?? '—'}</p>
                   <span className="text-[10px] px-1.5 py-0.5 rounded text-center capitalize"
                     style={{ background: `rgba(${rgb2},0.12)`, color: hex2, border: `0.5px solid rgba(${rgb2},0.25)` }}>

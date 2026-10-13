@@ -153,7 +153,7 @@ const C = {
   blueAlpha:   'rgba(107,126,255,0.15)',
   amberAlpha:  'rgba(245,158,11,0.15)',
   greenAlpha:  'rgba(16,185,129,0.15)',
-  redAlpha:    'rgba(248,113,113,0.15)',
+  redAlpha:    'rgba(255,77,77,0.15)',
   purpleAlpha: 'rgba(167,139,250,0.15)',
 }
 
@@ -229,7 +229,7 @@ const STEP_CFG: Record<StepType, {
   select:   { accent: C.blue,   surface: 'rgba(107,126,255,0.09)',  border: 'rgba(107,126,255,0.38)',  label: 'SELECT',   numColor: C.blue   },
   photo:    { accent: C.amber,  surface: 'rgba(245,158,11,0.09)',   border: 'rgba(245,158,11,0.38)',   label: 'CAPTURE',  numColor: C.amber  },
   resolved: { accent: C.green,  surface: 'rgba(16,185,129,0.09)',   border: 'rgba(16,185,129,0.38)',   label: 'RESOLVED', numColor: C.green  },
-  escalate: { accent: C.red,    surface: 'rgba(248,113,113,0.09)',  border: 'rgba(248,113,113,0.38)',  label: 'ESCALATE', numColor: C.red    },
+  escalate: { accent: C.red,    surface: 'rgba(255,77,77,0.09)',  border: 'rgba(255,77,77,0.38)',  label: 'ESCALATE', numColor: C.red    },
 }
 
 // ─── Meter configuration per unit type ───────────────────────────────────────
@@ -4255,7 +4255,7 @@ function TechTool() {
           </button>
 
           {netscoutError && (
-            <div style={{ background: 'rgba(248,113,113,0.08)', border: `1px solid rgba(248,113,113,0.28)`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontFamily: MONO, fontSize: 11, color: C.red, letterSpacing: '0.06em' }}>
+            <div style={{ background: 'rgba(255,77,77,0.08)', border: `1px solid rgba(255,77,77,0.28)`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontFamily: MONO, fontSize: 11, color: C.red, letterSpacing: '0.06em' }}>
               ✗ {netscoutError}
             </div>
           )}
@@ -4465,7 +4465,7 @@ const S: Record<string, React.CSSProperties> = {
   divider:      { height: 1, background: 'rgba(107,126,255,0.10)', margin: '16px 0' },
   answerRow:    { display: 'flex', gap: 10 },
   yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '22px 12px', borderRadius: 14, background: 'linear-gradient(160deg, rgba(5,150,105,0.28) 0%, rgba(16,185,129,0.15) 100%)', border: '1.5px solid rgba(16,185,129,0.50)', cursor: 'pointer', boxShadow: '0 2px 20px rgba(16,185,129,0.14)' },
-  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '22px 12px', borderRadius: 14, background: 'linear-gradient(160deg, rgba(220,38,38,0.24) 0%, rgba(248,113,113,0.13) 100%)', border: '1.5px solid rgba(248,113,113,0.50)', cursor: 'pointer', boxShadow: '0 2px 20px rgba(248,113,113,0.12)' },
+  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '22px 12px', borderRadius: 14, background: 'linear-gradient(160deg, rgba(220,38,38,0.24) 0%, rgba(255,77,77,0.13) 100%)', border: '1.5px solid rgba(255,77,77,0.50)', cursor: 'pointer', boxShadow: '0 2px 20px rgba(255,77,77,0.12)' },
   btnLabel:     { fontFamily: MONO, fontSize: 28, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
   btnSub:       { fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', color: C.textMuted },
   doneBtn:      { width: '100%', padding: '17px', borderRadius: 13, background: 'linear-gradient(135deg, rgba(245,158,11,0.20) 0%, rgba(245,158,11,0.11) 100%)', border: '1.5px solid rgba(245,158,11,0.42)', color: C.amber, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
@@ -4473,7 +4473,7 @@ const S: Record<string, React.CSSProperties> = {
   ghostSmBtn:   { width: '100%', padding: '13px', borderRadius: 10, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
   logFixBtn:    { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   newSessionBtn:{ flex: 1, padding: '14px', borderRadius: 13, background: C.bgCard, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  keepGoingBtn: { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.30)', color: C.red, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  keepGoingBtn: { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(255,77,77,0.10)', border: '1px solid rgba(255,77,77,0.30)', color: C.red, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   footer:       { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid rgba(107,126,255,0.10)', background: C.bgCard, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
   spinner:      { width: 22, height: 22, borderRadius: '50%', border: `2.5px solid rgba(107,126,255,0.15)`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
 }

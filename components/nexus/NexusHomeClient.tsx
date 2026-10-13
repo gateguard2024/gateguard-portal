@@ -48,7 +48,7 @@ function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
       <style>{`
-        @keyframes nxGlow { 0%,100% { filter: drop-shadow(0 0 16px rgba(95,184,224,0.45)); } 50% { filter: drop-shadow(0 0 32px rgba(95,184,224,0.85)); } }
+        @keyframes nxGlow { 0%,100% { filter: drop-shadow(0 0 16px rgba(0,163,255,0.45)); } 50% { filter: drop-shadow(0 0 32px rgba(0,163,255,0.85)); } }
         @keyframes nxSpin { to { transform: rotate(360deg); } }
         @keyframes nxPing { 0% { transform: scale(0.55); opacity: 0.65; } 80%,100% { transform: scale(2.3); opacity: 0; } }
         @keyframes nxDot { 0%,100% { transform: scale(0.85); opacity: 0.8; } 50% { transform: scale(1.35); opacity: 1; } }
@@ -63,21 +63,21 @@ function NexusMark() {
       `}</style>
       <div className="nx-glow" style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <svg width="68" height="68" viewBox="0 0 68 68" fill="none" aria-hidden="true">
-          <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="rgba(255,255,255,0.92)" strokeWidth="1.4" fill="rgba(95,184,224,0.08)" />
-          <polygon className="nx-spin" points="34,14 47,20 56,32 56,36 47,48 34,54 21,48 12,36 12,32 21,20" stroke="rgba(95,184,224,0.72)" strokeWidth="1" fill="none" />
-          <circle className="nx-ping" cx="34" cy="34" r="9" stroke="rgba(95,184,224,0.55)" strokeWidth="1.2" fill="none" />
-          <circle cx="34" cy="34" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="rgba(95,184,224,0.10)" />
-          <line x1="34" y1="4"  x2="34" y2="25" stroke="rgba(95,184,224,0.28)" strokeWidth="1" />
-          <line x1="34" y1="43" x2="34" y2="64" stroke="rgba(95,184,224,0.28)" strokeWidth="1" />
-          <line x1="4"  y1="34" x2="25" y2="34" stroke="rgba(95,184,224,0.28)" strokeWidth="1" />
-          <line x1="43" y1="34" x2="64" y2="34" stroke="rgba(95,184,224,0.28)" strokeWidth="1" />
-          <circle className="nx-dot" cx="34" cy="34" r="2.5" fill="#5FB8E0" />
+          <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="rgba(255,255,255,0.92)" strokeWidth="1.4" fill="rgba(0,163,255,0.08)" />
+          <polygon className="nx-spin" points="34,14 47,20 56,32 56,36 47,48 34,54 21,48 12,36 12,32 21,20" stroke="rgba(0,163,255,0.72)" strokeWidth="1" fill="none" />
+          <circle className="nx-ping" cx="34" cy="34" r="9" stroke="rgba(0,163,255,0.55)" strokeWidth="1.2" fill="none" />
+          <circle cx="34" cy="34" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="rgba(0,163,255,0.10)" />
+          <line x1="34" y1="4"  x2="34" y2="25" stroke="rgba(0,163,255,0.28)" strokeWidth="1" />
+          <line x1="34" y1="43" x2="34" y2="64" stroke="rgba(0,163,255,0.28)" strokeWidth="1" />
+          <line x1="4"  y1="34" x2="25" y2="34" stroke="rgba(0,163,255,0.28)" strokeWidth="1" />
+          <line x1="43" y1="34" x2="64" y2="34" stroke="rgba(0,163,255,0.28)" strokeWidth="1" />
+          <circle className="nx-dot" cx="34" cy="34" r="2.5" fill="#00A3FF" />
         </svg>
       </div>
       <div className="text-center">
         <h1 className="text-5xl font-extrabold uppercase" style={{ letterSpacing: '0.3em', lineHeight: 1, backgroundImage: 'linear-gradient(135deg,#9EE8FF 0%,#4A8CFF 50%,#9A8CFF 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent', filter: 'drop-shadow(0 0 24px rgba(74,140,255,0.6)) drop-shadow(0 1px 0 rgba(255,255,255,0.25))' }}>NEXUS</h1>
         <div className="mt-2 flex justify-center">
-          <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.45)', color: '#7DE5FF' }}>Professional</span>
+          <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.45)', color: '#7DE5FF' }}>Professional</span>
         </div>
         <p className="uppercase" style={{ letterSpacing: '0.22em', marginTop: 6 }}>
           <span className="text-xs" style={{ color: 'rgba(125,229,255,0.74)' }}>by </span>
@@ -184,7 +184,7 @@ export default function NexusHomeClient() {
           <div className="mt-6 w-full max-w-2xl space-y-3">
             <button type="button" onClick={() => setMessages([])} className="text-xs transition-colors" style={{ color: 'rgba(255,255,255,0.82)' }}>Clear conversation</button>
             {messages.slice(-4).map((message, index) => (
-              <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className={message.role === 'user' ? 'ml-12 rounded-xl px-4 py-3 text-right text-sm leading-relaxed' : 'mr-12 rounded-xl px-4 py-3 text-sm leading-relaxed'} style={message.role === 'user' ? { background: 'linear-gradient(135deg, rgba(95,184,224,0.20), rgba(107,126,255,0.14))', border: '0.5px solid rgba(95,184,224,0.32)', color: 'rgba(255,255,255,0.9)' } : { background: 'rgba(8,18,34,0.68)', border: '0.5px solid rgba(59,130,246,0.16)', color: 'rgba(255,255,255,0.74)' }}>{message.content}</div>
+              <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className={message.role === 'user' ? 'ml-12 rounded-xl px-4 py-3 text-right text-sm leading-relaxed' : 'mr-12 rounded-xl px-4 py-3 text-sm leading-relaxed'} style={message.role === 'user' ? { background: 'linear-gradient(135deg, rgba(0,163,255,0.20), rgba(107,126,255,0.14))', border: '0.5px solid rgba(0,163,255,0.32)', color: 'rgba(255,255,255,0.9)' } : { background: 'rgba(8,18,34,0.68)', border: '0.5px solid rgba(59,130,246,0.16)', color: 'rgba(255,255,255,0.74)' }}>{message.content}</div>
             ))}
           </div>
         )}

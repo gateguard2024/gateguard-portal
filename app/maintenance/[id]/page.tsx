@@ -197,7 +197,7 @@ const PRIORITY_CFG: Record<WOPriority, { bg: string; text: string; label: string
 }
 
 const STATUS_CFG: Record<WOStatus, { label: string; bg: string; text: string; dot: string }> = {
-  open:        { label: 'Open',        bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]',    dot: 'bg-[#3f7fb8]'    },
+  open:        { label: 'Open',        bg: 'bg-[#00A3FF]/10',    text: 'text-[#00A3FF]',    dot: 'bg-[#3f7fb8]'    },
   scheduled:   { label: 'Scheduled',   bg: 'bg-violet-500/10',  text: 'text-violet-400',  dot: 'bg-violet-400'  },
   in_route:    { label: 'En Route',    bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
   on_site:     { label: 'On Site',     bg: 'bg-orange-500/10',  text: 'text-orange-400',  dot: 'bg-orange-400'  },
@@ -225,7 +225,7 @@ const PRIORITIES: { value: WOPriority; label: string }[] = [
 
 // Compact category colors used in Details tab checklist overview
 const CATEGORY_COLORS: Record<string, string> = {
-  task:         'bg-[#2f7fb8]/10 text-[#5FB8E0]',
+  task:         'bg-[#00A3FF]/10 text-[#00A3FF]',
   safety:       'bg-red-500/10 text-red-400',
   inspection:   'bg-violet-500/10 text-violet-400',
   verification: 'bg-emerald-500/10 text-emerald-400',
@@ -296,7 +296,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <div className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all',
                   isPast   && 'bg-emerald-500 border-emerald-500 text-white',
-                  isActive && !isPast && 'bg-[#5FB8E0] border-[#5FB8E0] text-white shadow-md shadow-[#5FB8E0]/30',
+                  isActive && !isPast && 'bg-[#00A3FF] border-[#00A3FF] text-white shadow-md shadow-[#00A3FF]/30',
                   isFuture && !isActive && 'bg-card border-border text-foreground',
                 )}>
                   {isPast ? (
@@ -308,7 +308,7 @@ function WorkOrderTimeline({ status }: { status: WOStatus }) {
                 <span className={cn(
                   'text-[10px] font-medium whitespace-nowrap',
                   isPast   && 'text-emerald-600',
-                  isActive && !isPast && 'text-[#5FB8E0]',
+                  isActive && !isPast && 'text-[#00A3FF]',
                   isFuture && !isActive && 'text-slate-400',
                 )}>
                   {step.label}
@@ -386,8 +386,8 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 
   if (!open) return null
 
-  const sel = 'w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background pr-8'
-  const inp = 'w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background'
+  const sel = 'w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 bg-background pr-8'
+  const inp = 'w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 bg-background'
   const lbl = 'block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5'
 
   return (
@@ -465,7 +465,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
 
           <div><label className={lbl}>Notes</label>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={4}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 bg-background resize-none" /></div>
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 bg-background resize-none" /></div>
 
           {error && (
             <div className="flex items-center gap-2 text-red-500 text-xs bg-red-500/10 rounded-xl px-3 py-2">
@@ -481,7 +481,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
               type="checkbox"
               checked={sendNotifications}
               onChange={e => setSendNotifications(e.target.checked)}
-              className="w-4 h-4 rounded border-border accent-[#2f7fb8] cursor-pointer"
+              className="w-4 h-4 rounded border-border accent-[#00A3FF] cursor-pointer"
             />
             <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
               Send email notification to property manager on status change
@@ -492,7 +492,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
         <div className="border-t border-border p-4 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-[#5FB8E0]/20">
+            className="flex-1 py-2.5 rounded-xl bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-[#00A3FF]/20">
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
@@ -1138,7 +1138,7 @@ export default function WorkOrderDetailPage() {
             </Link>
             <button
               onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#2f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#00A3FF] text-white rounded-lg hover:bg-[#00A3FF] transition-colors"
             >
               <Edit2 size={12} /> Edit
             </button>
@@ -1172,7 +1172,7 @@ export default function WorkOrderDetailPage() {
                     <button
                       key={t.id}
                       onClick={() => handleSelectTemplate(t.id)}
-                      className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all text-sm font-medium text-foreground"
+                      className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all text-sm font-medium text-foreground"
                     >
                       {t.label}
                     </button>
@@ -1180,7 +1180,7 @@ export default function WorkOrderDetailPage() {
                 </div>
               ) : (
                 <>
-                  <button onClick={() => setEmailTemplate(null)} className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] flex items-center gap-1">
+                  <button onClick={() => setEmailTemplate(null)} className="text-xs text-[#00A3FF] hover:text-[#00A3FF] flex items-center gap-1">
                     <ArrowLeft size={11} /> Back to templates
                   </button>
 
@@ -1190,17 +1190,17 @@ export default function WorkOrderDetailPage() {
                       value={emailTo}
                       onChange={e => setEmailTo(e.target.value)}
                       placeholder="recipient@example.com"
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                     />
                     {(wo.site_pm_email || wo.site_contact_email) && (
                       <div className="flex gap-2 mt-1.5 flex-wrap">
                         {wo.site_pm_email && (
-                          <button onClick={() => setEmailTo(wo.site_pm_email!)} className="text-xs text-[#5FB8E0] hover:underline">
+                          <button onClick={() => setEmailTo(wo.site_pm_email!)} className="text-xs text-[#00A3FF] hover:underline">
                             Use PM: {wo.site_pm_email}
                           </button>
                         )}
                         {wo.site_contact_email && wo.site_contact_email !== wo.site_pm_email && (
-                          <button onClick={() => setEmailTo(wo.site_contact_email!)} className="text-xs text-[#5FB8E0] hover:underline">
+                          <button onClick={() => setEmailTo(wo.site_contact_email!)} className="text-xs text-[#00A3FF] hover:underline">
                             Use contact: {wo.site_contact_email}
                           </button>
                         )}
@@ -1213,7 +1213,7 @@ export default function WorkOrderDetailPage() {
                     <input
                       value={emailSubject}
                       onChange={e => setEmailSubject(e.target.value)}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                     />
                   </div>
 
@@ -1223,7 +1223,7 @@ export default function WorkOrderDetailPage() {
                       value={emailBody}
                       onChange={e => setEmailBody(e.target.value)}
                       rows={10}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 resize-none"
                     />
                   </div>
                 </>
@@ -1236,7 +1236,7 @@ export default function WorkOrderDetailPage() {
                 <button
                   onClick={handleSendEmail}
                   disabled={emailSending || !emailTo.trim() || !emailSubject.trim() || emailSent}
-                  className="flex-1 py-2.5 rounded-xl bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold disabled:opacity-50 shadow-lg shadow-[#5FB8E0]/20"
+                  className="flex-1 py-2.5 rounded-xl bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-semibold disabled:opacity-50 shadow-lg shadow-[#00A3FF]/20"
                 >
                   {emailSent ? '✓ Sent!' : emailSending ? 'Sending…' : 'Send Email'}
                 </button>
@@ -1346,7 +1346,7 @@ export default function WorkOrderDetailPage() {
                       className={cn(
                         'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
                         tab === t.key
-                          ? 'border-[#5FB8E0] text-[#5FB8E0]'
+                          ? 'border-[#00A3FF] text-[#00A3FF]'
                           : 'border-transparent text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -1374,11 +1374,11 @@ export default function WorkOrderDetailPage() {
                     {/* Tasks */}
                     <button
                       onClick={() => setTab('field_tickets')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <CheckCircle2 size={15} className="text-[#5FB8E0]" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Tasks →</span>
+                        <CheckCircle2 size={15} className="text-[#00A3FF]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Tasks →</span>
                       </div>
                       {totalCount > 0 ? (
                         <>
@@ -1395,11 +1395,11 @@ export default function WorkOrderDetailPage() {
                     {/* Crew */}
                     <button
                       onClick={() => setTab('crew')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Users size={15} className="text-violet-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Crew →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Crew →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {crewCount === null ? '—' : crewCount}
@@ -1411,11 +1411,11 @@ export default function WorkOrderDetailPage() {
                     {/* Schedule */}
                     <button
                       onClick={() => setTab('schedule')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <Calendar size={15} className="text-[#5FB8E0]" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Schedule →</span>
+                        <Calendar size={15} className="text-[#00A3FF]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Schedule →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {phaseCount === null ? '—' : phaseCount}
@@ -1427,11 +1427,11 @@ export default function WorkOrderDetailPage() {
                     {/* Time */}
                     <button
                       onClick={() => setTab('time')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Clock size={15} className="text-amber-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Time →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Time →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">
                         {totalMins > 0 ? `${Math.floor(totalMins / 60)}h ${totalMins % 60}m` : '0h'}
@@ -1444,11 +1444,11 @@ export default function WorkOrderDetailPage() {
                     {/* Comments */}
                     <button
                       onClick={() => setTab('comments')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <MessageSquare size={15} className="text-[#9FD8EC]" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Comments →</span>
+                        <MessageSquare size={15} className="text-[#00A3FF]" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Comments →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">{comments.length}</p>
                       <p className="text-xs text-muted-foreground mt-1">{comments.length === 0 ? 'No comments yet' : `Last: ${timeAgo(comments[comments.length - 1].created_at)}`}</p>
@@ -1457,11 +1457,11 @@ export default function WorkOrderDetailPage() {
                     {/* Parts */}
                     <button
                       onClick={() => setTab('parts')}
-                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#5FB8E0]/50 hover:bg-accent/30 transition-all group"
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-[#00A3FF]/50 hover:bg-accent/30 transition-all group"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <Package size={15} className="text-emerald-400" />
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#5FB8E0] transition-colors">Parts →</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-[#00A3FF] transition-colors">Parts →</span>
                       </div>
                       <p className="text-2xl font-bold text-foreground">{partsUsed.length}</p>
                       <p className="text-xs text-muted-foreground mt-1">{partsTotal > 0 ? `$${partsTotal.toFixed(2)} total` : 'No parts logged'}</p>
@@ -1472,7 +1472,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-[#5FB8E0]" />
+                        <CheckCircle2 size={14} className="text-[#00A3FF]" />
                         Checklist
                         {totalCount > 0 && (
                           <span className="text-xs text-muted-foreground font-normal">({doneCount}/{totalCount})</span>
@@ -1480,7 +1480,7 @@ export default function WorkOrderDetailPage() {
                       </h3>
                       <button
                         onClick={() => setTab('field_tickets')}
-                        className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] font-medium transition-colors"
+                        className="text-xs text-[#00A3FF] hover:text-[#00A3FF] font-medium transition-colors"
                       >
                         Manage in Field Tickets →
                       </button>
@@ -1500,7 +1500,7 @@ export default function WorkOrderDetailPage() {
                                 'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
                                 item.completed
                                   ? 'bg-emerald-400 border-emerald-400'
-                                  : 'border-border hover:border-[#5FB8E0]'
+                                  : 'border-border hover:border-[#00A3FF]'
                               )}
                             >
                               {item.completed && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -1532,12 +1532,12 @@ export default function WorkOrderDetailPage() {
                         onChange={e => setNewItem(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAddItem()}
                         placeholder="Quick-add a task…"
-                        className="flex-1 text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                        className="flex-1 text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                       />
                       <button
                         onClick={handleAddItem}
                         disabled={addingItem || !newItem.trim()}
-                        className="px-3 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
+                        className="px-3 py-2 bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
                       >
                         <Plus size={14} />
                       </button>
@@ -1548,7 +1548,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Camera size={14} className="text-[#5FB8E0]" />
+                        <Camera size={14} className="text-[#00A3FF]" />
                         Photos
                         {photos.length > 0 && (
                           <span className="text-xs text-muted-foreground font-normal">({photos.length})</span>
@@ -1557,7 +1557,7 @@ export default function WorkOrderDetailPage() {
                       <button
                         onClick={() => photoInputRef.current?.click()}
                         disabled={uploadingPhoto}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 text-xs font-semibold text-[#00A3FF] hover:text-[#00A3FF] transition-colors disabled:opacity-50"
                       >
                         <Plus size={13} />
                         {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
@@ -1590,7 +1590,7 @@ export default function WorkOrderDetailPage() {
                         <p className="text-sm text-muted-foreground">No photos yet</p>
                         <button
                           onClick={() => photoInputRef.current?.click()}
-                          className="text-xs font-semibold text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors"
+                          className="text-xs font-semibold text-[#00A3FF] hover:text-[#00A3FF] transition-colors"
                         >
                           Add the first photo
                         </button>
@@ -1656,7 +1656,7 @@ export default function WorkOrderDetailPage() {
                     <div className="bg-card border border-border rounded-xl overflow-hidden">
                       <div className="px-5 py-3.5 border-b border-border">
                         <h3 className="text-sm font-semibold flex items-center gap-2">
-                          <Wrench size={14} className="text-[#5FB8E0]" />
+                          <Wrench size={14} className="text-[#00A3FF]" />
                           Sub-Work Orders
                           <span className="text-xs text-muted-foreground font-normal">({subWOs.length})</span>
                         </h3>
@@ -1670,11 +1670,11 @@ export default function WorkOrderDetailPage() {
                               href={`/maintenance/${sub.id}`}
                               className="flex items-center gap-4 px-5 py-3 hover:bg-accent/30 transition-colors"
                             >
-                              <span className="font-mono text-xs text-[#5FB8E0]">{sub.wo_number}</span>
+                              <span className="font-mono text-xs text-[#00A3FF]">{sub.wo_number}</span>
                               <span className="flex-1 text-sm font-medium text-foreground">{sub.title}</span>
                               {sub.assignee_name && (
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <div className="w-5 h-5 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[10px] text-[#9FD8EC] font-semibold">
+                                  <div className="w-5 h-5 rounded-full bg-[#151D2A] flex items-center justify-center text-[10px] text-[#00A3FF] font-semibold">
                                     {sub.assignee_name.split(' ').map(n => n[0]).join('')}
                                   </div>
                                   {sub.assignee_name}
@@ -1710,7 +1710,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="px-5 py-4 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Clock size={14} className="text-[#5FB8E0]" />
+                        <Clock size={14} className="text-[#00A3FF]" />
                         Time Clock
                         {totalMins > 0 && (
                           <span className="ml-auto text-xs text-muted-foreground font-normal">
@@ -1752,7 +1752,7 @@ export default function WorkOrderDetailPage() {
                           value={clockTechName}
                           onChange={e => setClockTechName(e.target.value)}
                           placeholder="Technician name"
-                          className="flex-1 text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                          className="flex-1 text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                         />
                         <button
                           onClick={handleClockIn}
@@ -1843,7 +1843,7 @@ export default function WorkOrderDetailPage() {
                   {comments.map(c => (
                     <div key={c.id} className="bg-card border border-border rounded-xl p-4 group">
                       <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[11px] text-[#9FD8EC] font-bold shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-[#151D2A] flex items-center justify-center text-[11px] text-[#00A3FF] font-bold shrink-0">
                           {c.author_initials}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1873,13 +1873,13 @@ export default function WorkOrderDetailPage() {
                       onChange={e => setNewComment(e.target.value)}
                       placeholder="Add a comment…"
                       rows={3}
-                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none mb-3"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 resize-none mb-3"
                     />
                     <div className="flex justify-end">
                       <button
                         onClick={handlePostComment}
                         disabled={postingComment || !newComment.trim()}
-                        className="flex items-center gap-2 px-4 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors"
                       >
                         <Send size={13} />
                         {postingComment ? 'Posting…' : 'Post Comment'}
@@ -1909,7 +1909,7 @@ export default function WorkOrderDetailPage() {
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Package size={14} className="text-[#5FB8E0]" />
+                        <Package size={14} className="text-[#00A3FF]" />
                         Parts Used
                       </h3>
                       {partsTotal > 0 && (
@@ -1940,7 +1940,7 @@ export default function WorkOrderDetailPage() {
                           {partsUsed.map(p => {
                             const np = normPart(p)
                             const actionColors: Record<string, string> = {
-                              used:      'bg-[#2f7fb8]/10 text-[#5FB8E0]',
+                              used:      'bg-[#00A3FF]/10 text-[#00A3FF]',
                               installed: 'bg-emerald-500/10 text-emerald-400',
                               returned:  'bg-amber-500/10 text-amber-400',
                               warranty:  'bg-violet-500/10 text-violet-400',
@@ -1966,7 +1966,7 @@ export default function WorkOrderDetailPage() {
                                         disabled={markingUsed === p.id}
                                         className={cn(
                                           'opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] font-semibold transition-all',
-                                          'bg-[#2f7fb8]/10 text-[#5FB8E0] hover:bg-[#2f7fb8]/20 disabled:opacity-40'
+                                          'bg-[#00A3FF]/10 text-[#00A3FF] hover:bg-[#00A3FF]/20 disabled:opacity-40'
                                         )}
                                       >
                                         {markingUsed === p.id ? '…' : 'Mark Used'}
@@ -2003,7 +2003,7 @@ export default function WorkOrderDetailPage() {
                             value={invSearch}
                             onChange={e => handleInvSearch(e.target.value)}
                             placeholder="Search inventory (or enter manually below)…"
-                            className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                           />
                           {selectedInvItem && (
                             <button
@@ -2040,7 +2040,7 @@ export default function WorkOrderDetailPage() {
                         </div>
 
                         {selectedInvItem && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-[#2f7fb8]/10 rounded-lg text-xs text-[#5FB8E0]">
+                          <div className="flex items-center gap-2 px-3 py-2 bg-[#00A3FF]/10 rounded-lg text-xs text-[#00A3FF]">
                             <Package size={12} />
                             <span className="font-medium">{selectedInvItem.name}</span>
                             <span className="text-muted-foreground">· {selectedInvItem.on_hand} in stock</span>
@@ -2052,27 +2052,27 @@ export default function WorkOrderDetailPage() {
                             value={partForm.part_name}
                             onChange={e => setPartForm(f => ({ ...f, part_name: e.target.value }))}
                             placeholder="Part name *"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                           />
                           <input
                             value={partForm.part_number}
                             onChange={e => setPartForm(f => ({ ...f, part_number: e.target.value }))}
                             placeholder="SKU / Part # (optional)"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                           />
                           <input
                             type="number" min="1"
                             value={partForm.quantity}
                             onChange={e => setPartForm(f => ({ ...f, quantity: e.target.value }))}
                             placeholder="Qty"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                           />
                           <input
                             type="number" step="0.01" min="0"
                             value={partForm.unit_cost}
                             onChange={e => setPartForm(f => ({ ...f, unit_cost: e.target.value }))}
                             placeholder="Unit cost ($)"
-                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30"
+                            className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30"
                           />
                         </div>
 
@@ -2085,8 +2085,8 @@ export default function WorkOrderDetailPage() {
                               className={cn(
                                 'flex-1 py-1.5 text-xs font-medium rounded-lg border capitalize transition-colors',
                                 partForm.action === a
-                                  ? 'bg-[#2f7fb8] text-white border-[#5FB8E0]'
-                                  : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
+                                  ? 'bg-[#00A3FF] text-white border-[#00A3FF]'
+                                  : 'border-border text-muted-foreground hover:border-[#00A3FF]'
                               )}
                             >
                               {a}
@@ -2096,14 +2096,14 @@ export default function WorkOrderDetailPage() {
 
                         <div className="flex gap-2">
                           <button onClick={() => { setShowAddPart(false); setSelectedInvItem(null); setInvResults([]) }} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
-                          <button onClick={handleAddPart} disabled={addingPart || !partForm.part_name.trim()} className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40 transition-colors">
+                          <button onClick={handleAddPart} disabled={addingPart || !partForm.part_name.trim()} className="flex-1 py-2 rounded-lg bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-medium disabled:opacity-40 transition-colors">
                             {addingPart ? 'Adding…' : 'Add Part'}
                           </button>
                         </div>
                       </div>
                     ) : (
                       <div className="px-5 py-3 border-t border-border">
-                        <button onClick={() => setShowAddPart(true)} className="flex items-center gap-1.5 text-sm text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors">
+                        <button onClick={() => setShowAddPart(true)} className="flex items-center gap-1.5 text-sm text-[#00A3FF] hover:text-[#00A3FF] transition-colors">
                           <Plus size={14} /> Add Part
                         </button>
                       </div>
@@ -2117,7 +2117,7 @@ export default function WorkOrderDetailPage() {
                 <div className="space-y-5">
                   {costsLoading ? (
                     <div className="flex items-center justify-center py-16">
-                      <div className="animate-spin w-6 h-6 border-2 border-[#5FB8E0] border-t-transparent rounded-full" />
+                      <div className="animate-spin w-6 h-6 border-2 border-[#00A3FF] border-t-transparent rounded-full" />
                     </div>
                   ) : (
                     <>
@@ -2248,7 +2248,7 @@ export default function WorkOrderDetailPage() {
                                   <td className="px-5 py-3">
                                     <span className={cn(
                                       'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium',
-                                      c.source === 'manual'      ? 'bg-[#2f7fb8]/10 text-[#5FB8E0]' :
+                                      c.source === 'manual'      ? 'bg-[#00A3FF]/10 text-[#00A3FF]' :
                                       c.source === 'time_entry'  ? 'bg-amber-500/10 text-amber-400' :
                                       c.source === 'parts_used'  ? 'bg-emerald-500/10 text-emerald-400' :
                                       'bg-muted text-muted-foreground'
@@ -2272,7 +2272,7 @@ export default function WorkOrderDetailPage() {
                               <select
                                 value={costForm.cost_type}
                                 onChange={e => setCostForm(f => ({ ...f, cost_type: e.target.value }))}
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A3FF]"
                               >
                                 {['labor','parts','subcontractor','travel','overhead','other'].map(t => (
                                   <option key={t} value={t} className="capitalize">{t}</option>
@@ -2282,7 +2282,7 @@ export default function WorkOrderDetailPage() {
                                 value={costForm.description}
                                 onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))}
                                 placeholder="Description"
-                                className="col-span-1 h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
+                                className="col-span-1 h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A3FF]"
                               />
                               <input
                                 value={costForm.quantity}
@@ -2291,7 +2291,7 @@ export default function WorkOrderDetailPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A3FF]"
                               />
                               <input
                                 value={costForm.unit_cost}
@@ -2300,7 +2300,7 @@ export default function WorkOrderDetailPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5FB8E0]"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A3FF]"
                               />
                             </div>
                             <div className="flex gap-2">
@@ -2332,7 +2332,7 @@ export default function WorkOrderDetailPage() {
                                     fetch(`/api/job-costs/${wo.id}`).then(r => r.json()).then(d => setJobCosts(d)).finally(() => setCostsLoading(false))
                                   } finally { setAddingCost(false) }
                                 }}
-                                className="px-3 py-1.5 text-sm bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white rounded-lg disabled:opacity-40 transition-colors"
+                                className="px-3 py-1.5 text-sm bg-[#00A3FF] hover:bg-[#00A3FF] text-white rounded-lg disabled:opacity-40 transition-colors"
                               >
                                 {addingCost ? 'Adding…' : 'Add Entry'}
                               </button>
@@ -2342,7 +2342,7 @@ export default function WorkOrderDetailPage() {
                           <div className="px-5 py-3 border-t border-border">
                             <button
                               onClick={() => setShowAddCost(true)}
-                              className="flex items-center gap-1.5 text-sm text-[#5FB8E0] hover:text-[#5FB8E0] transition-colors"
+                              className="flex items-center gap-1.5 text-sm text-[#00A3FF] hover:text-[#00A3FF] transition-colors"
                             >
                               <Plus size={14} /> Add Manual Entry
                             </button>
@@ -2388,7 +2388,7 @@ export default function WorkOrderDetailPage() {
                 <div className="p-4 space-y-3.5">
 
                   <DetailRow icon={<Hash size={13} />} label="WO Number">
-                    <span className="font-mono text-[#5FB8E0] text-xs">{wo.wo_number}</span>
+                    <span className="font-mono text-[#00A3FF] text-xs">{wo.wo_number}</span>
                   </DetailRow>
 
                   <DetailRow icon={<Tag size={13} />} label="Category">
@@ -2398,7 +2398,7 @@ export default function WorkOrderDetailPage() {
                   <DetailRow icon={<User size={13} />} label="Assigned To">
                     {wo.assignee_name ? (
                       <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-[#1e2a3a] flex items-center justify-center text-[10px] text-[#9FD8EC] font-semibold">
+                        <div className="w-5 h-5 rounded-full bg-[#151D2A] flex items-center justify-center text-[10px] text-[#00A3FF] font-semibold">
                           {wo.assignee_name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <span className="text-sm">{wo.assignee_name}</span>
@@ -2455,7 +2455,7 @@ export default function WorkOrderDetailPage() {
                         href={mapsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] text-[#5FB8E0] hover:text-[#5FB8E0] font-semibold flex items-center gap-1"
+                        className="text-[10px] text-[#00A3FF] hover:text-[#00A3FF] font-semibold flex items-center gap-1"
                       >
                         Directions →
                       </a>
@@ -2486,7 +2486,7 @@ export default function WorkOrderDetailPage() {
                           href={mapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#2f7fb8]/10 text-[#5FB8E0] hover:bg-[#2f7fb8]/20 text-xs font-semibold rounded-lg transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#00A3FF]/10 text-[#00A3FF] hover:bg-[#00A3FF]/20 text-xs font-semibold rounded-lg transition-colors"
                         >
                           <Navigation size={11} /> Get Directions
                         </a>
@@ -2530,14 +2530,14 @@ export default function WorkOrderDetailPage() {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Property Manager</p>
                         <p className="text-sm font-medium text-foreground">{wo.site_pm_name}</p>
                         {wo.site_pm_phone && (
-                          <a href={`tel:${wo.site_pm_phone}`} className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5">
+                          <a href={`tel:${wo.site_pm_phone}`} className="text-xs text-[#00A3FF] hover:underline flex items-center gap-1 mt-0.5">
                             <PhoneCall size={10} /> {wo.site_pm_phone}
                           </a>
                         )}
                         {wo.site_pm_email && (
                           <button
                             onClick={() => { setEmailTo(wo.site_pm_email!); setEmailSlideOpen(true) }}
-                            className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-xs text-[#00A3FF] hover:underline flex items-center gap-1 mt-0.5"
                           >
                             <Send size={10} /> {wo.site_pm_email}
                           </button>
@@ -2549,14 +2549,14 @@ export default function WorkOrderDetailPage() {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Primary Contact</p>
                         <p className="text-sm font-medium text-foreground">{wo.site_contact_name}</p>
                         {wo.site_contact_phone && (
-                          <a href={`tel:${wo.site_contact_phone}`} className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5">
+                          <a href={`tel:${wo.site_contact_phone}`} className="text-xs text-[#00A3FF] hover:underline flex items-center gap-1 mt-0.5">
                             <PhoneCall size={10} /> {wo.site_contact_phone}
                           </a>
                         )}
                         {wo.site_contact_email && (
                           <button
                             onClick={() => { setEmailTo(wo.site_contact_email!); setEmailSlideOpen(true) }}
-                            className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-xs text-[#00A3FF] hover:underline flex items-center gap-1 mt-0.5"
                           >
                             <Send size={10} /> {wo.site_contact_email}
                           </button>
@@ -2680,7 +2680,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
   const available = techs.filter(t => !assignedIds.has(t.id))
 
   const ROLE_COLORS: Record<string, string> = {
-    lead:       'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',
+    lead:       'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]',
     owner:      'bg-violet-100 text-violet-700',
     supervisor: 'bg-amber-100 text-amber-700',
     crew:       'bg-muted text-muted-foreground',
@@ -2697,7 +2697,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#00A3FF] text-white px-3 py-1.5 rounded-lg hover:bg-[#00A3FF] font-medium"
         >
           <Plus size={13} /> Add Crew
         </button>
@@ -2708,7 +2708,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">Add crew member</p>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
             value={selectedTechId}
             onChange={e => setSelectedTechId(e.target.value)}
           >
@@ -2718,7 +2718,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
             ))}
           </select>
           <select
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
             value={selectedRole}
             onChange={e => setSelectedRole(e.target.value)}
           >
@@ -2729,7 +2729,7 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
           </select>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#00A3FF] text-white py-2 rounded-lg font-medium hover:bg-[#00A3FF] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add to Job'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2743,13 +2743,13 @@ function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: str
         <div className="border border-dashed border-border rounded-xl p-8 text-center">
           <Users size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No crew assigned yet</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline mt-1">Add first crew member →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#00A3FF] hover:underline mt-1">Add first crew member →</button>
         </div>
       ) : (
         <div className="space-y-2">
           {crew.map(member => (
             <div key={member.id} className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-[#5FB8E0] text-white text-xs font-bold flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[#00A3FF] text-white text-xs font-bold flex items-center justify-center shrink-0">
                 {member.technician.initials}
               </div>
               <div className="flex-1 min-w-0">
@@ -2876,7 +2876,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
 
   const PHASE_STATUS_CFG: Record<string, { label: string; color: string }> = {
     pending:     { label: 'Pending',     color: 'bg-muted text-slate-500' },
-    in_progress: { label: 'In Progress', color: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' },
+    in_progress: { label: 'In Progress', color: 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]' },
     complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700' },
     skipped:     { label: 'Skipped',     color: 'bg-amber-100 text-amber-600' },
   }
@@ -2896,7 +2896,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
         </div>
         <button
           onClick={() => { setAdding(true); setError(null) }}
-          className="flex items-center gap-1.5 text-xs bg-[#5FB8E0] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
+          className="flex items-center gap-1.5 text-xs bg-[#00A3FF] text-white px-3 py-1.5 rounded-lg hover:bg-[#00A3FF] font-medium"
         >
           <Plus size={13} /> Add Phase
         </button>
@@ -2906,7 +2906,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
         <div className="border border-border rounded-xl p-4 bg-card/50 space-y-3">
           <p className="text-xs font-semibold text-foreground">New phase / day</p>
           <input
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
             placeholder={'Name — e.g. "Day 1 – Rough-in" or "Phase 2 – Commissioning"'}
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -2916,7 +2916,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
                 value={form.scheduled_date}
                 onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
               />
@@ -2925,14 +2925,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date (optional)</label>
               <input
                 type="date"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
                 value={form.end_date}
                 onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
               />
             </div>
           </div>
           <textarea
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background resize-none"
             rows={2}
             placeholder="Notes for this phase (optional)"
             value={form.notes}
@@ -2940,7 +2940,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#00A3FF] text-white py-2 rounded-lg font-medium hover:bg-[#00A3FF] disabled:opacity-50">
               {saving ? 'Adding…' : 'Add Phase'}
             </button>
             <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -2955,7 +2955,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
           <Calendar size={24} className="text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground font-medium">No phases defined</p>
           <p className="text-xs text-muted-foreground mt-1 mb-3">Add phases to split this job across multiple days or stages</p>
-          <button onClick={() => setAdding(true)} className="text-xs text-[#5FB8E0] hover:underline">Add first phase →</button>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#00A3FF] hover:underline">Add first phase →</button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -2968,7 +2968,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                   <div className="px-4 py-3 space-y-3">
                     <p className="text-xs font-semibold text-foreground">Edit phase {idx + 1}</p>
                     <input
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
                       placeholder="Phase name"
                       value={editPhaseForm.name}
                       onChange={e => setEditPhaseForm(f => ({ ...f, name: e.target.value }))}
@@ -2978,7 +2978,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
                           value={editPhaseForm.scheduled_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))}
                         />
@@ -2987,14 +2987,14 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                         <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date</label>
                         <input
                           type="date"
-                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background"
+                          className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background"
                           value={editPhaseForm.end_date}
                           onChange={e => setEditPhaseForm(f => ({ ...f, end_date: e.target.value }))}
                         />
                       </div>
                     </div>
                     <textarea
-                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#5FB8E0] bg-background resize-none"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#00A3FF] bg-background resize-none"
                       rows={2}
                       placeholder="Notes (optional)"
                       value={editPhaseForm.notes}
@@ -3002,7 +3002,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     />
                     {editError && <p className="text-xs text-red-500">{editError}</p>}
                     <div className="flex gap-2">
-                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#5FB8E0] text-white py-2 rounded-lg font-medium hover:bg-[#2f7fb8] disabled:opacity-50">
+                      <button onClick={handleEditSave} disabled={editSaving} className="flex-1 text-xs bg-[#00A3FF] text-white py-2 rounded-lg font-medium hover:bg-[#00A3FF] disabled:opacity-50">
                         {editSaving ? 'Saving…' : 'Save Changes'}
                       </button>
                       <button onClick={cancelEdit} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
@@ -3034,7 +3034,7 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
                     </button>
                     <button
                       onClick={() => startEdit(phase)}
-                      className="text-muted-foreground hover:text-[#5FB8E0] transition-colors mt-0.5 shrink-0"
+                      className="text-muted-foreground hover:text-[#00A3FF] transition-colors mt-0.5 shrink-0"
                       title="Edit phase"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3069,7 +3069,7 @@ interface FTTabProps {
 }
 
 const CATEGORY_CFG: Record<string, { label: string; bg: string; text: string }> = {
-  task:         { label: 'Task',         bg: 'bg-[#2f7fb8]/10',    text: 'text-[#5FB8E0]'    },
+  task:         { label: 'Task',         bg: 'bg-[#00A3FF]/10',    text: 'text-[#00A3FF]'    },
   safety:       { label: 'Safety',       bg: 'bg-red-500/10',     text: 'text-red-400'     },
   inspection:   { label: 'Inspect',      bg: 'bg-violet-500/10',  text: 'text-violet-400'  },
   verification: { label: 'Verify',       bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
@@ -3233,7 +3233,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
   // ── Derived ─────────────────────────────────────────────────────────────────
   const tasksDone  = tasks.filter(t => t.completed).length
   const equipDone  = equipment.filter(e => e.confirmed).length
-  const inp        = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30'
+  const inp        = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30'
 
   return (
     <div className="space-y-5">
@@ -3242,7 +3242,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-[#5FB8E0]" />
+            <CheckCircle2 size={14} className="text-[#00A3FF]" />
             Service Tasks
             {tasks.length > 0 && (
               <span className="text-xs text-muted-foreground font-normal">({tasksDone}/{tasks.length} done)</span>
@@ -3250,7 +3250,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           </h3>
           <button
             onClick={() => setShowAddTask(true)}
-            className="flex items-center gap-1 text-xs bg-[#2f7fb8] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
+            className="flex items-center gap-1 text-xs bg-[#00A3FF] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#00A3FF] font-medium"
           >
             <Plus size={12} /> Add Task
           </button>
@@ -3278,7 +3278,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                       'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
                       task.completed
                         ? 'bg-emerald-400 border-emerald-400'
-                        : 'border-border hover:border-[#5FB8E0]'
+                        : 'border-border hover:border-[#00A3FF]'
                     )}
                   >
                     {task.completed && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -3388,7 +3388,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                       className={cn(
                         'text-[10px] font-semibold px-2 py-1 rounded-md border capitalize transition-colors',
                         taskForm.added_by === a
-                          ? 'bg-[#2f7fb8] text-white border-transparent'
+                          ? 'bg-[#00A3FF] text-white border-transparent'
                           : 'border-border text-muted-foreground hover:border-foreground'
                       )}
                     >
@@ -3410,7 +3410,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 Cancel
               </button>
               <button onClick={handleAddTask} disabled={savingTask || !taskForm.title.trim()}
-                className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40 transition-colors">
+                className="flex-1 py-2 rounded-lg bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-medium disabled:opacity-40 transition-colors">
                 {savingTask ? 'Adding…' : 'Add Task'}
               </button>
             </div>
@@ -3437,7 +3437,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Package size={14} className="text-[#5FB8E0]" />
+            <Package size={14} className="text-[#00A3FF]" />
             Equipment Manifest
             {equipment.length > 0 && (
               <span className="text-xs text-muted-foreground font-normal">({equipDone}/{equipment.length} confirmed)</span>
@@ -3445,7 +3445,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           </h3>
           <button
             onClick={() => setShowAddEquip(true)}
-            className="flex items-center gap-1 text-xs bg-[#2f7fb8] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium"
+            className="flex items-center gap-1 text-xs bg-[#00A3FF] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#00A3FF] font-medium"
           >
             <Plus size={12} /> Add Equipment
           </button>
@@ -3639,7 +3639,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                 {(['management', 'tech'] as const).map(a => (
                   <button key={a} onClick={() => setEquipForm(f => ({ ...f, added_by: a }))}
                     className={cn('text-[10px] font-semibold px-2.5 py-1 rounded-md border capitalize transition-colors',
-                      equipForm.added_by === a ? 'bg-[#2f7fb8] text-white border-transparent' : 'border-border text-muted-foreground hover:border-foreground'
+                      equipForm.added_by === a ? 'bg-[#00A3FF] text-white border-transparent' : 'border-border text-muted-foreground hover:border-foreground'
                     )}>
                     {a}
                   </button>
@@ -3649,7 +3649,7 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
             <div className="flex gap-2">
               <button onClick={() => setShowAddEquip(false)} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent">Cancel</button>
               <button onClick={handleAddEquip} disabled={savingEquip || !equipForm.name.trim()}
-                className="flex-1 py-2 rounded-lg bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-medium disabled:opacity-40">
+                className="flex-1 py-2 rounded-lg bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-medium disabled:opacity-40">
                 {savingEquip ? 'Adding…' : 'Add to Manifest'}
               </button>
             </div>
@@ -3805,7 +3805,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
   const OUTCOME_CFG: Record<string, { label: string; color: string }> = {
     reached:            { label: 'Reached',           color: 'bg-emerald-500/10 text-emerald-400' },
     no_answer:          { label: 'No Answer',          color: 'bg-slate-500/10 text-slate-400'     },
-    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-[#2f7fb8]/10 text-[#5FB8E0]'       },
+    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-[#00A3FF]/10 text-[#00A3FF]'       },
     wrong_number:       { label: 'Wrong Number',       color: 'bg-red-500/10 text-red-400'         },
     callback_requested: { label: 'Callback Requested', color: 'bg-amber-500/10 text-amber-400'     },
   }
@@ -3820,7 +3820,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
       : null,
   ].filter(Boolean) as { name: string; phone: string; label: string }[]
 
-  const inp = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30'
+  const inp = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30'
   const lbl = 'block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1'
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading calls…</div>
@@ -3846,7 +3846,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">{c.label}</p>
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-                  <p className="text-xs text-[#5FB8E0]">{c.phone}</p>
+                  <p className="text-xs text-[#00A3FF]">{c.phone}</p>
                 </div>
                 <a
                   href={`tel:${c.phone}`}
@@ -3869,13 +3869,13 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <PhoneCall size={14} className="text-[#5FB8E0]" />
+            <PhoneCall size={14} className="text-[#00A3FF]" />
             Call Log
             {calls.length > 0 && <span className="text-xs font-normal text-muted-foreground">({calls.length})</span>}
           </h3>
           <button
             onClick={() => setShowLogForm(v => !v)}
-            className="flex items-center gap-1.5 text-xs bg-[#2f7fb8] text-white px-3 py-1.5 rounded-lg hover:bg-[#2f7fb8] font-medium transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-[#00A3FF] text-white px-3 py-1.5 rounded-lg hover:bg-[#00A3FF] font-medium transition-colors"
           >
             <Plus size={12} /> Log a Call
           </button>
@@ -3895,8 +3895,8 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                   className={cn(
                     'flex-1 py-2 text-xs font-semibold rounded-lg border capitalize transition-colors flex items-center justify-center gap-1.5',
                     form.direction === d
-                      ? 'bg-[#2f7fb8] text-white border-[#5FB8E0]'
-                      : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
+                      ? 'bg-[#00A3FF] text-white border-[#00A3FF]'
+                      : 'border-border text-muted-foreground hover:border-[#00A3FF]'
                   )}
                 >
                   {d === 'outbound' ? <PhoneOutgoing size={11} /> : <PhoneCall size={11} />}
@@ -3936,7 +3936,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                       'px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-colors',
                       form.outcome === o
                         ? OUTCOME_CFG[o].color + ' border-transparent'
-                        : 'border-border text-muted-foreground hover:border-[#5FB8E0]'
+                        : 'border-border text-muted-foreground hover:border-[#00A3FF]'
                     )}
                   >
                     {OUTCOME_CFG[o].label}
@@ -3952,7 +3952,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 rows={3}
                 placeholder="What was discussed? Any follow-up needed?"
-                className="w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]/30 resize-none"
+                className="w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-[#00A3FF]/30 resize-none"
               />
             </div>
 
@@ -3966,7 +3966,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 py-2 bg-[#2f7fb8] hover:bg-[#2f7fb8] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                className="flex-1 py-2 bg-[#00A3FF] hover:bg-[#00A3FF] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
               >
                 {saving ? 'Saving…' : 'Save Call'}
               </button>
@@ -3995,10 +3995,10 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5',
-                      call.direction === 'outbound' ? 'bg-[#2f7fb8]/10' : 'bg-emerald-500/10'
+                      call.direction === 'outbound' ? 'bg-[#00A3FF]/10' : 'bg-emerald-500/10'
                     )}>
                       {call.direction === 'outbound'
-                        ? <PhoneOutgoing size={14} className="text-[#5FB8E0]" />
+                        ? <PhoneOutgoing size={14} className="text-[#00A3FF]" />
                         : <PhoneCall size={14} className="text-emerald-400" />
                       }
                     </div>
@@ -4006,7 +4006,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-foreground">{call.contact_name || 'Unknown contact'}</span>
                         {call.phone && (
-                          <a href={`tel:${call.phone}`} className="text-xs text-[#5FB8E0] hover:underline">{call.phone}</a>
+                          <a href={`tel:${call.phone}`} className="text-xs text-[#00A3FF] hover:underline">{call.phone}</a>
                         )}
                         {outcomeInfo && (
                           <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', outcomeInfo.color)}>
@@ -4018,7 +4018,7 @@ function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
                         <span>{fmtCallTime(call.called_at)}</span>
                         {call.duration_mins && <span>· {call.duration_mins}min</span>}
                         {call.made_by && <span>· by {call.made_by}</span>}
-                        <span className={cn('capitalize', call.direction === 'outbound' ? 'text-[#5FB8E0]' : 'text-emerald-400')}>
+                        <span className={cn('capitalize', call.direction === 'outbound' ? 'text-[#00A3FF]' : 'text-emerald-400')}>
                           · {call.direction}
                         </span>
                       </div>

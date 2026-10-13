@@ -294,16 +294,16 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 transition-colors"
-            style={{ color: 'rgba(52,211,153,0.55)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(52,211,153,0.95)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(52,211,153,0.55)')}
+            style={{ color: 'rgba(0,230,153,0.55)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(0,230,153,0.95)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,230,153,0.55)')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span className="text-xs font-medium">Tasks</span>
           </button>
-          <div className="flex-1 h-px" style={{ background: 'rgba(52,211,153,0.15)' }} />
+          <div className="flex-1 h-px" style={{ background: 'rgba(0,230,153,0.15)' }} />
 
           {/* View toggle */}
           <div className="flex gap-0.5">
@@ -314,7 +314,7 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
                 className="px-2 py-0.5 rounded text-[10px] font-medium transition-all capitalize"
                 style={
                   viewMode === v
-                    ? { background: 'rgba(52,211,153,0.18)', color: '#34d399', border: '0.5px solid rgba(52,211,153,0.35)' }
+                    ? { background: 'rgba(0,230,153,0.18)', color: '#34d399', border: '0.5px solid rgba(0,230,153,0.35)' }
                     : { background: 'transparent', color: 'rgba(255,255,255,0.82)', border: '0.5px solid rgba(255,255,255,0.07)' }
                 }
               >
@@ -325,7 +325,7 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
 
           <span
             className="text-[9px] uppercase tracking-widest font-mono px-2 py-0.5 rounded"
-            style={{ background: 'rgba(52,211,153,0.08)', color: 'rgba(52,211,153,0.55)', border: '0.5px solid rgba(52,211,153,0.18)' }}
+            style={{ background: 'rgba(0,230,153,0.08)', color: 'rgba(0,230,153,0.55)', border: '0.5px solid rgba(0,230,153,0.18)' }}
           >
             Explorer
           </span>
@@ -386,7 +386,7 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
               onClick={handleAddTask}
               disabled={saving}
               className="text-[10px] px-2.5 py-1 rounded-lg transition-all"
-              style={{ background: 'rgba(52,211,153,0.18)', color: '#34d399', border: '0.5px solid rgba(52,211,153,0.3)' }}
+              style={{ background: 'rgba(0,230,153,0.18)', color: '#34d399', border: '0.5px solid rgba(0,230,153,0.3)' }}
             >
               {saving ? '…' : 'Add'}
             </button>
@@ -394,7 +394,7 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
         </div>
 
         {addError && (
-          <div className="rounded-lg px-2.5 py-1.5 text-[10px]" style={{ background: 'rgba(248,113,113,0.12)', border: '0.5px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>
+          <div className="rounded-lg px-2.5 py-1.5 text-[10px]" style={{ background: 'rgba(255,77,77,0.12)', border: '0.5px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>
             {addError}
           </div>
         )}
@@ -403,7 +403,7 @@ export function TaskExplorer({ onBack, onStatusChange }: Props) {
           <span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
             {todos.filter(t => t.status !== 'done').length} open · sorted by AI score
           </span>
-          <span className="text-[9px] uppercase tracking-widest" style={{ color: 'rgba(52,211,153,0.3)' }}>
+          <span className="text-[9px] uppercase tracking-widest" style={{ color: 'rgba(0,230,153,0.3)' }}>
             Nexus Tasks · Explorer Mode
           </span>
         </div>

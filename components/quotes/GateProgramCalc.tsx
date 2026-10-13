@@ -81,7 +81,7 @@ export function GateProgramCalc({ defaultUnits, onClose, onGenerate }: {
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#cfe0f0', borderRadius: 9, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Close</button>
         </div>
 
-        {err && <div style={{ color: '#fca5a5', fontSize: 12, marginBottom: 8 }}>{err}</div>}
+        {err && <div style={{ color: '#FF4D4D', fontSize: 12, marginBottom: 8 }}>{err}</div>}
         {!rates ? <div style={{ color: '#9fb4c9', fontSize: 13, padding: 20, textAlign: 'center' }}>Loading rates…</div> : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -94,7 +94,7 @@ export function GateProgramCalc({ defaultUnits, onClose, onGenerate }: {
                 { l: 'Exterior doors', v: exteriorDoors, set: setExteriorDoors },
               ].map((f, k) => (
                 <label key={k} style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9' }}>{f.l}
-                  <input type="number" value={f.v} onChange={e => f.set(num(e.target.value))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '9px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb', fontSize: 15, fontWeight: 600 }} />
+                  <input type="number" value={f.v} onChange={e => f.set(num(e.target.value))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '9px 10px', borderRadius: 9, background: '#0c1420', border: '1px solid #1E293B', color: '#eef4fb', fontSize: 15, fontWeight: 600 }} />
                 </label>
               ))}
             </div>
@@ -108,10 +108,10 @@ export function GateProgramCalc({ defaultUnits, onClose, onGenerate }: {
                 </div>
 
                 {/* Generated lines preview */}
-                <div style={{ marginTop: 12, borderRadius: 11, border: '1px solid rgba(140,170,200,0.2)', background: 'rgba(12,20,32,0.4)', padding: 10 }}>
+                <div style={{ marginTop: 12, borderRadius: 11, border: '1px solid #1E293B', background: 'rgba(12,20,32,0.4)', padding: 10 }}>
                   {calc.lines.length === 0 && <div style={{ fontSize: 12, color: '#6f8299' }}>Enter counts to generate lines.</div>}
                   {calc.lines.map((l, k) => (
-                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '5px 0', borderBottom: '1px dashed rgba(140,170,200,0.16)', color: '#d6e3ef' }}>
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '5px 0', borderBottom: '1px dashed #1E293B', color: '#d6e3ef' }}>
                       <span>{l.description}{l.qty > 1 ? ` ×${l.qty}` : ''}</span>
                       <span style={{ fontWeight: 700 }}>{money(l.qty * l.unit_price)}{l.is_recurring ? '/mo' : ''}</span>
                     </div>

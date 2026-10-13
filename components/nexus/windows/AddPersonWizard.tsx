@@ -28,7 +28,7 @@ function Card({ active, title, sub, onClick }: { active: boolean; title: string;
   return (
     <button type="button" onClick={onClick}
       className="rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5"
-      style={{ background: active ? 'rgba(95,184,224,0.16)' : 'rgba(0,0,0,0.18)', border: active ? '1px solid rgba(95,184,224,0.45)' : '1px solid rgba(255,255,255,0.07)' }}>
+      style={{ background: active ? 'rgba(0,163,255,0.16)' : 'rgba(0,0,0,0.18)', border: active ? '1px solid rgba(0,163,255,0.45)' : '1px solid rgba(255,255,255,0.07)' }}>
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{title}</div>
       <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{sub}</div>
     </button>
@@ -112,12 +112,12 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
     <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="mx-auto flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
         style={{
-          background: 'radial-gradient(circle at 16% 0%, rgba(95,184,224,0.10), transparent 34%), linear-gradient(180deg,#1d2a39,#141d28)',
-          border: '1px solid rgba(140,170,200,0.28)', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.07)',
+          background: 'radial-gradient(circle at 16% 0%, rgba(0,163,255,0.10), transparent 34%), linear-gradient(180deg,#1d2a39,#141d28)',
+          border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.07)',
         }}>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(159,216,236,0.86)' }}>Add Person</div>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,163,255,0.86)' }}>Add Person</div>
             <h2 className="mt-1 text-xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>
               {step === 1 ? 'Who are you adding?' : step === 2 ? 'Their details' : 'Review & add'}
             </h2>
@@ -127,7 +127,7 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {result && (
-            <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${result.ok ? 'rgba(52,211,153,0.35)' : 'rgba(248,113,113,0.35)'}`, color: result.ok ? '#6ee7b7' : '#fca5a5' }}>
+            <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.12)', border: `1px solid ${result.ok ? 'rgba(0,230,153,0.35)' : 'rgba(255,77,77,0.35)'}`, color: result.ok ? '#00E699' : '#FF4D4D' }}>
               {result.message}
             </div>
           )}
@@ -206,15 +206,15 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
             {step === 1 ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (
-            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>Done</button>
+            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>Done</button>
           ) : step < 3 ? (
             <button type="button" disabled={step === 1 ? !kind : !canContinue} onClick={() => setStep((step + 1) as 1 | 2 | 3)}
-              className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>
+              className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>
               Continue
             </button>
           ) : (
             <button type="button" disabled={busy || !canContinue} onClick={submit}
-              className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #5FB8E0, #5FB8E0)', color: 'white' }}>
+              className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>
               {busy ? 'Adding…' : 'Add Person'}
             </button>
           )}

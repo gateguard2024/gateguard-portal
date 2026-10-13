@@ -59,7 +59,7 @@ export default function TrashPage() {
     <div style={{ minHeight: '100dvh', background: BG, color: TXT, padding: '20px 18px 60px', maxWidth: 760, margin: '0 auto', fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
       <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: MUT, fontSize: 12, textDecoration: 'none', marginBottom: 14 }}><ArrowLeft size={14} /> Back to dashboard</a>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: RED }}><Trash2 size={16} /></span>
+        <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(255,77,77,0.16)', border: '1px solid rgba(255,77,77,0.4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: RED }}><Trash2 size={16} /></span>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Deleted Items</h1>
       </div>
       <p style={{ fontSize: 13, color: MUT, margin: '0 0 16px' }}>Restore anything by mistake, or permanently remove it. Permanent delete is corporate-only and can’t be undone.</p>
@@ -72,13 +72,13 @@ export default function TrashPage() {
         ))}
       </div>
 
-      {msg && <div style={{ marginBottom: 12, fontSize: 13, padding: '9px 12px', borderRadius: 10, background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#6EE7B7' }}>{msg}</div>}
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, padding: '9px 12px', borderRadius: 10, background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.3)', color: '#6EE7B7' }}>{msg}</div>}
 
       {sel.size > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13, color: MUT }}>{sel.size} selected</span>
-          <button disabled={busy} onClick={() => act('restore')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(52,211,153,0.16)', border: '1px solid rgba(52,211,153,0.4)', color: '#6EE7B7' }}>{busy ? <Loader2 size={13} /> : <RotateCcw size={13} />} Restore</button>
-          <button disabled={busy} onClick={() => act('purge')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.4)', color: RED }}><Trash2 size={13} /> Permanently delete</button>
+          <button disabled={busy} onClick={() => act('restore')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(0,230,153,0.16)', border: '1px solid rgba(0,230,153,0.4)', color: '#6EE7B7' }}>{busy ? <Loader2 size={13} /> : <RotateCcw size={13} />} Restore</button>
+          <button disabled={busy} onClick={() => act('purge')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(255,77,77,0.16)', border: '1px solid rgba(255,77,77,0.4)', color: RED }}><Trash2 size={13} /> Permanently delete</button>
         </div>
       )}
 

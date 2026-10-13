@@ -26,7 +26,7 @@ const TYPE_META: Record<string, { label: string; hex: string }> = {
   pm_schedule:      { label: 'PM',          hex: '#0B7285' },
   gcal:             { label: 'Personal',    hex: '#7C3AED' },
   crm_activity:     { label: 'CRM',         hex: '#fbbf24' },
-  tracker_task:     { label: 'Tracker',     hex: '#5FB8E0' },
+  tracker_task:     { label: 'Tracker',     hex: '#00A3FF' },
 }
 
 function hexRgb(h: string) {

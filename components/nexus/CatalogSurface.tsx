@@ -12,8 +12,8 @@ const PANEL = '#1a2532';
 const BORDER = 'rgba(255,255,255,0.1)';
 const TEXT = '#F8FAFC';
 const MUTED = '#94A3B8';
-const BRAND = '#2f7fb8';
-const CYAN = '#5FB8E0';
+const BRAND = '#00A3FF';
+const CYAN = '#00A3FF';
 
 // ── Catalog option sets (mirrors legacy ProductModal) ────────────────────────
 const CATEGORIES = [
@@ -22,14 +22,14 @@ const CATEGORIES = [
 ] as const;
 const DESIGN_ROLES = ['', 'camera', 'board', 'gateway', 'reader', 'switch', 'power', 'intercom', 'gate', 'sensor', 'lock', 'network', 'other'];
 const DESIGN_CABLES = ['', '110V 12/2', '240V 12/3', '16/2', '18/2', '18/6', '22/4', '22/2 shielded', 'CAT6', 'CAT5e'];
-const DESIGN_COLORS = ['#5FB8E0', '#10B981', '#F59E0B', '#EF4444', '#9FD8EC', '#EC4899', '#0891B2', '#64748B', '#111827'];
+const DESIGN_COLORS = ['#00A3FF', '#10B981', '#F59E0B', '#EF4444', '#00A3FF', '#EC4899', '#0891B2', '#64748B', '#111827'];
 
 const BRAND_COLORS: Record<string, string> = {
   'Eagle Eye Networks': '#1B4F72', 'LTS Security': '#1A5276', 'Ubiquiti': '#0559C9',
   'Brivo': '#0F4C81', 'Altronix': '#1F618D', 'Securitron (ASSA ABLOY)': '#117A65',
   'DITEK': '#1E8449', 'Optex': '#6C3483', 'DoorKing': '#784212', 'FAAC': '#943126',
   'Viking Electronics': '#7B241C', '2N': '#1A252F', 'Shelly': '#E67E22',
-  'Belden': '#1C2833', 'ADI Pro': '#17202A', 'GateGuard': '#2f7fb8', 'Bosch': '#B03A2E',
+  'Belden': '#1C2833', 'ADI Pro': '#17202A', 'GateGuard': '#00A3FF', 'Bosch': '#B03A2E',
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -606,7 +606,7 @@ function ProductEditor({
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        value={design.color ?? '#5FB8E0'}
+                        value={design.color ?? '#00A3FF'}
                         onChange={(e) => setD('color', e.target.value)}
                         className="h-9 w-10 rounded-lg cursor-pointer p-0.5"
                         style={{ border: `1px solid ${BORDER}`, backgroundColor: PANEL }}
@@ -678,7 +678,7 @@ function ProductEditor({
                             onClick={() => findImage(slot.kind)}
                             disabled={imgBusy !== '' || !form.name}
                             className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-semibold disabled:opacity-50"
-                            style={{ backgroundColor: '#9FD8EC', color: TEXT }}
+                            style={{ backgroundColor: '#00A3FF', color: TEXT }}
                           >
                             {imgBusy === `find-${slot.kind}` ? <Loader2 size={10} className="animate-spin" /> : <Search size={10} />}Find
                           </button>
@@ -934,7 +934,7 @@ export default function CatalogSurface() {
                 onClick={() => setCatFilter(c.label)}
                 className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors shrink-0"
                 style={active
-                  ? { background: `linear-gradient(135deg, ${BRAND}, rgba(95,184,224,0.2))`, border: `1px solid ${CYAN}88`, color: '#fff' }
+                  ? { background: `linear-gradient(135deg, ${BRAND}, rgba(0,163,255,0.2))`, border: `1px solid ${CYAN}88`, color: '#fff' }
                   : { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
               >
                 {c.label}

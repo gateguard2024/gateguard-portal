@@ -247,7 +247,7 @@ export function PeopleModal() {
             {/* Quick add contact */}
             {newAdded ? (
               <div className="rounded-2xl p-3.5 flex items-center gap-2"
-                style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                style={{ background: 'rgba(0,230,153,0.06)', border: '1px solid rgba(0,230,153,0.2)' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path d="M2 6l3 3 5-5" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -263,20 +263,20 @@ export function PeopleModal() {
         <button
           onClick={() => setView('archivist')}
           className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
-          style={{ background: 'rgba(95,184,224,0.05)', border: '0.5px solid rgba(95,184,224,0.15)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(95,184,224,0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(95,184,224,0.05)' }}
+          style={{ background: 'rgba(0,163,255,0.05)', border: '0.5px solid rgba(0,163,255,0.15)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,163,255,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,163,255,0.05)' }}
         >
-          <span className="text-[10px]" style={{ color: 'rgba(95,184,224,0.7)' }}>Open full people directory — accounts, network, contacts</span>
+          <span className="text-[10px]" style={{ color: 'rgba(0,163,255,0.7)' }}>Open full people directory — accounts, network, contacts</span>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(95,184,224,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(0,163,255,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
 
         <ActionCommandBar onSubmit={handleCommand} isLoading={cmdLoading} />
 
         {cmdResult && (
-          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(95,184,224,0.08)', border: '0.5px solid rgba(95,184,224,0.2)', color: 'rgba(255,255,255,0.75)' }}>
+          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(0,163,255,0.08)', border: '0.5px solid rgba(0,163,255,0.2)', color: 'rgba(255,255,255,0.75)' }}>
             {cmdResult}
           </div>
         )}

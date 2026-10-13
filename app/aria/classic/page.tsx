@@ -427,7 +427,7 @@ const PipelinePanel = memo(function PipelinePanel({ phase, synthStep }: { phase:
                                      status === 'done' ? '0 0 16px rgba(16,185,129,0.4)' : 'none',
                         }}>
                         {status === 'done' ? (
-                          <Check size={22} style={{ color: '#6ee7b7' }} />
+                          <Check size={22} style={{ color: '#00E699' }} />
                         ) : status === 'running' ? (
                           <Loader2 size={22} className="animate-spin" style={{ color: '#c7d2fe' }} />
                         ) : (
@@ -2658,9 +2658,9 @@ export default function ARIAPage() {
                                                   'bg-[#131B2E] border-white/10 text-slate-100'
                 )}>
                   <span className="shrink-0 mt-0.5 font-bold text-[10px] px-1.5 py-0.5 rounded-md border"
-                    style={{ background: note.type === 'confirmation' ? 'rgba(52,211,153,0.15)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.15)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.06)',
+                    style={{ background: note.type === 'confirmation' ? 'rgba(0,230,153,0.15)' : note.type === 'contradiction' ? 'rgba(255,77,77,0.15)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.06)',
                              color: note.type === 'confirmation' ? '#6EE7B7' : note.type === 'contradiction' ? '#FCA5A5' : note.type === 'new_finding' ? '#FBBF24' : '#94A3B8',
-                             borderColor: note.type === 'confirmation' ? 'rgba(52,211,153,0.35)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.35)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.35)' : 'rgba(255,255,255,0.12)',
+                             borderColor: note.type === 'confirmation' ? 'rgba(0,230,153,0.35)' : note.type === 'contradiction' ? 'rgba(255,77,77,0.35)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.35)' : 'rgba(255,255,255,0.12)',
                            }}>
                     {note.provider}
                   </span>

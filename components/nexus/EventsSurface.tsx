@@ -10,11 +10,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 // ---- Console tokens (identical to Operations / Sales / My Day) ----
 const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
-const INPUT_STYLE = { background: '#16232f', border: '1px solid rgba(140,170,200,0.28)', color: '#eaf2fb' } as const
-const MODAL_STYLE = { background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', boxShadow: '0 30px 70px rgba(0,0,0,0.6)' } as const
+const INPUT_STYLE = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb' } as const
+const MODAL_STYLE = { background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', boxShadow: '0 30px 70px rgba(0,0,0,0.6)' } as const
 
 interface EventRow {
   id: string; title: string; event_type: string; status: string; event_date?: string | null
@@ -42,9 +42,9 @@ const STATUS_STAGE: Record<string, number> = { planning: 0, promoting: 2, confir
 
 // Three swim-lanes for the board.
 const BUCKETS: { key: string; label: string; statuses: string[]; accent: string }[] = [
-  { key: 'promo', label: 'Planning & Promo', statuses: ['planning', 'promoting'], accent: '#9FD8EC' },
-  { key: 'confirmed', label: 'Confirmed', statuses: ['confirmed'], accent: '#5FB8E0' },
-  { key: 'wrap', label: 'Held & Wrap-up', statuses: ['held', 'follow_up', 'complete'], accent: '#7ee0a8' },
+  { key: 'promo', label: 'Planning & Promo', statuses: ['planning', 'promoting'], accent: '#00A3FF' },
+  { key: 'confirmed', label: 'Confirmed', statuses: ['confirmed'], accent: '#00A3FF' },
+  { key: 'wrap', label: 'Held & Wrap-up', statuses: ['held', 'follow_up', 'complete'], accent: '#00E699' },
   { key: 'hold', label: 'Delayed / Cancelled', statuses: ['delayed', 'cancelled'], accent: '#fbbf24' },
 ]
 
@@ -148,8 +148,8 @@ export function EventsSurface() {
             <h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Events</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setTplOpen(true)} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>▤ Templates</button>
-            <button type="button" onClick={() => setCreateOpen(true)} className="rounded-xl px-3.5 py-2 text-[12px] font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Event</button>
+            <button type="button" onClick={() => setTplOpen(true)} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>▤ Templates</button>
+            <button type="button" onClick={() => setCreateOpen(true)} className="rounded-xl px-3.5 py-2 text-[12px] font-semibold" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>＋ New Event</button>
           </div>
         </div>
 
@@ -165,23 +165,23 @@ export function EventsSurface() {
         {loading ? (
           <div className="py-16 text-center text-sm" style={{ color: '#c3d3e2' }}>Loading events…</div>
         ) : events.length === 0 ? (
-          <div className="rounded-2xl py-16 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)' }}>
+          <div className="rounded-2xl py-16 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
             <div className="text-sm" style={{ color: '#cfe0f0' }}>No events yet.</div>
-            <div className="mt-1 text-xs" style={{ color: '#9FD8EC' }}>Create one from a template — lunch &amp; learn, launch party, trade show, and more come pre-loaded.</div>
-            <button onClick={() => setCreateOpen(true)} className="mt-4 rounded-xl px-4 py-2 text-xs font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Event</button>
+            <div className="mt-1 text-xs" style={{ color: '#00A3FF' }}>Create one from a template — lunch &amp; learn, launch party, trade show, and more come pre-loaded.</div>
+            <button onClick={() => setCreateOpen(true)} className="mt-4 rounded-xl px-4 py-2 text-xs font-semibold" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>＋ New Event</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {BUCKETS.map(b => {
               const rows = events.filter(e => b.statuses.includes(e.status))
               return (
-                <div key={b.key} className="rounded-2xl p-3" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)' }}>
+                <div key={b.key} className="rounded-2xl p-3" style={{ background: WELL, border: '1px solid #1E293B' }}>
                   <div className="mb-2.5 flex items-center justify-between">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: b.accent }}>{b.label}</div>
                     <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(20,32,44,0.6)', border: `1px solid ${b.accent}55`, color: b.accent }}>{rows.length}</span>
                   </div>
                   {rows.length === 0 ? (
-                    <div className="rounded-xl px-3 py-6 text-center text-[11px]" style={{ color: '#9FD8EC' }}>Nothing here yet</div>
+                    <div className="rounded-xl px-3 py-6 text-center text-[11px]" style={{ color: '#00A3FF' }}>Nothing here yet</div>
                   ) : (
                     <div className="flex flex-col gap-2">
                       {rows.map(e => {
@@ -189,15 +189,15 @@ export function EventsSurface() {
                         return (
                           <button key={e.id} onClick={() => openDetail(e.id)} className="rounded-xl p-3 text-left transition-transform hover:-translate-y-0.5" style={TILE_STYLE}>
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#9FD8EC' }}>{TYPE_LABEL[e.event_type] ?? e.event_type}</span>
-                              <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', border: '1px solid rgba(95,184,224,0.3)', color: '#bfe6ff' }}>{STATUS_LABEL[e.status] ?? e.status}</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#00A3FF' }}>{TYPE_LABEL[e.event_type] ?? e.event_type}</span>
+                              <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', border: '1px solid rgba(0,163,255,0.3)', color: '#bfe6ff' }}>{STATUS_LABEL[e.status] ?? e.status}</span>
                             </div>
                             <div className="mt-1.5 text-[13.5px] font-bold" style={{ color: '#eaf2fb' }}>{e.title}</div>
                             <div className="mt-0.5 text-[11px]" style={{ color: '#c3d3e2' }}>{e.property_name || 'No property'} · {fmtDate(e.event_date)}</div>
                             <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(10,16,24,0.55)' }}>
-                              <div style={{ width: `${((stage + 1) / STAGES.length) * 100}%`, background: 'linear-gradient(90deg,#2f7fb8,#5FB8E0)' }} />
+                              <div style={{ width: `${((stage + 1) / STAGES.length) * 100}%`, background: 'linear-gradient(90deg,#00A3FF,#00A3FF)' }} />
                             </div>
-                            <div className="mt-1 flex items-center justify-between text-[10px]" style={{ color: '#9FD8EC' }}>
+                            <div className="mt-1 flex items-center justify-between text-[10px]" style={{ color: '#00A3FF' }}>
                               <span>{STAGES[stage]}</span>
                               <span>{e.budget != null ? money(e.budget) : `host ${e.host_name || '—'}`}</span>
                             </div>
@@ -219,7 +219,7 @@ export function EventsSurface() {
           <div className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-3xl p-5" style={MODAL_STYLE} onClick={e => e.stopPropagation()}>
             <div className="mb-3 flex items-start justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: '#5FB8E0' }}>Property Events</div>
+                <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Property Events</div>
                 <div className="text-lg font-bold" style={{ color: '#eaf2fb' }}>New event</div>
               </div>
               <button onClick={() => setCreateOpen(false)} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
@@ -231,48 +231,48 @@ export function EventsSurface() {
                 <div className="mb-1 text-[11px]" style={{ color: '#c3d3e2' }}>Start from a template</div>
                 <div className="grid grid-cols-1 gap-1.5">
                   {templates.map(t => (
-                    <button key={t.id} onClick={() => setForm(f => ({ ...f, template_id: f.template_id === t.id ? '' : t.id, event_type: t.event_type, title: f.title || t.name, budget: t.default_budget ? String(t.default_budget) : f.budget }))} className="rounded-xl px-3 py-2 text-left transition-all" style={{ background: form.template_id === t.id ? 'rgba(95,184,224,0.16)' : '#16232f', border: `1px solid ${form.template_id === t.id ? 'rgba(95,184,224,0.5)' : 'rgba(140,170,200,0.18)'}` }}>
+                    <button key={t.id} onClick={() => setForm(f => ({ ...f, template_id: f.template_id === t.id ? '' : t.id, event_type: t.event_type, title: f.title || t.name, budget: t.default_budget ? String(t.default_budget) : f.budget }))} className="rounded-xl px-3 py-2 text-left transition-all" style={{ background: form.template_id === t.id ? 'rgba(0,163,255,0.16)' : '#16232f', border: `1px solid ${form.template_id === t.id ? 'rgba(0,163,255,0.5)' : '#1E293B'}` }}>
                       <div className="flex items-center gap-2">
                         <div className="text-[12.5px] font-semibold" style={{ color: '#eaf2fb' }}>{t.name}</div>
-                        {t.is_starter && <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(126,224,168,0.14)', color: '#7ee0a8' }}>Starter</span>}
+                        {t.is_starter && <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(0,230,153,0.14)', color: '#00E699' }}>Starter</span>}
                       </div>
                       {t.description && <div className="text-[10.5px]" style={{ color: '#8ba0b4' }}>{t.description}</div>}
                     </button>
                   ))}
-                  <div className="text-[10px]" style={{ color: '#9FD8EC' }}>Or leave blank for a scratch event.</div>
+                  <div className="text-[10px]" style={{ color: '#00A3FF' }}>Or leave blank for a scratch event.</div>
                 </div>
               </div>
 
               {/* Property picker */}
               <div>
                 <div className="mb-1 text-[11px]" style={{ color: '#c3d3e2' }}>Property</div>
-                <div className="mb-2 inline-flex rounded-xl p-0.5" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
+                <div className="mb-2 inline-flex rounded-xl p-0.5" style={{ background: '#16232f', border: '1px solid #1E293B' }}>
                   {([['site', 'Sites'], ['opp', 'Opportunities'], ['custom', 'Custom']] as const).map(([k, lbl]) => (
-                    <button key={k} onClick={() => setPropTab(k)} className="rounded-lg px-3 py-1 text-[11px] font-semibold" style={{ background: propTab === k ? 'rgba(95,184,224,0.2)' : 'transparent', color: propTab === k ? '#bfe6ff' : '#8ba0b4' }}>{lbl}</button>
+                    <button key={k} onClick={() => setPropTab(k)} className="rounded-lg px-3 py-1 text-[11px] font-semibold" style={{ background: propTab === k ? 'rgba(0,163,255,0.2)' : 'transparent', color: propTab === k ? '#bfe6ff' : '#8ba0b4' }}>{lbl}</button>
                   ))}
                 </div>
                 {form.property_name && (
-                  <div className="mb-2 flex items-center justify-between rounded-xl px-3 py-2" style={{ background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.4)' }}>
+                  <div className="mb-2 flex items-center justify-between rounded-xl px-3 py-2" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.4)' }}>
                     <span className="text-[12px] font-semibold" style={{ color: '#eaf2fb' }}>{form.property_name}{form.site_id ? '  · linked to site' : ''}</span>
-                    <button onClick={() => setForm(f => ({ ...f, property_name: '', site_id: '', aria_property_id: '' }))} className="text-[11px]" style={{ color: '#9FD8EC' }}>Change</button>
+                    <button onClick={() => setForm(f => ({ ...f, property_name: '', site_id: '', aria_property_id: '' }))} className="text-[11px]" style={{ color: '#00A3FF' }}>Change</button>
                   </div>
                 )}
                 {propTab !== 'custom' ? (
                   <>
                     <input value={propQuery} onChange={e => setPropQuery(e.target.value)} placeholder={propTab === 'site' ? 'Search your sites…' : 'Search opportunities…'} className="mb-1.5 w-full rounded-xl px-3 py-2 text-sm outline-none" style={INPUT_STYLE} />
-                    <div className="max-h-40 overflow-y-auto rounded-xl" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
+                    <div className="max-h-40 overflow-y-auto rounded-xl" style={{ background: '#16232f', border: '1px solid #1E293B' }}>
                       {propTab === 'site' ? (
-                        filteredSites.length === 0 ? <div className="px-3 py-3 text-[11px]" style={{ color: '#9FD8EC' }}>No sites match.</div> :
+                        filteredSites.length === 0 ? <div className="px-3 py-3 text-[11px]" style={{ color: '#00A3FF' }}>No sites match.</div> :
                         filteredSites.map(s => (
-                          <button key={s.id} onClick={() => setForm(f => ({ ...f, property_name: s.name, site_id: s.id, aria_property_id: '' }))} className="block w-full px-3 py-2 text-left text-[12px] hover:bg-white/5" style={{ color: '#d6e2ee', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                            {s.name}{(s.city || s.state) && <span className="text-[10px]" style={{ color: '#9FD8EC' }}> · {[s.city, s.state].filter(Boolean).join(', ')}</span>}
+                          <button key={s.id} onClick={() => setForm(f => ({ ...f, property_name: s.name, site_id: s.id, aria_property_id: '' }))} className="block w-full px-3 py-2 text-left text-[12px] hover:bg-white/5" style={{ color: '#d6e2ee', borderBottom: '1px solid #1E293B' }}>
+                            {s.name}{(s.city || s.state) && <span className="text-[10px]" style={{ color: '#00A3FF' }}> · {[s.city, s.state].filter(Boolean).join(', ')}</span>}
                           </button>
                         ))
                       ) : (
-                        filteredOpps.length === 0 ? <div className="px-3 py-3 text-[11px]" style={{ color: '#9FD8EC' }}>No opportunities match.</div> :
+                        filteredOpps.length === 0 ? <div className="px-3 py-3 text-[11px]" style={{ color: '#00A3FF' }}>No opportunities match.</div> :
                         filteredOpps.map(o => (
-                          <button key={o.id} onClick={() => setForm(f => ({ ...f, property_name: o.name, site_id: o.site_id || '', aria_property_id: '' }))} className="block w-full px-3 py-2 text-left text-[12px] hover:bg-white/5" style={{ color: '#d6e2ee', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                            {o.name}{o.stage && <span className="text-[10px]" style={{ color: '#9FD8EC' }}> · {o.stage}</span>}
+                          <button key={o.id} onClick={() => setForm(f => ({ ...f, property_name: o.name, site_id: o.site_id || '', aria_property_id: '' }))} className="block w-full px-3 py-2 text-left text-[12px] hover:bg-white/5" style={{ color: '#d6e2ee', borderBottom: '1px solid #1E293B' }}>
+                            {o.name}{o.stage && <span className="text-[10px]" style={{ color: '#00A3FF' }}> · {o.stage}</span>}
                           </button>
                         ))
                       )}
@@ -295,7 +295,7 @@ export function EventsSurface() {
 
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setCreateOpen(false)} className="rounded-xl px-3 py-2 text-xs" style={{ color: '#c3d3e2' }}>Cancel</button>
-              <button onClick={createEvent} disabled={busy || !form.title.trim()} className="rounded-xl px-4 py-2 text-xs font-bold disabled:opacity-40" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0' }}>{busy ? 'Creating…' : 'Create event'}</button>
+              <button onClick={createEvent} disabled={busy || !form.title.trim()} className="rounded-xl px-4 py-2 text-xs font-bold disabled:opacity-40" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>{busy ? 'Creating…' : 'Create event'}</button>
             </div>
           </div>
         </div>
@@ -373,13 +373,13 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
           <>
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#5FB8E0' }}>{TYPE_LABEL[d.event.event_type] ?? d.event.event_type}</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#00A3FF' }}>{TYPE_LABEL[d.event.event_type] ?? d.event.event_type}</div>
                 <input value={d.event.title} onChange={e => setD({ ...d, event: { ...d.event, title: e.target.value } })} onBlur={e => patchEvent({ title: e.target.value.trim() || d.event.title })}
                   className="w-full bg-transparent text-lg font-extrabold outline-none" style={{ color: '#eaf2fb' }} />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px]" style={{ color: '#9FD8EC' }}>{saving ? 'Saving…' : 'Saved'}</span>
-                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' }}>Delete</button>
+                <span className="text-[10px]" style={{ color: '#00A3FF' }}>{saving ? 'Saving…' : 'Saved'}</span>
+                <button onClick={deleteEvent} className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'rgba(255,77,77,0.14)', border: '1px solid rgba(255,77,77,0.4)', color: '#f87171' }}>Delete</button>
                 <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
               </div>
             </div>
@@ -407,15 +407,15 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
 
             {/* stepper reflects status */}
             <div className="relative my-4">
-              <div className="absolute left-2 right-2 top-2.5 h-0.5" style={{ background: 'rgba(140,170,200,0.18)' }} />
+              <div className="absolute left-2 right-2 top-2.5 h-0.5" style={{ background: '#1E293B' }} />
               <div className="relative flex justify-between">
                 {STAGES.map((st, i) => {
                   const cur = STATUS_STAGE[d.event.status] ?? 0
                   const done = i <= cur
                   return (
                     <div key={st} className="flex w-[12.5%] flex-col items-center gap-1">
-                      <span className="h-3.5 w-3.5 rounded-full" style={{ background: done ? '#2f7fb8' : '#16232f', border: `2px solid ${done ? '#5FB8E0' : '#3a4b5c'}` }} />
-                      <span className="text-center text-[9px]" style={{ color: done ? '#bfe6ff' : '#9FD8EC' }}>{st}</span>
+                      <span className="h-3.5 w-3.5 rounded-full" style={{ background: done ? '#00A3FF' : '#16232f', border: `2px solid ${done ? '#00A3FF' : '#3a4b5c'}` }} />
+                      <span className="text-center text-[9px]" style={{ color: done ? '#bfe6ff' : '#00A3FF' }}>{st}</span>
                     </div>
                   )
                 })}
@@ -461,24 +461,24 @@ function EventDetail({ eventId, onClose, onChanged }: { eventId: string; onClose
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 text-[9px] uppercase tracking-[0.08em]" style={{ color: '#9FD8EC' }}>{label}</div>
+      <div className="mb-1 text-[9px] uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>{label}</div>
       {children}
     </div>
   )
 }
-function Empty2() { return <div className="text-[11px]" style={{ color: '#9FD8EC' }}>Nothing yet — add below.</div> }
+function Empty2() { return <div className="text-[11px]" style={{ color: '#00A3FF' }}>Nothing yet — add below.</div> }
 
 function EditSection({ title, addPlaceholder, onAdd, children }: { title: string; addPlaceholder: string; onAdd: (text: string) => void | Promise<void>; children: React.ReactNode }) {
   const [text, setText] = useState('')
   const submit = () => { const t = text.trim(); if (!t) return; setText(''); void onAdd(t) }
   return (
-    <div className="rounded-2xl p-3" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
-      <div className="mb-2 text-[11px] font-bold" style={{ color: '#9FD8EC' }}>{title}</div>
+    <div className="rounded-2xl p-3" style={{ background: '#16232f', border: '1px solid #1E293B' }}>
+      <div className="mb-2 text-[11px] font-bold" style={{ color: '#00A3FF' }}>{title}</div>
       <div className="flex flex-col gap-1.5">{children}</div>
       <div className="mt-2 flex items-center gap-1.5">
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }} placeholder={addPlaceholder}
-          className="flex-1 rounded-lg px-2 py-1.5 text-[12px] outline-none" style={{ background: '#0f1a24', border: '1px solid rgba(140,170,200,0.18)', color: '#eaf2fb' }} />
-        <button onClick={submit} className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold" style={{ background: '#26374a', border: '1px solid rgba(95,184,224,0.3)', color: '#cfe0f0' }}>+</button>
+          className="flex-1 rounded-lg px-2 py-1.5 text-[12px] outline-none" style={{ background: '#0f1a24', border: '1px solid #1E293B', color: '#eaf2fb' }} />
+        <button onClick={submit} className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold" style={{ background: '#1E293B', border: '1px solid rgba(0,163,255,0.3)', color: '#cfe0f0' }}>+</button>
       </div>
     </div>
   )
@@ -488,14 +488,14 @@ function ItemRow({ main, sub, done, onToggle, pill, pillNext, onDelete }: { main
   return (
     <div className="group flex items-center gap-2">
       {onToggle && (
-        <button onClick={onToggle} className="flex h-4 w-4 shrink-0 items-center justify-center rounded" style={{ background: done ? '#2f7fb8' : 'transparent', border: `1px solid ${done ? '#5FB8E0' : 'rgba(140,170,200,0.4)'}`, color: '#eaf2fb', fontSize: 10 }}>{done ? '✓' : ''}</button>
+        <button onClick={onToggle} className="flex h-4 w-4 shrink-0 items-center justify-center rounded" style={{ background: done ? '#00A3FF' : 'transparent', border: `1px solid ${done ? '#00A3FF' : '#1E293B'}`, color: '#eaf2fb', fontSize: 10 }}>{done ? '✓' : ''}</button>
       )}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12px] capitalize" style={{ color: done ? '#9FD8EC' : '#e2ebf4', textDecoration: done ? 'line-through' : 'none' }}>{main}</div>
-        {sub && <div className="truncate text-[10px] capitalize" style={{ color: '#9FD8EC' }}>{sub}</div>}
+        <div className="truncate text-[12px] capitalize" style={{ color: done ? '#00A3FF' : '#e2ebf4', textDecoration: done ? 'line-through' : 'none' }}>{main}</div>
+        {sub && <div className="truncate text-[10px] capitalize" style={{ color: '#00A3FF' }}>{sub}</div>}
       </div>
       {pill && (
-        <button onClick={pillNext} disabled={!pillNext} className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', border: '1px solid rgba(95,184,224,0.3)', color: '#bfe6ff' }}>{pill}</button>
+        <button onClick={pillNext} disabled={!pillNext} className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', border: '1px solid rgba(0,163,255,0.3)', color: '#bfe6ff' }}>{pill}</button>
       )}
       {onDelete && <button onClick={onDelete} className="shrink-0 px-1 text-[13px] opacity-0 transition-opacity group-hover:opacity-100" style={{ color: '#f87171' }} aria-label="Delete">×</button>}
     </div>
@@ -505,10 +505,10 @@ function ItemRow({ main, sub, done, onToggle, pill, pillNext, onDelete }: { main
 function Kpi({ glyph, value, label, sub }: { glyph: string; value: string | number; label: string; sub?: string }) {
   return (
     <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-      <div className="text-[15px]" aria-hidden style={{ color: '#9FD8EC' }}>{glyph}</div>
+      <div className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{glyph}</div>
       <div className="mt-0.5 text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
       <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
-      {sub && <div className="mt-1 text-[9px]" style={{ color: '#9FD8EC' }}>{sub}</div>}
+      {sub && <div className="mt-1 text-[9px]" style={{ color: '#00A3FF' }}>{sub}</div>}
     </div>
   )
 }
@@ -544,7 +544,7 @@ function TemplateManager({ templates, onClose, onChanged }: { templates: Templat
       <div className="max-h-[88dvh] w-full max-w-2xl overflow-y-auto rounded-3xl p-5" style={MODAL_STYLE} onClick={e => e.stopPropagation()}>
         <div className="mb-3 flex items-start justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: '#5FB8E0' }}>Event Templates</div>
+            <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Event Templates</div>
             <div className="text-lg font-bold" style={{ color: '#eaf2fb' }}>Template manager</div>
           </div>
           <button onClick={onClose} className="rounded-full px-2 py-1 text-xs" style={{ color: '#c3d3e2' }}>Close</button>
@@ -552,25 +552,25 @@ function TemplateManager({ templates, onClose, onChanged }: { templates: Templat
 
         {/* Existing templates */}
         <div className="mb-4 flex flex-col gap-1.5">
-          {templates.length === 0 && <div className="text-[11px]" style={{ color: '#9FD8EC' }}>No templates yet — build one below.</div>}
+          {templates.length === 0 && <div className="text-[11px]" style={{ color: '#00A3FF' }}>No templates yet — build one below.</div>}
           {templates.map(t => (
-            <div key={t.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.18)' }}>
+            <div key={t.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: '#16232f', border: '1px solid #1E293B' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[12.5px] font-semibold" style={{ color: '#eaf2fb' }}>{t.name}</span>
-                  <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', color: '#9FD8EC' }}>{TYPE_LABEL[t.event_type] ?? t.event_type}</span>
-                  {t.is_starter && <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(126,224,168,0.14)', color: '#7ee0a8' }}>Starter</span>}
+                  <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(20,32,44,0.6)', color: '#00A3FF' }}>{TYPE_LABEL[t.event_type] ?? t.event_type}</span>
+                  {t.is_starter && <span className="rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase" style={{ background: 'rgba(0,230,153,0.14)', color: '#00E699' }}>Starter</span>}
                 </div>
                 {t.description && <div className="text-[10.5px]" style={{ color: '#8ba0b4' }}>{t.description}</div>}
               </div>
-              <button onClick={() => edit(t)} className="rounded-lg px-2.5 py-1 text-[11px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>Edit</button>
+              <button onClick={() => edit(t)} className="rounded-lg px-2.5 py-1 text-[11px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>Edit</button>
             </div>
           ))}
         </div>
 
         {/* Draft editor */}
-        <div className="rounded-2xl p-3.5" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.2)' }}>
-          <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: '#9FD8EC' }}>{editing ? 'Edit template' : 'New template'}</div>
+        <div className="rounded-2xl p-3.5" style={{ background: WELL, border: '1px solid #1E293B' }}>
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>{editing ? 'Edit template' : 'New template'}</div>
           <div className="flex flex-col gap-2 text-sm">
             <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="Template name (e.g. Property Launch)" className="rounded-xl px-3 py-2 text-sm outline-none" style={INPUT_STYLE} />
             <div className="grid grid-cols-2 gap-2">
@@ -583,9 +583,9 @@ function TemplateManager({ templates, onClose, onChanged }: { templates: Templat
           </div>
           <div className="mt-3 flex justify-end gap-2">
             {editing && <button onClick={() => setDraft(blank)} className="rounded-xl px-3 py-2 text-xs" style={{ color: '#c3d3e2' }}>New instead</button>}
-            <button onClick={save} disabled={busy || !draft.name.trim()} className="rounded-xl px-4 py-2 text-xs font-bold disabled:opacity-40" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0' }}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add template'}</button>
+            <button onClick={save} disabled={busy || !draft.name.trim()} className="rounded-xl px-4 py-2 text-xs font-bold disabled:opacity-40" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add template'}</button>
           </div>
-          <div className="mt-2 text-[10px]" style={{ color: '#9FD8EC' }}>Starter templates are managed by Gate Guard corporate. Your org&apos;s own templates are fully editable here.</div>
+          <div className="mt-2 text-[10px]" style={{ color: '#00A3FF' }}>Starter templates are managed by Gate Guard corporate. Your org&apos;s own templates are fully editable here.</div>
         </div>
       </div>
     </div>

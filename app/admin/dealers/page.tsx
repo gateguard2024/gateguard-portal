@@ -195,12 +195,12 @@ export default function PartnerNetworkPage() {
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search by name, contact, email…"
-          className="w-full pl-9 pr-4 py-2 h-9 border border-[rgba(95,184,224,0.18)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#243141]"
+          className="w-full pl-9 pr-4 py-2 h-9 border border-[rgba(0,163,255,0.18)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#243141]"
         />
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────── */}
-      <div className="flex gap-0.5 border-b border-[rgba(95,184,224,0.18)] overflow-x-auto">
+      <div className="flex gap-0.5 border-b border-[rgba(0,163,255,0.18)] overflow-x-auto">
         {TABS.map(tab => (
           <button
             key={tab.key}
@@ -224,7 +224,7 @@ export default function PartnerNetworkPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────── */}
-      <div className="bg-[#243141] rounded-xl border border-[rgba(95,184,224,0.18)] overflow-hidden">
+      <div className="bg-[#243141] rounded-xl border border-[rgba(0,163,255,0.18)] overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#6f8299]">
             <div className="animate-spin w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
@@ -249,7 +249,7 @@ export default function PartnerNetworkPage() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[rgba(95,184,224,0.18)] bg-[rgba(0,0,0,0.20)]">
+              <tr className="border-b border-[rgba(0,163,255,0.18)] bg-[rgba(0,0,0,0.20)]">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Organization</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Partner Type</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[#8fa4b8] uppercase tracking-wide">Contact</th>

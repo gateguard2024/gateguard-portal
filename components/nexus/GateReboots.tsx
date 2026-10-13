@@ -21,8 +21,8 @@ type Door = { id: string; name: string }
 type Cam = { id: string; name: string }
 
 const C = {
-  accent: '#5FB8E0', ok: '#7ee0a8', warn: '#fbbf24', alarm: '#f87171',
-  border: 'rgba(140,170,200,0.24)', panel: 'linear-gradient(180deg,#1d2a39,#141d28)',
+  accent: '#00A3FF', ok: '#00E699', warn: '#fbbf24', alarm: '#f87171',
+  border: '#1E293B', panel: 'linear-gradient(180deg,#1d2a39,#141d28)',
   tile: '#16232f', well: '#0c1420', ink: '#eaf2fb', ink2: 'rgba(255,255,255,0.6)',
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))

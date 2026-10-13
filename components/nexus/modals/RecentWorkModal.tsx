@@ -191,7 +191,7 @@ export function RecentWorkModal() {
 
             {/* Activity card */}
             <CommandCard
-              hex="#5FB8E0" tag="CRM Activity"
+              hex="#00A3FF" tag="CRM Activity"
               urgent={act?.type === 'call'}
               headline={act ? `${act.type === 'call' ? 'Call' : act.type === 'email' ? 'Email' : 'Activity'} from ${act.contact_name ?? 'contact'}: ${act.subject ?? 'follow up required'}.` : 'No recent CRM activity.'}
               sub={act ? timeAgo(act.created_at) : undefined}
@@ -212,13 +212,13 @@ export function RecentWorkModal() {
         <button
           onClick={() => setView('archivist')}
           className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
-          style={{ background: 'rgba(95,184,224,0.05)', border: '0.5px solid rgba(95,184,224,0.15)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(95,184,224,0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(95,184,224,0.05)' }}
+          style={{ background: 'rgba(0,163,255,0.05)', border: '0.5px solid rgba(0,163,255,0.15)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,163,255,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,163,255,0.05)' }}
         >
-          <span className="text-[10px]" style={{ color: 'rgba(95,184,224,0.7)' }}>Open full archive — quotes, orders, activity</span>
+          <span className="text-[10px]" style={{ color: 'rgba(0,163,255,0.7)' }}>Open full archive — quotes, orders, activity</span>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(95,184,224,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(0,163,255,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
 
@@ -227,7 +227,7 @@ export function RecentWorkModal() {
 
         {/* Command result */}
         {cmdResult && (
-          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(95,184,224,0.08)', border: '0.5px solid rgba(95,184,224,0.2)', color: 'rgba(255,255,255,0.75)' }}>
+          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(0,163,255,0.08)', border: '0.5px solid rgba(0,163,255,0.2)', color: 'rgba(255,255,255,0.75)' }}>
             {cmdResult}
           </div>
         )}

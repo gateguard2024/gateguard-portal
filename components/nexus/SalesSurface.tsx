@@ -69,7 +69,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
         style={{ background: NEXUS_BG, border: '1px solid rgba(255,255,255,0.085)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="min-h-0 overflow-y-auto pr-1 pb-28" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Sales</div>
+          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#00A3FF' }}>Sales</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: '#eaf2fb' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
@@ -86,7 +86,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
 function ActionButton({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
     <button type="button" onClick={onClick} className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 active:translate-y-0"
-      style={{ background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+      style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>
       {label}
     </button>
   )

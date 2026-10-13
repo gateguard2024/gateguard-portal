@@ -17,7 +17,7 @@ const taS: React.CSSProperties = { ...inS, resize: 'vertical', minHeight: 70, li
 const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: LBL_DK }
 const Field = ({ l, children }: { l: string; children: React.ReactNode }) => (<label style={lbl}>{l}{children}</label>)
 const Sec = ({ t }: { t: string }) => <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: SEC_DK, margin: '16px 0 6px' }}>{t}</div>
-const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)', marginBottom: 8 }
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', marginBottom: 8 }
 
 // Pipe-delimited list parsing/serialising so the rep can edit repeatable blocks
 // as plain text (one per line, fields separated by " | ").
@@ -167,7 +167,7 @@ export function SurveyEditor({ id }: { id: string }) {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#EEF3FA 0%,#E7EEF7 100%)', display: 'flex' }}>
       <style>{`@media print { .sv-form { display:none !important } .sv-prev { width:100% !important } }`}</style>
-      <aside className="sv-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#2b3c52 0%,#16202e 100%)' }}>
+      <aside className="sv-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#1E293B 0%,#16202e 100%)' }}>
         <div style={{ marginBottom: 10 }}>
           <button onClick={() => {
             if (typeof window === 'undefined') return
@@ -177,20 +177,20 @@ export function SurveyEditor({ id }: { id: string }) {
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save survey'}</button>
-          <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: '#2f7fb8', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
+          <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: '#00A3FF', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
         </div>
-        {err && <div style={{ fontSize: 11.5, color: '#fca5a5', marginBottom: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: 11.5, color: '#FF4D4D', marginBottom: 8 }}>{err}</div>}
 
         <Sec t="Send survey to client" />
-        <button onClick={() => { setSendOpen(o => !o); setSendMsg(null) }} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#2f7fb8,#1d5c86)', cursor: 'pointer' }}>✉ Send survey to client</button>
+        <button onClick={() => { setSendOpen(o => !o); setSendMsg(null) }} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#00A3FF,#1d5c86)', cursor: 'pointer' }}>✉ Send survey to client</button>
         {sendOpen && (
           <div style={{ ...groupCard, marginTop: 8 }}>
             <Field l="To"><input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@email.com" style={inS} /></Field>
             <div style={{ height: 8 }} /><Field l="CC (optional)"><input value={sendCc} onChange={e => setSendCc(e.target.value)} placeholder="you@gateguard.co" style={inS} /></Field>
             <div style={{ height: 8 }} /><Field l="Subject (optional — auto)"><input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={autoSubject} style={inS} /></Field>
-            <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>The survey record is attached as a PDF and a CRM activity is logged on the opportunity when you send.</div>
+            <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(0,163,255,0.3)', borderRadius: 8 }}>The survey record is attached as a PDF and a CRM activity is logged on the opportunity when you send.</div>
             <button onClick={sendSurvey} disabled={sending || !sendTo} style={{ marginTop: 8, width: '100%', padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer', opacity: sending || !sendTo ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send now'}</button>
-            {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#fca5a5' }}>{sendMsg.text}</div>}
+            {sendMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: sendMsg.ok ? '#12855f' : '#FF4D4D' }}>{sendMsg.text}</div>}
           </div>
         )}
 
@@ -209,20 +209,20 @@ export function SurveyEditor({ id }: { id: string }) {
         <Sec t="3 · Photos" />
         <div style={groupCard}>
           <input ref={heroRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'hero_url') }} />
-          <button onClick={() => heroRef.current?.click()} disabled={uploading === 'hero_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'hero_url' ? 'Uploading…' : (cfg.hero_url ? '✓ Replace cover photo' : '+ Cover photo')}</button>
+          <button onClick={() => heroRef.current?.click()} disabled={uploading === 'hero_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(0,163,255,0.4)', background: 'rgba(0,163,255,0.1)', color: '#00A3FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'hero_url' ? 'Uploading…' : (cfg.hero_url ? '✓ Replace cover photo' : '+ Cover photo')}</button>
           <div style={{ height: 6 }} /><Field l="Cover caption"><input value={cfg.hero_caption ?? ''} onChange={e => set('hero_caption', e.target.value)} placeholder="Pool and clubhouse" style={inS} /></Field>
           <div style={{ height: 8 }} />
           <input ref={aerialRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadImage(f, 'aerial_url') }} />
-          <button onClick={() => aerialRef.current?.click()} disabled={uploading === 'aerial_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'aerial_url' ? 'Uploading…' : (cfg.aerial_url ? '✓ Replace site map' : '+ Site map / aerial')}</button>
+          <button onClick={() => aerialRef.current?.click()} disabled={uploading === 'aerial_url'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(0,163,255,0.4)', background: 'rgba(0,163,255,0.1)', color: '#00A3FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'aerial_url' ? 'Uploading…' : (cfg.aerial_url ? '✓ Replace site map' : '+ Site map / aerial')}</button>
           <div style={{ height: 8 }} />
           <input ref={siteRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { const fs = e.target.files; if (fs && fs.length) void uploadSitePhotos(fs) }} />
-          <button onClick={() => siteRef.current?.click()} disabled={uploading === 'site'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(95,184,224,0.4)', background: 'rgba(95,184,224,0.1)', color: '#9FD8EC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'site' ? 'Uploading…' : `+ Site photos${cfg.site_photos?.length ? ` (${cfg.site_photos.length})` : ''}`}</button>
+          <button onClick={() => siteRef.current?.click()} disabled={uploading === 'site'} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1px dashed rgba(0,163,255,0.4)', background: 'rgba(0,163,255,0.1)', color: '#00A3FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{uploading === 'site' ? 'Uploading…' : `+ Site photos${cfg.site_photos?.length ? ` (${cfg.site_photos.length})` : ''}`}</button>
           <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>GPS + capture time are read from each photo to place map pins automatically.</div>
         </div>
 
         <Sec t="4 · Let AI build it" />
         <button onClick={aiDraft} disabled={aiBusy} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#c2410c,#e0763f)', cursor: 'pointer', opacity: aiBusy ? 0.7 : 1 }}>{aiBusy ? 'Drafting…' : '✦ AI draft from notes + photos'}</button>
-        {aiMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: aiMsg.ok ? '#12855f' : '#fca5a5' }}>{aiMsg.text}</div>}
+        {aiMsg && <div style={{ fontSize: 11.5, marginTop: 6, color: aiMsg.ok ? '#12855f' : '#FF4D4D' }}>{aiMsg.text}</div>}
         <div style={{ fontSize: 10.5, color: '#9fb4c9', marginTop: 6 }}>Claude reads your notes + photos and drafts the openings, findings, scope, and recommendations. Review and fine-tune everything below before sending.</div>
 
         <Sec t="Record header" />

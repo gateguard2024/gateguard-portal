@@ -23,7 +23,7 @@ interface Props { onBack: () => void }
 const STAGE_HEX: Record<string, string> = {
   prospect: '#6B7EFF', new: '#6B7EFF', contacted: '#fbbf24', qualified: '#34d399',
   proposal_sent: '#0B7285', negotiation: '#f59e0b', won: '#10b981', lost: '#f87171',
-  aria_draft: '#5FB8E0', survey_requested: '#0B7285',
+  aria_draft: '#00A3FF', survey_requested: '#0B7285',
 }
 
 function hexRgb(h: string) {
@@ -97,24 +97,24 @@ export function OppsLeadsExplorer({ onBack }: Props) {
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 transition-colors"
-            style={{ color: 'rgba(52,211,153,0.55)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(52,211,153,0.95)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(52,211,153,0.55)')}
+            style={{ color: 'rgba(0,230,153,0.55)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(0,230,153,0.95)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,230,153,0.55)')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span className="text-xs font-medium">New Opps / Leads</span>
           </button>
-          <div className="flex-1 h-px" style={{ background: 'rgba(52,211,153,0.15)' }} />
+          <div className="flex-1 h-px" style={{ background: 'rgba(0,230,153,0.15)' }} />
           {pipelineTotal > 0 && (
             <span className="text-[9px] px-2 py-0.5 rounded-full font-mono font-medium"
-              style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '0.5px solid rgba(52,211,153,0.25)' }}>
+              style={{ background: 'rgba(0,230,153,0.12)', color: '#34d399', border: '0.5px solid rgba(0,230,153,0.25)' }}>
               ${(pipelineTotal / 1000).toFixed(0)}k pipeline
             </span>
           )}
           <span className="text-[9px] uppercase tracking-widest font-mono px-2 py-0.5 rounded"
-            style={{ background: 'rgba(52,211,153,0.08)', color: 'rgba(52,211,153,0.55)', border: '0.5px solid rgba(52,211,153,0.18)' }}>
+            style={{ background: 'rgba(0,230,153,0.08)', color: 'rgba(0,230,153,0.55)', border: '0.5px solid rgba(0,230,153,0.18)' }}>
             Archivist
           </span>
         </div>
@@ -125,7 +125,7 @@ export function OppsLeadsExplorer({ onBack }: Props) {
             <button key={t} onClick={() => setTab(t)}
               className="px-2.5 py-0.5 rounded-full text-[10px] font-medium capitalize transition-all"
               style={tab === t
-                ? { background: 'rgba(52,211,153,0.2)', border: '0.5px solid rgba(52,211,153,0.45)', color: '#34d399' }
+                ? { background: 'rgba(0,230,153,0.2)', border: '0.5px solid rgba(0,230,153,0.45)', color: '#34d399' }
                 : { background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.3)' }
               }
             >
@@ -141,7 +141,7 @@ export function OppsLeadsExplorer({ onBack }: Props) {
               <button key={f.key} onClick={() => setStage(f.key)}
                 className="px-2 py-0.5 rounded-full text-[9px] font-medium transition-all"
                 style={stage === f.key
-                  ? { background: 'rgba(52,211,153,0.18)', border: '0.5px solid rgba(52,211,153,0.4)', color: '#34d399' }
+                  ? { background: 'rgba(0,230,153,0.18)', border: '0.5px solid rgba(0,230,153,0.4)', color: '#34d399' }
                   : { background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }
                 }
               >
@@ -229,7 +229,7 @@ export function OppsLeadsExplorer({ onBack }: Props) {
           <span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
             {tab === 'opportunities' ? `${filteredOpps.length} opportunities` : `${leads.length} leads`}
           </span>
-          <span className="text-[9px] uppercase tracking-widest" style={{ color: 'rgba(52,211,153,0.3)' }}>
+          <span className="text-[9px] uppercase tracking-widest" style={{ color: 'rgba(0,230,153,0.3)' }}>
             Nexus Archivist · Pipeline
           </span>
         </div>

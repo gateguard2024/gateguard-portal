@@ -13,8 +13,8 @@ import { useEffect, useState } from 'react'
 
 // ---- Console tokens (identical to Sales / My Day) ----
 const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const TILE_BG = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
 type FleetHealth = { online: number; attention: number; offline: number }
@@ -29,7 +29,7 @@ type OpsData = {
 }
 type Analytics = { totals?: { ftfPct?: number; avgUtilizationPct?: number; callbacks?: number; completed?: number } }
 
-const priorityColor = (p: string) => /urgent|critical/i.test(p) ? '#f87171' : /high/i.test(p) ? '#fbbf24' : '#9FD8EC'
+const priorityColor = (p: string) => /urgent|critical/i.test(p) ? '#f87171' : /high/i.test(p) ? '#fbbf24' : '#00A3FF'
 const ageLabel = (h: number | null) => h == null ? '' : h < 24 ? `${h}h` : `${Math.round(h / 24)}d`
 
 function Tile({ children, onClick, className = '' }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
@@ -40,7 +40,7 @@ function Tile({ children, onClick, className = '' }: { children: React.ReactNode
 function CardHead({ title, right, onOpen }: { title: string; right?: React.ReactNode; onOpen?: () => void }) {
   return (
     <div className="mb-2.5 flex items-center justify-between">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#9FD8EC' }}>{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>{title}</div>
       {right ?? (onOpen && <span className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>Open →</span>)}
     </div>
   )
@@ -48,10 +48,10 @@ function CardHead({ title, right, onOpen }: { title: string; right?: React.React
 function Kpi({ glyph, value, label, sub, onClick }: { glyph: string; value: string | number; label: string; sub?: string; onClick?: () => void }) {
   return (
     <Tile onClick={onClick}>
-      <div className="text-[15px]" aria-hidden style={{ color: '#9FD8EC' }}>{glyph}</div>
+      <div className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{glyph}</div>
       <div className="mt-0.5 text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
       <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
-      {sub && <div className="mt-1 text-[9px]" style={{ color: '#9FD8EC' }}>{sub}</div>}
+      {sub && <div className="mt-1 text-[9px]" style={{ color: '#00A3FF' }}>{sub}</div>}
     </Tile>
   )
 }
@@ -63,7 +63,7 @@ function Dial({ label, value, unit, pct, color, note }: { label: string; value: 
   const end = { x: 60 - 48 * Math.cos(Math.PI * p), y: 60 - 48 * Math.sin(Math.PI * p) }
   return (
     <div className="rounded-2xl p-3 text-center" style={TILE_STYLE}>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>{label}</div>
       <svg width="112" height="62" viewBox="0 0 120 66" className="mx-auto">
         <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="#12202c" strokeWidth="9" strokeLinecap="round" />
         {p > 0.001 && (
@@ -142,19 +142,19 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             ⊞ Operations Hub →
           </button>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#7ee0a8', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#7ee0a8'}` }} />{loading ? 'Loading…' : 'Live'}
+            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#00E699', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#00E699'}` }} />{loading ? 'Loading…' : 'Live'}
             </span>
             <button type="button" onClick={() => onOpenTab('Dashboard')} className="rounded-xl px-3 py-2 text-[12px] font-semibold lg:hidden" style={{ background: 'linear-gradient(180deg,#3a4552,#2a333d)', border: '1px solid rgba(150,168,190,0.28)', color: '#e4ebf2' }}>⊞ Hub</button>
-            <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
-            <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.25)', color: '#cfe0f0' }}>＋ New Work Order</button>
+            <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
+            <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>＋ New Work Order</button>
           </div>
         </div>
 
         {/* Readable source legend — light text on a dark well */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl px-3 py-2 text-[10px]" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', color: '#c3d3e2' }}>
-          <span><span style={{ color: '#7ee0a8' }}>●</span> <b style={{ color: '#eaf2fb' }}>REAL</b> — computed from your records</span>
-          <span><span style={{ color: '#5FB8E0' }}>●</span> <b style={{ color: '#eaf2fb' }}>COUNTS</b> — true device totals</span>
+        <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl px-3 py-2 text-[10px]" style={{ background: WELL, border: '1px solid #1E293B', color: '#c3d3e2' }}>
+          <span><span style={{ color: '#00E699' }}>●</span> <b style={{ color: '#eaf2fb' }}>REAL</b> — computed from your records</span>
+          <span><span style={{ color: '#00A3FF' }}>●</span> <b style={{ color: '#eaf2fb' }}>COUNTS</b> — true device totals</span>
           <span><span style={{ color: '#fbbf24' }}>●</span> <b style={{ color: '#eaf2fb' }}>LIVE ONLINE</b> — arrives in Phase 2 (UniFi / Eagle Eye)</span>
         </div>
 
@@ -169,19 +169,19 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
               <div className="flex items-center gap-3">
                 <svg width="92" height="92" viewBox="0 0 42 42">
                   <circle cx="21" cy="21" r="15.9" fill="none" stroke="#12202c" strokeWidth="5" />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#7ee0a8" strokeWidth="5" strokeDasharray={`${onDash} ${100 - onDash}`} strokeDashoffset="25" />
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00E699" strokeWidth="5" strokeDasharray={`${onDash} ${100 - onDash}`} strokeDashoffset="25" />
                   <circle cx="21" cy="21" r="15.9" fill="none" stroke="#fbbf24" strokeWidth="5" strokeDasharray={`${atDash} ${100 - atDash}`} strokeDashoffset={`${25 - onDash}`} />
                   <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f87171" strokeWidth="5" strokeDasharray={`${offDash} ${100 - offDash}`} strokeDashoffset={`${25 - onDash - atDash}`} />
                   <text x="21" y="20" textAnchor="middle" fontSize="8" fill="#eaf2fb" fontWeight="700">{healthPct}%</text>
                   <text x="21" y="26.5" textAnchor="middle" fontSize="3.2" fill="#c3d3e2">healthy</text>
                 </svg>
                 <div className="text-[11px] leading-[1.7]" style={{ color: '#c3d3e2' }}>
-                  <div><span style={{ color: '#7ee0a8' }}>●</span> Online · {health.online}</div>
+                  <div><span style={{ color: '#00E699' }}>●</span> Online · {health.online}</div>
                   <div><span style={{ color: '#fbbf24' }}>●</span> Attn · {health.attention}</div>
                   <div><span style={{ color: '#f87171' }}>●</span> Offline · {health.offline}</div>
                 </div>
               </div>
-              <div className="mt-2 border-t pt-1.5 text-[9px]" style={{ borderColor: 'rgba(140,170,200,0.14)', color: '#9FD8EC' }}>{live ? 'Cameras & network report live · gates show last-service status' : 'Status from last service · live monitoring turns on after first fleet sync'}</div>
+              <div className="mt-2 border-t pt-1.5 text-[9px]" style={{ borderColor: '#1E293B', color: '#00A3FF' }}>{live ? 'Cameras & network report live · gates show last-service status' : 'Status from last service · live monitoring turns on after first fleet sync'}</div>
             </Tile>
 
             <div className="grid grid-cols-2 gap-3">
@@ -199,14 +199,14 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <Tile>
               <CardHead title="Open Work Orders" right={
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.35)', color: '#9FD8EC' }}>{d?.openWorkOrders.open ?? 0} open</span>
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.35)', color: '#00A3FF' }}>{d?.openWorkOrders.open ?? 0} open</span>
                   <button type="button" onClick={() => onOpenTab('Work Orders')} className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>View all →</button>
                 </div>
               } />
               <div className="flex flex-col gap-1.5" style={{ maxHeight: 152, overflowY: 'auto' }}>
-                {(d?.openWorkOrders.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#9FD8EC' }}>{loading ? 'Loading…' : 'No open work orders.'}</div>}
+                {(d?.openWorkOrders.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'No open work orders.'}</div>}
                 {(d?.openWorkOrders.items ?? []).map(w => (
-                  <button key={w.id} type="button" onClick={() => onOpenJob?.(w.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                  <button key={w.id} type="button" onClick={() => onOpenJob?.(w.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
                     <span className="min-w-0 flex-1 truncate text-[12px]" style={{ color: '#e7eff7' }}>{w.wo ? `#${w.wo} · ` : ''}{w.title}{w.site ? ` · ${w.site}` : ''}</span>
                     <span className="ml-2 flex shrink-0 items-center gap-2">
                       <span className="whitespace-nowrap text-[10px] capitalize" style={{ color: '#c3d3e2' }}>{String(w.status).replace(/_/g, ' ')}</span>
@@ -221,20 +221,20 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <Tile>
               <CardHead title="Service Performance" right={<span className="text-[10px]" style={{ color: '#c3d3e2' }}>REAL · rolling</span>} />
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
-                  <Gauge pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0} color="#5FB8E0" label={d?.response.avgResponseHours != null ? `${d.response.avgResponseHours}h` : '—'} />
-                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Avg Response</div>
-                  <div className="text-[8px]" style={{ color: '#9FD8EC' }}>to on-site</div>
+                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
+                  <Gauge pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0} color="#00A3FF" label={d?.response.avgResponseHours != null ? `${d.response.avgResponseHours}h` : '—'} />
+                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Avg Response</div>
+                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>to on-site</div>
                 </div>
-                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
-                  <Gauge pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0} color="#7ee0a8" label={d?.response.avgResolveDays != null ? `${d.response.avgResolveDays}d` : '—'} />
-                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Avg Resolve</div>
-                  <div className="text-[8px]" style={{ color: '#9FD8EC' }}>to close</div>
+                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
+                  <Gauge pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0} color="#00E699" label={d?.response.avgResolveDays != null ? `${d.response.avgResolveDays}d` : '—'} />
+                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Avg Resolve</div>
+                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>to close</div>
                 </div>
-                <div className="flex flex-col items-center justify-center rounded-xl px-2 py-2 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                <div className="flex flex-col items-center justify-center rounded-xl px-2 py-2 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
                   <div className="text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : (d?.serviceLoad.ratio ?? 0)}</div>
-                  <div className="mt-1 text-[10px] font-semibold" style={{ color: '#9FD8EC' }}>Load / device</div>
-                  <div className="text-[8px]" style={{ color: '#9FD8EC' }}>{d?.serviceLoad.visits90d ?? 0} visits · 90d</div>
+                  <div className="mt-1 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Load / device</div>
+                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>{d?.serviceLoad.visits90d ?? 0} visits · 90d</div>
                 </div>
               </div>
             </Tile>
@@ -243,11 +243,11 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <Tile>
               <CardHead title="Today's Schedule" right={<button type="button" onClick={() => onOpenTab('Calendar')} className="text-[10px] font-semibold" style={{ color: '#8FD3EC' }}>Calendar →</button>} />
               {(d?.schedule.items ?? []).length === 0 ? (
-                <div className="py-1.5 text-center text-[11px]" style={{ color: '#9FD8EC' }}>{loading ? 'Loading…' : 'Nothing scheduled today.'}</div>
+                <div className="py-1.5 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'Nothing scheduled today.'}</div>
               ) : (
                 <div className="flex flex-col gap-1.5" style={{ maxHeight: 120, overflowY: 'auto' }}>
                   {(d?.schedule.items ?? []).map(j => (
-                    <button key={j.id} type="button" onClick={() => onOpenJob?.(j.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                    <button key={j.id} type="button" onClick={() => onOpenJob?.(j.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
                       <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{j.title}{j.site ? ` · ${j.site}` : ''}</span>
                       <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(j.priority) }}>{j.tech ?? j.status}</span>
                     </button>
@@ -260,13 +260,13 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
           {/* ===== COL 3 · WORKLOAD & UPKEEP ===== */}
           <div className="flex flex-col gap-3">
             <Tile>
-              <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
+              <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(255,77,77,0.16)', border: '1px solid rgba(255,77,77,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
               {(d?.requests.items ?? []).length === 0 ? (
-                <div className="py-1.5 text-center text-[11px]" style={{ color: '#9FD8EC' }}>{loading ? 'Loading…' : 'No open requests.'}</div>
+                <div className="py-1.5 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'No open requests.'}</div>
               ) : (
                 <div className="flex flex-col gap-1.5" style={{ maxHeight: 124, overflowY: 'auto' }}>
                   {(d?.requests.items ?? []).map(r => (
-                    <button key={r.id} type="button" onClick={() => onOpenTab('Requests')} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.16)' }}>
+                    <button key={r.id} type="button" onClick={() => onOpenTab('Requests')} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
                       <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{r.title}{r.site ? ` · ${r.site}` : ''}</span>
                       <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(r.priority) }}>{ageLabel(r.ageHours)}</span>
                     </button>
@@ -278,16 +278,16 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             <Tile onClick={() => onOpenTab('PM')}>
               <CardHead title="Preventive Maintenance" onOpen={() => onOpenTab('PM')} />
               <div className="flex gap-2">
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(248,113,113,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#f87171' }}>{d?.pm.overdue ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Overdue</div></div>
+                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(255,77,77,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#f87171' }}>{d?.pm.overdue ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Overdue</div></div>
                 <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(251,191,36,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#fbbf24' }}>{d?.pm.dueSoon ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Due 14d</div></div>
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(140,170,200,0.2)' }}><div className="text-[22px] font-extrabold" style={{ color: '#7ee0a8' }}>{d?.pm.onTrack ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>On track</div></div>
+                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}><div className="text-[22px] font-extrabold" style={{ color: '#00E699' }}>{d?.pm.onTrack ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>On track</div></div>
               </div>
             </Tile>
 
             <Tile onClick={() => onOpenTab('Analytics')}>
               <CardHead title="Crew Performance · 30d" onOpen={() => onOpenTab('Analytics')} />
-              <Bar label="First-time fix" value={`${t.ftfPct ?? 0}%`} pct={t.ftfPct ?? 0} color="#7ee0a8" />
-              <Bar label="Utilization" value={`${t.avgUtilizationPct ?? 0}%`} pct={t.avgUtilizationPct ?? 0} color="#5FB8E0" />
+              <Bar label="First-time fix" value={`${t.ftfPct ?? 0}%`} pct={t.ftfPct ?? 0} color="#00E699" />
+              <Bar label="Utilization" value={`${t.avgUtilizationPct ?? 0}%`} pct={t.avgUtilizationPct ?? 0} color="#00A3FF" />
               <div className="flex items-center justify-between pt-0.5"><span className="text-[12px]" style={{ color: '#c3d3e2' }}>Callbacks / re-work</span><span className="text-[13px] font-bold" style={{ color: '#fbbf24' }}>{t.callbacks ?? 0}</span></div>
             </Tile>
           </div>

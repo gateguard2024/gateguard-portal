@@ -309,7 +309,7 @@ export default function OppsPage() {
         {error && (
           <div
             className="rounded-xl p-4 my-4 text-sm text-center"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '0.5px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}
+            style={{ background: 'rgba(239,68,68,0.08)', border: '0.5px solid rgba(239,68,68,0.2)', color: '#FF4D4D' }}
           >
             {error}
           </div>

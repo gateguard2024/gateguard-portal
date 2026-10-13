@@ -176,7 +176,7 @@ export function NewOppsLeadsModal() {
 
             {/* ARIA */}
             <CommandCard
-              hex="#5FB8E0" tag="ARIA Intel"
+              hex="#00A3FF" tag="ARIA Intel"
               headline={lastARIA ? `Property insights ready from last research session. Generate pitch brief?` : 'No recent ARIA searches. Run lead intelligence.'}
               sub={lastARIA?.query ? `Last search: "${lastARIA.query.slice(0, 32)}…"` : undefined}
               actionLabel={lastARIA ? 'Generate Brief' : 'Run ARIA'}
@@ -195,20 +195,20 @@ export function NewOppsLeadsModal() {
         <button
           onClick={() => setView('archivist')}
           className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
-          style={{ background: 'rgba(52,211,153,0.05)', border: '0.5px solid rgba(52,211,153,0.15)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(52,211,153,0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(52,211,153,0.05)' }}
+          style={{ background: 'rgba(0,230,153,0.05)', border: '0.5px solid rgba(0,230,153,0.15)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,230,153,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,230,153,0.05)' }}
         >
-          <span className="text-[10px]" style={{ color: 'rgba(52,211,153,0.7)' }}>Open full pipeline — opportunities, leads, ARIA intel</span>
+          <span className="text-[10px]" style={{ color: 'rgba(0,230,153,0.7)' }}>Open full pipeline — opportunities, leads, ARIA intel</span>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(52,211,153,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 6h8M6 2l4 4-4 4" stroke="rgba(0,230,153,0.7)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
 
         <ActionCommandBar onSubmit={handleCommand} isLoading={cmdLoading} />
 
         {cmdResult && (
-          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(52,211,153,0.07)', border: '0.5px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.75)' }}>
+          <div className="px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(0,230,153,0.07)', border: '0.5px solid rgba(0,230,153,0.2)', color: 'rgba(255,255,255,0.75)' }}>
             {cmdResult}
           </div>
         )}

@@ -15,7 +15,7 @@ interface Props { onBack: () => void }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const TIER_HEX: Record<string, string> = {
-  corporate: '#5FB8E0', master_agent: '#f59e0b', master_dealer: '#6B7EFF',
+  corporate: '#00A3FF', master_agent: '#f59e0b', master_dealer: '#6B7EFF',
   sales_dealer: '#34d399', install_dealer: '#0B7285', service_dealer: '#94a3b8',
 }
 const STAGE_HEX: Record<string, string> = {
@@ -206,7 +206,7 @@ export function PeopleExplorer({ onBack }: Props) {
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded text-center"
                     style={d.onboarding_complete
-                      ? { background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '0.5px solid rgba(52,211,153,0.25)' }
+                      ? { background: 'rgba(0,230,153,0.12)', color: '#34d399', border: '0.5px solid rgba(0,230,153,0.25)' }
                       : { background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '0.5px solid rgba(251,191,36,0.25)' }
                     }
                   >

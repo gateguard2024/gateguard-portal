@@ -150,7 +150,7 @@ export default function QuickLogPage() {
         </div>
       </div>
 
-      {msg && <div style={{ marginBottom: 12, fontSize: 13, padding: '9px 12px', borderRadius: 10, background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#6EE7B7' }}>{msg}</div>}
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, padding: '9px 12px', borderRadius: 10, background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.3)', color: '#6EE7B7' }}>{msg}</div>}
 
       {view === 'capture' && (<>
         <textarea ref={boxRef} value={text} onChange={e => setText(e.target.value)} autoFocus placeholder="What's on your mind? Type or tap the mic…"
@@ -159,7 +159,7 @@ export default function QuickLogPage() {
           {KINDS.map(k => <button key={k.v} onClick={() => setKind(kind === k.v ? '' : k.v)} style={chip(kind === k.v)}><k.Icon size={14} /> {k.label}</button>)}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={toggleMic} aria-label="Voice" style={{ width: 56, height: 56, flexShrink: 0, borderRadius: '50%', border: recording ? `2px solid ${GREEN}` : 0, cursor: 'pointer', background: recording ? 'rgba(52,211,153,0.2)' : BRAND, color: recording ? GREEN : BG, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={toggleMic} aria-label="Voice" style={{ width: 56, height: 56, flexShrink: 0, borderRadius: '50%', border: recording ? `2px solid ${GREEN}` : 0, cursor: 'pointer', background: recording ? 'rgba(0,230,153,0.2)' : BRAND, color: recording ? GREEN : BG, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
             <Mic size={26} />
           </button>
           <button onClick={() => save(recording ? 'voice' : 'text')} disabled={saving || !text.trim()} style={{ flex: 1, fontSize: 16, fontWeight: 700, padding: '17px 0', borderRadius: 14, border: 0, cursor: text.trim() ? 'pointer' : 'default', background: text.trim() ? GREEN : 'rgba(255,255,255,0.08)', color: text.trim() ? '#04201A' : MUT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -217,7 +217,7 @@ export default function QuickLogPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  <button disabled={busyId === it.id} onClick={() => act(it.id, { action: 'done' })} style={actBtn('rgba(52,211,153,0.16)', 'rgba(52,211,153,0.4)', '#6EE7B7')}><Check size={13} /> Done</button>
+                  <button disabled={busyId === it.id} onClick={() => act(it.id, { action: 'done' })} style={actBtn('rgba(0,230,153,0.16)', 'rgba(0,230,153,0.4)', '#6EE7B7')}><Check size={13} /> Done</button>
                   <button disabled={busyId === it.id} onClick={() => act(it.id, { action: 'make_todo' })} style={actBtn('rgba(107,126,255,0.16)', 'rgba(107,126,255,0.4)', '#C7D0FF')}><StickyNote size={13} /> To-do</button>
                   <button disabled={busyId === it.id} onClick={() => { setAttachFor(it.id); setQ(''); setHits([]) }} style={actBtn('rgba(255,255,255,0.05)', LINE, MUT)}><Link2 size={13} /> Attach</button>
                 </div>

@@ -7,10 +7,10 @@ import { useCallback, useEffect, useState } from 'react'
 type Linked = { link_id: string; contact_id: string; name: string; email: string | null; phone: string | null; title: string | null; role: string | null }
 type Found = { id: string; name: string; email: string | null; title?: string | null }
 
-const card = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 16, padding: 16, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' } as const
-const input = { background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
+const card = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 16, padding: 16, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' } as const
+const input = { background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(0,163,255,0.22)', color: 'rgba(255,255,255,0.92)', borderRadius: 10, padding: '8px 10px', width: '100%', fontSize: 13 } as const
 
-export function ContactsCard({ entityType, entityId, accent = '#5FB8E0' }: { entityType: string; entityId?: string; accent?: string }) {
+export function ContactsCard({ entityType, entityId, accent = '#00A3FF' }: { entityType: string; entityId?: string; accent?: string }) {
   const [rows, setRows] = useState<Linked[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
@@ -144,7 +144,7 @@ export function ContactsCard({ entityType, entityId, accent = '#5FB8E0' }: { ent
               <button onClick={createAndAttach} disabled={busy} style={{ width: '100%', marginTop: 8, textAlign: 'center', background: `${accent}1a`, border: `1px solid ${accent}55`, borderRadius: 8, padding: '8px 10px', cursor: busy ? 'default' : 'pointer', color: accent, fontSize: 13, fontWeight: 600, opacity: busy ? 0.5 : 1 }}>{busy ? 'Saving…' : `+ Create & add “${q.trim()}”`}</button>
             </div>
           )}
-          {err && <div style={{ marginTop: 8, fontSize: 12, color: '#fca5a5', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '6px 8px' }}>{err}</div>}
+          {err && <div style={{ marginTop: 8, fontSize: 12, color: '#FF4D4D', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.3)', borderRadius: 8, padding: '6px 8px' }}>{err}</div>}
           <button onClick={resetAdd} style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.82)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
         </div>
       )}

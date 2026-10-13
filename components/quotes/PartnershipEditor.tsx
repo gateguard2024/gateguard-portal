@@ -19,7 +19,7 @@ const numOrU = (v: string) => (v === '' ? undefined : Math.max(0, Number(v) || 0
 // component they were a brand-new component type on every render, so React
 // remounted every input on each keystroke — the "one letter at a time" bug.
 // Light "rich hybrid" palette — matches the ROI calculator and the client letter.
-const INK = '#17293e', MUT = '#5a708c', CYAN = '#2f7fb8'
+const INK = '#17293e', MUT = '#5a708c', CYAN = '#00A3FF'
 // Dark-rail palette — the editor's left rail matches the Nexus workbench (dark
 // steel). Labels/headers go light; inputs stay light cards and the proposal
 // letter on the right stays white.
@@ -47,7 +47,7 @@ function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { l
     </div>
   )
 }
-const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)', marginBottom: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', marginBottom: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }
 const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: TXT_DK, marginBottom: 6 }
 const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: TXT_DK, fontWeight: 600 }
 
@@ -246,7 +246,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       }`}</style>
 
       {/* Left form */}
-      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#2b3c52 0%,#16202e 100%)' }}>
+      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#1E293B 0%,#16202e 100%)' }}>
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
@@ -276,7 +276,7 @@ export function PartnershipEditor({ id }: { id: string }) {
         {/* Send to client */}
         <div className="pp-bar" style={{ marginBottom: 12 }}>
           {approved ? (
-            <button onClick={() => { setSendOpen(o => !o); setSendMsg(null) }} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#2f7fb8,#1d5c86)', cursor: 'pointer' }}>✉ Send proposal to client</button>
+            <button onClick={() => { setSendOpen(o => !o); setSendMsg(null) }} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#fff', background: 'linear-gradient(135deg,#00A3FF,#1d5c86)', cursor: 'pointer' }}>✉ Send proposal to client</button>
           ) : (
             <div title="Approve the proposal first" style={{ width: '100%', textAlign: 'center', padding: '10px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.6)', fontSize: 12.5, cursor: 'not-allowed' }}>🔒 Send unlocks once approved</div>
           )}
@@ -308,7 +308,7 @@ export function PartnershipEditor({ id }: { id: string }) {
                 <button type="button" onClick={() => setSendSubject(autoSubject)} style={{ fontSize: 10.5, fontWeight: 700, color: '#7fc4ec', background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}>↺ use auto</button>
               </div>
               <input value={sendSubject} onChange={e => setSendSubject(e.target.value)} placeholder={autoSubject} style={inS} />
-              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(95,184,224,0.3)', borderRadius: 8 }}>
+              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(47,127,184,0.14)', border: '1px solid rgba(0,163,255,0.3)', borderRadius: 8 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9fb4c9', marginBottom: 6 }}>Attach as PDF</div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#dbe4f0', marginBottom: 4, cursor: 'pointer' }}><input type="checkbox" checked={attachProposal} onChange={e => setAttachProposal(e.target.checked)} /> Proposal</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#dbe4f0', marginBottom: 4, cursor: 'pointer' }}><input type="checkbox" checked={attachAgreement} onChange={e => setAttachAgreement(e.target.checked)} /> Service agreement</label>
@@ -340,7 +340,7 @@ export function PartnershipEditor({ id }: { id: string }) {
               <div style={{ fontSize: 11, color: '#9fb4c9', marginTop: 3 }}>{m.note}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {!isCorporate && reviewStatus !== 'pending' && reviewStatus !== 'approved' && (
-                  <button onClick={() => review('submit')} disabled={busy === 'submit'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#5FB8E0,#2f7fb8)', cursor: 'pointer' }}>{busy === 'submit' ? 'Submitting…' : 'Submit for review'}</button>
+                  <button onClick={() => review('submit')} disabled={busy === 'submit'} style={{ padding: '7px 12px', borderRadius: 8, border: 0, fontWeight: 700, fontSize: 12, color: '#04231a', background: 'linear-gradient(135deg,#00A3FF,#00A3FF)', cursor: 'pointer' }}>{busy === 'submit' ? 'Submitting…' : 'Submit for review'}</button>
                 )}
                 {isCorporate && (
                   <>
@@ -411,7 +411,7 @@ export function PartnershipEditor({ id }: { id: string }) {
         <Sec t="Set-up pricing" />
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           {(['condition', 'flat'] as const).map(m => (
-            <button key={m} type="button" onClick={() => set('pricing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.pricing_mode ?? 'condition') === m) ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'condition' ? 'By condition' : 'Flat fee'}</button>
+            <button key={m} type="button" onClick={() => set('pricing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.pricing_mode ?? 'condition') === m) ? { background: '#00A3FF', border: '1px solid #00A3FF', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'condition' ? 'By condition' : 'Flat fee'}</button>
           ))}
         </div>
         {(cfg.pricing_mode ?? 'condition') === 'flat' ? (
@@ -422,7 +422,7 @@ export function PartnershipEditor({ id }: { id: string }) {
             <Stepper label="$ / opening needing repair" value={cfg.setup_per_repair ?? 750} onChange={v => set('setup_per_repair', v)} step={50} prefix="$" />
           </div>
         )}
-        <div style={{ fontSize: 11.5, color: '#cfe8dd', marginTop: 8, padding: '8px 10px', background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 8 }}>
+        <div style={{ fontSize: 11.5, color: '#cfe8dd', marginTop: 8, padding: '8px 10px', background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.3)', borderRadius: 8 }}>
           {r.pricingMode === 'flat'
             ? <>{r.accessPoints} openings × {money(r.setupFlatPerOpening)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>
             : <>{r.workingOpenings} × {money(r.setupPerWorking)} + {r.repairOpenings} × {money(r.setupPerRepair)} = <b style={{ color: '#12855f' }}>{money(r.setupFee)}</b> set-up<br /></>}
@@ -516,7 +516,7 @@ export function PartnershipEditor({ id }: { id: string }) {
         <Sec t="Billing" />
         <div style={{ display: 'flex', gap: 6 }}>
           {(['resident', 'property_monthly'] as BillingMode[]).map(m => (
-            <button key={m} onClick={() => set('billing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.billing_mode ?? 'resident') === m) ? { background: '#5FB8E0', border: '1px solid #5FB8E0', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'resident' ? 'Resident-funded' : 'Property bulk / mo'}</button>
+            <button key={m} onClick={() => set('billing_mode', m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', ...(((cfg.billing_mode ?? 'resident') === m) ? { background: '#00A3FF', border: '1px solid #00A3FF', color: '#04202e' } : { background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#c3d3e2' }) }}>{m === 'resident' ? 'Resident-funded' : 'Property bulk / mo'}</button>
           ))}
         </div>
         {resident ? (
@@ -533,7 +533,7 @@ export function PartnershipEditor({ id }: { id: string }) {
             ) : (
               <div style={{ marginTop: 8 }}>
                 <Stepper label="Resident fee / unit" value={cfg.resident_fee ?? 100} onChange={v => set('resident_fee', v)} step={5} prefix="$" />
-                {suggestedFee != null && <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 4 }}>Calculator suggests {money(suggestedFee)} — <button type="button" onClick={() => set('resident_fee', suggestedFee)} style={{ background: 'transparent', border: 0, color: '#5FB8E0', cursor: 'pointer', padding: 0, fontWeight: 700 }}>use it</button></div>}
+                {suggestedFee != null && <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 4 }}>Calculator suggests {money(suggestedFee)} — <button type="button" onClick={() => set('resident_fee', suggestedFee)} style={{ background: 'transparent', border: 0, color: '#00A3FF', cursor: 'pointer', padding: 0, fontWeight: 700 }}>use it</button></div>}
               </div>
             )}
           </div>
@@ -554,7 +554,7 @@ export function PartnershipEditor({ id }: { id: string }) {
         <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>Buyout base {money(r.buyoutBase)} ({r.units} units × {money(r.residentFee)}) · straight-line {money(r.buyoutMonthly)}/mo · $0 after month {r.buyoutMonths}.</div>
 
         {/* Advanced — everything below auto-writes from the numbers above; only touch to override wording. */}
-        <div style={{ marginTop: 16, borderTop: '1px solid rgba(140,170,200,0.15)', paddingTop: 12 }}>
+        <div style={{ marginTop: 16, borderTop: '1px solid #1E293B', paddingTop: 12 }}>
           <button type="button" onClick={() => setShowAdvanced(s => !s)} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', color: '#9fb4c9', fontSize: 12, fontWeight: 700 }}>
             {showAdvanced ? '▾' : '▸'} Fine-tune wording (optional)
           </button>

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 type Status = 'live' | 'failed' | 'not_configured'
 type Check = { key: string; name: string; category: string; status: Status; detail: string; connectPath?: string }
 
-const INK = '#17293e', MUT = '#5a708c', CYAN = '#2f7fb8'
+const INK = '#17293e', MUT = '#5a708c', CYAN = '#00A3FF'
 const TONE: Record<Status, { dot: string; label: string; fg: string; bg: string }> = {
   live:           { dot: '#12b886', label: 'Live', fg: '#0f6e56', bg: 'rgba(18,133,95,0.10)' },
   failed:         { dot: '#e24b4a', label: 'Failed', fg: '#a32d2d', bg: 'rgba(220,38,38,0.10)' },

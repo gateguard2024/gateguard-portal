@@ -55,8 +55,8 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
         aria-hidden="true"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(95,184,224,0.095) 1px, transparent 1px),' +
-            'linear-gradient(90deg, rgba(95,184,224,0.095) 1px, transparent 1px)',
+            'linear-gradient(rgba(0,163,255,0.095) 1px, transparent 1px),' +
+            'linear-gradient(90deg, rgba(0,163,255,0.095) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
           maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.28) 62%, transparent)',
         }}
@@ -72,7 +72,7 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
           preserveAspectRatio="xMidYMin slice"
           viewBox="0 0 1440 900"
         >
-          <g stroke="rgba(95,184,224,0.06)" strokeWidth="1" fill="none">
+          <g stroke="rgba(0,163,255,0.06)" strokeWidth="1" fill="none">
             <path d="M60 80 L220 40 L390 110 L300 250 L60 80" />
             <path d="M220 40 L300 250 L120 330 L60 80" />
             <path d="M390 110 L560 60 L640 200 L300 250" />
@@ -83,7 +83,7 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
             <path d="M1340 330 L1200 500 L1370 590" />
             <path d="M640 200 L720 90 L840 210" />
           </g>
-          <g fill="rgba(95,184,224,0.16)">
+          <g fill="rgba(0,163,255,0.16)">
             {[
               [60, 80], [220, 40], [390, 110], [300, 250], [120, 330], [560, 60],
               [640, 200], [720, 90], [840, 210], [900, 70], [1080, 130], [1220, 50],
@@ -104,7 +104,7 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
             transform: 'translate(-50%, -50%)',
             width: 860,
             height: 360,
-            background: 'radial-gradient(ellipse, rgba(95,184,224,0.22) 0%, rgba(95,184,224,0.10) 28%, transparent 70%)',
+            background: 'radial-gradient(ellipse, rgba(0,163,255,0.22) 0%, rgba(0,163,255,0.10) 28%, transparent 70%)',
             borderRadius: '999px',
             filter: 'blur(10px)',
           }}
@@ -113,7 +113,7 @@ export function NexusBackdropLayers({ variant = 'page' }: { variant?: BackdropVa
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px"
         aria-hidden="true"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(95,184,224,0.55), transparent)' }}
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(0,163,255,0.55), transparent)' }}
       />
     </>
   )

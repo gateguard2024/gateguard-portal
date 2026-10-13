@@ -55,9 +55,9 @@ export function CostSheetBody() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(248,113,113,0.32)' }}>
+      <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(255,77,77,0.32)' }}>
         <div className="flex items-center gap-2">
-          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(248,113,113,0.22)', color: '#fecaca' }}>Corporate only</span>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(255,77,77,0.22)', color: '#fecaca' }}>Corporate only</span>
           <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.66)' }}>
             Gate Guard&apos;s true cost — never shown to dealers. Drives the calculators&apos; margin math.
           </span>

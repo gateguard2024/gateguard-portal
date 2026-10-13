@@ -174,7 +174,7 @@ export function FieldModal() {
 
             {/* Site intel */}
             <CommandCard
-              hex="#5FB8E0" tag="Site Intel"
+              hex="#00A3FF" tag="Site Intel"
               headline={openWO ? `${openWO.wo_number ?? 'Open job'} at ${openWO.customer_name ?? 'site'} is unassigned. Dispatch now?` : 'All open jobs are dispatched.'}
               sub={openWO ? 'Needs technician assignment' : undefined}
               actionLabel="Dispatch Tech"

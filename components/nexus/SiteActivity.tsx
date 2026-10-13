@@ -15,7 +15,7 @@ const ICON = (t: string) =>
   : /camera|video/i.test(t) ? "📹"
   : "•";
 
-const tone = (sev: string) => sev === "critical" ? "#fca5a5" : sev === "warning" ? "#fcd34d" : "rgba(255,255,255,0.6)";
+const tone = (sev: string) => sev === "critical" ? "#FF4D4D" : sev === "warning" ? "#fcd34d" : "rgba(255,255,255,0.6)";
 
 export function SiteActivity({ siteId }: { siteId: string }) {
   const [events, setEvents] = useState<Ev[]>([]);
@@ -55,11 +55,11 @@ export function SiteActivity({ siteId }: { siteId: string }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [siteId]);
 
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 16 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 16 } as const;
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#5FB8E0" /> Activity</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 10 }}><Activity size={16} color="#00A3FF" /> Activity</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
         : events.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{brivoNote ?? "No activity yet. Door unlocks, installs, and alerts will show here."}</div>
         : <div style={{ display: "grid", gap: 2 }}>

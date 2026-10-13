@@ -51,7 +51,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
   function statusOf(v: Vendor) { return statuses.find(s => s.vendor === v); }
   function chip(s?: Status) {
     if (!s || !s.configured) return { label: "Not set", color: "#64748b" };
-    if (s.status === "verified") return { label: "Verified", color: "#7ee0a8" };
+    if (s.status === "verified") return { label: "Verified", color: "#00E699" };
     if (s.status === "error") return { label: "Error", color: "#f87171" };
     return { label: "Configured", color: "#fbbf24" };
   }
@@ -94,7 +94,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     finally { setLoadingSites(false); }
   }
 
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (
@@ -102,7 +102,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     <div style={card}>
       <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Connections</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>This property&apos;s own Brivo, Eagle Eye, Shelly, and UniFi logins. Stored encrypted — never shown again.</div>
-      {!keyOk && <div style={{ fontSize: 12, color: "#fca5a5", marginBottom: 10 }}>Server encryption key not set (CREDENTIALS_ENC_KEY) — saving is disabled until it&apos;s configured.</div>}
+      {!keyOk && <div style={{ fontSize: 12, color: "#FF4D4D", marginBottom: 10 }}>Server encryption key not set (CREDENTIALS_ENC_KEY) — saving is disabled until it&apos;s configured.</div>}
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div> : (
         <div style={{ display: "grid", gap: 8 }}>
           {VENDORS.map(({ vendor, label, fields }) => {
@@ -113,10 +113,10 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>{label}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: c.color }}>{c.label}</span>
-                    <button onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); }} style={{ fontSize: 12, color: "#5FB8E0", background: "none", border: "none", cursor: "pointer" }}>{isOpen ? "Cancel" : s?.configured ? "Update" : "Set up"}</button>
+                    <button onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); }} style={{ fontSize: 12, color: "#00A3FF", background: "none", border: "none", cursor: "pointer" }}>{isOpen ? "Cancel" : s?.configured ? "Update" : "Set up"}</button>
                   </div>
                 </div>
-                {s?.last_error && !isOpen && <div style={{ fontSize: 11, color: "#fca5a5", marginTop: 4 }}>{s.last_error}</div>}
+                {s?.last_error && !isOpen && <div style={{ fontSize: 11, color: "#FF4D4D", marginTop: 4 }}>{s.last_error}</div>}
                 {isOpen && (
                   <div style={{ display: "grid", gap: 7, marginTop: 10 }}>
                     {/* Primary fields */}
@@ -128,7 +128,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                     {/* UniFi cloud site picker */}
                     {vendor === "unifi" && (
                       <div style={{ display: "grid", gap: 6, paddingTop: 2 }}>
-                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#5FB8E0", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
+                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#00A3FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
                         {cloudSites.length > 0 && (
                           <select value={form.cloud_site_id ?? ""} onChange={e => { const s = cloudSites.find(x => x.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: s?.host_id ?? p.cloud_host_id ?? "" })); }} style={input}>
                             <option value="">— pick this property&apos;s UniFi site —</option>
@@ -152,10 +152,10 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                       </>
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
-                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
-                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(126,224,168,0.16)", border: "1px solid rgba(126,224,168,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
-                      {s?.configured && <button onClick={() => remove(vendor, label)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1, marginLeft: "auto" }}>Remove</button>}
+                      <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
+                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
+                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
+                      {s?.configured && <button onClick={() => remove(vendor, label)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,77,77,0.14)", border: "1px solid rgba(255,77,77,0.4)", color: "#FF4D4D", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1, marginLeft: "auto" }}>Remove</button>}
                     </div>
                   </div>
                 )}
@@ -164,7 +164,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
           })}
         </div>
       )}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
     </div>
     <SiteQuickBooks siteId={siteId} />
     </>
@@ -190,7 +190,7 @@ function SiteQuickBooks({ siteId }: { siteId: string }) {
     setBusy(false);
     if (r?.ok) { setMsg("Linked ✓"); load(); } else setMsg(r?.error || "Couldn't save.");
   }
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)", border: "1px solid rgba(140,170,200,0.22)", borderRadius: 18, padding: 18, marginTop: 12 } as const;
+  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18, marginTop: 12 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
   return (
     <div style={card}>
@@ -199,10 +199,10 @@ function SiteQuickBooks({ siteId }: { siteId: string }) {
           <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}>QuickBooks · Billing</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Link this property to its Customer in your Gate Guard QuickBooks. Invoices, portal balance &amp; Pay all resolve from here.</div>
         </div>
-        <span style={{ fontSize: 11, fontWeight: 700, color: data?.connected ? "#7ee0a8" : "#fbbf24", whiteSpace: "nowrap" }}>{data?.connected ? "Connected" : "Not connected"}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: data?.connected ? "#00E699" : "#fbbf24", whiteSpace: "nowrap" }}>{data?.connected ? "Connected" : "Not connected"}</span>
       </div>
       {data && !data.connected && (
-        <button onClick={() => { window.location.href = "/api/integrations/quickbooks/connect"; }} style={{ marginTop: 12, fontSize: 12, fontWeight: 600, background: "rgba(45,127,184,0.2)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "8px 14px", cursor: "pointer" }}>Connect QuickBooks →</button>
+        <button onClick={() => { window.location.href = "/api/integrations/quickbooks/connect"; }} style={{ marginTop: 12, fontSize: 12, fontWeight: 600, background: "rgba(45,127,184,0.2)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "8px 14px", cursor: "pointer" }}>Connect QuickBooks →</button>
       )}
       {data?.connected && (
         <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
@@ -211,12 +211,12 @@ function SiteQuickBooks({ siteId }: { siteId: string }) {
             {(data.customers ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(95,184,224,0.18)", border: "1px solid rgba(95,184,224,0.45)", color: "#5FB8E0", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save link"}</button>
+            <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save link"}</button>
             {data.current && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Currently: {data.current.name}</span>}
           </div>
         </div>
       )}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
     </div>
   );
 }

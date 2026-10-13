@@ -142,28 +142,28 @@ function AddAssetSlideOver({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-lg bg-[#1e2a3a] shadow-2xl flex flex-col h-full overflow-y-auto">
-        <div className="sticky top-0 bg-[#1e2a3a] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
+      <div className="w-full max-w-lg bg-[#151D2A] shadow-2xl flex flex-col h-full overflow-y-auto">
+        <div className="sticky top-0 bg-[#151D2A] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-[#eaf2fb]">Add Installed Equipment</h2>
           <button onClick={onClose} className="text-[#8598aa] hover:text-[#c3d3e2] text-2xl leading-none">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-4">
-          {error && <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#FF4D4D] rounded-lg px-4 py-3 text-sm">{error}</div>}
 
           <div>
             <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Product Name *</label>
-            <input value={form.product_name} onChange={e => set('product_name', e.target.value)} placeholder="DoorKing 6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+            <input value={form.product_name} onChange={e => set('product_name', e.target.value)} placeholder="DoorKing 6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-[#c3d3e2] mb-1">SKU / Model</label>
-              <input value={form.product_sku} onChange={e => set('product_sku', e.target.value)} placeholder="DK-6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+              <input value={form.product_sku} onChange={e => set('product_sku', e.target.value)} placeholder="DK-6050" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Category</label>
-              <select value={form.product_category} onChange={e => set('product_category', e.target.value)} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]">
+              <select value={form.product_category} onChange={e => set('product_category', e.target.value)} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]">
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
@@ -172,21 +172,21 @@ function AddAssetSlideOver({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Location</label>
-              <input value={form.location_note} onChange={e => set('location_note', e.target.value)} placeholder="Main Gate" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+              <input value={form.location_note} onChange={e => set('location_note', e.target.value)} placeholder="Main Gate" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#c3d3e2] mb-1">Zone (optional)</label>
-              <input value={form.location_zone} onChange={e => set('location_zone', e.target.value)} placeholder="North Entry" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+              <input value={form.location_zone} onChange={e => set('location_zone', e.target.value)} placeholder="North Entry" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
             </div>
           </div>
 
           <div className="border-t border-[#2a3a4d] pt-4">
             <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Hardware IDs</p>
             <div className="space-y-3">
-              <input value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="Serial number" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+              <input value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="Serial number" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
               <div className="grid grid-cols-2 gap-3">
-                <input value={form.mac_address} onChange={e => set('mac_address', e.target.value)} placeholder="MAC address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
-                <input value={form.ip_address} onChange={e => set('ip_address', e.target.value)} placeholder="IP address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
+                <input value={form.mac_address} onChange={e => set('mac_address', e.target.value)} placeholder="MAC address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
+                <input value={form.ip_address} onChange={e => set('ip_address', e.target.value)} placeholder="IP address" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
               </div>
             </div>
           </div>
@@ -194,15 +194,15 @@ function AddAssetSlideOver({
           <div className="border-t border-[#2a3a4d] pt-4">
             <p className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider mb-3">Install Record</p>
             <div className="space-y-3">
-              <input value={form.installed_by} onChange={e => set('installed_by', e.target.value)} placeholder="Installed by (tech name)" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]" />
-              <textarea value={form.install_notes} onChange={e => set('install_notes', e.target.value)} placeholder="Install notes" rows={2} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none" />
+              <input value={form.installed_by} onChange={e => set('installed_by', e.target.value)} placeholder="Installed by (tech name)" className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]" />
+              <textarea value={form.install_notes} onChange={e => set('install_notes', e.target.value)} placeholder="Install notes" rows={2} className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF] resize-none" />
             </div>
           </div>
         </form>
 
-        <div className="sticky bottom-0 bg-[#1e2a3a] border-t border-[#33465b] px-6 py-4 flex justify-end gap-3">
+        <div className="sticky bottom-0 bg-[#151D2A] border-t border-[#33465b] px-6 py-4 flex justify-end gap-3">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-[#3a4a5c] rounded-lg hover:bg-[#22303f]">Cancel</button>
-          <button onClick={handleSubmit} disabled={saving} className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50">
+          <button onClick={handleSubmit} disabled={saving} className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#00A3FF] disabled:opacity-50">
             {saving ? 'Saving…' : 'Add Equipment'}
           </button>
         </div>
@@ -213,22 +213,22 @@ function AddAssetSlideOver({
 
 /* ─── Helpers ────────────────────────────────────────── */
 const ASSET_STATUS: Record<string, { label: string; color: string; dot: string }> = {
-  active:   { label: 'Online',   color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300', dot: 'bg-emerald-500' },
-  offline:  { label: 'Offline',  color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',         dot: 'bg-red-500'     },
+  active:   { label: 'Online',   color: 'bg-[rgba(0,230,153,0.15)] text-emerald-300', dot: 'bg-emerald-500' },
+  offline:  { label: 'Offline',  color: 'bg-[rgba(239,68,68,0.18)] text-[#FF4D4D]',         dot: 'bg-red-500'     },
   degraded: { label: 'Degraded', color: 'bg-[rgba(251,191,36,0.15)] text-amber-300',     dot: 'bg-amber-500'   },
   replaced: { label: 'Replaced', color: 'bg-[#22303f] text-[#98abbd]',     dot: 'bg-slate-400'   },
 }
 
 const WO_STATUS: Record<string, string> = {
-  open:        'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',
+  open:        'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]',
   scheduled:   'bg-violet-100 text-violet-700',
   in_progress: 'bg-[rgba(251,191,36,0.15)] text-amber-300',
-  completed:   'bg-[rgba(126,224,168,0.15)] text-emerald-300',
+  completed:   'bg-[rgba(0,230,153,0.15)] text-emerald-300',
   cancelled:   'bg-[#22303f] text-[#98abbd]',
 }
 
 const PRIORITY: Record<string, string> = {
-  critical: 'text-[#fca5a5]',
+  critical: 'text-[#FF4D4D]',
   high:     'text-amber-300',
   normal:   'text-[#98abbd]',
   low:      'text-[#8598aa]',
@@ -237,7 +237,7 @@ const PRIORITY: Record<string, string> = {
 const SEVERITY_ICON: Record<string, JSX.Element> = {
   critical: <AlertTriangle size={14} className="text-[#fb7185]" />,
   warning:  <AlertTriangle size={14} className="text-amber-300" />,
-  info:     <Activity size={14} className="text-[#5FB8E0]" />,
+  info:     <Activity size={14} className="text-[#00A3FF]" />,
 }
 
 function formatDate(iso: string | null) {
@@ -583,7 +583,7 @@ export default function SiteDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-[#5FB8E0] border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-2 border-[#00A3FF] border-t-transparent rounded-full" />
       </div>
     )
   }
@@ -617,7 +617,7 @@ export default function SiteDetailPage() {
     <div className="min-h-full" style={STEEL_SCOPE}>
       <div className="max-w-6xl mx-auto p-6">
       {/* Back */}
-      <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-[#98abbd] hover:text-[#5FB8E0] mb-4 transition-colors">
+      <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-[#98abbd] hover:text-[#00A3FF] mb-4 transition-colors">
         <ChevronLeft size={16} /> Back to Properties
       </Link>
 
@@ -631,7 +631,7 @@ export default function SiteDetailPage() {
               value={site.status}
               disabled={statusUpdating}
               onChange={e => handleStatusChange(e.target.value)}
-              className="text-xs border border-[#33465b] rounded-full px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] bg-[#1e2a3a]"
+              className="text-xs border border-[#33465b] rounded-full px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3FF] bg-[#151D2A]"
             >
               <option value="active">Active</option>
               <option value="prospect">Prospect</option>
@@ -665,17 +665,17 @@ export default function SiteDetailPage() {
               {site.units.toLocaleString()} units
             </div>
           )}
-          <div className={`px-3 py-1.5 rounded-full font-medium ${activeAssets > 0 ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300' : 'bg-[#22303f] text-[#98abbd]'}`}>
+          <div className={`px-3 py-1.5 rounded-full font-medium ${activeAssets > 0 ? 'bg-[rgba(0,230,153,0.15)] text-emerald-300' : 'bg-[#22303f] text-[#98abbd]'}`}>
             {activeAssets} device{activeAssets !== 1 ? 's' : ''} online
           </div>
           {offlineAssets > 0 && (
-            <div className="px-3 py-1.5 bg-[rgba(239,68,68,0.18)] text-[#fca5a5] rounded-full font-medium flex items-center gap-1.5">
+            <div className="px-3 py-1.5 bg-[rgba(239,68,68,0.18)] text-[#FF4D4D] rounded-full font-medium flex items-center gap-1.5">
               <WifiOff size={12} /> {offlineAssets} offline
             </div>
           )}
           <button
             onClick={() => setShowAddAsset(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#00A3FF]"
           >
             <Plus size={15} /> Add Equipment
           </button>
@@ -710,7 +710,7 @@ export default function SiteDetailPage() {
           fieldKey="install_dealer_id"
           orgLink={linkedOrgs.install_dealer_id}
           onAssign={setAssigningField}
-          color="text-[#9FD8EC]"
+          color="text-[#00A3FF]"
           bgColor="bg-[#22303f]"
           borderColor="border-blue-200"
         />
@@ -720,9 +720,9 @@ export default function SiteDetailPage() {
           fieldKey="service_dealer_id"
           orgLink={linkedOrgs.service_dealer_id}
           onAssign={setAssigningField}
-          color="text-[#5FB8E0]"
+          color="text-[#00A3FF]"
           bgColor="bg-[#3f7fb8]"
-          borderColor="border-[#5FB8E0]"
+          borderColor="border-[#00A3FF]"
           primary
         />
       </div>
@@ -754,14 +754,14 @@ export default function SiteDetailPage() {
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px ${
               tab === t.id
-                ? 'border-[#5FB8E0] text-[#5FB8E0]'
+                ? 'border-[#00A3FF] text-[#00A3FF]'
                 : 'border-transparent text-[#98abbd] hover:text-[#c3d3e2]'
             }`}
           >
             <t.icon size={15} />
             {t.label}
             {t.count !== undefined && t.count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-[#3f7fb8] text-[#5FB8E0]' : 'bg-[#22303f] text-[#98abbd]'}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-[#3f7fb8] text-[#00A3FF]' : 'bg-[#22303f] text-[#98abbd]'}`}>
                 {t.count}
               </span>
             )}
@@ -778,7 +778,7 @@ export default function SiteDetailPage() {
       {tab === 'overview' && (
         <div className="grid grid-cols-2 gap-6">
           {/* Property info */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
             <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
               <Building2 size={16} className="text-[#8598aa]" /> Property Info
             </h3>
@@ -789,7 +789,7 @@ export default function SiteDetailPage() {
               <InfoRow label="Added"    value={formatDate(site.created_at)} />
               {site.crm_opp_id && (
                 <InfoRow label="CRM Opp" value={
-                  <Link href={`/crm/opportunities/${site.crm_opp_id}`} className="text-[#5FB8E0] hover:underline">
+                  <Link href={`/crm/opportunities/${site.crm_opp_id}`} className="text-[#00A3FF] hover:underline">
                     View opportunity →
                   </Link>
                 } />
@@ -798,7 +798,7 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Contacts */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
             <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
               <Mail size={16} className="text-[#8598aa]" /> Contacts
             </h3>
@@ -807,7 +807,7 @@ export default function SiteDetailPage() {
                 <div>
                   <p className="text-xs font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Property Manager</p>
                   <p className="font-medium text-[#eaf2fb]">{site.pm_name}</p>
-                  {site.pm_email && <a href={`mailto:${site.pm_email}`} className="text-[#5FB8E0] hover:underline block">{site.pm_email}</a>}
+                  {site.pm_email && <a href={`mailto:${site.pm_email}`} className="text-[#00A3FF] hover:underline block">{site.pm_email}</a>}
                   {site.pm_phone && <p className="text-[#98abbd]">{site.pm_phone}</p>}
                 </div>
               )}
@@ -815,7 +815,7 @@ export default function SiteDetailPage() {
                 <div>
                   <p className="text-xs font-semibold text-[#8598aa] uppercase tracking-wider mb-1">Primary Contact</p>
                   <p className="font-medium text-[#eaf2fb]">{site.primary_contact_name}</p>
-                  {site.primary_contact_email && <a href={`mailto:${site.primary_contact_email}`} className="text-[#5FB8E0] hover:underline block">{site.primary_contact_email}</a>}
+                  {site.primary_contact_email && <a href={`mailto:${site.primary_contact_email}`} className="text-[#00A3FF] hover:underline block">{site.primary_contact_email}</a>}
                 </div>
               )}
               {!site.pm_name && !site.primary_contact_name && (
@@ -825,7 +825,7 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Access info */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
             <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
               <Key size={16} className="text-[#8598aa]" /> Site Access (Tech Info)
             </h3>
@@ -837,7 +837,7 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Notes */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
             <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
               <FileText size={16} className="text-[#8598aa]" /> Notes
             </h3>
@@ -850,7 +850,7 @@ export default function SiteDetailPage() {
 
           {/* Map — full width spanning both columns */}
           {(site.address || site.city) && (
-            <div className="col-span-2 bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <div className="col-span-2 bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
               <h3 className="text-sm font-semibold text-[#c3d3e2] mb-4 flex items-center gap-2">
                 <MapPin size={16} className="text-[#8598aa]" /> Location
               </h3>
@@ -866,13 +866,13 @@ export default function SiteDetailPage() {
       {tab === 'assets' && (
         <div className="space-y-3">
           {assets.length === 0 ? (
-            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
+            <div className="bg-[#151D2A] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <Package size={40} className="mb-3 opacity-30" />
               <p className="font-medium">No equipment documented</p>
               <p className="text-sm mt-1">Add the devices installed at this property</p>
               <button
                 onClick={() => setShowAddAsset(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#00A3FF]"
               >
                 <Plus size={15} /> Add Equipment
               </button>
@@ -881,7 +881,7 @@ export default function SiteDetailPage() {
             <>
               {/* Group by zone */}
               {groupByZone(assets).map(({ zone, items }) => (
-                <div key={zone} className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
+                <div key={zone} className="bg-[#151D2A] rounded-xl border border-[#33465b] overflow-hidden">
                   {zone && (
                     <div className="px-4 py-2.5 bg-[#1a2532] border-b border-[#33465b]">
                       <span className="text-xs font-semibold text-[#98abbd] uppercase tracking-wider">{zone}</span>
@@ -915,7 +915,7 @@ export default function SiteDetailPage() {
                                   <input value={idEdit.serial} onChange={e => setIdEdit({ ...idEdit, serial: e.target.value })} placeholder="Serial / ESN" className="w-32 border border-[#3a4a5c] rounded px-1.5 py-1 text-xs" />
                                   <input value={idEdit.mac} onChange={e => setIdEdit({ ...idEdit, mac: e.target.value })} placeholder="MAC address" className="w-32 border border-[#3a4a5c] rounded px-1.5 py-1 text-xs" />
                                   <div className="flex gap-1">
-                                    <button type="button" disabled={idSaving} onClick={saveAssetIds} className="px-2 py-0.5 rounded bg-[#2f7fb8] text-white text-[11px] disabled:opacity-40">{idSaving ? '…' : 'Save'}</button>
+                                    <button type="button" disabled={idSaving} onClick={saveAssetIds} className="px-2 py-0.5 rounded bg-[#00A3FF] text-white text-[11px] disabled:opacity-40">{idSaving ? '…' : 'Save'}</button>
                                     <button type="button" onClick={() => setIdEdit(null)} className="px-2 py-0.5 rounded bg-[#22303f] text-[#aebfce] text-[11px]">Cancel</button>
                                   </div>
                                 </div>
@@ -925,7 +925,7 @@ export default function SiteDetailPage() {
                                     <div>{asset.serial_number ?? '—'}</div>
                                     <div className={asset.mac_address ? 'text-[#8598aa]' : 'text-amber-300'}>{asset.mac_address ?? 'no MAC'}</div>
                                   </div>
-                                  <button type="button" onClick={() => setIdEdit({ id: asset.id, serial: asset.serial_number ?? '', mac: asset.mac_address ?? '' })} className="text-[#5FB8E0] hover:text-[#5FB8E0]" title="Backfill Serial / MAC for fleet health">✎</button>
+                                  <button type="button" onClick={() => setIdEdit({ id: asset.id, serial: asset.serial_number ?? '', mac: asset.mac_address ?? '' })} className="text-[#00A3FF] hover:text-[#00A3FF]" title="Backfill Serial / MAC for fleet health">✎</button>
                                 </div>
                               )}
                             </td>
@@ -954,7 +954,7 @@ export default function SiteDetailPage() {
 
       {/* ── Tab: Events ──────────────────────────────────────────────── */}
       {tab === 'events' && (
-        <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
+        <div className="bg-[#151D2A] rounded-xl border border-[#33465b] overflow-hidden">
           {events.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <Activity size={40} className="mb-3 opacity-30" />
@@ -986,13 +986,13 @@ export default function SiteDetailPage() {
 
       {/* ── Tab: Work Orders ─────────────────────────────────────────── */}
       {tab === 'work_orders' && (
-        <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
+        <div className="bg-[#151D2A] rounded-xl border border-[#33465b] overflow-hidden">
           {/* Header with Create button */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#33465b] bg-[#1a2532]">
             <h3 className="text-sm font-semibold text-[#c3d3e2]">Work Orders</h3>
             <Link
               href={`/maintenance?new=1&site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3f7fb8] text-white text-xs font-medium rounded-lg hover:bg-[#2f7fb8] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3f7fb8] text-white text-xs font-medium rounded-lg hover:bg-[#00A3FF] transition-colors"
             >
               <Plus size={12} /> New Work Order
             </Link>
@@ -1022,7 +1022,7 @@ export default function SiteDetailPage() {
                     onClick={() => router.push(`/maintenance/${wo.id}`)}
                     className="hover:bg-[#22303f] cursor-pointer"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-[#5FB8E0] font-semibold">{wo.wo_number}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#00A3FF] font-semibold">{wo.wo_number}</td>
                     <td className="px-4 py-3 font-medium text-[#eaf2fb]">{wo.title}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${WO_STATUS[wo.status] ?? 'bg-[#22303f] text-[#98abbd]'}`}>
@@ -1046,7 +1046,7 @@ export default function SiteDetailPage() {
       {tab === 'requests' && (
         <div className="space-y-4">
           {/* Header with share link */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4 flex items-center justify-between">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-[#dbe6f0] mb-0.5">Property Request Portal</h3>
               <p className="text-xs text-[#98abbd]">Share this link with your property manager so they can submit maintenance requests directly.</p>
@@ -1062,7 +1062,7 @@ export default function SiteDetailPage() {
               </a>
               <button
                 onClick={copyRequestLink}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-[#3f7fb8] text-white hover:bg-[#2f7fb8]'}`}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-[#3f7fb8] text-white hover:bg-[#00A3FF]'}`}
               >
                 <Copy size={12} />
                 {copySuccess ? 'Copied!' : 'Copy Link'}
@@ -1071,7 +1071,7 @@ export default function SiteDetailPage() {
           </div>
 
           {/* Requests table */}
-          <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
+          <div className="bg-[#151D2A] rounded-xl border border-[#33465b] overflow-hidden">
             {requests.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-[#8598aa]">
                 <Inbox size={36} className="mb-3 opacity-30" />
@@ -1093,8 +1093,8 @@ export default function SiteDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-[#2a3a4d]">
                   {requests.map(req => {
-                    const priBg: Record<string, string> = { urgent: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]', high: 'bg-orange-100 text-orange-700', normal: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]', low: 'bg-[#22303f] text-[#98abbd]' }
-                    const stBg:  Record<string, string> = { new: 'bg-yellow-100 text-yellow-700', acknowledged: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]', converted: 'bg-[rgba(126,224,168,0.15)] text-emerald-300', closed: 'bg-[#22303f] text-[#98abbd]' }
+                    const priBg: Record<string, string> = { urgent: 'bg-[rgba(239,68,68,0.18)] text-[#FF4D4D]', high: 'bg-orange-100 text-orange-700', normal: 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]', low: 'bg-[#22303f] text-[#98abbd]' }
+                    const stBg:  Record<string, string> = { new: 'bg-yellow-100 text-yellow-700', acknowledged: 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]', converted: 'bg-[rgba(0,230,153,0.15)] text-emerald-300', closed: 'bg-[#22303f] text-[#98abbd]' }
                     const age = Math.floor((Date.now() - new Date(req.created_at).getTime()) / 86400000)
                     return (
                       <tr key={req.id} className="hover:bg-[#22303f]">
@@ -1127,7 +1127,7 @@ export default function SiteDetailPage() {
                             <button
                               onClick={() => handleConvertRequest(req)}
                               disabled={convertingId === req.id}
-                              className="text-xs font-medium text-[#5FB8E0] hover:text-[#5FB8E0] disabled:opacity-50 whitespace-nowrap"
+                              className="text-xs font-medium text-[#00A3FF] hover:text-[#00A3FF] disabled:opacity-50 whitespace-nowrap"
                             >
                               {convertingId === req.id ? 'Creating…' : '+ Create WO'}
                             </button>
@@ -1159,7 +1159,7 @@ export default function SiteDetailPage() {
             </div>
             <button
               onClick={() => { setShowPMForm(true); setPMError(null) }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#00A3FF]"
             >
               <Plus size={15} /> Add PM Schedule
             </button>
@@ -1167,7 +1167,7 @@ export default function SiteDetailPage() {
 
           {/* Add form */}
           {showPMForm && (
-            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-5">
+            <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-5">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-semibold text-[#dbe6f0]">New PM Schedule</h4>
                 <button onClick={() => setShowPMForm(false)} className="text-[#8598aa] hover:text-[#c3d3e2]">
@@ -1176,7 +1176,7 @@ export default function SiteDetailPage() {
               </div>
               <form onSubmit={handleAddPMSchedule} className="space-y-3">
                 {pmError && (
-                  <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-2.5 text-sm">{pmError}</div>
+                  <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#FF4D4D] rounded-lg px-4 py-2.5 text-sm">{pmError}</div>
                 )}
                 <div>
                   <label className="block text-xs font-medium text-[#aebfce] mb-1">Title *</label>
@@ -1184,7 +1184,7 @@ export default function SiteDetailPage() {
                     value={pmForm.title}
                     onChange={e => setPMForm(p => ({ ...p, title: e.target.value }))}
                     placeholder="e.g. Gate lubrication"
-                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
                   />
                 </div>
                 <div>
@@ -1194,7 +1194,7 @@ export default function SiteDetailPage() {
                     onChange={e => setPMForm(p => ({ ...p, description: e.target.value }))}
                     placeholder="Optional checklist or instructions"
                     rows={2}
-                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
+                    className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF] resize-none"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1203,7 +1203,7 @@ export default function SiteDetailPage() {
                     <select
                       value={pmForm.interval_days}
                       onChange={e => setPMForm(p => ({ ...p, interval_days: e.target.value }))}
-                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
                     >
                       <option value="30">Every 30 days</option>
                       <option value="60">Every 60 days</option>
@@ -1218,7 +1218,7 @@ export default function SiteDetailPage() {
                       type="date"
                       value={pmForm.next_due_at}
                       onChange={e => setPMForm(p => ({ ...p, next_due_at: e.target.value }))}
-                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                      className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
                     />
                   </div>
                 </div>
@@ -1233,7 +1233,7 @@ export default function SiteDetailPage() {
                   <button
                     type="submit"
                     disabled={pmSaving}
-                    className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50"
+                    className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#00A3FF] disabled:opacity-50"
                   >
                     {pmSaving ? 'Saving…' : 'Add Schedule'}
                   </button>
@@ -1244,19 +1244,19 @@ export default function SiteDetailPage() {
 
           {/* Schedules list */}
           {pmSchedules.length === 0 && !showPMForm ? (
-            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
+            <div className="bg-[#151D2A] rounded-xl border border-[#33465b] flex flex-col items-center justify-center py-16 text-[#8598aa]">
               <RefreshCw size={40} className="mb-3 opacity-30" />
               <p className="font-medium text-sm">No PM schedules yet</p>
               <p className="text-xs mt-1">Add recurring maintenance tasks — work orders are created automatically</p>
               <button
                 onClick={() => setShowPMForm(true)}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#00A3FF]"
               >
                 <Plus size={15} /> Add PM Schedule
               </button>
             </div>
           ) : pmSchedules.length > 0 ? (
-            <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] overflow-hidden">
+            <div className="bg-[#151D2A] rounded-xl border border-[#33465b] overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#33465b] bg-[#1a2532]">
@@ -1274,7 +1274,7 @@ export default function SiteDetailPage() {
                     const now     = new Date()
                     const daysOut = Math.floor((due.getTime() - now.getTime()) / 86400000)
                     const dueCls  = daysOut < 0
-                      ? 'text-[#fca5a5] font-semibold'
+                      ? 'text-[#FF4D4D] font-semibold'
                       : daysOut <= 7
                         ? 'text-amber-300 font-semibold'
                         : 'text-emerald-300'
@@ -1310,7 +1310,7 @@ export default function SiteDetailPage() {
                             title={s.is_active ? 'Deactivate' : 'Activate'}
                             className={`w-10 h-5 rounded-full relative transition-colors focus:outline-none disabled:opacity-50 ${s.is_active ? 'bg-[#3f7fb8]' : 'bg-slate-300'}`}
                           >
-                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-[#1e2a3a] rounded-full shadow transition-transform ${s.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-[#151D2A] rounded-full shadow transition-transform ${s.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
                           </button>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -1342,7 +1342,7 @@ export default function SiteDetailPage() {
             </div>
             <Link
               href={`/crm/opportunities`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#5FB8E0] hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#00A3FF] hover:underline"
             >
               <ExternalLink size={12} /> View CRM
             </Link>
@@ -1354,7 +1354,7 @@ export default function SiteDetailPage() {
               When a won opportunity creates this property, it appears here.
             </div>
           ) : (
-            <div className="bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden">
+            <div className="bg-[#151D2A] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-[#1a2532] border-b border-[#2a3a4d]">
                   <tr>
@@ -1388,7 +1388,7 @@ export default function SiteDetailPage() {
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/crm/opportunities/${opp.id}`}
-                          className="text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 justify-end"
+                          className="text-xs text-[#00A3FF] hover:underline flex items-center gap-1 justify-end"
                         >
                           <ExternalLink size={11} /> View
                         </Link>
@@ -1411,7 +1411,7 @@ export default function SiteDetailPage() {
             </div>
             <Link
               href={`/quotes/new?site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
-              className='inline-flex items-center gap-1.5 text-xs font-medium text-[#5FB8E0] hover:underline'
+              className='inline-flex items-center gap-1.5 text-xs font-medium text-[#00A3FF] hover:underline'
             >
               <Plus size={12} /> New Quote
             </Link>
@@ -1427,7 +1427,7 @@ export default function SiteDetailPage() {
               No quotes for this property yet.
             </div>
           ) : (
-            <div className='bg-[#1e2a3a] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden'>
+            <div className='bg-[#151D2A] rounded-xl border border-[#2a3a4d] shadow-sm overflow-hidden'>
               <table className='w-full text-sm'>
                 <thead className='bg-[#1a2532] border-b border-[#2a3a4d]'>
                   <tr>
@@ -1444,7 +1444,7 @@ export default function SiteDetailPage() {
                   {siteQuotes.map(q => (
                     <tr key={q.id} className='hover:bg-[#22303f] transition-colors'>
                       <td className='px-4 py-3'>
-                        <span className='font-mono text-xs text-[#5FB8E0]'>{q.quote_number}</span>
+                        <span className='font-mono text-xs text-[#00A3FF]'>{q.quote_number}</span>
                       </td>
                       <td className='px-4 py-3'>
                         <span className='text-[#dbe6f0]'>{q.property_name ?? site?.name ?? '—'}</span>
@@ -1459,9 +1459,9 @@ export default function SiteDetailPage() {
                       </td>
                       <td className='px-4 py-3'>
                         <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full capitalize
-                          ${q.status === 'accepted' ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300'
-                          : q.status === 'sent' || q.status === 'viewed' ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]'
-                          : q.status === 'declined' ? 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]'
+                          ${q.status === 'accepted' ? 'bg-[rgba(0,230,153,0.15)] text-emerald-300'
+                          : q.status === 'sent' || q.status === 'viewed' ? 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]'
+                          : q.status === 'declined' ? 'bg-[rgba(239,68,68,0.18)] text-[#FF4D4D]'
                           : 'bg-[#22303f] text-[#98abbd]'}`}
                         >
                           {q.status}
@@ -1473,7 +1473,7 @@ export default function SiteDetailPage() {
                       <td className='px-4 py-3 text-right'>
                         <Link
                           href={`/quotes/${q.id}`}
-                          className='text-xs text-[#5FB8E0] hover:underline flex items-center gap-1 justify-end'
+                          className='text-xs text-[#00A3FF] hover:underline flex items-center gap-1 justify-end'
                         >
                           <ExternalLink size={11} /> View
                         </Link>
@@ -1541,7 +1541,7 @@ export default function SiteDetailPage() {
             {assets.length === 0 ? (
               <div className="text-center py-10 text-[#8598aa] text-sm">No equipment on this site yet.</div>
             ) : (
-              <div className="bg-[#1e2a3a] border border-[#33465b] rounded-xl overflow-hidden">
+              <div className="bg-[#151D2A] border border-[#33465b] rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-[#1a2532] border-b border-[#2a3a4d]">
                     <tr>
@@ -1570,9 +1570,9 @@ export default function SiteDetailPage() {
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize
                               ${rmaStatus === 'pending'  ? 'bg-[rgba(251,191,36,0.15)] text-amber-300' :
-                                rmaStatus === 'shipped'  ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' :
+                                rmaStatus === 'shipped'  ? 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]' :
                                 rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
-                                rmaStatus === 'resolved' ? 'bg-[rgba(126,224,168,0.15)] text-emerald-300' :
+                                rmaStatus === 'resolved' ? 'bg-[rgba(0,230,153,0.15)] text-emerald-300' :
                                 'bg-[#22303f] text-[#8598aa]'}`}
                             >
                               {rmaStatus === 'none' ? 'No RMA' : rmaStatus}
@@ -1597,7 +1597,7 @@ export default function SiteDetailPage() {
                                   })
                                   setRmaSlideOpen(true)
                                 }}
-                                className="text-xs text-[#5FB8E0] hover:text-[#5FB8E0] font-medium"
+                                className="text-xs text-[#00A3FF] hover:text-[#00A3FF] font-medium"
                               >
                                 Update
                               </button>
@@ -1631,7 +1631,7 @@ export default function SiteDetailPage() {
                   {activeRMAs.map(a => {
                     const rmaStatus = a.rma_status ?? 'pending'
                     return (
-                      <div key={a.id} className="bg-[#1e2a3a] border border-[#33465b] rounded-xl p-4 flex items-start justify-between gap-4">
+                      <div key={a.id} className="bg-[#151D2A] border border-[#33465b] rounded-xl p-4 flex items-start justify-between gap-4">
                         <div>
                           <p className="font-medium text-[#dbe6f0] text-sm">{a.product_name}</p>
                           {a.rma_ticket_number && (
@@ -1647,7 +1647,7 @@ export default function SiteDetailPage() {
                         <div className="flex items-center gap-3 shrink-0">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize
                             ${rmaStatus === 'pending'  ? 'bg-[rgba(251,191,36,0.15)] text-amber-300' :
-                              rmaStatus === 'shipped'  ? 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]' :
+                              rmaStatus === 'shipped'  ? 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]' :
                               rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
                               'bg-[#22303f] text-[#8598aa]'}`}
                           >
@@ -1670,7 +1670,7 @@ export default function SiteDetailPage() {
                               })
                               setRmaSlideOpen(true)
                             }}
-                            className="text-xs font-medium text-[#5FB8E0] hover:text-[#5FB8E0] border border-[#5FB8E0] px-3 py-1.5 rounded-lg hover:bg-[#3f7fb8] transition-colors"
+                            className="text-xs font-medium text-[#00A3FF] hover:text-[#00A3FF] border border-[#00A3FF] px-3 py-1.5 rounded-lg hover:bg-[#3f7fb8] transition-colors"
                           >
                             Update
                           </button>
@@ -1694,8 +1694,8 @@ export default function SiteDetailPage() {
       {rmaSlideOpen && editRma && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40" onClick={() => setRmaSlideOpen(false)} />
-          <div className="w-full max-w-md bg-[#1e2a3a] shadow-2xl flex flex-col h-full">
-            <div className="sticky top-0 bg-[#1e2a3a] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
+          <div className="w-full max-w-md bg-[#151D2A] shadow-2xl flex flex-col h-full">
+            <div className="sticky top-0 bg-[#151D2A] border-b border-[#33465b] px-6 py-4 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-[#eaf2fb]">Update RMA</h2>
                 <p className="text-xs text-[#8598aa] mt-0.5">{editRma.asset_name}</p>
@@ -1710,7 +1710,7 @@ export default function SiteDetailPage() {
                 <select
                   value={rmaForm.status}
                   onChange={e => setRmaForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
                 >
                   <option value="pending">Pending</option>
                   <option value="shipped">Shipped</option>
@@ -1725,7 +1725,7 @@ export default function SiteDetailPage() {
                   value={rmaForm.ticket_number}
                   onChange={e => setRmaForm(f => ({ ...f, ticket_number: e.target.value }))}
                   placeholder="RMA-12345"
-                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
                 />
               </div>
               <div>
@@ -1735,11 +1735,11 @@ export default function SiteDetailPage() {
                   onChange={e => setRmaForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="RMA notes, tracking number, resolution details…"
                   rows={4}
-                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
+                  className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF] resize-none"
                 />
               </div>
             </div>
-            <div className="sticky bottom-0 bg-[#1e2a3a] border-t border-[#33465b] px-6 py-4 flex gap-3 justify-end">
+            <div className="sticky bottom-0 bg-[#151D2A] border-t border-[#33465b] px-6 py-4 flex gap-3 justify-end">
               <button
                 onClick={() => setRmaSlideOpen(false)}
                 className="px-4 py-2 text-sm border border-[#3a4a5c] rounded-lg hover:bg-[#22303f]"
@@ -1774,7 +1774,7 @@ export default function SiteDetailPage() {
                     setRmaSlideOpen(false)
                   } finally { setRmaSaving(false) }
                 }}
-                className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#2f7fb8] disabled:opacity-50"
+                className="px-5 py-2 text-sm bg-[#3f7fb8] text-white rounded-lg hover:bg-[#00A3FF] disabled:opacity-50"
               >
                 {rmaSaving ? 'Saving…' : 'Save Changes'}
               </button>
@@ -1835,7 +1835,7 @@ function OrgPickerModal({ open, onClose, onSelect, tierFilter, title }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-[#1e2a3a] rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
+      <div className="relative bg-[#151D2A] rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
         <div className="px-5 py-4 border-b border-[#33465b] flex items-center justify-between">
           <h3 className="font-semibold text-[#eaf2fb]">{title}</h3>
           <button onClick={onClose} className="text-[#8598aa] hover:text-[#c3d3e2]"><X size={18} /></button>
@@ -1848,7 +1848,7 @@ function OrgPickerModal({ open, onClose, onSelect, tierFilter, title }: {
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="Search by name..."
-              className="w-full pl-9 pr-4 py-2 border border-[#33465b] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full pl-9 pr-4 py-2 border border-[#33465b] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
           </div>
         </div>
@@ -1870,7 +1870,7 @@ function OrgPickerModal({ open, onClose, onSelect, tierFilter, title }: {
                 <p className="text-sm font-medium text-[#eaf2fb] truncate">{org.name}</p>
                 {org.org_tier && <p className="text-xs text-[#8598aa] capitalize">{org.org_tier.replace(/_/g, ' ')}</p>}
               </div>
-              <span className="text-xs text-[#5FB8E0] font-medium shrink-0">Select →</span>
+              <span className="text-xs text-[#00A3FF] font-medium shrink-0">Select →</span>
             </button>
           ))}
         </div>
@@ -1906,7 +1906,7 @@ function AssignmentCard({
       <div className="flex items-center justify-between mb-2">
         <span className={`text-xs font-bold uppercase tracking-widest ${color}`}>{role}</span>
         {primary && (
-          <span className="text-xs bg-[#1e2a3a]/70 border border-[#33465b] text-[#98abbd] px-2 py-0.5 rounded-full">Primary</span>
+          <span className="text-xs bg-[#151D2A]/70 border border-[#33465b] text-[#98abbd] px-2 py-0.5 rounded-full">Primary</span>
         )}
       </div>
       <p className="text-xs text-[#98abbd] mb-3">{label}</p>
@@ -2000,7 +2000,7 @@ function SiteMapEmbed({ address }: { address: string }) {
         zoom:      15,
       })
 
-      new mapboxgl.Marker({ color: '#5FB8E0' })
+      new mapboxgl.Marker({ color: '#00A3FF' })
         .setLngLat(coords)
         .addTo(map)
     }
@@ -2066,7 +2066,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
     return `${Math.round(h / 24)}d`
   }
 
-  if (!data) return <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-6 text-sm text-[#c3d3e2]">Loading service analytics…</div>
+  if (!data) return <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-6 text-sm text-[#c3d3e2]">Loading service analytics…</div>
 
   const s = data.stats ?? {}
   const inc = data.incidents ?? []
@@ -2079,11 +2079,11 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
   }
   const catRows = Array.from(cats.entries()).sort((a, b) => b[1].total - a[1].total)
   const uptime = s.uptimePct ?? 100
-  const uptimeColor = uptime >= 99 ? '#7ee0a8' : uptime >= 95 ? '#fbbf24' : '#f87171'
+  const uptimeColor = uptime >= 99 ? '#00E699' : uptime >= 95 ? '#fbbf24' : '#f87171'
 
   const KPI = ({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) => (
     <div className="bg-[#14202c] rounded-xl border border-[#2b3d50] p-4">
-      <div className="text-[11px] uppercase tracking-wide text-[#9FD8EC]">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide text-[#00A3FF]">{label}</div>
       <div className="mt-1 text-2xl font-semibold" style={{ color: color ?? '#eaf2fb' }}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-[#c3d3e2]">{sub}</div>}
     </div>
@@ -2093,12 +2093,12 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPI label={`Uptime · ${s.windowDays ?? 90}d`} value={`${uptime}%`} color={uptimeColor} sub={`${dur(s.downtimeMs)} total downtime`} />
-        <KPI label="Open incidents" value={String(s.openCount ?? 0)} color={(s.openCount ?? 0) > 0 ? '#f87171' : '#7ee0a8'} sub={s.currentDowntimeMs ? `${dur(s.currentDowntimeMs)} longest active` : 'all clear'} />
+        <KPI label="Open incidents" value={String(s.openCount ?? 0)} color={(s.openCount ?? 0) > 0 ? '#f87171' : '#00E699'} sub={s.currentDowntimeMs ? `${dur(s.currentDowntimeMs)} longest active` : 'all clear'} />
         <KPI label="Mean time to resolve" value={dur(s.mttrMs)} sub={`${s.resolvedCount ?? 0} resolved`} />
         <KPI label="Time since last" value={dur(s.timeSinceLastMs)} sub={`${inc.length} total logged`} />
       </div>
 
-      <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4">
+      <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-4">
         <div className="text-sm font-semibold text-[#eaf2fb] mb-3">Incidents by category</div>
         {catRows.length === 0 ? (
           <div className="text-xs text-[#c3d3e2]">No incidents logged for this site yet.</div>
@@ -2110,7 +2110,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
                 <div key={cat} className="flex items-center gap-3">
                   <div className="w-28 shrink-0 text-xs capitalize text-[#c3d3e2]">{cat}</div>
                   <div className="flex-1 h-2 rounded-full bg-[#14202c] overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#5FB8E0' }} />
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#00A3FF' }} />
                   </div>
                   <div className="w-24 shrink-0 text-right text-xs text-[#eaf2fb]">{e.total}{e.open > 0 && <span className="text-[#f87171]"> · {e.open} open</span>}</div>
                 </div>
@@ -2120,7 +2120,7 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
         )}
       </div>
 
-      <div className="bg-[#1e2a3a] rounded-xl border border-[#33465b] p-4">
+      <div className="bg-[#151D2A] rounded-xl border border-[#33465b] p-4">
         <div className="text-sm font-semibold text-[#eaf2fb] mb-3">Recent incidents</div>
         {inc.length === 0 ? (
           <div className="text-xs text-[#c3d3e2]">Nothing logged yet — faults filed here (manual or auto-monitored) build this history.</div>
@@ -2130,9 +2130,9 @@ function ServiceAnalyticsTab({ siteId }: { siteId: string }) {
               const open = i.status === 'open' || i.status === 'investigating'
               return (
                 <div key={i.id ?? k} className="flex items-center gap-3 text-xs">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: open ? '#f87171' : '#7ee0a8' }} />
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: open ? '#f87171' : '#00E699' }} />
                   <span className="min-w-0 flex-1 truncate text-[#eaf2fb]">{i.title ?? 'Incident'}</span>
-                  <span className="shrink-0 capitalize text-[#9FD8EC]">{String(i.category ?? '')}</span>
+                  <span className="shrink-0 capitalize text-[#00A3FF]">{String(i.category ?? '')}</span>
                   <span className="shrink-0 text-[#c3d3e2]">{i.source === 'monitor' ? 'auto' : (i.source ?? 'manual')}</span>
                   <span className="shrink-0 w-16 text-right" style={{ color: open ? '#fbbf24' : '#c3d3e2' }}>{open ? 'open' : 'resolved'}</span>
                 </div>

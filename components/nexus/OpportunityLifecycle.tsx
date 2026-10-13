@@ -7,7 +7,7 @@ import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { ContactsCard } from '@/components/nexus/ContactsCard'
 import { normalizeStage } from '@/lib/pipeline'
 
-const cyan = '#5FB8E0'
+const cyan = '#00A3FF'
 const STAGES = ['Overview', 'Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
 
 // Canonical stage key per lifecycle step (what we PATCH onto opportunities.stage).
@@ -26,7 +26,7 @@ const STAGE_TO_STEP: Record<string, number> = {
 
 const cardStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 18 } as const
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)', borderRadius: 12, padding: '10px 12px', width: '100%' } as const
-const btn = { background: 'rgba(95,184,224,0.18)', border: '1px solid rgba(95,184,224,0.45)', color: '#7DE5FF', borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' } as const
+const btn = { background: 'rgba(0,163,255,0.18)', border: '1px solid rgba(0,163,255,0.45)', color: '#7DE5FF', borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' } as const
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -144,16 +144,16 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           {onClose ? <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button> : <span />}
           {opportunityId && !isLost && (
-            <button onClick={markLost} disabled={markingLost} style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1 }}>{markingLost ? 'Marking…' : 'Mark Lost'}</button>
+            <button onClick={markLost} disabled={markingLost} style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.4)', color: '#FF4D4D', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1 }}>{markingLost ? 'Marking…' : 'Mark Lost'}</button>
           )}
         </div>
         {lostError && (
-          <div style={{ marginBottom: 14, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
+          <div style={{ marginBottom: 14, background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
             {lostError}
           </div>
         )}
         {isLost && (
-          <div style={{ marginBottom: 14, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ marginBottom: 14, background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <span>This deal is marked Lost{opp?.lost_reason ? ` — ${opp.lost_reason}` : ''}. The steps below are locked.</span>
             <button onClick={reopenDeal} disabled={markingLost} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.9)', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1, whiteSpace: 'nowrap' }}>{markingLost ? 'Working…' : 'Reopen deal'}</button>
           </div>
@@ -169,9 +169,9 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
             return (
               <button key={s} onClick={() => goToStage(i)} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 14, cursor: 'pointer',
-                background: active ? 'rgba(95,184,224,0.18)' : done ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${active ? 'rgba(95,184,224,0.5)' : done ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                color: active ? '#7DE5FF' : done ? '#6ee7b7' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600,
+                background: active ? 'rgba(0,163,255,0.18)' : done ? 'rgba(0,230,153,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${active ? 'rgba(0,163,255,0.5)' : done ? 'rgba(0,230,153,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                color: active ? '#7DE5FF' : done ? '#00E699' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600,
               }}>
                 <span style={{ width: 20, height: 20, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, background: 'rgba(0,0,0,0.3)' }}>{done ? '✓' : i + 1}</span>
                 {s}
@@ -500,8 +500,8 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start' }}>
       {lead && (
-        <Card style={{ gridColumn: '1 / -1', background: 'rgba(95,184,224,0.1)', border: '1px solid rgba(95,184,224,0.3)' }}>
-          <Sub>Converted from lead — <b style={{ color: '#9FD8EC' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
+        <Card style={{ gridColumn: '1 / -1', background: 'rgba(0,163,255,0.1)', border: '1px solid rgba(0,163,255,0.3)' }}>
+          <Sub>Converted from lead — <b style={{ color: '#00A3FF' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
         </Card>
       )}
 
@@ -523,7 +523,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
             {editing ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 {[['Yes', true], ['No', false]].map(([lbl, val]) => (
-                  <button key={String(val)} onClick={() => setForm(f => ({ ...f, unit_automation: val as boolean }))} style={{ ...btn, padding: '8px 18px', background: form.unit_automation === val ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.05)', border: form.unit_automation === val ? '1px solid rgba(95,184,224,0.5)' : '1px solid rgba(255,255,255,0.12)', color: form.unit_automation === val ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{lbl}</button>
+                  <button key={String(val)} onClick={() => setForm(f => ({ ...f, unit_automation: val as boolean }))} style={{ ...btn, padding: '8px 18px', background: form.unit_automation === val ? 'rgba(0,163,255,0.2)' : 'rgba(255,255,255,0.05)', border: form.unit_automation === val ? '1px solid rgba(0,163,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: form.unit_automation === val ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{lbl}</button>
                 ))}
               </div>
             ) : <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.92)' }}>{form.unit_automation ? 'Yes — locks on units' : 'No'}</div>}
@@ -553,12 +553,12 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <H>Notes</H>
         <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note…" style={{ ...inputStyle, minHeight: 70 }} />
         <button onClick={saveNote} disabled={posting || !noteText.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !noteText.trim() ? 0.5 : 1 }}>Save note</button>
-        {noteErr && <Sub><span style={{ color: '#fca5a5' }}>{noteErr}</span></Sub>}
+        {noteErr && <Sub><span style={{ color: '#FF4D4D' }}>{noteErr}</span></Sub>}
         <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
 
       {/* Contacts (many-to-many) — add/remove people on this deal */}
-      {opportunityId && <ContactsCard entityType="opportunity" entityId={opportunityId} accent="#5FB8E0" />}
+      {opportunityId && <ContactsCard entityType="opportunity" entityId={opportunityId} accent="#00A3FF" />}
 
       {/* Calendar & tasks — self-assigned, with details + check-to-complete */}
       <Card>
@@ -569,7 +569,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
               const done = t.status === 'done'
               if (editId && t.id === editId) {
                 return (
-                  <div key={t.id || i} style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(95,184,224,0.28)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
+                  <div key={t.id || i} style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,163,255,0.28)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
                     <input value={editT.title} onChange={e => setEditT(v => ({ ...v, title: e.target.value }))} placeholder="Task…" style={{ ...inputStyle }} />
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <input type="date" value={editT.due} onChange={e => setEditT(v => ({ ...v, due: e.target.value }))} style={{ ...inputStyle, flex: 1, minWidth: 130 }} />
@@ -580,18 +580,18 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
                         </select>
                       )}
                     </div>
-                    {editErr && <div style={{ fontSize: 11, color: '#fca5a5' }}>{editErr}</div>}
+                    {editErr && <div style={{ fontSize: 11, color: '#FF4D4D' }}>{editErr}</div>}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => t.id && saveTaskEdit(t.id)} disabled={posting} style={{ ...btn, flex: 1, opacity: posting ? 0.5 : 1 }}>Save</button>
                       <button onClick={() => setEditId(null)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)' }}>Cancel</button>
-                      <button onClick={() => t.id && deleteTask(t.id)} disabled={posting} title="Delete task" style={{ ...btn, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5', opacity: posting ? 0.5 : 1 }}>Delete</button>
+                      <button onClick={() => t.id && deleteTask(t.id)} disabled={posting} title="Delete task" style={{ ...btn, background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.4)', color: '#FF4D4D', opacity: posting ? 0.5 : 1 }}>Delete</button>
                     </div>
                   </div>
                 )
               }
               return (
                 <div key={t.id || i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                  <button onClick={() => t.id && toggleTask(t.id, !done)} title={done ? 'Mark open' : 'Mark done'} style={{ flexShrink: 0, marginTop: 1, width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: done ? 'rgba(110,231,183,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${done ? 'rgba(110,231,183,0.6)' : 'rgba(255,255,255,0.2)'}`, color: '#6ee7b7', fontSize: 11, lineHeight: '16px' }}>{done ? '✓' : ''}</button>
+                  <button onClick={() => t.id && toggleTask(t.id, !done)} title={done ? 'Mark open' : 'Mark done'} style={{ flexShrink: 0, marginTop: 1, width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: done ? 'rgba(110,231,183,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${done ? 'rgba(110,231,183,0.6)' : 'rgba(255,255,255,0.2)'}`, color: '#00E699', fontSize: 11, lineHeight: '16px' }}>{done ? '✓' : ''}</button>
                   {/* Click the task to edit it — title, date, assignee, or delete. */}
                   <button onClick={() => openTaskEdit(t)} title="Open to edit" style={{ minWidth: 0, flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                     <div style={{ color: done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.85)', textDecoration: done ? 'line-through' : 'none' }}>{t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}{t.assigned_to_name ? ` · ${t.assigned_to_name}` : ''}</div>
@@ -620,7 +620,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           {!taskOpen && <button onClick={() => setTaskOpen(true)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)' }}>+ Details</button>}
           <button onClick={addTask} disabled={posting || !taskTitle.trim()} style={{ ...btn, opacity: posting || !taskTitle.trim() ? 0.5 : 1 }}>Add task</button>
         </div>
-        {taskErr && <Sub><span style={{ color: '#fca5a5' }}>{taskErr}</span></Sub>}
+        {taskErr && <Sub><span style={{ color: '#FF4D4D' }}>{taskErr}</span></Sub>}
         <Sub>{teammates.length > 0 ? 'Assign to yourself or a teammate — it lands on their tasks & calendar.' : 'Tasks save to your own tasks & calendar.'}</Sub>
       </Card>
 
@@ -630,7 +630,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             {(['call', 'email', 'meeting', 'note'] as const).map(t => (
-              <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(95,184,224,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(95,184,224,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
+              <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(0,163,255,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(0,163,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
             ))}
           </div>
           {actType === 'email' && <input value={actTo} onChange={e => setActTo(e.target.value)} placeholder="To (email address)" style={{ ...inputStyle, marginBottom: 8 }} />}
@@ -645,7 +645,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           <button onClick={postActivity} disabled={posting || !actSubject.trim() || (actType === 'email' && !actTo.trim())} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() || (actType === 'email' && !actTo.trim()) ? 0.5 : 1 }}>
             {actType === 'email' ? 'Send email' : actType === 'meeting' && actWhen ? 'Schedule + log' : 'Add to timeline'}
           </button>
-          {actMsg && <Sub><span style={{ color: actMsg.error ? '#fca5a5' : '#6ee7b7' }}>{actMsg.text}</span></Sub>}
+          {actMsg && <Sub><span style={{ color: actMsg.error ? '#FF4D4D' : '#00E699' }}>{actMsg.text}</span></Sub>}
         </div>
         {activities.length === 0 ? <Sub>No calls, emails, meetings, or notes logged yet.</Sub> : (
           <div style={{ display: 'grid', gap: 8 }}>
@@ -676,7 +676,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         )}
         <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f); e.target.value = '' }} />
         <button disabled={uploading || !opportunityId} onClick={() => fileRef.current?.click()} style={{ ...btn, marginTop: 12, opacity: uploading || !opportunityId ? 0.6 : 1 }}>{uploading ? 'Uploading…' : '+ Add attachment'}</button>
-        {uploadErr && <Sub><span style={{ color: '#fca5a5' }}>{uploadErr}</span></Sub>}
+        {uploadErr && <Sub><span style={{ color: '#FF4D4D' }}>{uploadErr}</span></Sub>}
       </Card>
 
       <Card>
@@ -691,7 +691,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
               return (
                 <div key={e.id || i} style={{ fontSize: 13, color: failed ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.8)' }}>
                   {failed ? '⚠️' : '✉️'} {e.subject || '(no subject)'}
-                  {failed && <span style={{ color: '#fca5a5', fontWeight: 600 }}> · Not delivered</span>}
+                  {failed && <span style={{ color: '#FF4D4D', fontWeight: 600 }}> · Not delivered</span>}
                   {e.created_at ? <span style={{ color: 'rgba(255,255,255,0.82)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}
                 </div>
               )
@@ -728,10 +728,10 @@ type SurveyDevice = {
 }
 
 const ACTION_OPTS: { v: SurveyDevice['action']; label: string; color: string }[] = [
-  { v: 'keep', label: 'Keep', color: '#6ee7b7' },
+  { v: 'keep', label: 'Keep', color: '#00E699' },
   { v: 'service', label: 'Service', color: '#7DE5FF' },
   { v: 'replace', label: 'Replace', color: '#fbbf24' },
-  { v: 'new', label: 'New install', color: '#9FD8EC' },
+  { v: 'new', label: 'New install', color: '#00A3FF' },
 ]
 
 const newSurveyDevice = (): SurveyDevice => ({
@@ -904,7 +904,7 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#9FD8EC', background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.3)' }}>{banner}</div>}
+      {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#00A3FF', background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.3)' }}>{banner}</div>}
 
       {/* 0 · Site basics — drives the install cost in Financials */}
       <Card>
@@ -928,11 +928,11 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
       </Card>
 
       {/* 1 · Voice */}
-      <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(95,184,224,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(95,184,224,0.3)' }}>
+      <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,163,255,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(0,163,255,0.3)' }}>
         <H>🎙️ Talk through the property</H>
         <Sub>Walk the site and say what you see. Or upload a recording. Then tap “Fill from voice” and Nexus builds your device list.</Sub>
         <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={toggleRecord} style={{ ...btn, background: recording ? 'rgba(248,113,113,0.2)' : 'rgba(95,184,224,0.2)', border: `1px solid ${recording ? 'rgba(248,113,113,0.5)' : 'rgba(95,184,224,0.5)'}`, color: recording ? '#fca5a5' : '#9FD8EC', borderRadius: 999, padding: '12px 20px' }}>{recording ? '■ Stop' : '● Record'}</button>
+          <button onClick={toggleRecord} style={{ ...btn, background: recording ? 'rgba(255,77,77,0.2)' : 'rgba(0,163,255,0.2)', border: `1px solid ${recording ? 'rgba(255,77,77,0.5)' : 'rgba(0,163,255,0.5)'}`, color: recording ? '#FF4D4D' : '#00A3FF', borderRadius: 999, padding: '12px 20px' }}>{recording ? '■ Stop' : '● Record'}</button>
           <button onClick={() => audioRef.current?.click()} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '12px 20px' }}>⬆ Upload recording</button>
           <input ref={audioRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadAudio(f); e.target.value = '' }} />
           <button onClick={fillFromVoice} disabled={parsing} style={{ ...btn, opacity: parsing ? 0.6 : 1 }}>{parsing ? 'Working…' : '✨ Fill from voice'}</button>
@@ -1008,7 +1008,7 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
             {[device.location, device.action ? ACTION_OPTS.find(a => a.v === device.action)?.label : null].filter(Boolean).join(' · ') || 'No location yet'}
           </div>
         </div>
-        {device.working != null && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: device.working ? 'rgba(110,231,183,0.18)' : 'rgba(248,113,113,0.18)', color: device.working ? '#6ee7b7' : '#fca5a5' }}>{device.working ? 'OK' : 'BROKEN'}</span>}
+        {device.working != null && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: device.working ? 'rgba(110,231,183,0.18)' : 'rgba(255,77,77,0.18)', color: device.working ? '#00E699' : '#FF4D4D' }}>{device.working ? 'OK' : 'BROKEN'}</span>}
         <button onClick={e => { e.stopPropagation(); onDelete() }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 15 }}>✕</button>
       </div>
 
@@ -1030,9 +1030,9 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
               {[{ v: true, t: 'Yes' }, { v: false, t: 'No' }].map(o => (
                 <button key={o.t} onClick={() => set({ working: o.v })} style={{
                   flex: 1, padding: '8px 0', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  background: device.working === o.v ? (o.v ? 'rgba(110,231,183,0.2)' : 'rgba(248,113,113,0.2)') : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${device.working === o.v ? (o.v ? 'rgba(110,231,183,0.5)' : 'rgba(248,113,113,0.5)') : 'rgba(255,255,255,0.12)'}`,
-                  color: device.working === o.v ? (o.v ? '#6ee7b7' : '#fca5a5') : 'rgba(255,255,255,0.6)',
+                  background: device.working === o.v ? (o.v ? 'rgba(110,231,183,0.2)' : 'rgba(255,77,77,0.2)') : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${device.working === o.v ? (o.v ? 'rgba(110,231,183,0.5)' : 'rgba(255,77,77,0.5)') : 'rgba(255,255,255,0.12)'}`,
+                  color: device.working === o.v ? (o.v ? '#00E699' : '#FF4D4D') : 'rgba(255,255,255,0.6)',
                 }}>{o.t}</button>
               ))}
             </div>
@@ -1048,7 +1048,7 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
           {/* Dealer cost + retail (auto-filled from the catalog when you pick a product) */}
           <div>{label('Dealer cost')}<input value={device.unit_cost ?? ''} onChange={e => set({ unit_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
           <div>{label('Retail to client')}<input value={device.retail ?? ''} onChange={e => set({ retail: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
-          {device.unit_cost != null && device.retail != null && <div>{label('Margin')}<div style={{ ...sIn, color: '#6ee7b7', display: 'flex', alignItems: 'center' }}>${(device.retail - device.unit_cost).toLocaleString()}</div></div>}
+          {device.unit_cost != null && device.retail != null && <div>{label('Margin')}<div style={{ ...sIn, color: '#00E699', display: 'flex', alignItems: 'center' }}>${(device.retail - device.unit_cost).toLocaleString()}</div></div>}
           {isService && <div>{label('Repair / parts $')}<input value={device.repair_cost ?? ''} onChange={e => set({ repair_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>}
           <div>{label('Labor hours')}<input value={device.labor_hours ?? ''} onChange={e => set({ labor_hours: num(e.target.value) })} inputMode="decimal" placeholder="0" style={sIn} /></div>
 
@@ -1127,7 +1127,7 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', overflow: 'auto', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(95,184,224,0.22)', borderRadius: 22, padding: 18 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', overflow: 'auto', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,163,255,0.22)', borderRadius: 22, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <H>{mode === 'search' ? 'Choose a product' : '🚩 Ask corporate to add it'}</H>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18 }}>✕</button>
@@ -1145,14 +1145,14 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
                     style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 12px', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>{p.name}</div>
-                      {retail != null && <div style={{ fontSize: 12, color: '#6ee7b7', flexShrink: 0 }}>${retail.toLocaleString()}</div>}
+                      {retail != null && <div style={{ fontSize: 12, color: '#00E699', flexShrink: 0 }}>${retail.toLocaleString()}</div>}
                     </div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{[p.brand, p.category].filter(Boolean).join(' · ') || 'Product'}{cost != null ? ` · cost $${cost.toLocaleString()}` : ''}</div>
                   </button>
                 )
               })}
               {loadingP && <Sub>Loading products…</Sub>}
-              {!loadingP && errP && <Sub><span style={{ color: '#fca5a5' }}>{errP}</span> — add it as a one-time item or ask corporate.</Sub>}
+              {!loadingP && errP && <Sub><span style={{ color: '#FF4D4D' }}>{errP}</span> — add it as a one-time item or ask corporate.</Sub>}
               {!loadingP && !errP && results.length === 0 && <Sub>{q ? `No products match “${q}”.` : 'No products in this catalog yet.'} Add it as a one-time item or ask corporate.</Sub>}
             </div>
             <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
@@ -1260,7 +1260,7 @@ function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportun
   const paybackMonths = monthlyNet > 0 && installCost > 0 ? installCost / monthlyNet : 0
 
   const stat = (label: string, value: string, sub?: string) => (
-    <div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{label}</div><div style={{ fontSize: 22, fontWeight: 700, color: '#6ee7b7' }}>{value}</div>{sub && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{sub}</div>}</div>
+    <div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{label}</div><div style={{ fontSize: 22, fontWeight: 700, color: '#00E699' }}>{value}</div>{sub && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{sub}</div>}</div>
   )
 
   return (
@@ -1304,7 +1304,7 @@ function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportun
       </Card>
 
       {/* Deal economics — real recurring (from calculator) + payback */}
-      <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
+      <Card style={{ background: 'linear-gradient(180deg, rgba(0,230,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(0,230,153,0.3)' }}>
         <H>Deal economics</H>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 12, marginTop: 8 }}>
           {stat('Install cost', usd0(installCost), `labor ${usd0(laborCost)} + equip ${usd0(Number(equipment) || 0)}`)}
@@ -1408,22 +1408,22 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   if (existing) {
     return (
       <div style={{ display: 'grid', gap: 16 }}>
-        <Card style={{ background: 'linear-gradient(180deg, rgba(95,184,224,0.12), rgba(8,18,34,0.6))', border: '1px solid rgba(95,184,224,0.3)' }}>
+        <Card style={{ background: 'linear-gradient(180deg, rgba(0,163,255,0.12), rgba(8,18,34,0.6))', border: '1px solid rgba(0,163,255,0.3)' }}>
           <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Proposal · {acct}</div>
           <h2 style={{ margin: '6px 0', fontSize: 24 }}>{existing.quote_number || 'Quote'}</h2>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 8 }}>
             <div><Sub>One-time</Sub><div style={{ fontSize: 22, fontWeight: 800, color: '#7DE5FF' }}>{usd(Number(existing.total_one_time) || 0)}</div></div>
-            <div><Sub>Monthly</Sub><div style={{ fontSize: 22, fontWeight: 800, color: '#6ee7b7' }}>{usd(Number(existing.total_mrr) || 0)}/mo</div></div>
+            <div><Sub>Monthly</Sub><div style={{ fontSize: 22, fontWeight: 800, color: '#00E699' }}>{usd(Number(existing.total_mrr) || 0)}/mo</div></div>
             <div><Sub>Status</Sub><div style={{ fontSize: 15, fontWeight: 700, textTransform: 'capitalize' }}>{existing.status || 'draft'}</div></div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
             <a href={`/quotes/${existing.id}`} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Open / edit quote →</a>
-            <a href={`/quotes/${existing.id}/proposal`} target="_blank" rel="noreferrer" style={{ ...btn, background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.45)', color: '#6ee7b7', textDecoration: 'none' }}>Client proposal view →</a>
+            <a href={`/quotes/${existing.id}/proposal`} target="_blank" rel="noreferrer" style={{ ...btn, background: 'rgba(0,230,153,0.18)', border: '1px solid rgba(0,230,153,0.45)', color: '#00E699', textDecoration: 'none' }}>Client proposal view →</a>
           </div>
           <Sub>Edit line items, send for signature, and track acceptance from the full quote page.</Sub>
         </Card>
         <button onClick={() => setExisting(null)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', width: 'fit-content' }}>+ Start another quote</button>
-        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7' }}>{msg}</p>}
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#FF4D4D' : '#00E699' }}>{msg}</p>}
       </div>
     )
   }
@@ -1431,7 +1431,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   // Builder.
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <Card style={{ background: 'radial-gradient(circle at 50% 0%, rgba(95,184,224,0.18), transparent 55%), rgba(255,255,255,0.04)', textAlign: 'center' }}>
+      <Card style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,163,255,0.18), transparent 55%), rgba(255,255,255,0.04)', textAlign: 'center' }}>
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Build the proposal · {acct}</div>
         <Sub>Add what you&apos;re selling — search a product or type a line. The total adds up as you go.</Sub>
       </Card>
@@ -1458,7 +1458,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input value={draft.qty} onChange={e => setDraft({ ...draft, qty: e.target.value.replace(/[^0-9]/g, '') })} placeholder="Qty" style={{ ...inputStyle, width: 80 }} />
             <input value={draft.unit_price} onChange={e => setDraft({ ...draft, unit_price: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Price each $" style={{ ...inputStyle, width: 130 }} />
-            <button onClick={() => setDraft({ ...draft, is_recurring: !draft.is_recurring })} style={{ ...btn, background: draft.is_recurring ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${draft.is_recurring ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: draft.is_recurring ? '#6ee7b7' : 'rgba(255,255,255,0.7)' }}>{draft.is_recurring ? '✓ Monthly' : 'One-time'}</button>
+            <button onClick={() => setDraft({ ...draft, is_recurring: !draft.is_recurring })} style={{ ...btn, background: draft.is_recurring ? 'rgba(0,230,153,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${draft.is_recurring ? 'rgba(0,230,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: draft.is_recurring ? '#00E699' : 'rgba(255,255,255,0.7)' }}>{draft.is_recurring ? '✓ Monthly' : 'One-time'}</button>
             <button onClick={addManual} disabled={!draft.description.trim() && !draft.unit_price} style={{ ...btn, opacity: (draft.description.trim() || draft.unit_price) ? 1 : 0.5 }}>Add line</button>
           </div>
         </div>
@@ -1470,22 +1470,22 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
           <div style={{ display: 'grid', gap: 6 }}>
             {items.map((it, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 12px', flexWrap: 'wrap' }}>
-                <span style={{ flex: 1, minWidth: 120, fontSize: 13 }}>{it.description} {it.is_recurring && <span style={{ color: '#6ee7b7', fontSize: 11 }}>· monthly</span>}</span>
+                <span style={{ flex: 1, minWidth: 120, fontSize: 13 }}>{it.description} {it.is_recurring && <span style={{ color: '#00E699', fontSize: 11 }}>· monthly</span>}</span>
                 <input value={String(it.qty)} onChange={e => setQty(i, e.target.value.replace(/[^0-9]/g, ''))} title="Qty" style={{ ...inputStyle, width: 50, padding: '6px 8px', textAlign: 'center' }} />
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>×&nbsp;$</span>
                 <input value={String(it.unit_price)} onChange={e => setPrice(i, e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0" title="Price each" style={{ ...inputStyle, width: 80, padding: '6px 8px', textAlign: 'right', ...(it.unit_price ? {} : { border: '1px solid rgba(251,191,36,0.6)' }) }} />
                 <span style={{ fontSize: 13, width: 84, textAlign: 'right', fontWeight: 600 }}>{usd(it.qty * it.unit_price)}{it.is_recurring ? '/mo' : ''}</span>
-                <button onClick={() => removeItem(i)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: 16 }}>×</button>
+                <button onClick={() => removeItem(i)} style={{ background: 'none', border: 'none', color: '#FF4D4D', cursor: 'pointer', fontSize: 16 }}>×</button>
               </div>
             ))}
           </div>
         )}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 12, paddingTop: 12, display: 'flex', gap: 24, justifyContent: 'flex-end' }}>
           <div style={{ textAlign: 'right' }}><Sub>One-time</Sub><div style={{ fontSize: 20, fontWeight: 800, color: '#7DE5FF' }}>{usd(oneTime)}</div></div>
-          <div style={{ textAlign: 'right' }}><Sub>Monthly</Sub><div style={{ fontSize: 20, fontWeight: 800, color: '#6ee7b7' }}>{usd(mrr)}/mo</div></div>
+          <div style={{ textAlign: 'right' }}><Sub>Monthly</Sub><div style={{ fontSize: 20, fontWeight: 800, color: '#00E699' }}>{usd(mrr)}/mo</div></div>
         </div>
         <button onClick={createQuote} disabled={busy || items.length === 0} style={{ ...btn, width: '100%', marginTop: 12, padding: 12, opacity: !busy && items.length > 0 ? 1 : 0.5 }}>{busy ? 'Creating…' : 'Create quote'}</button>
-        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7', marginTop: 10 }}>{msg}</p>}
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#FF4D4D' : '#00E699', marginTop: 10 }}>{msg}</p>}
       </Card>
     </div>
   )
@@ -1531,10 +1531,10 @@ function Negotiate({ opp }: { opp?: Record<string, any> } = {}) {
             <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '10px 12px', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Try: “Customer says the monthly is too high. What can I do?”</div>
           )}
           {messages.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? 'rgba(95,184,224,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${m.role === 'user' ? 'rgba(95,184,224,0.4)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>{m.text}</div>
+            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? 'rgba(0,163,255,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${m.role === 'user' ? 'rgba(0,163,255,0.4)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>{m.text}</div>
           ))}
           {asking && <div style={{ alignSelf: 'flex-start', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Coach is thinking…</div>}
-          {error && <div style={{ fontSize: 12, color: '#fca5a5' }}>{error}</div>}
+          {error && <div style={{ fontSize: 12, color: '#FF4D4D' }}>{error}</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '6px 8px 6px 12px' }}>
           <input
@@ -1649,7 +1649,7 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
   }
 
   const check = (on: boolean, label: string, set: (v: boolean) => void) => (
-    <button type="button" onClick={() => set(!on)} disabled={done} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', width: '100%', background: on ? 'rgba(52,211,153,0.12)' : 'rgba(0,0,0,0.2)', border: `1px solid ${on ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 12, padding: 14, cursor: done ? 'default' : 'pointer', opacity: done ? 0.7 : 1 }}>
+    <button type="button" onClick={() => set(!on)} disabled={done} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', width: '100%', background: on ? 'rgba(0,230,153,0.12)' : 'rgba(0,0,0,0.2)', border: `1px solid ${on ? 'rgba(0,230,153,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 12, padding: 14, cursor: done ? 'default' : 'pointer', opacity: done ? 0.7 : 1 }}>
       <span style={{ width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? '#34d399' : 'rgba(255,255,255,0.08)', color: '#06241a', fontSize: 14, fontWeight: 800 }}>{on ? '✓' : ''}</span>
       <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>{label}</span>
     </button>
@@ -1657,7 +1657,7 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
+      <Card style={{ background: 'linear-gradient(180deg, rgba(0,230,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(0,230,153,0.3)' }}>
         <H>Close the deal</H>
         <Sub>When the contract is signed AND the deposit is paid, convert the deal — it becomes Closed Won and an install job opens automatically.</Sub>
         <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
@@ -1676,14 +1676,14 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 16 }}>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>What happens · 2</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#6ee7b7' }}>Install job created</div><Sub>Shows in Jobs → Operations Hub → Work Orders, linked to this deal.</Sub>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#00E699' }}>Install job created</div><Sub>Shows in Jobs → Operations Hub → Work Orders, linked to this deal.</Sub>
           </div>
         </div>
-        <button onClick={convert} disabled={!canConvert} style={{ ...btn, width: '100%', padding: 13, background: canConvert ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${canConvert ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.12)'}`, color: canConvert ? '#6ee7b7' : 'rgba(255,255,255,0.4)', cursor: canConvert ? 'pointer' : 'not-allowed' }}>
+        <button onClick={convert} disabled={!canConvert} style={{ ...btn, width: '100%', padding: 13, background: canConvert ? 'rgba(0,230,153,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${canConvert ? 'rgba(0,230,153,0.5)' : 'rgba(255,255,255,0.12)'}`, color: canConvert ? '#00E699' : 'rgba(255,255,255,0.4)', cursor: canConvert ? 'pointer' : 'not-allowed' }}>
           {done ? 'Converted ✓' : busy ? 'Converting…' : 'Deposit collected — convert to install job'}
         </button>
         {!done && !canConvert && !busy && <Sub>Check both boxes above to enable conversion.</Sub>}
-        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7', marginTop: 10 }}>{msg}</p>}
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#FF4D4D' : '#00E699', marginTop: 10 }}>{msg}</p>}
       </Card>
     </div>
   )

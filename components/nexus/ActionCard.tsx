@@ -24,9 +24,9 @@ export interface ActionCardProps {
 }
 
 const STATUS_COLORS = {
-  blue:  { bg: 'rgba(95,184,224,0.18)', border: 'rgba(95,184,224,0.35)', text: '#93a3ff' },
+  blue:  { bg: 'rgba(0,163,255,0.18)', border: 'rgba(0,163,255,0.35)', text: '#93a3ff' },
   amber: { bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
-  green: { bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.35)',  text: '#34d399' },
+  green: { bg: 'rgba(0,230,153,0.15)',  border: 'rgba(0,230,153,0.35)',  text: '#34d399' },
   red:   { bg: 'rgba(239,68,68,0.15)',   border: 'rgba(239,68,68,0.35)',   text: '#f87171' },
 }
 
@@ -67,7 +67,7 @@ export function ActionCard({
       {phase === 'done' && (
         <div className="flex items-center gap-3 py-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.4)' }}>
+            style={{ background: 'rgba(0,230,153,0.2)', border: '1px solid rgba(0,230,153,0.4)' }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2 6l3 3 5-5" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -109,7 +109,7 @@ export function ActionCard({
           </div>
 
           {/* AI context label */}
-          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(95,184,224,0.5)' }}>
+          <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'rgba(0,163,255,0.5)' }}>
             {aiContext}
           </p>
 
@@ -130,12 +130,12 @@ export function ActionCard({
                 onClick={() => setPhase('confirm')}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{
-                  background: 'rgba(95,184,224,0.2)',
-                  border:     '1px solid rgba(95,184,224,0.4)',
+                  background: 'rgba(0,163,255,0.2)',
+                  border:     '1px solid rgba(0,163,255,0.4)',
                   color:      '#a5b4ff',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(95,184,224,0.3)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(95,184,224,0.2)')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,163,255,0.3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,163,255,0.2)')}
               >
                 {actionLabel}
               </button>

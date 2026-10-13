@@ -41,7 +41,7 @@ function CardButton({ card, onClick }: { card: Card; onClick: () => void }) {
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
   const displayLabel = muted ? `${label} — Coming Soon` : label
-  return <button type="button" onClick={onClick} className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0" style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(251,191,36,0.06))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : { background: 'linear-gradient(135deg, rgba(95,184,224,0.22), rgba(95,184,224,0.10))', border: '1px solid rgba(95,184,224,0.26)', color: '#9FD8EC', boxShadow: '0 0 18px rgba(95,184,224,0.12)' }} aria-label={displayLabel} title={displayLabel}>{displayLabel}</button>
+  return <button type="button" onClick={onClick} className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0" style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(251,191,36,0.06))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : { background: 'linear-gradient(135deg, rgba(0,163,255,0.22), rgba(0,163,255,0.10))', border: '1px solid rgba(0,163,255,0.26)', color: '#00A3FF', boxShadow: '0 0 18px rgba(0,163,255,0.12)' }} aria-label={displayLabel} title={displayLabel}>{displayLabel}</button>
 }
 
 function Shell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
@@ -72,11 +72,11 @@ export function MoneyDocsSurfaceNext() {
   const router = useRouter()
   const [activePanel, setActivePanel] = useState<Panel>(null)
   const cards: Card[] = [
-    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#5FB8E0', glyph: 'quote' },
+    { id: 'invoices', title: 'Invoices', subtitle: 'See unpaid, past-due, paid, and customer billing items.', hex: '#00A3FF', glyph: 'quote' },
     { id: 'renewals', title: 'Renewals', subtitle: 'Find contracts, agreements, and services that are coming due.', hex: '#FBBF24', glyph: 'activity', badge: 'Dates' },
-    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#5FB8E0', glyph: 'todo', badge: 'Sign' },
+    { id: 'documents', title: 'Documents to Sign', subtitle: 'Open paperwork that needs a signature, review, or customer action.', hex: '#00A3FF', glyph: 'todo', badge: 'Sign' },
     { id: 'library', title: 'Document Library', subtitle: 'Browse the shared document database, upload, and send for e-signature.', hex: '#34D399', glyph: 'research', badge: 'Docs' },
-    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#5FB8E0', glyph: 'priority', badge: 'Review' },
+    { id: 'compliance', title: 'Compliance', subtitle: 'Check missing, expired, or required paperwork before it becomes a problem.', hex: '#00A3FF', glyph: 'priority', badge: 'Review' },
   ]
   return (
     <section className="mt-9 w-full max-w-5xl">

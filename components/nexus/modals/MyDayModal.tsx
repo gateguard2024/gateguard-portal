@@ -74,7 +74,7 @@ function BackBtn({ label, color, onClick }: { label: string; color: string; onCl
 function CommandResult({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   return (
     <div className="flex items-start gap-3 rounded-xl px-4 py-3"
-      style={{ background: 'rgba(95,184,224,0.07)', border: '0.5px solid rgba(95,184,224,0.22)' }}>
+      style={{ background: 'rgba(0,163,255,0.07)', border: '0.5px solid rgba(0,163,255,0.22)' }}>
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5" aria-hidden="true">
         <path d="M7 1L8.2 5.4H13L9.4 7.8L10.8 12L7 9.4L3.2 12L4.6 7.8L1 5.4H5.8L7 1Z" fill="#6B7EFF"/>
       </svg>
@@ -168,10 +168,10 @@ function TaskCommandCard({
       style={{
         background: isOverdue
           ? 'rgba(239,68,68,0.06)'
-          : 'rgba(52,211,153,0.05)',
+          : 'rgba(0,230,153,0.05)',
         border: isOverdue
           ? '0.5px solid rgba(239,68,68,0.2)'
-          : '0.5px solid rgba(52,211,153,0.15)',
+          : '0.5px solid rgba(0,230,153,0.15)',
       }}
     >
       {/* Priority stripe */}
@@ -206,9 +206,9 @@ function TaskCommandCard({
       <button
         onClick={() => onComplete(task.id)}
         className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all"
-        style={{ background: 'rgba(52,211,153,0.1)', border: '0.5px solid rgba(52,211,153,0.25)' }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(52,211,153,0.22)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(52,211,153,0.1)')}
+        style={{ background: 'rgba(0,230,153,0.1)', border: '0.5px solid rgba(0,230,153,0.25)' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,230,153,0.22)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,230,153,0.1)')}
         aria-label="Mark complete"
       >
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
@@ -509,7 +509,7 @@ export function MyDayModal() {
         <div className="space-y-2">
           <BackBtn label="My Day" color="107,126,255" onClick={() => setView('menu')} />
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(95,184,224,0.55)' }}>
+            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(0,163,255,0.55)' }}>
               Work orders today
             </p>
             <button
@@ -558,7 +558,7 @@ export function MyDayModal() {
         <div className="space-y-2">
           <BackBtn label="My Day" color="52,211,153" onClick={() => setView('menu')} />
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(52,211,153,0.55)' }}>
+            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(0,230,153,0.55)' }}>
               Priority tasks
             </p>
             <button

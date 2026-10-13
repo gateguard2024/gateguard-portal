@@ -33,7 +33,7 @@ function bucketColor(bucket: InvoiceBucket): string {
   if (bucket === 'past_due') return '#F87171'
   if (bucket === 'due_soon') return '#FBBF24'
   if (bucket === 'recently_paid') return '#34D399'
-  return '#5FB8E0'
+  return '#00A3FF'
 }
 
 export function MoneyDocsInvoicesBoard() {

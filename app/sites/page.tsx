@@ -41,17 +41,17 @@ function getSiteHealth(openWoCount: number, offlineAssetCount: number): HealthLe
 }
 
 const HEALTH_CONFIG: Record<HealthLevel, { label: string; color: string; dot: string }> = {
-  healthy:  { label: 'Healthy',  color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300',  dot: 'text-emerald-300'  },
+  healthy:  { label: 'Healthy',  color: 'bg-[rgba(0,230,153,0.15)] text-emerald-300',  dot: 'text-emerald-300'  },
   at_risk:  { label: 'At Risk',  color: 'bg-[rgba(251,191,36,0.15)] text-amber-300',  dot: 'text-amber-300'  },
-  critical: { label: 'Critical', color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',      dot: 'text-[#fb7185]'    },
+  critical: { label: 'Critical', color: 'bg-[rgba(239,68,68,0.18)] text-[#FF4D4D]',      dot: 'text-[#fb7185]'    },
 }
 
 /* ─── status helpers ─────────────────────────────────── */
 const STATUS_CONFIG = {
-  active:   { label: 'Active',   color: 'bg-[rgba(126,224,168,0.15)] text-emerald-300',  dot: 'bg-emerald-500' },
+  active:   { label: 'Active',   color: 'bg-[rgba(0,230,153,0.15)] text-emerald-300',  dot: 'bg-emerald-500' },
   inactive: { label: 'Inactive', color: 'bg-[#22303f] text-[#aebfce]',      dot: 'bg-slate-400'   },
-  prospect: { label: 'Prospect', color: 'bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]',        dot: 'bg-[#2f7fb8]'    },
-  churned:  { label: 'Churned',  color: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',          dot: 'bg-red-500'     },
+  prospect: { label: 'Prospect', color: 'bg-[rgba(0,163,255,0.15)] text-[#00A3FF]',        dot: 'bg-[#00A3FF]'    },
+  churned:  { label: 'Churned',  color: 'bg-[rgba(239,68,68,0.18)] text-[#FF4D4D]',          dot: 'bg-red-500'     },
 }
 
 /* ─── New Site slide-over ────────────────────────────── */
@@ -118,7 +118,7 @@ function NewSiteSlideOver({
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
-          <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#fca5a5] rounded-lg px-4 py-3 text-sm">{error}</div>
+          <div className="bg-[rgba(239,68,68,0.13)] border border-[rgba(239,68,68,0.35)] text-[#FF4D4D] rounded-lg px-4 py-3 text-sm">{error}</div>
         )}
 
         {/* Property name */}
@@ -129,7 +129,7 @@ function NewSiteSlideOver({
             value={form.name}
             onChange={e => set('name', e.target.value)}
             placeholder="Stonegate Townhomes"
-            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
           />
         </div>
 
@@ -140,7 +140,7 @@ function NewSiteSlideOver({
             <select
               value={form.property_type}
               onChange={e => set('property_type', e.target.value)}
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             >
               <option>Multifamily</option>
               <option>HOA</option>
@@ -156,7 +156,7 @@ function NewSiteSlideOver({
               value={form.units}
               onChange={e => set('units', e.target.value)}
               placeholder="186"
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
           </div>
         </div>
@@ -169,7 +169,7 @@ function NewSiteSlideOver({
             value={form.address}
             onChange={e => set('address', e.target.value)}
             placeholder="1400 Stonegate Dr"
-            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+            className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
           />
         </div>
 
@@ -181,7 +181,7 @@ function NewSiteSlideOver({
               value={form.city}
               onChange={e => set('city', e.target.value)}
               placeholder="Alpharetta"
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
           </div>
           <div className="col-span-1">
@@ -192,7 +192,7 @@ function NewSiteSlideOver({
               onChange={e => set('state', e.target.value)}
               placeholder="GA"
               maxLength={2}
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
           </div>
           <div className="col-span-2">
@@ -202,7 +202,7 @@ function NewSiteSlideOver({
               value={form.zip}
               onChange={e => set('zip', e.target.value)}
               placeholder="30022"
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
           </div>
         </div>
@@ -216,7 +216,7 @@ function NewSiteSlideOver({
               value={form.pm_name}
               onChange={e => set('pm_name', e.target.value)}
               placeholder="Name"
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -224,14 +224,14 @@ function NewSiteSlideOver({
                 value={form.pm_email}
                 onChange={e => set('pm_email', e.target.value)}
                 placeholder="Email"
-                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
               />
               <input
                 type="tel"
                 value={form.pm_phone}
                 onChange={e => set('pm_phone', e.target.value)}
                 placeholder="Phone"
-                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+                className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
               />
             </div>
           </div>
@@ -246,14 +246,14 @@ function NewSiteSlideOver({
               value={form.gate_code}
               onChange={e => set('gate_code', e.target.value)}
               placeholder="Gate code (e.g. #4521)"
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0]"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF]"
             />
             <textarea
               value={form.access_notes}
               onChange={e => set('access_notes', e.target.value)}
               placeholder="Access notes for techs (e.g. check in at leasing office)"
               rows={2}
-              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] resize-none"
+              className="w-full border border-[#3a4a5c] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF] resize-none"
             />
           </div>
         </div>
@@ -272,7 +272,7 @@ function StatCard({
     <button
       onClick={onClick}
       className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-        active ? 'border-[#5FB8E0] bg-[#3f7fb8] shadow-sm' : 'border-[#33465b] bg-[#1e2a3a] hover:border-[#5FB8E0] hover:bg-[#22303f]'
+        active ? 'border-[#00A3FF] bg-[#3f7fb8] shadow-sm' : 'border-[#33465b] bg-[#151D2A] hover:border-[#00A3FF] hover:bg-[#22303f]'
       }`}
     >
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
@@ -339,7 +339,7 @@ export default function SitesPage() {
   const eventIcon = (type: string) => {
     if (type === 'device_offline')       return <AlertTriangle size={12} className="text-amber-300" />
     if (type === 'work_order_completed') return <CheckCircle2 size={12} className="text-emerald-300" />
-    if (type === 'install')              return <Wrench size={12} className="text-[#5FB8E0]" />
+    if (type === 'install')              return <Wrench size={12} className="text-[#00A3FF]" />
     return <Clock size={12} className="text-[#8598aa]" />
   }
 
@@ -449,14 +449,14 @@ export default function SitesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-[#eaf2fb] flex items-center gap-2">
-            <Building2 size={24} className="text-[#5FB8E0]" />
+            <Building2 size={24} className="text-[#00A3FF]" />
             Properties
           </h1>
           <p className="text-sm text-[#98abbd] mt-0.5">All installed sites — equipment, service history, and dealer attribution</p>
         </div>
         <button
           onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#2f7fb8]"
+          className="flex items-center gap-2 px-4 py-2 bg-[#3f7fb8] text-white rounded-lg text-sm font-medium hover:bg-[#00A3FF]"
         >
           <Plus size={16} />
           Add Property
@@ -465,8 +465,8 @@ export default function SitesPage() {
 
       {/* Stat bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Active"   value={counts.active}   icon={CheckCircle2}  color="bg-[rgba(126,224,168,0.15)] text-emerald-300" active={filterStatus === 'active'}   onClick={() => setFilter(f => f === 'active'   ? null : 'active')}   />
-        <StatCard label="Prospect" value={counts.prospect} icon={Clock}         color="bg-[rgba(95,184,224,0.15)] text-[#9FD8EC]"       active={filterStatus === 'prospect'} onClick={() => setFilter(f => f === 'prospect' ? null : 'prospect')} />
+        <StatCard label="Active"   value={counts.active}   icon={CheckCircle2}  color="bg-[rgba(0,230,153,0.15)] text-emerald-300" active={filterStatus === 'active'}   onClick={() => setFilter(f => f === 'active'   ? null : 'active')}   />
+        <StatCard label="Prospect" value={counts.prospect} icon={Clock}         color="bg-[rgba(0,163,255,0.15)] text-[#00A3FF]"       active={filterStatus === 'prospect'} onClick={() => setFilter(f => f === 'prospect' ? null : 'prospect')} />
         <StatCard label="Inactive" value={counts.inactive} icon={XCircle}       color="bg-[#22303f] text-[#98abbd]"    active={filterStatus === 'inactive'} onClick={() => setFilter(f => f === 'inactive' ? null : 'inactive')} />
         <StatCard label="Churned"  value={counts.churned}  icon={AlertTriangle}  color="bg-[rgba(239,68,68,0.18)] text-[#fb7185]"        active={filterStatus === 'churned'}  onClick={() => setFilter(f => f === 'churned'  ? null : 'churned')}  />
       </div>
@@ -479,7 +479,7 @@ export default function SitesPage() {
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search by name, address, or city…"
-          className="w-full pl-9 pr-4 py-2.5 border border-[#3a4a5c] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5FB8E0] bg-[#1e2a3a]"
+          className="w-full pl-9 pr-4 py-2.5 border border-[#3a4a5c] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3FF] bg-[#151D2A]"
         />
       </div>
 

@@ -62,9 +62,9 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { styl
 const formatDate = (dateString: string | null) => { if (!dateString) return 'No date'; const [year, month, day] = dateString.split('-'); return `${month}/${day}/${year}`; };
 const getStatusConfig = (status: InvoiceStatus) => {
   switch (status) {
-    case 'paid': return { color: '#34D399', bg: 'rgba(52,211,153,0.1)', label: 'Paid', icon: CheckCircle2 };
+    case 'paid': return { color: '#34D399', bg: 'rgba(0,230,153,0.1)', label: 'Paid', icon: CheckCircle2 };
     case 'open': return { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', label: 'Open', icon: Clock };
-    case 'overdue': return { color: '#F87171', bg: 'rgba(248,113,113,0.1)', label: 'Overdue', icon: AlertCircle };
+    case 'overdue': return { color: '#F87171', bg: 'rgba(255,77,77,0.1)', label: 'Overdue', icon: AlertCircle };
     default: return { color: 'rgba(255,255,255,0.5)', bg: 'rgba(255,255,255,0.05)', label: status.charAt(0).toUpperCase() + status.slice(1), icon: FileText };
   }
 };
@@ -216,7 +216,7 @@ export default function InvoicesBoard() {
             </div>
             <div className="p-5 border-t bg-black/20 flex flex-col gap-3 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               {actionError && (
-                <div className="rounded-2xl px-3 py-2 text-xs" style={{ backgroundColor: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{actionError}</div>
+                <div className="rounded-2xl px-3 py-2 text-xs" style={{ backgroundColor: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>{actionError}</div>
               )}
               {noteOpen && (
                 <div className="flex flex-col gap-2">

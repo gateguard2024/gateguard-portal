@@ -488,7 +488,7 @@ export default function MessagesShell() {
               <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(0,163,255,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(0,163,255,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#00A3FF' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
             ))}
           </div>
-          {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
+          {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#FF4D4D' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
           {filteredConversations.length === 0 ? (
@@ -578,7 +578,7 @@ export default function MessagesShell() {
                     <div key={msg.id} className="shrink-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(248,113,113,0.18)' : 'rgba(0,163,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#fca5a5' : '#00A3FF' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : msg.failed ? 'rgba(255,77,77,0.18)' : 'rgba(0,163,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : msg.failed ? '#FF4D4D' : '#00A3FF' }}>{isInbound ? 'Received' : msg.failed ? 'Failed to send' : 'Sent'}</span>
                           <span className="text-xs truncate" style={textSecondary}>{isInbound ? selectedConversation.contact_name : 'You'}</span>
                         </div>
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -659,7 +659,7 @@ export default function MessagesShell() {
             <div className="relative">
               <div className="flex justify-between items-center mb-2">
                 <div className="text-[11px] font-bold uppercase tracking-wider" style={textSecondary}>Linked record</div>
-                {selectedConversation.linked_label && <button onClick={() => void patchLink(selectedConversation, { linked_type: null })} className="text-[11px]" style={{ color: '#fca5a5' }}>Unlink</button>}
+                {selectedConversation.linked_label && <button onClick={() => void patchLink(selectedConversation, { linked_type: null })} className="text-[11px]" style={{ color: '#FF4D4D' }}>Unlink</button>}
               </div>
               {selectedConversation.linked_label ? (
                 <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#1E293B', border: '1px solid rgba(255,255,255,0.1)' }}>

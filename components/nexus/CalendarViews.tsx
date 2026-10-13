@@ -132,10 +132,10 @@ const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): 
 // --- Theme & Styles ---
 const textPrimary = { color: 'rgba(255,255,255,0.9)' };
 const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const glassBg = { backgroundColor: '#26374a', border: '1px solid rgba(150,180,210,0.2)' };
+const glassBg = { backgroundColor: '#1E293B', border: '1px solid rgba(150,180,210,0.2)' };
 const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
   jobs: { label: 'Jobs', color: '#34D399' },
-  sales: { label: 'Sales', color: '#5FB8E0' },
+  sales: { label: 'Sales', color: '#00A3FF' },
   todos: { label: 'To-Dos', color: '#94a3b8' },
   google: { label: 'Google', color: '#FBBF24' }
 };
@@ -278,12 +278,12 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(year, month, i));
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-black/20 bg-[#1e2a3a]/50 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-300">
+        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-black/20 bg-[#151D2A]/50 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-300">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
         <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-2">
           {cells.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-black/15 bg-[#1e2a3a]/30" />;
+            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-black/15 bg-[#151D2A]/30" />;
             const isToday = new Date().toDateString() === date.toDateString();
             const isSelected = selectedDate.toDateString() === date.toDateString();
             const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === date.toDateString());
@@ -294,16 +294,16 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                 onClick={() => setSelectedDate(date)}
                 className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
                   isSelected
-                    ? 'border-[#5FB8E0] bg-[#2f7fb8]/20 shadow-[0_0_18px_rgba(95,184,224,0.3)]'
+                    ? 'border-[#00A3FF] bg-[#00A3FF]/20 shadow-[0_0_18px_rgba(0,163,255,0.3)]'
                     : isToday
-                    ? 'border-[#5FB8E0]/60 bg-white/10'
-                    : 'border-black/30 bg-[#1e2a3a] hover:border-[#5FB8E0]/45 hover:bg-[#26374a]'
+                    ? 'border-[#00A3FF]/60 bg-white/10'
+                    : 'border-black/30 bg-[#151D2A] hover:border-[#00A3FF]/45 hover:bg-[#1E293B]'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-[#5FB8E0] px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-200'}`}>{date.getDate()}</span>
-                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-[#9FD8EC]">Today</span>}
-                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#5FB8E0', boxShadow: '0 0 6px rgba(95,184,224,0.6)' }} />}
+                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-[#00A3FF] px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-200'}`}>{date.getDate()}</span>
+                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-[#00A3FF]">Today</span>}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#00A3FF', boxShadow: '0 0 6px rgba(0,163,255,0.6)' }} />}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.slice(0, 2).map(e => {
@@ -329,13 +329,13 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     const startOfWeek = new Date(year, month, date - dayOfWeek);
     const weekDays = Array.from({ length: 7 }).map((_, i) => new Date(year, month, startOfWeek.getDate() + i));
     return (
-      <div className="flex flex-1 border border-[rgba(140,170,200,0.15)] rounded-2xl overflow-hidden mt-4 bg-[#16222f]">
+      <div className="flex flex-1 border border-[#1E293B] rounded-2xl overflow-hidden mt-4 bg-[#0B111E]">
         {weekDays.map((day, idx) => {
           const isToday = new Date().toDateString() === day.toDateString();
           const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === day.toDateString());
           return (
             <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-white/5">
-              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-[#1e2a3a]">
+              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-[#151D2A]">
                 <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
                 </span>
@@ -469,7 +469,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     const close = () => { setSelectedEvent(null); setInlineEdit(false); };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={close}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#151D2A', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex justify-between items-start">
               <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>{cat.label}</div>
@@ -549,7 +549,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#1e2c3c', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#151D2A', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
             <h3 className="text-lg font-medium" style={textPrimary}>{editingEvent ? 'Edit Event' : 'Add Event'}</h3>
             <button onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
@@ -588,20 +588,20 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
     const dLabel = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     return (
-      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: '#1e2a3a' }}>
+      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: '#151D2A' }}>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#9FD8EC]">Day Inspector</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#00A3FF]">Day Inspector</span>
           <span className="rounded-full border border-white/5 bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">{dayEvents.length} items</span>
         </div>
         <h3 className="mb-3 text-lg font-extrabold text-white">{dLabel}</h3>
         <hr className="mb-3 border-white/10" />
         <div className="flex max-h-[440px] min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
           {dayEvents.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#16222f] py-14 text-center text-xs text-slate-300">No events scheduled for this day.</div>
+            <div className="rounded-2xl border border-white/5 bg-[#0B111E] py-14 text-center text-xs text-slate-300">No events scheduled for this day.</div>
           ) : dayEvents.map(e => {
             const color = CATEGORIES[e.category].color;
             return (
-              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-[#1e2a3a] p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
+              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-[#151D2A] p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-200">{formatTime(e.start, e.all_day)}{e.end ? ` - ${formatTime(e.end)}` : ''}</span>
                 <h4 className="mt-0.5 text-sm font-bold text-white">{e.title}</h4>
                 <div className="mt-2 flex items-center gap-2">
@@ -612,7 +612,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
             );
           })}
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#5FB8E0]/45 bg-[#2f7fb8]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(95,184,224,0.2)] transition-all hover:bg-[#2f7fb8]/40">
+        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#00A3FF]/45 bg-[#00A3FF]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,163,255,0.2)] transition-all hover:bg-[#00A3FF]/40">
           <Plus size={14} /> Add to {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </button>
       </div>
@@ -628,7 +628,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-200">
           {(['Month', 'Week', 'Day', 'List'] as const).map(mode => (
-            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#5FB8E0]/45 bg-[#2f7fb8]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
+            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#00A3FF]/45 bg-[#00A3FF]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
           ))}
         </div>
         <div className="flex items-center gap-2">
@@ -638,7 +638,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
             <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronRight size={16} /></button>
           </div>
           <span className="min-w-[128px] text-center text-lg font-bold text-slate-100">{monthLabel}</span>
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#5FB8E0]/45 bg-[#2f7fb8]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(95,184,224,0.25)] transition-all hover:bg-[#2f7fb8]/40"><Plus size={14} /> Add Event</button>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#00A3FF]/45 bg-[#00A3FF]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,163,255,0.25)] transition-all hover:bg-[#00A3FF]/40"><Plus size={14} /> Add Event</button>
         </div>
       </div>
 
@@ -668,7 +668,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
         </div>
       </div>
 
-      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC' }}>{syncMsg}</div>)}
+      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{syncMsg}</div>)}
 
       <div className="relative z-10 flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col">

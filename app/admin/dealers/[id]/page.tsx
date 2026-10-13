@@ -221,7 +221,7 @@ function OnboardingStepper({ org }: { org: Org }) {
           <div key={step.key} className="flex items-center">
             <div className="flex flex-col items-center min-w-[100px]">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-[#243141] border-[rgba(95,184,224,0.18)] text-slate-400'
+                done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-[#243141] border-[rgba(0,163,255,0.18)] text-slate-400'
               }`}>
                 {done ? <CheckCircle2 size={14} /> : i + 1}
               </div>
@@ -411,7 +411,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
             const doc = docMap.get(cfg.type)
             const status = doc?.status ?? 'missing'
             return (
-              <div key={cfg.type} className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-4 space-y-3">
+              <div key={cfg.type} className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
@@ -433,7 +433,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                 </div>
 
                 {doc?.notes && (
-                  <p className="text-xs text-[#9fb4c9] italic border-l-2 border-[rgba(95,184,224,0.20)] pl-2">{doc.notes}</p>
+                  <p className="text-xs text-[#9fb4c9] italic border-l-2 border-[rgba(0,163,255,0.20)] pl-2">{doc.notes}</p>
                 )}
 
                 <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -442,7 +442,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                       href={doc.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(95,184,224,0.12)] transition-colors"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(0,163,255,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(0,163,255,0.12)] transition-colors"
                     >
                       <ExternalLink size={11} /> View
                     </a>
@@ -475,7 +475,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                             <button
                               onClick={() => { void handleSendDoc(cfg.type === 'agreement' ? 'dealer_agreement' : cfg.type, sigEmail) }}
                               disabled={sendingDoc === cfg.type}
-                              className="flex items-center gap-1 px-2 py-1 rounded border border-[rgba(95,184,224,0.18)] text-[10px] text-[#8fa4b8] hover:bg-[rgba(0,0,0,0.20)] transition-colors"
+                              className="flex items-center gap-1 px-2 py-1 rounded border border-[rgba(0,163,255,0.18)] text-[10px] text-[#8fa4b8] hover:bg-[rgba(0,0,0,0.20)] transition-colors"
                             >
                               Resend
                             </button>
@@ -518,7 +518,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                   })()}
                   <button
                     onClick={() => openSlide(cfg.type)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(95,184,224,0.12)] transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[rgba(0,163,255,0.20)] text-xs font-medium text-[#eaf2fb] hover:bg-[rgba(0,163,255,0.12)] transition-colors"
                   >
                     <Upload size={11} />
                     {doc?.url ? 'Update' : 'Manual upload'}
@@ -552,7 +552,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
             <select
               value={slide.status}
               onChange={e => setSlide(s => ({ ...s, status: e.target.value as PartnerDoc['status'] }))}
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             >
               <option value="missing">Missing</option>
               <option value="pending">Pending Review</option>
@@ -567,7 +567,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
               value={slide.url}
               onChange={e => setSlide(s => ({ ...s, url: e.target.value }))}
               placeholder="https://drive.google.com/…"
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           {slideCfg?.hasExpiry && (
@@ -577,7 +577,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                 type="date"
                 value={slide.expires_at}
                 onChange={e => setSlide(s => ({ ...s, expires_at: e.target.value }))}
-                className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+                className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
               />
             </div>
           )}
@@ -588,7 +588,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
               onChange={e => setSlide(s => ({ ...s, notes: e.target.value }))}
               rows={3}
               placeholder="Optional notes about this document…"
-              className="w-full px-3 py-2 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735] resize-none"
+              className="w-full px-3 py-2 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735] resize-none"
             />
           </div>
         </div>
@@ -765,9 +765,9 @@ function FeaturesTab({ org }: { org: Org }) {
 
       {/* Feature sections */}
       {Array.from(sections.entries()).map(([sectionKey, { label, items }]) => (
-        <div key={sectionKey} className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
+        <div key={sectionKey} className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
           {/* Section header */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-[rgba(95,184,224,0.20)] bg-[rgba(0,0,0,0.20)]">
+          <div className="flex items-center justify-between px-5 py-2.5 border-b border-[rgba(0,163,255,0.20)] bg-[rgba(0,0,0,0.20)]">
             <h3 className="text-xs font-bold text-[#9fb4c9] uppercase tracking-wider">{label}</h3>
             <span className="text-[10px] text-slate-400">{items.length} feature{items.length !== 1 ? 's' : ''}</span>
           </div>
@@ -836,13 +836,13 @@ function FeaturesTab({ org }: { org: Org }) {
                     value={expiresAt.slice(0, 10)}
                     onChange={e => markDirty(f.key, { expires_at: e.target.value || null })}
                     placeholder="No expiry"
-                    className="w-32 text-[11px] border border-[rgba(95,184,224,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
+                    className="w-32 text-[11px] border border-[rgba(0,163,255,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
                   />
                   <input
                     value={notes}
                     onChange={e => markDirty(f.key, { notes: e.target.value || null })}
                     placeholder="Notes…"
-                    className="flex-1 text-[11px] border border-[rgba(95,184,224,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
+                    className="flex-1 text-[11px] border border-[rgba(0,163,255,0.18)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-[#9fb4c9]"
                   />
                 </div>
               </div>
@@ -1149,7 +1149,7 @@ export default function DealerDetailPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium hover:bg-[rgba(95,184,224,0.12)] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(0,163,255,0.20)] text-xs font-medium hover:bg-[rgba(0,163,255,0.12)] transition-colors"
             >
               <Edit2 size={13} /> Edit
             </button>
@@ -1214,7 +1214,7 @@ export default function DealerDetailPage() {
         )}
 
         {/* Header card */}
-        <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-6">
+        <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl p-6">
           <div className="flex items-start gap-4">
             <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${tierCfg?.bg ?? 'bg-[rgba(255,255,255,0.06)]'}`}>
               <TierIcon size={24} className={tierCfg?.color ?? 'text-[#8fa4b8]'} />
@@ -1252,7 +1252,7 @@ export default function DealerDetailPage() {
               </div>
               {/* Primary contact */}
               {(org.contact_name || org.contact_email) && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-[#9fb4c9] border-t border-[rgba(95,184,224,0.20)]/50 pt-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-[#9fb4c9] border-t border-[rgba(0,163,255,0.20)]/50 pt-2">
                   <span className="text-xs text-[#9fb4c9] font-medium uppercase tracking-wide">Primary Contact:</span>
                   {org.contact_name && <span>{org.contact_name}</span>}
                   {org.contact_email && (
@@ -1272,7 +1272,7 @@ export default function DealerDetailPage() {
 
           {/* Quick stats */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-[rgba(95,184,224,0.20)]">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-[rgba(0,163,255,0.20)]">
               <div>
                 <div className="text-2xl font-bold text-[#eaf2fb]">{stats.sites_count}</div>
                 <div className="text-xs text-[#9fb4c9] mt-0.5">Properties Served</div>
@@ -1294,7 +1294,7 @@ export default function DealerDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 border-b border-[rgba(95,184,224,0.20)] overflow-x-auto">
+        <div className="flex gap-0.5 border-b border-[rgba(0,163,255,0.20)] overflow-x-auto">
           {(Object.keys(TAB_LABELS) as TabKey[]).map(t => (
             <button
               key={t}
@@ -1314,7 +1314,7 @@ export default function DealerDetailPage() {
         {tab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Info card */}
-            <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-5 space-y-4">
+            <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl p-5 space-y-4">
               <h3 className="text-sm font-semibold text-[#eaf2fb]">Organization Info</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
@@ -1353,7 +1353,7 @@ export default function DealerDetailPage() {
 
               {/* Commission config */}
               {commConfig && (
-                <div className="pt-4 border-t border-[rgba(95,184,224,0.20)] space-y-2">
+                <div className="pt-4 border-t border-[rgba(0,163,255,0.20)] space-y-2">
                   <h4 className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide">Commission Config</h4>
                   <div className="flex justify-between text-sm">
                     <span className="text-[#9fb4c9]">Sales Partner Rate</span>
@@ -1374,18 +1374,18 @@ export default function DealerDetailPage() {
             </div>
 
             {/* Onboarding stepper */}
-            <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl p-5 space-y-4">
+            <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl p-5 space-y-4">
               <h3 className="text-sm font-semibold text-[#eaf2fb]">Onboarding Progress</h3>
               <OnboardingStepper org={org} />
 
               {/* Recent activity */}
-              <div className="pt-4 border-t border-[rgba(95,184,224,0.20)] space-y-2">
+              <div className="pt-4 border-t border-[rgba(0,163,255,0.20)] space-y-2">
                 <h4 className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide">Recent Activity</h4>
                 {wos.slice(0, 5).length === 0 ? (
                   <p className="text-xs text-[#9fb4c9] py-2">No activity yet</p>
                 ) : (
                   wos.slice(0, 5).map(wo => (
-                    <div key={wo.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-[rgba(95,184,224,0.20)]/50 last:border-0">
+                    <div key={wo.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-[rgba(0,163,255,0.20)]/50 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <Wrench size={12} className="text-[#9fb4c9] shrink-0" />
                         <span className="text-sm text-[#eaf2fb] truncate">{wo.title}</span>
@@ -1404,8 +1404,8 @@ export default function DealerDetailPage() {
 
         {/* ── Properties ─────────────────────────────────────── */}
         {tab === 'properties' && (
-          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
+          <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0,163,255,0.20)]">
               <Building2 size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Properties Served</h2>
               {sites.length > 0 && (
@@ -1432,8 +1432,8 @@ export default function DealerDetailPage() {
 
         {/* ── Work Orders ────────────────────────────────────── */}
         {tab === 'work_orders' && (
-          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
+          <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0,163,255,0.20)]">
               <Wrench size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Work Orders</h2>
               {wos.length > 0 && (
@@ -1460,8 +1460,8 @@ export default function DealerDetailPage() {
 
         {/* ── Commission History ──────────────────────────────── */}
         {tab === 'commissions' && (
-          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
+          <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0,163,255,0.20)]">
               <DollarSign size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Commission History</h2>
             </div>
@@ -1504,7 +1504,7 @@ export default function DealerDetailPage() {
                     <button
                       onClick={() => { void handleCommissionAction(row.id, 'approved') }}
                       disabled={commActionId === row.id}
-                      className="px-2.5 py-1 rounded-lg bg-[rgba(0,0,0,0.20)] text-slate-700 text-xs font-semibold border border-[rgba(95,184,224,0.18)] hover:bg-[rgba(255,255,255,0.06)] transition-colors disabled:opacity-50"
+                      className="px-2.5 py-1 rounded-lg bg-[rgba(0,0,0,0.20)] text-slate-700 text-xs font-semibold border border-[rgba(0,163,255,0.18)] hover:bg-[rgba(255,255,255,0.06)] transition-colors disabled:opacity-50"
                     >
                       Unhold
                     </button>
@@ -1534,15 +1534,15 @@ export default function DealerDetailPage() {
 
         {/* ── Reps ────────────────────────────────────────────── */}
         {tab === 'reps' && (
-          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
+          <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(0,163,255,0.20)]">
               <div className="flex items-center gap-2">
                 <Users size={15} className="text-brand-400" />
                 <h2 className="text-sm font-semibold">Sales Reps</h2>
               </div>
               <Link
                 href={`/reps?org_id=${org.id}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(95,184,224,0.20)] text-xs font-medium hover:bg-[rgba(95,184,224,0.12)] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(0,163,255,0.20)] text-xs font-medium hover:bg-[rgba(0,163,255,0.12)] transition-colors"
               >
                 View in Reps <ExternalLink size={11} />
               </Link>
@@ -1558,8 +1558,8 @@ export default function DealerDetailPage() {
 
         {/* ── Activity Log ────────────────────────────────────── */}
         {tab === 'activity' && (
-          <div className="bg-[#243141] border border-[rgba(95,184,224,0.20)] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(95,184,224,0.20)]">
+          <div className="bg-[#243141] border border-[rgba(0,163,255,0.20)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0,163,255,0.20)]">
               <Activity size={15} className="text-brand-400" />
               <h2 className="text-sm font-semibold">Activity Log</h2>
             </div>
@@ -1594,7 +1594,7 @@ export default function DealerDetailPage() {
             <input
               value={editName}
               onChange={e => setEditName(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
@@ -1603,7 +1603,7 @@ export default function DealerDetailPage() {
               type="email"
               value={editEmail}
               onChange={e => setEditEmail(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
@@ -1612,7 +1612,7 @@ export default function DealerDetailPage() {
               type="tel"
               value={editPhone}
               onChange={e => setEditPhone(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
           <div>
@@ -1621,11 +1621,11 @@ export default function DealerDetailPage() {
               type="url"
               value={editWebsite}
               onChange={e => setEditWebsite(e.target.value)}
-              className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+              className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
             />
           </div>
 
-          <div className="pt-2 border-t border-[rgba(95,184,224,0.20)]">
+          <div className="pt-2 border-t border-[rgba(0,163,255,0.20)]">
             <p className="text-xs font-semibold text-[#9fb4c9] uppercase tracking-wide mb-3">Primary Contact</p>
             <div className="space-y-3">
               <div>
@@ -1634,7 +1634,7 @@ export default function DealerDetailPage() {
                   value={editContactName}
                   onChange={e => setEditContactName(e.target.value)}
                   placeholder="Contact name"
-                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
               <div>
@@ -1644,7 +1644,7 @@ export default function DealerDetailPage() {
                   value={editContactEmail}
                   onChange={e => setEditContactEmail(e.target.value)}
                   placeholder="contact@example.com"
-                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
               <div>
@@ -1654,7 +1654,7 @@ export default function DealerDetailPage() {
                   value={editContactPhone}
                   onChange={e => setEditContactPhone(e.target.value)}
                   placeholder="+1 (555) 000-0000"
-                  className="w-full px-3 py-2 h-9 border border-[rgba(95,184,224,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
+                  className="w-full px-3 py-2 h-9 border border-[rgba(0,163,255,0.20)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-[#1b2735]"
                 />
               </div>
             </div>

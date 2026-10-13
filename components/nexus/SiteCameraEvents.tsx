@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
-const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#eaf2fb', borderRadius: 10, padding: '7px 9px', fontSize: 12.5, outline: 'none' } as const;
+const INPUT = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb', borderRadius: 10, padding: '7px 9px', fontSize: 12.5, outline: 'none' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EEvent = Record<string, any>;
@@ -46,9 +46,9 @@ export function SiteCameraEvents({ siteId }: { siteId: string }) {
 
   if (err && !events?.length) return null; // not connected → hide (cameras wall already covers status)
   return (
-    <div style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 12, marginTop: 12 }}>
+    <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 12, marginTop: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        <div style={{ color: '#9FD8EC', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Camera events · Eagle Eye</div>
+        <div style={{ color: '#00A3FF', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Camera events · Eagle Eye</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <select value={type} onChange={e => setType(e.target.value)} style={{ ...INPUT, padding: '6px 7px' }}>
             <option value="" style={{ background: '#111a24' }}>All types</option>
@@ -62,18 +62,18 @@ export function SiteCameraEvents({ siteId }: { siteId: string }) {
           </select>
         </div>
       </div>
-      {events == null ? <div style={{ fontSize: 12, color: '#9FD8EC', padding: '8px 2px' }}>Loading events…</div>
-        : shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#9FD8EC', padding: '8px 2px' }}>No camera events in this window.</div>
+      {events == null ? <div style={{ fontSize: 12, color: '#00A3FF', padding: '8px 2px' }}>Loading events…</div>
+        : shown.length === 0 ? <div style={{ fontSize: 11.5, color: '#00A3FF', padding: '8px 2px' }}>No camera events in this window.</div>
         : <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
             {shown.map((e, i) => {
               const alert = ALERT.test(e.label);
               return (
-                <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid rgba(140,170,200,0.08)' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: alert ? '#f87171' : '#7ee0a8', flexShrink: 0 }} />
+                <div key={e.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: alert ? '#f87171' : '#00E699', flexShrink: 0 }} />
                   <span aria-hidden>{glyph(e.label)}</span>
                   <span style={{ color: '#e2ebf4' }}>{e.label}{e.ongoing ? ' · ongoing' : ''}</span>
                   {e.cameraName && <span style={{ color: '#c3d3e2' }}>· {e.cameraName}</span>}
-                  {e.when && <span style={{ color: '#9FD8EC', marginLeft: 'auto' }}>{fmt(e.when)}</span>}
+                  {e.when && <span style={{ color: '#00A3FF', marginLeft: 'auto' }}>{fmt(e.when)}</span>}
                 </div>
               );
             })}

@@ -51,14 +51,14 @@ export function DealProfitability({ lines, selected, laborRate }: {
   }, [lines, selected, laborRate])
 
   const marginColor = roll.margin >= 0.4 ? '#3ddc97' : roll.margin >= 0.25 ? '#f0a020' : '#f0556a'
-  const tile = { background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(140,170,200,0.2)', borderRadius: 12, padding: '10px 12px' } as const
+  const tile = { background: 'rgba(0,0,0,0.24)', border: '1px solid #1E293B', borderRadius: 12, padding: '10px 12px' } as const
   const fmtPair = (mo: number, set: number, suffix = '') =>
     [mo ? `${money(mo)}/mo` : '', set ? money(set) : ''].filter(Boolean).join(' + ') + suffix || '—'
 
   return (
-    <div className="rounded-xl p-3 mb-3" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(95,184,224,0.34)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+    <div className="rounded-xl p-3 mb-3" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid rgba(0,163,255,0.34)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
       <div className="flex items-center gap-2 mb-2.5">
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>📊 Deal profitability</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>📊 Deal profitability</div>
         <span className="ml-auto text-[11px] font-bold rounded-md px-2 py-0.5" style={{ background: `${marginColor}22`, border: `1px solid ${marginColor}66`, color: marginColor }}>{Math.round(roll.margin * 100)}% margin</span>
       </div>
 
@@ -83,7 +83,7 @@ export function DealProfitability({ lines, selected, laborRate }: {
             const pay = r.payMo + r.paySet, keep = r.keepMo + r.keepSet
             const pct = pay > 0 ? Math.max(4, Math.min(100, Math.round((keep / pay) * 100))) : 0
             return (
-              <div key={r.section} className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(12,20,32,0.4)', border: '1px solid rgba(140,170,200,0.16)' }}>
+              <div key={r.section} className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(12,20,32,0.4)', border: '1px solid #1E293B' }}>
                 <div className="flex items-baseline gap-2">
                   <span className="flex-1 text-[12px] font-semibold" style={{ color: '#dbe7f2' }}>{r.section}</span>
                   <span className="text-[12px] font-bold" style={{ color: '#3ddc97' }}>keep {fmtPair(r.keepMo, r.keepSet)}</span>

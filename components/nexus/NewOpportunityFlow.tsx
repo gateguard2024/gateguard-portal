@@ -65,7 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-const inputStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
+const inputStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
 
 export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }) {
   const [step, setStep] = useState<Step>('source')
@@ -244,10 +244,10 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   return (
     <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="mx-auto flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+        style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(95,184,224,0.82)' }}>New Opportunity</div>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,163,255,0.82)' }}>New Opportunity</div>
             <h2 className="mt-1 text-xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>
               {step === 'source' ? 'Where is this deal coming from?' : step === 'pick' ? (source === 'lead' ? 'Pick the lead' : 'Find the customer') : 'Opportunity details'}
             </h2>
@@ -257,18 +257,18 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {result && (
-            <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${result.ok ? 'rgba(52,211,153,0.35)' : 'rgba(248,113,113,0.35)'}`, color: result.ok ? '#6ee7b7' : '#fca5a5' }}>{result.message}</div>
+            <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.12)', border: `1px solid ${result.ok ? 'rgba(0,230,153,0.35)' : 'rgba(255,77,77,0.35)'}`, color: result.ok ? '#00E699' : '#FF4D4D' }}>{result.message}</div>
           )}
 
           {step === 'source' && !result && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {([['lead', 'From an existing Lead', 'Convert a lead you are already working into a deal.'], ['customer', 'From an existing Customer', 'Start a new deal for a customer you already serve.']] as const).map(([s, title, sub]) => (
-                <button key={s} type="button" onClick={() => chooseSource(s)} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.06)', border: '1px solid rgba(95,184,224,0.22)' }}>
+                <button key={s} type="button" onClick={() => chooseSource(s)} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.06)', border: '1px solid rgba(0,163,255,0.22)' }}>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{title}</div>
                   <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{sub}</div>
                 </button>
               ))}
-              <button type="button" onClick={() => chooseSource('blank')} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 sm:col-span-2" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.22)' }}>
+              <button type="button" onClick={() => chooseSource('blank')} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 sm:col-span-2" style={{ background: 'rgba(0,230,153,0.06)', border: '1px solid rgba(0,230,153,0.22)' }}>
                 <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Start from scratch</div>
                 <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>No lead or customer yet — just type the account and details.</div>
               </button>
@@ -281,19 +281,19 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
               {picking && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Searching…</div>}
               <div className="space-y-2">
                 {source === 'lead' && leadList.map(l => (
-                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.property_name || l.name || 'Lead'}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{[l.name, l.location, l.units ? `${l.units} units` : null].filter(Boolean).join(' · ') || 'Lead'}</div>
                   </button>
                 ))}
-                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.18)', color: 'rgba(255,255,255,0.82)' }}>No leads match. Try a different name.</div>}
+                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.82)' }}>No leads match. Try a different name.</div>}
                 {source === 'customer' && results.map(r => (
-                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
                     <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{r.title}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{r.subtitle}</div>
                   </button>
                 ))}
-                {source === 'customer' && query.trim().length < 2 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.18)', color: 'rgba(255,255,255,0.82)' }}>Type at least 2 characters to search.</div>}
+                {source === 'customer' && query.trim().length < 2 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.82)' }}>Type at least 2 characters to search.</div>}
               </div>
             </div>
           )}
@@ -301,8 +301,8 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
           {step === 'form' && !result && (
             <div className="space-y-3">
               {selected && (
-                <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.28)' }}>
-                  <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: '#9FD8EC' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
+                <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(0,163,255,0.08)', border: '1px solid rgba(0,163,255,0.28)' }}>
+                  <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: '#00A3FF' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.label}</div>
                   <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{selected.sublabel}</div>
                 </div>
@@ -335,13 +335,13 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
             if (step === 'form') { setStep(source === 'blank' ? 'source' : 'pick'); return }
             if (step === 'pick') { setStep('source'); return }
             onClose()
-          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', color: 'rgba(255,255,255,0.7)' }}>
+          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.7)' }}>
             {result ? 'Close' : step === 'source' ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (
-            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)', color: 'white' }}>Done</button>
+            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>Done</button>
           ) : step === 'form' ? (
-            <button type="button" disabled={busy || !name.trim()} onClick={create} className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #2f7fb8, #5FB8E0)', color: 'white' }}>{busy ? 'Creating…' : 'Create Opportunity'}</button>
+            <button type="button" disabled={busy || !name.trim()} onClick={create} className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>{busy ? 'Creating…' : 'Create Opportunity'}</button>
           ) : <span />}
         </div>
       </div>

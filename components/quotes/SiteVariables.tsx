@@ -130,14 +130,14 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
   const ggCut = Number(res?.gateGuardCombined) || 0
 
   return (
-    <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#22384f,#1b2a3b)', border: '1px solid rgba(95,184,224,0.34)' }}>
+    <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(180deg,#22384f,#1b2a3b)', border: '1px solid rgba(0,163,255,0.34)' }}>
       <div className="flex items-center gap-2 mb-1">
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9FD8EC' }}>🛡️ Gate Program</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>🛡️ Gate Program</div>
         <span className="ml-auto text-[10px]" style={{ color: '#6f8299' }}>{loading ? 'pricing…' : 'live Gate Guard engine'}</span>
       </div>
       <div className="text-[10.5px] mb-2 leading-relaxed" style={{ color: '#8fa4b8' }}>Key in the counts — the Gate Program section prices itself from the real calculator. Every line stays editable below.</div>
 
-      {err && <div className="text-[11px] mb-2" style={{ color: '#fca5a5' }}>{err}</div>}
+      {err && <div className="text-[11px] mb-2" style={{ color: '#FF4D4D' }}>{err}</div>}
 
       <div className="grid grid-cols-2 gap-2">
         {fields.map(f => (
@@ -148,7 +148,7 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
               onFocus={e => e.target.select()}
               onChange={e => set(f.k, num(e.target.value))}
               className="block w-full mt-1 rounded-lg px-2 py-1.5 text-[14px] font-semibold outline-none"
-              style={{ background: '#0c1420', border: '1px solid rgba(140,170,200,0.24)', color: '#eef4fb' }}
+              style={{ background: '#0c1420', border: '1px solid #1E293B', color: '#eef4fb' }}
             />
           </label>
         ))}
@@ -166,10 +166,10 @@ export function SiteVariables({ initial, onVarsChange, onGenerate }: {
           <div className="mt-2.5 grid grid-cols-3 gap-1.5">
             {[
               { l: 'Dealer', v: dealerCut, c: '#3ddc97' },
-              { l: 'Sales rep', v: salesCut, c: '#9FD8EC' },
+              { l: 'Sales rep', v: salesCut, c: '#00A3FF' },
               { l: 'Gate Guard', v: ggCut, c: '#c3d3e2' },
             ].map(x => (
-              <div key={x.l} className="rounded-lg px-2 py-1.5 text-center" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(140,170,200,0.2)' }}>
+              <div key={x.l} className="rounded-lg px-2 py-1.5 text-center" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid #1E293B' }}>
                 <div className="text-[9px] font-bold uppercase tracking-[0.04em]" style={{ color: '#8fa4b8' }}>{x.l}</div>
                 <div className="text-[13px] font-extrabold" style={{ color: x.c }}>{money(x.v)}</div>
                 <div className="text-[8.5px]" style={{ color: '#6f8299' }}>/ mo</div>

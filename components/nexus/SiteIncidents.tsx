@@ -8,9 +8,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { INCIDENT_CATEGORIES, INCIDENT_PRESETS, CATEGORY_BY_ID, causeLabel, categoryLabel, SEVERITY_META, type IncidentSeverity } from '@/lib/incident-taxonomy';
 
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
-const INPUT = { background: '#16232f', border: '1px solid rgba(140,170,200,0.28)', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none', width: '100%' } as const;
+const INPUT = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none', width: '100%' } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Incident = Record<string, any>;
@@ -54,30 +54,30 @@ export function SiteIncidents({ siteId }: { siteId: string }) {
     await load();
   }
 
-  const healthColor = !stats ? '#9FD8EC' : stats.uptimePct >= 99 ? '#7ee0a8' : stats.uptimePct >= 95 ? '#fbbf24' : '#f87171';
+  const healthColor = !stats ? '#00A3FF' : stats.uptimePct >= 99 ? '#00E699' : stats.uptimePct >= 95 ? '#fbbf24' : '#f87171';
 
   return (
-    <div style={{ background: WELL, border: '1px solid rgba(140,170,200,0.18)', borderRadius: 16, padding: 14 }}>
+    <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9FD8EC' }}>Faults &amp; uptime</div>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#00A3FF' }}>Faults &amp; uptime</div>
           <div style={{ fontSize: 12, color: '#c3d3e2' }}>Track outages, downtime and why systems went down.</div>
         </div>
-        <button onClick={() => setLogOpen(true)} style={{ background: '#26374a', border: '1px solid rgba(95,184,224,0.3)', color: '#cfe0f0', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>＋ Log issue</button>
+        <button onClick={() => setLogOpen(true)} style={{ background: '#1E293B', border: '1px solid rgba(0,163,255,0.3)', color: '#cfe0f0', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>＋ Log issue</button>
       </div>
 
       {/* Uptime stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8, marginBottom: 12 }}>
         <Stat label={`Uptime · ${stats?.windowDays ?? 90}d`} value={stats ? `${stats.uptimePct}%` : '—'} color={healthColor} />
-        <Stat label="Open faults" value={stats?.openCount ?? 0} color={open.length ? '#f87171' : '#7ee0a8'} />
-        <Stat label="Since last" value={dur(stats?.timeSinceLastMs)} sub="incident" color="#9FD8EC" />
-        <Stat label="Current down" value={dur(stats?.currentDowntimeMs || null)} sub={open.length ? 'active' : 'none'} color={open.length ? '#fbbf24' : '#9FD8EC'} />
-        <Stat label="Avg fix (MTTR)" value={dur(stats?.mttrMs)} color="#9FD8EC" />
+        <Stat label="Open faults" value={stats?.openCount ?? 0} color={open.length ? '#f87171' : '#00E699'} />
+        <Stat label="Since last" value={dur(stats?.timeSinceLastMs)} sub="incident" color="#00A3FF" />
+        <Stat label="Current down" value={dur(stats?.currentDowntimeMs || null)} sub={open.length ? 'active' : 'none'} color={open.length ? '#fbbf24' : '#00A3FF'} />
+        <Stat label="Avg fix (MTTR)" value={dur(stats?.mttrMs)} color="#00A3FF" />
       </div>
 
       {/* Open faults */}
-      {loading ? <div style={{ fontSize: 12, color: '#9FD8EC', padding: '8px 0' }}>Loading faults…</div>
-        : open.length === 0 ? <div style={{ fontSize: 12, color: '#7ee0a8', padding: '10px 0' }}>✓ All systems operational — no open faults.</div>
+      {loading ? <div style={{ fontSize: 12, color: '#00A3FF', padding: '8px 0' }}>Loading faults…</div>
+        : open.length === 0 ? <div style={{ fontSize: 12, color: '#00E699', padding: '10px 0' }}>✓ All systems operational — no open faults.</div>
         : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {open.map(i => <FaultRow key={i.id} inc={i} onResolve={() => patch(i.id, { status: 'resolved' })} onConvert={() => patch(i.id, { action: 'convert_to_wo' })} />)}
           </div>}
@@ -85,16 +85,16 @@ export function SiteIncidents({ siteId }: { siteId: string }) {
       {/* Recently resolved */}
       {recent.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9FD8EC', marginBottom: 6 }}>Recently resolved</div>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#00A3FF', marginBottom: 6 }}>Recently resolved</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {recent.map(i => {
               const down = i.resolved_at && i.started_at ? Date.parse(i.resolved_at) - Date.parse(i.started_at) : null;
               return (
                 <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7ee0a8' }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E699' }} />
                   <span style={{ color: '#c3d3e2' }}>{i.title}</span>
-                  <span style={{ color: '#9FD8EC' }}>· {categoryLabel(i.category)}{i.cause ? ` · ${causeLabel(i.category, i.cause)}` : ''}</span>
-                  <span style={{ color: '#9FD8EC', marginLeft: 'auto' }}>down {dur(down)}</span>
+                  <span style={{ color: '#00A3FF' }}>· {categoryLabel(i.category)}{i.cause ? ` · ${causeLabel(i.category, i.cause)}` : ''}</span>
+                  <span style={{ color: '#00A3FF', marginLeft: 'auto' }}>down {dur(down)}</span>
                 </div>
               );
             })}
@@ -110,9 +110,9 @@ export function SiteIncidents({ siteId }: { siteId: string }) {
 function Stat({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
   return (
     <div style={TILE}>
-      <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC' }}>{label}</div>
+      <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF' }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color, lineHeight: 1.1, marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 9, color: '#9FD8EC' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 9, color: '#00A3FF' }}>{sub}</div>}
     </div>
   );
 }
@@ -131,8 +131,8 @@ function FaultRow({ inc, onResolve, onConvert }: { inc: Incident; onResolve: () 
         </div>
       </div>
       <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: sev.color, border: `1px solid ${sev.color}66`, borderRadius: 999, padding: '2px 8px' }}>{sev.label}</span>
-      {!inc.work_order_id && <button onClick={onConvert} style={{ background: '#22303f', border: '1px solid rgba(95,184,224,0.28)', color: '#9FD8EC', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Send tech</button>}
-      <button onClick={onResolve} style={{ background: 'rgba(126,224,168,0.14)', border: '1px solid rgba(126,224,168,0.4)', color: '#7ee0a8', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Resolve</button>
+      {!inc.work_order_id && <button onClick={onConvert} style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Send tech</button>}
+      <button onClick={onResolve} style={{ background: 'rgba(0,230,153,0.14)', border: '1px solid rgba(0,230,153,0.4)', color: '#00E699', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Resolve</button>
     </div>
   );
 }
@@ -165,10 +165,10 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '88dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid rgba(140,170,200,0.28)', borderRadius: 22, padding: 18, boxShadow: '0 30px 70px rgba(0,0,0,0.6)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '88dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRadius: 22, padding: 18, boxShadow: '0 30px 70px rgba(0,0,0,0.6)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#5FB8E0' }}>Site fault</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#00A3FF' }}>Site fault</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb' }}>Log an issue</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12, cursor: 'pointer' }}>Close</button>
@@ -177,7 +177,7 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
         {/* Presets */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {INCIDENT_PRESETS.map(p => (
-            <button key={p.key} onClick={() => applyPreset(p)} style={{ background: '#16232f', border: '1px solid rgba(140,170,200,0.22)', color: '#c3d3e2', borderRadius: 999, padding: '5px 11px', fontSize: 11.5, cursor: 'pointer' }}>{p.label}</button>
+            <button key={p.key} onClick={() => applyPreset(p)} style={{ background: '#16232f', border: '1px solid #1E293B', color: '#c3d3e2', borderRadius: 999, padding: '5px 11px', fontSize: 11.5, cursor: 'pointer' }}>{p.label}</button>
           ))}
         </div>
 
@@ -185,13 +185,13 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="What happened? (e.g. Main gate stuck open)" style={INPUT} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC', marginBottom: 4 }}>System</div>
+              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>System</div>
               <select value={category} onChange={e => { setCategory(e.target.value); setCause(''); }} style={{ ...INPUT, padding: '8px 8px' }}>
                 {INCIDENT_CATEGORIES.map(cat => <option key={cat.id} value={cat.id} style={{ background: '#111a24' }}>{cat.label}</option>)}
               </select>
             </div>
             <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC', marginBottom: 4 }}>Why it's down</div>
+              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Why it's down</div>
               <select value={cause} onChange={e => setCause(e.target.value)} style={{ ...INPUT, padding: '8px 8px' }}>
                 <option value="" style={{ background: '#111a24' }}>Select cause…</option>
                 {causes.map(x => <option key={x.id} value={x.id} style={{ background: '#111a24' }}>{x.label}</option>)}
@@ -200,7 +200,7 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC', marginBottom: 4 }}>Severity</div>
+              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Severity</div>
               <select value={severity} onChange={e => setSeverity(e.target.value as IncidentSeverity)} style={{ ...INPUT, padding: '8px 8px' }}>
                 <option value="low" style={{ background: '#111a24' }}>Low</option>
                 <option value="medium" style={{ background: '#111a24' }}>Medium</option>
@@ -209,7 +209,7 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
               </select>
             </div>
             <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9FD8EC', marginBottom: 4 }}>Down since</div>
+              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Down since</div>
               <input type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} style={{ ...INPUT, padding: '7px 8px' }} />
             </div>
           </div>
@@ -218,9 +218,9 @@ function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () =>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12.5, cursor: 'pointer', padding: '8px 10px' }}>Cancel</button>
-          <button onClick={save} disabled={busy || !title.trim()} style={{ background: '#26374a', border: '1px solid rgba(140,170,200,0.3)', color: '#cfe0f0', borderRadius: 10, padding: '8px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !title.trim() ? 0.4 : 1 }}>{busy ? 'Logging…' : 'Log fault'}</button>
+          <button onClick={save} disabled={busy || !title.trim()} style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0', borderRadius: 10, padding: '8px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !title.trim() ? 0.4 : 1 }}>{busy ? 'Logging…' : 'Log fault'}</button>
         </div>
-        <div style={{ fontSize: 9.5, color: '#9FD8EC', marginTop: 8 }}>Logged to the site ledger. Later, the AI watcher and GGSOC will file these automatically.</div>
+        <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>Logged to the site ledger. Later, the AI watcher and GGSOC will file these automatically.</div>
       </div>
     </div>
   );

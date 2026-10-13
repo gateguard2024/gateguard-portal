@@ -34,11 +34,11 @@ function val(v: unknown, fallback = 'Not added yet') {
 
 function Section({ title, children, count }: { title: string; children: React.ReactNode; count?: number }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.22)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</div>
         {typeof count === 'number' && count > 0 && (
-          <div className="rounded-full px-2 py-1 text-[10px]" style={{ background: 'rgba(95,184,224,0.12)', color: '#9FD8EC' }}>{count}</div>
+          <div className="rounded-full px-2 py-1 text-[10px]" style={{ background: 'rgba(0,163,255,0.12)', color: '#00A3FF' }}>{count}</div>
         )}
       </div>
       {children}
@@ -52,7 +52,7 @@ function Empty({ text }: { text: string }) {
 
 function MiniRow({ title, subtitle, meta }: { title: string; subtitle?: string; meta?: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>{title}</div>
         {meta && <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap' }}>{meta}</div>}
@@ -69,7 +69,7 @@ function ListBlock({ records, emptyText, render }: { records?: AnyRecord[]; empt
 
 function MiniStat({ label, value: v }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+    <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
       <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label}</div>
       <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{v}</div>
     </div>
@@ -413,15 +413,15 @@ export function OpportunityGlassWindow({
     } catch { setMsg({ ok: false, text: 'Could not save.' }) }
     finally { setStatBusy(false) }
   }
-  const statTile = { background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' } as const
+  const statTile = { background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' } as const
   function renderEditStat(field: string, label: string, display: string, inputType: string, current: unknown) {
     if (editStat === field) {
       return (
         <div className="rounded-2xl p-3" style={statTile}>
           <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label}</div>
-          <input autoFocus type={inputType} value={statVal} onChange={e => setStatVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void saveStat(field); if (e.key === 'Escape') setEditStat(null) }} className="mt-1 w-full rounded-lg px-2 py-1 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(95,184,224,0.4)', color: 'white' }} />
+          <input autoFocus type={inputType} value={statVal} onChange={e => setStatVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void saveStat(field); if (e.key === 'Escape') setEditStat(null) }} className="mt-1 w-full rounded-lg px-2 py-1 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,163,255,0.4)', color: 'white' }} />
           <div className="mt-1 flex gap-1">
-            <button type="button" disabled={statBusy} onClick={() => saveStat(field)} className="flex-1 rounded-md py-0.5 text-[10px] font-semibold disabled:opacity-50" style={{ background: '#2f7fb8', color: 'white' }}>{statBusy ? '…' : 'Save'}</button>
+            <button type="button" disabled={statBusy} onClick={() => saveStat(field)} className="flex-1 rounded-md py-0.5 text-[10px] font-semibold disabled:opacity-50" style={{ background: '#00A3FF', color: 'white' }}>{statBusy ? '…' : 'Save'}</button>
             <button type="button" onClick={() => setEditStat(null)} className="rounded-md px-2 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}>✕</button>
           </div>
         </div>
@@ -429,7 +429,7 @@ export function OpportunityGlassWindow({
     }
     return (
       <button type="button" onClick={() => openStat(field, current)} title="Click to edit" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={statTile}>
-        <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label} <span style={{ color: 'rgba(95,184,224,0.6)' }}>✎</span></div>
+        <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>{label} <span style={{ color: 'rgba(0,163,255,0.6)' }}>✎</span></div>
         <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{display}</div>
       </button>
     )
@@ -641,9 +641,9 @@ export function OpportunityGlassWindow({
     ? '#ef4444'
     : stageMeta === 'proposal' || stageMeta === 'negotiation'
     ? '#fbbf24'
-    : '#9FD8EC'
+    : '#00A3FF'
 
-  const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' } as const
+  const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' } as const
 
   // ── Health + probability model ──────────────────────────────────────────────
   // Health = how long the deal has sat idle (time since last update). Estimated
@@ -689,21 +689,21 @@ export function OpportunityGlassWindow({
     {/* Schedule follow-up popup */}
     {followupOpen && (
       <div onClick={() => setFollowupOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Schedule follow-up</h4>
             <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
           </div>
           <div className="space-y-3">
-            <input value={fu.title} onChange={e => setFu({ ...fu, title: e.target.value })} placeholder={`Follow up: ${String(opp.name || opp.account_name || 'opportunity')}`} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <input value={fu.title} onChange={e => setFu({ ...fu, title: e.target.value })} placeholder={`Follow up: ${String(opp.name || opp.account_name || 'opportunity')}`} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Due date</label>
-              <input type="date" value={fu.due_date} onChange={e => setFu({ ...fu, due_date: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(0,163,255,0.9)' }}>Due date</label>
+              <input type="date" value={fu.due_date} onChange={e => setFu({ ...fu, due_date: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             </div>
-            <textarea value={fu.notes} onChange={e => setFu({ ...fu, notes: e.target.value })} placeholder="Notes (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <textarea value={fu.notes} onChange={e => setFu({ ...fu, notes: e.target.value })} placeholder="Notes (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Assign to {assignLoading && <span style={{ color: 'rgba(255,255,255,0.4)' }}>· loading…</span>}</label>
-              <select value={fu.assigned_to} onChange={e => { const u = assignUsers.find(x => x.id === e.target.value); setFu({ ...fu, assigned_to: e.target.value, assigned_to_name: u ? (u.full_name || u.email) : '' }) }} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }}>
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(0,163,255,0.9)' }}>Assign to {assignLoading && <span style={{ color: 'rgba(255,255,255,0.4)' }}>· loading…</span>}</label>
+              <select value={fu.assigned_to} onChange={e => { const u = assignUsers.find(x => x.id === e.target.value); setFu({ ...fu, assigned_to: e.target.value, assigned_to_name: u ? (u.full_name || u.email) : '' }) }} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }}>
                 <option value="" style={{ background: '#0b1424' }}>Me (default)</option>
                 {assignUsers.map(u => <option key={u.id} value={u.id} style={{ background: '#0b1424' }}>{u.full_name || u.email}</option>)}
               </select>
@@ -711,7 +711,7 @@ export function OpportunityGlassWindow({
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-            <button type="button" disabled={fuBusy} onClick={submitFollowup} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{fuBusy ? 'Scheduling…' : 'Schedule'}</button>
+            <button type="button" disabled={fuBusy} onClick={submitFollowup} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#00A3FF', color: 'white' }}>{fuBusy ? 'Scheduling…' : 'Schedule'}</button>
           </div>
         </div>
       </div>
@@ -720,26 +720,26 @@ export function OpportunityGlassWindow({
     {/* Log activity popup */}
     {actOpen && (
       <div onClick={() => setActOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Log activity</h4>
             <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
           </div>
           <div className="mb-3 flex flex-wrap gap-1.5">
             {(['note', 'call', 'email', 'meeting'] as const).map(t => (
-              <button key={t} type="button" onClick={() => setAct({ ...act, type: t })} className="rounded-lg px-2.5 py-1 text-[11px] font-medium capitalize" style={act.type === t ? { background: '#2f7fb8', color: 'white', border: '1px solid #2f7fb8' } : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(140,170,200,0.24)', color: 'rgba(255,255,255,0.7)' }}>{t}</button>
+              <button key={t} type="button" onClick={() => setAct({ ...act, type: t })} className="rounded-lg px-2.5 py-1 text-[11px] font-medium capitalize" style={act.type === t ? { background: '#00A3FF', color: 'white', border: '1px solid #00A3FF' } : { background: 'rgba(255,255,255,0.05)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.7)' }}>{t}</button>
             ))}
           </div>
           <div className="space-y-3">
-            <input value={act.subject} onChange={e => setAct({ ...act, subject: e.target.value })} placeholder={act.type === 'call' ? 'Call summary…' : act.type === 'email' ? 'Email subject…' : act.type === 'meeting' ? 'Meeting summary…' : 'Add a note…'} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
-            <textarea value={act.body} onChange={e => setAct({ ...act, body: e.target.value })} placeholder="Details (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <input value={act.subject} onChange={e => setAct({ ...act, subject: e.target.value })} placeholder={act.type === 'call' ? 'Call summary…' : act.type === 'email' ? 'Email subject…' : act.type === 'meeting' ? 'Meeting summary…' : 'Add a note…'} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <textarea value={act.body} onChange={e => setAct({ ...act, body: e.target.value })} placeholder="Details (optional)…" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             {(act.type === 'call' || act.type === 'meeting') && (
-              <input value={act.outcome} onChange={e => setAct({ ...act, outcome: e.target.value })} placeholder="Outcome (e.g. Connected, Voicemail)…" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+              <input value={act.outcome} onChange={e => setAct({ ...act, outcome: e.target.value })} placeholder="Outcome (e.g. Connected, Voicemail)…" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             )}
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-            <button type="button" disabled={actBusy || !act.subject.trim()} onClick={submitActivity} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{actBusy ? 'Logging…' : 'Log it'}</button>
+            <button type="button" disabled={actBusy || !act.subject.trim()} onClick={submitActivity} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#00A3FF', color: 'white' }}>{actBusy ? 'Logging…' : 'Log it'}</button>
           </div>
         </div>
       </div>
@@ -748,28 +748,28 @@ export function OpportunityGlassWindow({
     {/* Add contact popup */}
     {addContactOpen && (
       <div onClick={() => setAddContactOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.24)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Add contact</h4>
             <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
           </div>
           <div className="space-y-2">
-            <input value={nc.name} onChange={e => setNc({ ...nc, name: e.target.value })} placeholder="Name" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
-            <input value={nc.title} onChange={e => setNc({ ...nc, title: e.target.value })} placeholder="Title (optional)" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <input value={nc.name} onChange={e => setNc({ ...nc, name: e.target.value })} placeholder="Name" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+            <input value={nc.title} onChange={e => setNc({ ...nc, title: e.target.value })} placeholder="Title (optional)" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             <div className="grid grid-cols-2 gap-2">
-              <input value={nc.email} onChange={e => setNc({ ...nc, email: e.target.value })} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
-              <input value={nc.phone} onChange={e => setNc({ ...nc, phone: e.target.value })} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+              <input value={nc.email} onChange={e => setNc({ ...nc, email: e.target.value })} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
+              <input value={nc.phone} onChange={e => setNc({ ...nc, phone: e.target.value })} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }} />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(159,216,236,0.9)' }}>Role</label>
-              <select value={nc.role} onChange={e => setNc({ ...nc, role: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.24)', color: 'rgba(255,255,255,0.92)' }}>
+              <label className="mb-1 block text-[11px] uppercase tracking-wide" style={{ color: 'rgba(0,163,255,0.9)' }}>Role</label>
+              <select value={nc.role} onChange={e => setNc({ ...nc, role: e.target.value })} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.24)', color: 'rgba(255,255,255,0.92)' }}>
                 {['Decision Maker', 'Influencer', 'Economic Buyer', 'Property Manager', 'Site Contact', 'Billing', 'Technical', 'Other'].map(r => <option key={r} value={r} style={{ background: '#0b1424' }}>{r}</option>)}
               </select>
             </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-            <button type="button" disabled={ncBusy || !nc.name.trim()} onClick={addContact} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{ncBusy ? 'Adding…' : 'Add contact'}</button>
+            <button type="button" disabled={ncBusy || !nc.name.trim()} onClick={addContact} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: '#00A3FF', color: 'white' }}>{ncBusy ? 'Adding…' : 'Add contact'}</button>
           </div>
         </div>
       </div>
@@ -781,19 +781,19 @@ export function OpportunityGlassWindow({
         <div className="mb-2 flex w-full max-w-4xl items-center justify-between gap-3">
           <div className="truncate text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{preview.name}</div>
           <div className="flex shrink-0 gap-2">
-            <a href={preview.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.16)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>Open original ↗</a>
+            <a href={preview.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>Open original ↗</a>
             <button type="button" onClick={() => setPreview(null)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.82)' }}>Close</button>
           </div>
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img onClick={e => e.stopPropagation()} src={preview.url} alt={preview.name} className="max-h-[82vh] max-w-4xl rounded-2xl object-contain" style={{ border: '1px solid rgba(140,170,200,0.28)' }} />
+        <img onClick={e => e.stopPropagation()} src={preview.url} alt={preview.name} className="max-h-[82vh] max-w-4xl rounded-2xl object-contain" style={{ border: '1px solid #1E293B' }} />
       </div>
     )}
 
     {/* Rep / agent picker — any user in the organization */}
     {assignOpen && (
       <div onClick={() => setAssignOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign rep / agent</h4>
             <button type="button" onClick={() => setAssignOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -805,7 +805,7 @@ export function OpportunityGlassWindow({
               <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
                 {assignUsers.map(u => (
                   <button key={u.id} type="button" disabled={busy === 'reassign_opp'} onClick={() => doReassign(u.id, u.full_name || u.email)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}{u.role ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(159,216,236,0.7)' }}>· {u.role}</span> : null}</span>
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.full_name || u.email}{u.role ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(0,163,255,0.7)' }}>· {u.role}</span> : null}</span>
                     <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{u.email}</span>
                   </button>
                 ))}
@@ -818,7 +818,7 @@ export function OpportunityGlassWindow({
     {/* Dealer picker — assign this deal to a dealer org in your network */}
     {dealerOpen && (
       <div onClick={() => setDealerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign to dealer</h4>
             <button type="button" onClick={() => setDealerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -830,8 +830,8 @@ export function OpportunityGlassWindow({
               <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
                 {dealerOrgs.map(o => (
                   <button key={o.id} type="button" disabled={busy === 'assign_dealer'} onClick={() => doAssignDealer(o.id, o.name)} className="flex w-full items-center justify-between border-b px-3 py-2 text-left transition-colors hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{o.name}{currentDealer?.id === o.id ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(52,211,153,0.9)' }}>· current</span> : null}</span>
-                    {o.tier_label ? <span className="text-[10px] uppercase" style={{ color: 'rgba(159,216,236,0.7)' }}>{o.tier_label}</span> : null}
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.9)' }}>{o.name}{currentDealer?.id === o.id ? <span className="ml-1.5 text-[9px] uppercase" style={{ color: 'rgba(0,230,153,0.9)' }}>· current</span> : null}</span>
+                    {o.tier_label ? <span className="text-[10px] uppercase" style={{ color: 'rgba(0,163,255,0.7)' }}>{o.tier_label}</span> : null}
                   </button>
                 ))}
               </div>
@@ -843,7 +843,7 @@ export function OpportunityGlassWindow({
     {/* Manager picker — org admins */}
     {managerOpen && (
       <div onClick={() => setManagerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#2b3c52,#1e2a3a)', border: '1px solid rgba(140,170,200,0.3)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign manager</h4>
             <button type="button" onClick={() => setManagerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -862,7 +862,7 @@ export function OpportunityGlassWindow({
               </div>
             )}
           <div className="mt-3 flex justify-between">
-            <button type="button" disabled={busy === 'manager'} onClick={() => saveManager(null, null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>Clear manager</button>
+            <button type="button" disabled={busy === 'manager'} onClick={() => saveManager(null, null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>Clear manager</button>
             <button type="button" onClick={() => setManagerOpen(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>Close</button>
           </div>
         </div>
@@ -872,9 +872,9 @@ export function OpportunityGlassWindow({
       {editing && (
         <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
-            <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(95,184,224,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
-              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(95,184,224,0.18)' }}>
-                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: '#9FD8EC' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{editMode === 'property' ? 'Property details' : 'Contact & property details'}</h3></div>
+            <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(0,163,255,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(0,163,255,0.18)' }}>
+                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: '#00A3FF' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{editMode === 'property' ? 'Property details' : 'Contact & property details'}</h3></div>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
               </div>
               <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
@@ -888,7 +888,7 @@ export function OpportunityGlassWindow({
                 </div>
                 </>)}
                 {editMode === 'property' && (
-                  <div className="mb-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.24)', color: '#9FD8EC' }}>Contacts are managed in the People section above — add or edit them there.</div>
+                  <div className="mb-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.24)', color: '#00A3FF' }}>Contacts are managed in the People section above — add or edit them there.</div>
                 )}
                 <div className="mb-2 mt-4 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Account &amp; property</div>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -902,9 +902,9 @@ export function OpportunityGlassWindow({
                   <textarea value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Notes" rows={3} className="rounded-xl px-3 py-2 text-sm outline-none resize-none sm:col-span-2" style={editInput} />
                 </div>
               </div>
-              <div className="sticky bottom-0 flex justify-end gap-2 p-4" style={{ background: 'linear-gradient(0deg, rgba(8,14,28,0.98), rgba(8,14,28,0.90))', borderTop: '1px solid rgba(95,184,224,0.18)' }}>
+              <div className="sticky bottom-0 flex justify-end gap-2 p-4" style={{ background: 'linear-gradient(0deg, rgba(8,14,28,0.98), rgba(8,14,28,0.90))', borderTop: '1px solid rgba(0,163,255,0.18)' }}>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
-                <button type="button" disabled={savingEdit} onClick={saveEdit} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+                <button type="button" disabled={savingEdit} onClick={saveEdit} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#00A3FF', color: 'white' }}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
               </div>
             </div>
           </div>
@@ -912,10 +912,10 @@ export function OpportunityGlassWindow({
       )}
 
       {/* ── Header ── */}
-      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#1e2a3a)', border: '1px solid rgba(95,184,224,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+      <div className="rounded-[2rem] p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(145deg,#33465e,#151D2A)', border: '1px solid rgba(0,163,255,0.3)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#9FD8EC' }}>Opportunity</div>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#00A3FF' }}>Opportunity</div>
             {renaming ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <input
@@ -924,9 +924,9 @@ export function OpportunityGlassWindow({
                   onChange={e => setNameDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setRenaming(false) }}
                   className="min-w-[220px] flex-1 rounded-xl px-3 py-2 text-lg font-semibold outline-none"
-                  style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(95,184,224,0.4)', color: 'rgba(255,255,255,0.94)' }}
+                  style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(0,163,255,0.4)', color: 'rgba(255,255,255,0.94)' }}
                 />
-                <button type="button" disabled={busy === 'rename'} onClick={saveName} className="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-40" style={{ background: '#2f7fb8', color: 'white' }}>{busy === 'rename' ? 'Saving…' : 'Save'}</button>
+                <button type="button" disabled={busy === 'rename'} onClick={saveName} className="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-40" style={{ background: '#00A3FF', color: 'white' }}>{busy === 'rename' ? 'Saving…' : 'Save'}</button>
                 <button type="button" onClick={() => setRenaming(false)} className="rounded-full px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
               </div>
             ) : (
@@ -934,7 +934,7 @@ export function OpportunityGlassWindow({
                 <h3 className="text-2xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>
                   {val(show('name'), 'Untitled Opportunity')}
                 </h3>
-                <button type="button" onClick={startRename} title="Rename opportunity" className="mt-1 shrink-0 rounded-lg p-1.5 transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(95,184,224,0.24)', color: '#9FD8EC' }}>
+                <button type="button" onClick={startRename} title="Rename opportunity" className="mt-1 shrink-0 rounded-lg p-1.5 transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(0,163,255,0.24)', color: '#00A3FF' }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                 </button>
               </div>
@@ -963,7 +963,7 @@ export function OpportunityGlassWindow({
                 return (
                   <button key={s.key} type="button" disabled={stageBusy !== null} onClick={() => setStage(s.key)}
                     className="min-w-[70px] flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-60"
-                    style={{ background: active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.16)' : 'rgba(255,255,255,0.05)', border: `1px solid ${active ? '#2f7fb8' : done ? 'rgba(52,211,153,0.4)' : 'rgba(140,170,200,0.24)'}`, color: active ? 'white' : done ? '#6ee7b7' : 'rgba(255,255,255,0.62)' }}>
+                    style={{ background: active ? '#00A3FF' : done ? 'rgba(0,230,153,0.16)' : 'rgba(255,255,255,0.05)', border: `1px solid ${active ? '#00A3FF' : done ? 'rgba(0,230,153,0.4)' : '#1E293B'}`, color: active ? 'white' : done ? '#00E699' : 'rgba(255,255,255,0.62)' }}>
                     {stageBusy === s.key ? '…' : s.label}
                   </button>
                 )
@@ -982,23 +982,23 @@ export function OpportunityGlassWindow({
         {/* At-a-glance — assigned dealer, rep, manager, units, health (time-in-stage) + est win %. */}
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-6">
           {canAssignDealer ? (
-            <button type="button" onClick={openDealerPicker} title="Assign this deal to a dealer" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
-              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Dealer <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+            <button type="button" onClick={openDealerPicker} title="Assign this deal to a dealer" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
+              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Dealer <span style={{ color: 'rgba(0,163,255,0.6)' }}>▾</span></div>
               <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(dealerName, 'Assign')}</div>
             </button>
           ) : (
             <MiniStat label="Dealer" value={val(dealerName, 'Unassigned')} />
           )}
           {canReassign ? (
-            <button type="button" onClick={openReassign} title="Assign a rep / agent" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
-              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Rep / Agent <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+            <button type="button" onClick={openReassign} title="Assign a rep / agent" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
+              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Rep / Agent <span style={{ color: 'rgba(0,163,255,0.6)' }}>▾</span></div>
               <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(show('owner_name') ?? opp.owner_name, 'Assign')}</div>
             </button>
           ) : (
             <MiniStat label="Rep / Agent" value={val(show('owner_name') ?? opp.owner_name, 'Unassigned')} />
           )}
-          <button type="button" onClick={openManager} title="Assign a managing admin" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
-            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Manager <span style={{ color: 'rgba(95,184,224,0.6)' }}>▾</span></div>
+          <button type="button" onClick={openManager} title="Assign a managing admin" className="rounded-2xl p-3 text-left transition-all hover:brightness-125" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Manager <span style={{ color: 'rgba(0,163,255,0.6)' }}>▾</span></div>
             <div className="mt-1 truncate text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.82)' }}>{val(show('manager_name') ?? opp.manager_name, 'Assign')}</div>
           </button>
           {renderEditStat('units', 'Units', val(show('units') ?? opp.units, 'Unknown'), 'number', show('units') ?? opp.units)}
@@ -1006,7 +1006,7 @@ export function OpportunityGlassWindow({
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Idle · {health.label}</div>
             <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: health.color }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: health.color }} />{agingLabel(opp.updated_at ?? opp.created_at)}</div>
           </div>
-          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+          <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
             <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Est. win %</div>
             <div className="mt-1 text-xs font-semibold" style={{ color: estProb >= 60 ? '#34d399' : estProb >= 30 ? '#fbbf24' : '#f87171' }}>{estProb}%</div>
           </div>
@@ -1014,14 +1014,14 @@ export function OpportunityGlassWindow({
 
         {/* Deal value → Total Contract Value → weighted forecast. */}
         <div className="mt-3">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(159,216,236,0.9)' }}>Deal value · Total Contract Value</div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(0,163,255,0.9)' }}>Deal value · Total Contract Value</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {renderEditStat('install_fee', 'Install fee', installVal ? formatMoney(installVal) : 'Not set', 'number', installVal || '')}
             {renderEditStat('contract_term', 'Term (mo)', String(termVal), 'number', termVal)}
             <MiniStat label="TCV" value={tcv ? formatMoney(tcv) : '—'} />
-            <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
+            <div className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(0,163,255,0.3)' }}>
               <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Weighted · {estProb}%</div>
-              <div className="mt-1 text-xs font-semibold" style={{ color: '#9FD8EC' }}>{weightedTcv ? formatMoney(weightedTcv) : '—'}</div>
+              <div className="mt-1 text-xs font-semibold" style={{ color: '#00A3FF' }}>{weightedTcv ? formatMoney(weightedTcv) : '—'}</div>
             </div>
           </div>
           <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>TCV = MRR {formatMoney(mrrVal)} × {termVal} mo + install {formatMoney(installVal)}</div>
@@ -1044,14 +1044,14 @@ export function OpportunityGlassWindow({
                 const amt = Number(opp.amount ?? 0)
                 const prob = opp.probability != null ? Number(opp.probability) : null
                 if (!amt || prob == null) return null
-                return <div style={{ color: '#9FD8EC' }}>Expected revenue: {formatMoney(Math.round(amt * (prob / 100)))} <span style={{ color: 'rgba(255,255,255,0.45)' }}>({formatMoney(amt)} × {prob}%)</span></div>
+                return <div style={{ color: '#00A3FF' }}>Expected revenue: {formatMoney(Math.round(amt * (prob / 100)))} <span style={{ color: 'rgba(255,255,255,0.45)' }}>({formatMoney(amt)} × {prob}%)</span></div>
               })()}
             </div>
           </Section>
 
           <Section title="People">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={() => openEdit('all')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit details</button>
+              <button type="button" onClick={() => openEdit('all')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>Edit details</button>
             </div>
             {show('site_contact_name') ? (
               <MiniRow
@@ -1073,21 +1073,21 @@ export function OpportunityGlassWindow({
             {contacts.length > 0 && (
               <div className="mt-2 space-y-2">
                 {contacts.map(c => (
-                  <div key={String(c.id)} className="flex items-start justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                  <div key={String(c.id)} className="flex items-start justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{val(c.contact_name, 'Contact')}</span>
-                        {c.role && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>{String(c.role)}</span>}
-                        {c.is_primary && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.35)', color: '#6ee7b7' }}>Primary</span>}
+                        {c.role && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>{String(c.role)}</span>}
+                        {c.is_primary && <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'rgba(0,230,153,0.14)', border: '1px solid rgba(0,230,153,0.35)', color: '#00E699' }}>Primary</span>}
                       </div>
                       <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{[c.contact_title, c.contact_email, c.contact_phone].filter(Boolean).join(' • ') || 'No contact info'}</div>
                     </div>
-                    <button type="button" onClick={() => delContact(String(c.id))} title="Remove" className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>✕</button>
+                    <button type="button" onClick={() => delContact(String(c.id))} title="Remove" className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>✕</button>
                   </div>
                 ))}
               </div>
             )}
-            <button type="button" onClick={() => setAddContactOpen(true)} className="mt-2 w-full rounded-2xl px-3 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}>
+            <button type="button" onClick={() => setAddContactOpen(true)} className="mt-2 w-full rounded-2xl px-3 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.10)', border: '1px dashed rgba(0,163,255,0.4)', color: '#00A3FF' }}>
               <div className="text-xs font-semibold">+ Add contact</div>
               <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Decision maker, influencer, billing…</div>
             </button>
@@ -1103,14 +1103,14 @@ export function OpportunityGlassWindow({
             )}
             {canReassign && (
               <div className="mt-2">
-                <button type="button" onClick={openReassign} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>⇄ Reassign rep</button>
+                <button type="button" onClick={openReassign} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>⇄ Reassign rep</button>
               </div>
             )}
           </Section>
 
           <Section title="Property">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={() => openEdit('property')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(95,184,224,0.14)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>Edit property</button>
+              <button type="button" onClick={() => openEdit('property')} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>Edit property</button>
             </div>
             {(show('property_address') || property) ? (
               <MiniRow
@@ -1124,7 +1124,7 @@ export function OpportunityGlassWindow({
                 meta={show('units') ? `${show('units')} units` : property?.unit_count ? `${property.unit_count} units` : undefined}
               />
             ) : (
-              <button type="button" onClick={() => openEdit('property')} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.08)', border: '1px dashed rgba(95,184,224,0.35)', color: '#9FD8EC' }}>
+              <button type="button" onClick={() => openEdit('property')} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.08)', border: '1px dashed rgba(0,163,255,0.35)', color: '#00A3FF' }}>
                 <div className="text-xs font-semibold">+ Add property details</div>
                 <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Address, city, state, and units</div>
               </button>
@@ -1132,7 +1132,7 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Activity Timeline" count={activities.length}>
-            <button type="button" onClick={() => setActOpen(true)} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+            <button type="button" onClick={() => setActOpen(true)} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>
               <div className="text-xs font-semibold">+ Log activity</div>
               <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Call, email, meeting, or note</div>
             </button>
@@ -1150,7 +1150,7 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Tasks" count={todos.length}>
-            <button type="button" onClick={openFollowup} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(95,184,224,0.10)', border: '1px solid rgba(95,184,224,0.3)', color: '#9FD8EC' }}>
+            <button type="button" onClick={openFollowup} className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.3)', color: '#00A3FF' }}>
               <div className="text-xs font-semibold">+ Add task</div>
               <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>With a due date and notes</div>
             </button>
@@ -1162,19 +1162,19 @@ export function OpportunityGlassWindow({
                   const tid = String(t.id ?? i)
                   const done = String(t.status ?? '') === 'done'
                   return (
-                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                    <div key={tid} className="rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold" style={{ color: done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)', textDecoration: done ? 'line-through' : 'none' }}>{val(t.title, 'Task')}</div>
                           {t.body && <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>{String(t.body)}</div>}
                           <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] uppercase tracking-wide">
-                            {t.due_date && <span style={{ color: '#9FD8EC' }}>Due {fmtDate(t.due_date)}</span>}
+                            {t.due_date && <span style={{ color: '#00A3FF' }}>Due {fmtDate(t.due_date)}</span>}
                             {(t.assigned_to_name || t.owner_name) && <span style={{ color: 'rgba(255,255,255,0.5)' }}>→ {String(t.assigned_to_name || t.owner_name)}</span>}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          <button type="button" disabled={taskBusy === tid} title={done ? 'Reopen' : 'Complete'} onClick={() => completeTask(tid, !done)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: done ? 'rgba(255,255,255,0.06)' : 'rgba(52,211,153,0.14)', border: `1px solid ${done ? 'rgba(255,255,255,0.14)' : 'rgba(52,211,153,0.4)'}`, color: done ? 'rgba(255,255,255,0.6)' : '#6ee7b7' }}>{taskBusy === tid ? '…' : done ? '↺' : '✓'}</button>
-                          <button type="button" disabled={taskBusy === tid} title="Delete" onClick={() => deleteTask(tid)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>✕</button>
+                          <button type="button" disabled={taskBusy === tid} title={done ? 'Reopen' : 'Complete'} onClick={() => completeTask(tid, !done)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: done ? 'rgba(255,255,255,0.06)' : 'rgba(0,230,153,0.14)', border: `1px solid ${done ? 'rgba(255,255,255,0.14)' : 'rgba(0,230,153,0.4)'}`, color: done ? 'rgba(255,255,255,0.6)' : '#00E699' }}>{taskBusy === tid ? '…' : done ? '↺' : '✓'}</button>
+                          <button type="button" disabled={taskBusy === tid} title="Delete" onClick={() => deleteTask(tid)} className="rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>✕</button>
                         </div>
                       </div>
                     </div>
@@ -1190,7 +1190,7 @@ export function OpportunityGlassWindow({
           <Section title="Next Best Actions">
             <div className="space-y-2">
               {msg && (
-                <div className="rounded-2xl p-3 text-[11px] font-medium" style={{ background: msg.ok ? 'rgba(52,211,153,0.10)' : 'rgba(248,113,113,0.10)', border: `1px solid ${msg.ok ? 'rgba(52,211,153,0.30)' : 'rgba(248,113,113,0.30)'}`, color: msg.ok ? '#86efac' : '#fca5a5' }}>
+                <div className="rounded-2xl p-3 text-[11px] font-medium" style={{ background: msg.ok ? 'rgba(0,230,153,0.10)' : 'rgba(255,77,77,0.10)', border: `1px solid ${msg.ok ? 'rgba(0,230,153,0.30)' : 'rgba(255,77,77,0.30)'}`, color: msg.ok ? '#86efac' : '#FF4D4D' }}>
                   {msg.text}
                 </div>
               )}
@@ -1200,7 +1200,7 @@ export function OpportunityGlassWindow({
                   onClick={() => handleAction('create_project')}
                   disabled={busy !== null}
                   className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                  style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.34)', color: 'rgba(255,255,255,0.92)' }}
+                  style={{ background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.34)', color: 'rgba(255,255,255,0.92)' }}
                 >
                   <div className="text-xs font-semibold">{busy === 'create_project' ? 'Creating job…' : '🛠️ Create install job'}</div>
                   <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Turn this won deal into a job for the field team</div>
@@ -1216,7 +1216,7 @@ export function OpportunityGlassWindow({
                     onClick={() => action.action === 'schedule_followup' ? openFollowup() : handleAction(action.action)}
                     disabled={busy !== null}
                     className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                    style={{ background: 'rgba(95,184,224,0.08)', border: '1px solid rgba(95,184,224,0.22)', color: 'rgba(255,255,255,0.86)' }}
+                    style={{ background: 'rgba(0,163,255,0.08)', border: '1px solid rgba(0,163,255,0.22)', color: 'rgba(255,255,255,0.86)' }}
                   >
                     <div className="text-xs font-semibold">{busy === action.action ? 'Working…' : action.title}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{action.subtitle}</div>
@@ -1236,7 +1236,7 @@ export function OpportunityGlassWindow({
                   } catch { setMsg({ ok: false, text: 'Could not delete' }) }
                 }}
                 className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.22)', color: '#fca5a5' }}
+                style={{ background: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.22)', color: '#FF4D4D' }}
               >
                 <div className="text-xs font-semibold">Delete opportunity</div>
                 <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>Move to Deleted Items — you can restore it.</div>
@@ -1272,7 +1272,7 @@ export function OpportunityGlassWindow({
                           disabled={quoteBusy}
                           onClick={createProposal}
                           className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                          style={{ background: 'linear-gradient(135deg,#2f7fb8,#5FB8E0)', color: 'white' }}
+                          style={{ background: 'linear-gradient(135deg,#00A3FF,#00A3FF)', color: 'white' }}
                         >
                           <div className="text-xs font-semibold">{quoteBusy ? 'Creating…' : '✦ Create proposal'}</div>
                           <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>Build a quote from this opportunity</div>
@@ -1290,16 +1290,16 @@ export function OpportunityGlassWindow({
                             const qLabel = val(q.title || q.quote_number, 'Proposal')
                             return (
                               <div key={qid} className="flex items-stretch gap-2">
-                                <a href={href} target="_blank" rel="noreferrer" className="block flex-1 min-w-0 rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(95,184,224,0.3)' }}>
+                                <a href={href} target="_blank" rel="noreferrer" className="block flex-1 min-w-0 rounded-2xl p-3 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(0,163,255,0.3)' }}>
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="min-w-0 flex-1">
-                                      <div className="truncate text-xs font-semibold" style={{ color: '#9FD8EC' }}>{qLabel}</div>
+                                      <div className="truncate text-xs font-semibold" style={{ color: '#00A3FF' }}>{qLabel}</div>
                                       <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[String(status), fmtDate(q.created_at)].filter(Boolean).join(' · ')}</div>
                                     </div>
                                     {amt > 0 && <div className="shrink-0 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.84)' }}>${amt.toLocaleString()}</div>}
                                   </div>
                                 </a>
-                                <button type="button" title="Delete proposal" disabled={quoteDelBusy === qid} onClick={() => deleteQuote(qid, qLabel)} className="shrink-0 rounded-2xl px-3 font-bold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{quoteDelBusy === qid ? '…' : '✕'}</button>
+                                <button type="button" title="Delete proposal" disabled={quoteDelBusy === qid} onClick={() => deleteQuote(qid, qLabel)} className="shrink-0 rounded-2xl px-3 font-bold disabled:opacity-40" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>{quoteDelBusy === qid ? '…' : '✕'}</button>
                               </div>
                             )
                           })}
@@ -1336,7 +1336,7 @@ export function OpportunityGlassWindow({
                         disabled={!!fileBusy}
                         onClick={() => pickInto(b.key, b.accept)}
                         className="mb-2 w-full rounded-2xl px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                        style={{ background: 'rgba(95,184,224,0.10)', border: '1px dashed rgba(95,184,224,0.4)', color: '#9FD8EC' }}
+                        style={{ background: 'rgba(0,163,255,0.10)', border: '1px dashed rgba(0,163,255,0.4)', color: '#00A3FF' }}
                       >
                         <div className="text-xs font-semibold">{busy ? 'Uploading…' : b.photo ? '+ Add photos' : (b.key === 'quote_survey' ? '+ Attach existing file' : '+ Add file')}</div>
                         <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{b.hint}</div>
@@ -1349,14 +1349,14 @@ export function OpportunityGlassWindow({
                             const fid = String(f.id ?? i)
                             const href = (f.url ?? f.public_url) as string | undefined
                             return (
-                              <div key={fid} className="group relative aspect-square overflow-hidden rounded-xl" style={{ border: '1px solid rgba(140,170,200,0.2)', background: '#16232f' }}>
+                              <div key={fid} className="group relative aspect-square overflow-hidden rounded-xl" style={{ border: '1px solid #1E293B', background: '#16232f' }}>
                                 <button type="button" onClick={() => href && setPreview({ url: href, name: val(f.file_name, 'Photo') })} className="block h-full w-full" title={val(f.file_name, 'Photo')}>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={href} alt={val(f.file_name, 'Photo')} className="h-full w-full object-cover" />
                                 </button>
                                 <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                                  <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'Photo'))} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(95,184,224,0.4)', color: '#9FD8EC' }}>✎</button>
-                                  <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                                  <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'Photo'))} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>✎</button>
+                                  <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="rounded-md px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40" style={{ background: 'rgba(8,14,22,0.72)', border: '1px solid rgba(255,77,77,0.4)', color: '#FF4D4D' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
                                 </div>
                                 <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate px-1.5 py-1 text-[9px]" style={{ background: 'linear-gradient(0deg,rgba(8,14,22,0.85),transparent)', color: 'rgba(255,255,255,0.82)' }}>{val(f.file_name, 'Photo')}</div>
                               </div>
@@ -1369,13 +1369,13 @@ export function OpportunityGlassWindow({
                             const fid = String(f.id ?? i)
                             const href = (f.url ?? f.public_url) as string | undefined
                             return (
-                              <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid rgba(140,170,200,0.2)' }}>
+                              <div key={fid} className="flex items-center justify-between gap-2 rounded-2xl p-3" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
                                 <a href={href || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
-                                  <div className="truncate text-xs font-semibold" style={{ color: href ? '#9FD8EC' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
+                                  <div className="truncate text-xs font-semibold" style={{ color: href ? '#00A3FF' : 'rgba(255,255,255,0.84)' }}>{val(f.file_name, 'File')}</div>
                                   <div className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{[val(f.file_type ?? f.type, ''), fmtDate(f.created_at)].filter(Boolean).join(' · ')}</div>
                                 </a>
-                                <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'File'))} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(95,184,224,0.12)', border: '1px solid rgba(95,184,224,0.35)', color: '#9FD8EC' }}>✎</button>
-                                <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
+                                <button type="button" title="Rename" onClick={() => renameAttachment(fid, val(f.file_name, 'File'))} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.35)', color: '#00A3FF' }}>✎</button>
+                                <button type="button" disabled={fileRmBusy === fid} title="Remove" onClick={() => removeFile(fid)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.35)', color: '#FF4D4D' }}>{fileRmBusy === fid ? '…' : '✕'}</button>
                               </div>
                             )
                           })}

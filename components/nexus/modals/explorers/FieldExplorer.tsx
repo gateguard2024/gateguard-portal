@@ -88,7 +88,7 @@ export function FieldExplorer({ onBack }: Props) {
           <div className="flex gap-2">
             {openCount > 0 && (
               <span className="text-[9px] px-2 py-0.5 rounded-full font-medium"
-                style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.25)' }}>
+                style={{ background: 'rgba(255,77,77,0.12)', color: '#f87171', border: '0.5px solid rgba(255,77,77,0.25)' }}>
                 {openCount} open
               </span>
             )}
@@ -153,7 +153,7 @@ export function FieldExplorer({ onBack }: Props) {
                   style={{ gridTemplateColumns: '8px 64px 1fr 80px 60px', background: 'rgba(255,255,255,0.025)', border: '0.5px solid rgba(255,255,255,0.06)' }}>
                   <span className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ background: priHex, boxShadow: `0 0 4px ${priHex}80` }} />
-                  <span className="text-[10px] font-mono truncate" style={{ color: 'rgba(52,211,153,0.8)' }}>{wo.wo_number ?? '—'}</span>
+                  <span className="text-[10px] font-mono truncate" style={{ color: 'rgba(0,230,153,0.8)' }}>{wo.wo_number ?? '—'}</span>
                   <div className="min-w-0">
                     <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>{wo.title ?? '—'}</p>
                     {wo.customer_name && <p className="text-[9px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>{wo.customer_name}</p>}

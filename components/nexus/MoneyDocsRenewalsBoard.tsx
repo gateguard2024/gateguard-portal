@@ -34,7 +34,7 @@ function bucketColor(bucket: RenewalBucket): string {
   if (bucket === 'needs_followup') return '#F87171'
   if (bucket === 'expiring_soon') return '#FBBF24'
   if (bucket === 'recently_renewed') return '#34D399'
-  return '#5FB8E0'
+  return '#00A3FF'
 }
 
 export function MoneyDocsRenewalsBoard() {
