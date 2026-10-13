@@ -201,6 +201,7 @@ export function OpportunityGlassWindow({
       const body = {
         title,
         opportunity_id: oppIdStr,
+        quote_mode: 'partnership',
         client_name: anyC.name || anyCo.name || opp.account_name || null,
         client_email: anyC.email || opp.contact_email || null,
         property_name: anyP.name || opp.property_name || anyP.address || null,

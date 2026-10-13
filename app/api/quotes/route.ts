@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
     notes,
     valid_until,
     line_items,
+    quote_mode,
   } = body
 
   if (!title) {
@@ -124,6 +125,7 @@ export async function POST(req: NextRequest) {
     title,
     property_name:  property_name ?? null,
     units:          units ?? null,
+    quote_mode:     quote_mode ?? null,
     status:         'draft',
     notes:          notes ?? null,
     valid_until:    valid_until ?? null,

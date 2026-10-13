@@ -293,7 +293,7 @@ export function PartnershipEditor({ id }: { id: string }) {
           <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', fontWeight: 800, fontSize: 13, color: '#dbe6f2', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save & edit later'}</button>
         </div>
         <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <button onClick={() => window.print()} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: CYAN, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
+          <button onClick={async () => { await save(); window.open(`/api/quotes/${id}/proposal-pdf`, '_blank') }} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: CYAN, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Download PDF</button>
           {approved
             ? <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
             : <span title="Locked until approved" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.55)', fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>🔒 Client link</span>}
