@@ -69,6 +69,12 @@ export interface PartnershipConfig {
   addon_gate_hinge_rate?: number // default 150 /gate/mo
   addon_camera_rate?: number     // default 100 /camera/mo
   valid_days?: number       // default 30
+  // Rep signature block — editable per proposal; falls back to the quote creator's
+  // profile (name / org / phone / email) when a field is left blank.
+  rep_name?: string
+  rep_dealer?: string
+  rep_phone?: string
+  rep_email?: string
   // Optional programs — each shown only if elected on the proposal/agreement.
   offer_smart_locks?: boolean
   smart_lock_resident_fee?: number      // resident P&A/unit/yr once smart locks elected (default 150)
@@ -308,10 +314,10 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     termMonths, termYears: Math.max(1, Math.round(termMonths / 12)),
     addonGateRate, addonCameraRate, addonGateTotal: addonGateRate * gates,
     validDays: n(cfg.valid_days, 30),
-    preparedBy: String(quote?.created_by_name || 'Russel Feldman'),
-    preparedByDealer: String(quote?.org_name || quote?.dealer_name || 'Gate Guard, LLC'),
-    preparedByPhone: String(quote?.created_by_phone || ''),
-    preparedByEmail: String(quote?.created_by_email || ''),
+    preparedBy: String(cfg.rep_name || quote?.created_by_name || 'Russel Feldman'),
+    preparedByDealer: String(cfg.rep_dealer || quote?.org_name || quote?.dealer_name || 'Gate Guard, LLC'),
+    preparedByPhone: String(cfg.rep_phone || quote?.created_by_phone || ''),
+    preparedByEmail: String(cfg.rep_email || quote?.created_by_email || ''),
     // Optional programs
     offerSmartLocks: !!cfg.offer_smart_locks,
     smartLockResidentFee, smartLockInstallPerUnit,

@@ -34,7 +34,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
   const dateStr = new Date(quote?.sent_at || quote?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   const resident = r.billingMode === 'resident'
 
-  const paper: React.CSSProperties = { maxWidth: 780, margin: '0 auto', background: '#fff', color: INK, padding: '40px 48px', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif', fontSize: 14, lineHeight: 1.55 }
+  const paper: React.CSSProperties = { maxWidth: 780, margin: '0 auto', background: '#fff', color: INK, padding: '40px 48px', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif', fontSize: 14, lineHeight: 1.55, borderRadius: 14, boxShadow: '0 40px 90px -30px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.3)' }
   const termCell: React.CSSProperties = { flex: 1, padding: '12px 14px' }
 
   return (

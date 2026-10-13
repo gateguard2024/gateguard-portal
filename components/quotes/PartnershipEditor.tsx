@@ -152,6 +152,30 @@ export function PartnershipEditor({ id }: { id: string }) {
   const previewQuote = useMemo(() => ({ ...(quote ?? {}), property_name: propName, property_address: propAddr, units: Number(units) || 0 }), [quote, propName, propAddr, units])
   const r = useMemo(() => resolvePartnership(previewQuote, cfg), [previewQuote, cfg])
   const resident = (cfg.billing_mode ?? 'resident') !== 'property_monthly'
+
+  // Deal viability (PASS/FAIL) from the ROI calculator — ROI ≤ 4 mo, positive
+  // monthly profit, AND ≥ 30% margin. Runs server-side so cost constants stay off
+  // the client; scope mapped from this deal's openings + fees.
+  const [dealRoi, setDealRoi] = useState<{ pass: boolean; netMargin: number; roiMonths: number } | null>(null)
+  useEffect(() => {
+    const u = Number(units) || 0
+    const payload = {
+      units: u, setupFee: r.setupFee, monthlyPA: r.residentFee,
+      monthlyBulkFee: (cfg.billing_mode === 'property_monthly' && u > 0) ? (Number(cfg.property_monthly) || 0) / u : 0,
+      workingVehGates: cfg.entry_gates_working ?? cfg.entry_gates ?? 0,
+      nonWorkingVehGates: cfg.entry_gates_repair ?? 0,
+      exitGates: (cfg.exit_gates_working ?? cfg.exit_gates ?? 0) + (cfg.exit_gates_repair ?? 0),
+      workingAccessDoors: cfg.amenity_doors_working ?? cfg.amenity_doors ?? 0,
+      nonWorkingAccessDoors: cfg.amenity_doors_repair ?? 0,
+      newCameras: cfg.cameras ?? 0,
+    }
+    const t = setTimeout(() => {
+      fetch('/api/roi/compute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(res => res.json()).then(j => { if (j?.result) setDealRoi({ pass: !!j.result.pass, netMargin: j.result.netMargin ?? 0, roiMonths: j.result.roiMonths ?? 0 }) })
+        .catch(() => {})
+    }, 350)
+    return () => clearTimeout(t)
+  }, [r.setupFee, r.residentFee, cfg, units])
   const residentAuto = cfg.resident_fee_auto !== false // default on
 
   // Pull the rough calculator's $/unit/month for this site, then derive the
@@ -364,6 +388,13 @@ export function PartnershipEditor({ id }: { id: string }) {
 
         {err && <div style={{ color: '#b91c1c', fontSize: 12, marginBottom: 8 }}>{err}</div>}
 
+        {dealRoi && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, padding: '10px 12px', borderRadius: 10, background: dealRoi.pass ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.12)', border: `1px solid ${dealRoi.pass ? 'rgba(0,230,153,0.4)' : 'rgba(255,77,77,0.4)'}` }}>
+            <div style={{ fontSize: 11.5, color: '#c3d3e2', lineHeight: 1.35 }}>Deal viability · ROI calc<br /><span style={{ color: '#8fa4b8', fontSize: 10.5 }}>{Math.round((dealRoi.netMargin || 0) * 100)}% margin · {isFinite(dealRoi.roiMonths) ? dealRoi.roiMonths : '∞'} mo payback · needs ≥30% &amp; ≤4mo</span></div>
+            <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: '0.04em', color: dealRoi.pass ? '#00E699' : '#FF4D4D' }}>{dealRoi.pass ? 'PASS' : 'FAIL'}</div>
+          </div>
+        )}
+
         <Sec t="Property & contact" />
         <Field l="Property name"><input value={propName} onChange={e => { setPropName(e.target.value); setSaved(false) }} style={inS} /></Field>
         <div style={{ height: 8 }} /><Field l="Short name (headers / 'walking me through …')"><input value={cfg.property_short ?? ''} onChange={e => set('property_short', e.target.value)} placeholder="The Halston  ·  Bridgewater" style={inS} /></Field>
@@ -374,6 +405,15 @@ export function PartnershipEditor({ id }: { id: string }) {
           <Field l="Management co"><input value={cfg.management_co ?? ''} onChange={e => set('management_co', e.target.value)} style={inS} /></Field>
           <Field l="Units"><input type="number" min={0} value={units} onChange={e => { setUnits(e.target.value); setSaved(false) }} style={inS} /></Field>
         </div>
+
+        <Sec t="Your signature (on the proposal & email)" />
+        <Field l="Rep name"><input value={cfg.rep_name ?? ''} onChange={e => set('rep_name', e.target.value)} placeholder="Leave blank to use your profile" style={inS} /></Field>
+        <div style={{ height: 8 }} /><Field l="Dealer / company"><input value={cfg.rep_dealer ?? ''} onChange={e => set('rep_dealer', e.target.value)} placeholder="Your dealer name" style={inS} /></Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+          <Field l="Phone"><input value={cfg.rep_phone ?? ''} onChange={e => set('rep_phone', e.target.value)} placeholder="(555) 123-4567" style={inS} /></Field>
+          <Field l="Email"><input value={cfg.rep_email ?? ''} onChange={e => set('rep_email', e.target.value)} placeholder="you@dealer.com" style={inS} /></Field>
+        </div>
+        <div style={{ fontSize: 11, color: '#8fa4b8', marginTop: 6 }}>Shows under “Respectfully,” on the letter and in the sent email. Blank fields fall back to your profile.</div>
 
         <Sec t="Openings & condition" />
         <div style={{ fontSize: 11, color: '#8fa4b8', marginBottom: 8 }}>Count each opening as Working or Needs repair. Repair openings price higher — the letter writes itself.</div>

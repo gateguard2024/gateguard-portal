@@ -920,6 +920,13 @@ export default function QuoteDetailPage() {
 
   useEffect(() => { fetchQuote(); }, [fetchQuote]);
 
+  // Partnership proposals are edited in the dedicated partnership editor, not the
+  // line-item builder. Any link that lands here for a partnership quote bounces
+  // to the right page so you return to the proposal you were building.
+  useEffect(() => {
+    if (quote?.quote_mode === 'partnership') router.replace(`/quotes/${id}/partnership`);
+  }, [quote?.quote_mode, id, router]);
+
   // Fetch available surveys once on mount
   useEffect(() => {
     (async () => {
