@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { PartnershipProposal } from '@/components/public/PartnershipProposal'
 import { resolvePartnership, money, residentFeeFromMonthly, type PartnershipConfig, type BillingMode } from '@/lib/partnership-proposal'
+import { NEXUS_BG } from '@/components/nexus/NexusBackdrop'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Quote = Record<string, any>
@@ -47,7 +48,7 @@ function Stepper({ label, value, onChange, min = 0, step = 1, prefix = '' }: { l
     </div>
   )
 }
-const groupCard: React.CSSProperties = { padding: 10, borderRadius: 10, background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', marginBottom: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }
+const groupCard: React.CSSProperties = { padding: 10, borderRadius: 12, background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(255,255,255,0.09)', marginBottom: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 20px 44px -28px rgba(0,0,0,0.85)' }
 const groupTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: TXT_DK, marginBottom: 6 }
 const toggleRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: TXT_DK, fontWeight: 600 }
 
@@ -181,18 +182,19 @@ export function PartnershipEditor({ id }: { id: string }) {
     }
   }, [residentAuto, suggestedFee, cfg.resident_fee])
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true); setErr(null)
     try {
       const res = await fetch(`/api/quotes/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnership: cfg, quote_mode: 'partnership', property_name: propName, property_address: propAddr, units: Number(units) || 0 }),
       })
-      if (!res.ok) { const j = await res.json().catch(() => ({})); setErr(j?.error || 'Save failed.'); return }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setErr(j?.error || 'Save failed.'); return false }
       setSaved(true)
       // Server resets a dealer's proposal to 'draft' on save; corporate auto-approves.
       setReviewStatus(isCorporate ? 'approved' : 'draft')
-    } catch { setErr('Save failed.') }
+      return true
+    } catch { setErr('Save failed.'); return false }
     finally { setSaving(false) }
   }
 
@@ -235,7 +237,7 @@ export function PartnershipEditor({ id }: { id: string }) {
   if (!quote) return <div style={{ padding: 40, color: MUT }}>Loading…</div>
 
   return (
-    <div className="pp-root" style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#EEF3FA 0%,#E7EEF7 100%)', display: 'flex' }}>
+    <div className="pp-root" style={{ minHeight: '100vh', background: NEXUS_BG, display: 'flex' }}>
       <style>{`@media print {
         .pp-form,.pp-bar{display:none!important}
         /* The preview is a 100vh scroll container on screen; in print it must grow
@@ -246,7 +248,7 @@ export function PartnershipEditor({ id }: { id: string }) {
       }`}</style>
 
       {/* Left form */}
-      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(255,255,255,0.09)', background: 'linear-gradient(180deg,#1E293B 0%,#16202e 100%)' }}>
+      <aside className="pp-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(255,255,255,0.09)', background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(26,36,54,0.92),rgba(15,22,36,0.94))', backdropFilter: 'blur(18px) saturate(1.15)', boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.05), 0 0 60px -20px rgba(0,0,0,0.8)' }}>
         <div className="pp-bar" style={{ marginBottom: 10 }}>
           <button
             onClick={() => {
@@ -262,9 +264,12 @@ export function PartnershipEditor({ id }: { id: string }) {
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
           >← Back to opportunity</button>
         </div>
+        <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button onClick={async () => { const ok = await save(); if (ok) await review('submit') }} disabled={saving || busy === 'submit'} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04202e', background: 'linear-gradient(135deg,#00A3FF,#1d5c86)', cursor: 'pointer' }}>{saving || busy === 'submit' ? 'Saving…' : 'Save & review'}</button>
+          <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', fontWeight: 800, fontSize: 13, color: '#dbe6f2', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save & edit later'}</button>
+        </div>
         <div className="pp-bar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 0, fontWeight: 800, fontSize: 13, color: '#04231a', background: 'linear-gradient(135deg,#3ddc97,#12b886)', cursor: 'pointer' }}>{saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save proposal'}</button>
-          <button onClick={() => window.print()} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: CYAN, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
+          <button onClick={() => window.print()} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(47,127,184,0.4)', background: '#e2eefb', color: CYAN, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>PDF</button>
           {approved
             ? <a href={`/quotes/${id}/proposal`} target="_blank" rel="noreferrer" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.25)', background: '#fff', color: MUT, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>Open ↗</a>
             : <span title="Locked until approved" style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(70,100,140,0.16)', color: 'rgba(90,112,140,0.55)', fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>🔒 Client link</span>}

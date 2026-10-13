@@ -22,12 +22,13 @@ export type BackdropVariant = 'hero' | 'page'
 
 // The base gradient. Every Nexus screen shares this exact value.
 export const NEXUS_BG =
-  // 2036 Hybrid canvas: pale steel blue-grey (mockup canvas). Base runs
-  // #313f54 -> #3b4e66 -> #445a73 with soft teal/cyan accent glows up top. One
-  // token; every Nexus screen inherits it.
-  'radial-gradient(ellipse at 50% -8%, rgba(45,212,191,0.10) 0%, transparent 44%),' +
-  'radial-gradient(ellipse at 88% 6%, rgba(56,189,248,0.08) 0%, transparent 38%),' +
-  'linear-gradient(160deg, #313f54 0%, #3b4e66 52%, #445a73 100%)'
+  // Matches the My Day command center exactly: a lifted dark-navy canvas with two
+  // ambient depth glows (cyan top-left, indigo bottom-right). One token; every
+  // Nexus screen inherits the same background My Day uses, so nothing reads as a
+  // different, lighter page.
+  'radial-gradient(1100px 720px at 8% -8%, rgba(30,150,230,0.14), transparent 58%),' +
+  'radial-gradient(1100px 760px at 100% 112%, rgba(107,126,255,0.13), transparent 55%),' +
+  'linear-gradient(180deg, #141d2e 0%, #0e1521 55%, #0b111b 100%)'
 
 /**
  * Decorative layers only — render inside a `relative` container that already
