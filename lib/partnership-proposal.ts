@@ -136,6 +136,9 @@ export interface ResolvedPartnership {
   addonGateTotal: number
   validDays: number
   preparedBy: string
+  preparedByDealer: string
+  preparedByPhone: string
+  preparedByEmail: string
   // Optional programs
   offerSmartLocks: boolean
   smartLockResidentFee: number
@@ -306,6 +309,9 @@ export function resolvePartnership(quote: Quote, cfg: PartnershipConfig = {}): R
     addonGateRate, addonCameraRate, addonGateTotal: addonGateRate * gates,
     validDays: n(cfg.valid_days, 30),
     preparedBy: String(quote?.created_by_name || 'Russel Feldman'),
+    preparedByDealer: String(quote?.org_name || quote?.dealer_name || 'Gate Guard, LLC'),
+    preparedByPhone: String(quote?.created_by_phone || ''),
+    preparedByEmail: String(quote?.created_by_email || ''),
     // Optional programs
     offerSmartLocks: !!cfg.offer_smart_locks,
     smartLockResidentFee, smartLockInstallPerUnit,
@@ -403,7 +409,7 @@ export function buildProposalEmail(
     <div style="font-weight:700;color:#16283d;margin:14px 0 4px">Term</div>
     <p style="margin:0 0 10px">${r.termYears}-year term from Go-Live, renewing in one-year terms unless either party gives 60 days' notice. The matching service agreement is attached.</p>
     ${signBtn}
-    <p style="margin-top:20px">Respectfully,<br><b>${quote?.created_by_name || 'Gate Guard'}</b><br><span style="color:#5a708c">Gate Guard, LLC · (770) 776-8095 · rfeldman@gateguard.co</span></p>
+    <p style="margin-top:20px">Respectfully,<br><b>${r.preparedBy}</b><br><span style="color:#5a708c">${[r.preparedByDealer, r.preparedByPhone, r.preparedByEmail].filter(Boolean).join(' · ')}</span></p>
   </div>`
 
   const textLines = [
@@ -416,7 +422,7 @@ export function buildProposalEmail(
     ...(addonLines.length ? ['Optional add-ons (none required):', ...addonLines.map(a => `• ${a.replace(/&amp;/g, '&')}`), ''] : []),
     `${r.termYears}-year term from Go-Live. The matching service agreement is attached.`,
     ...(proposalLink ? ['', `View & sign online: ${proposalLink}`] : []),
-    '', 'Respectfully,', `${quote?.created_by_name || 'Gate Guard'} — Gate Guard, LLC`,
+    '', 'Respectfully,', `${r.preparedBy} — ${r.preparedByDealer}`, [r.preparedByPhone, r.preparedByEmail].filter(Boolean).join(' · '),
   ]
   return { subject, html, text: textLines.join('\n') }
 }

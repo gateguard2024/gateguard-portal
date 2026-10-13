@@ -20,7 +20,7 @@ export async function GET(
   const { data: quote, error } = await supabase
     .from('quotes')
     .select(`
-      id, quote_number, org_id, client_org_id, site_id,
+      id, quote_number, org_id, client_org_id, site_id, created_by,
       title, status, property_name, units,
       total_one_time, total_mrr, dealer_mrr,
       valid_until, accepted_at, sent_at, declined_at,
@@ -88,7 +88,27 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const itemsWithImages = sortedItems.map((i: any) => ({ ...i, image_url: i.product_id ? (imgById.get(i.product_id) ?? null) : null }))
 
-  return NextResponse.json({ quote: { ...quote, quote_line_items: itemsWithImages, client_org_name, site_name } })
+  // Rep (creator) contact for the proposal signature: their dealer, phone, email.
+  let created_by_phone: string | null = null
+  let created_by_email: string | null = null
+  let dealer_name: string | null = null
+  if (quote.created_by) {
+    const { data: rep } = await supabase
+      .from('profiles')
+      .select('phone, email, org_id')
+      .eq('id', quote.created_by)
+      .maybeSingle()
+    if (rep) {
+      created_by_phone = rep.phone ?? null
+      created_by_email = rep.email ?? null
+      if (rep.org_id) {
+        const { data: repOrg } = await supabase.from('organizations').select('name').eq('id', rep.org_id).maybeSingle()
+        dealer_name = repOrg?.name ?? null
+      }
+    }
+  }
+
+  return NextResponse.json({ quote: { ...quote, quote_line_items: itemsWithImages, client_org_name, site_name, created_by_phone, created_by_email, dealer_name } })
 }
 
 // PATCH /api/quotes/[id] — update fields + handle status transitions

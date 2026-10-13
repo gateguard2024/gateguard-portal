@@ -34,7 +34,7 @@ export async function proposalPdfBuffer(quote: Quote, cfg: PartnershipConfig = {
     // Letterhead
     const top = pdf.y
     pdf.font('Helvetica-Bold').fontSize(16).fillColor(NAVY).text('GATEGUARD', L, top)
-    pdf.font('Helvetica').fontSize(8.5).fillColor(MUT).text('Gate Guard, LLC · 980 Hammond Drive, Ste. 200 · Atlanta, GA 30328\n844-4MY-GATE | (770) 776-8095 · rfeldman@gateguard.co', L, top + 1, { align: 'right', width: W })
+    pdf.font('Helvetica').fontSize(8.5).fillColor(MUT).text('Gate Guard, LLC · 844-4MY-GATE · info@gateguard.co', L, top + 1, { align: 'right', width: W })
     pdf.moveDown(0.6); rule(CYAN, 2); pdf.moveDown(0.6)
 
     pdf.font('Helvetica').fontSize(9).fillColor(MUT).text(dateStr)
@@ -95,8 +95,8 @@ export async function proposalPdfBuffer(quote: Quote, cfg: PartnershipConfig = {
 
     pdf.moveDown(0.6)
     pdf.font('Helvetica').fontSize(10).fillColor(BODY).text('Respectfully,')
-    pdf.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(String(quote?.created_by_name || 'Gate Guard'))
-    pdf.font('Helvetica').fontSize(9).fillColor(MUT).text('Gate Guard, LLC · (770) 776-8095 · rfeldman@gateguard.co')
+    pdf.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(r.preparedBy)
+    pdf.font('Helvetica').fontSize(9).fillColor(MUT).text([r.preparedByDealer, r.preparedByPhone, r.preparedByEmail].filter(Boolean).join(' · '))
 
     pdf.end()
   })

@@ -40,10 +40,13 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
   return (
     <div style={paper}>
       {/* Letterhead */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${CYAN}`, paddingBottom: 12, marginBottom: 20 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: NAVY, letterSpacing: '0.02em' }}>GATE<span style={{ color: CYAN }}>GUARD</span></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${CYAN}`, paddingBottom: 12, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/gg-badge.png" alt="Gate Guard" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          <div style={{ fontSize: 20, fontWeight: 800, color: NAVY, letterSpacing: '0.02em' }}>GATE<span style={{ color: CYAN }}>GUARD</span></div>
+        </div>
         <div style={{ textAlign: 'right', fontSize: 11.5, color: MUT, lineHeight: 1.5 }}>
-          Gate Guard, LLC<br />980 Hammond Drive, Ste. 200 · Atlanta, GA 30328<br />844-4MY-GATE | (770) 776-8095 · rfeldman@gateguard.co
+          Gate Guard, LLC<br />844-4MY-GATE · info@gateguard.co
         </div>
       </div>
 
@@ -218,7 +221,7 @@ export function PartnershipProposal({ quote, cfg }: { quote: any; cfg?: Partners
 
       <p style={{ margin: '14px 0 12px' }}>This proposal is valid for {r.validDays} days. I am glad to walk it through with your regional or ownership group, and to build a savings model showing what {r.property} is spending today against what this program eliminates.</p>
       <p style={{ margin: '0 0 4px' }}>Respectfully,</p>
-      <p style={{ margin: 0, fontSize: 13 }}><b>{r.preparedBy}</b><br /><span style={{ color: MUT, fontSize: 12 }}>Gate Guard, LLC · (770) 776-8095 · rfeldman@gateguard.co</span></p>
+      <p style={{ margin: 0, fontSize: 13 }}><b>{r.preparedBy}</b><br /><span style={{ color: MUT, fontSize: 12 }}>{[r.preparedByDealer, r.preparedByPhone, r.preparedByEmail].filter(Boolean).join(' · ')}</span></p>
 
       {/* Acceptance */}
       <div style={{ marginTop: 24, padding: 16, border: '1px solid #d8e1ea', borderRadius: 10, background: '#f8fafc' }}>

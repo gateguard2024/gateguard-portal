@@ -24,7 +24,7 @@ export async function GET(
   const selectCols = (withOptional: boolean) => `
       id, quote_number, title, status, property_name, units,
       total_one_time, total_mrr, valid_until, accepted_at, sent_at, declined_at,
-      notes, share_token, org_id, opportunity_id, created_at,
+      notes, share_token, org_id, opportunity_id, created_at, created_by,
       quote_mode, client_name, client_email, client_phone, property_address,
       cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
       package_mode, selected_package, created_by_name, expiry_date,
@@ -113,11 +113,20 @@ export async function GET(
     org_name = org?.name ?? null
   }
 
+  // Rep (creator) contact for the proposal signature.
+  let created_by_phone: string | null = null
+  let created_by_email: string | null = null
+  if (quote.created_by) {
+    const { data: rep } = await supabase.from('profiles').select('phone, email').eq('id', quote.created_by).maybeSingle()
+    created_by_phone = rep?.phone ?? null
+    created_by_email = rep?.email ?? null
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { quote_line_items: _raw, ...quoteRest } = quote as typeof quote & { quote_line_items: unknown[] }
 
   return NextResponse.json({
-    quote:     { ...quoteRest, org_name },
+    quote:     { ...quoteRest, org_name, created_by_phone, created_by_email },
     lineItems,
     org_name,
   })
