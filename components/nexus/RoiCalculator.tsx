@@ -144,10 +144,10 @@ export function RoiCalculator() {
   const dealerAnnual = r ? (r.dealerFee || 0) * 12 + (inp.additionalDealerInstall || 0) : 0
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,360px) 1fr', gap: 18, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,360px) 1fr', gap: 18, alignItems: 'stretch', height: 'calc(100dvh - 240px)', minHeight: 480, overflow: 'hidden' }}>
 
       {/* LEFT — INPUTS */}
-      <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 16, alignContent: 'start', overflowY: 'auto', minHeight: 0, height: '100%', paddingRight: 8 }}>
         <Group title="Site & terms">
           <Field label="Units" value={inp.units} onChange={v => set('units', v)} />
           <Field label="Term (months)" value={inp.termMonths} onChange={v => set('termMonths', v)} />
@@ -187,7 +187,7 @@ export function RoiCalculator() {
       </div>
 
       {/* RIGHT — OUTPUTS */}
-      <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 16, alignContent: 'start', overflowY: 'auto', minHeight: 0, height: '100%', paddingRight: 8 }}>
         {!r || !inp.units ? (
           <div style={{ ...glass, borderRadius: 18, padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 260 }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, background: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, boxShadow: '0 0 24px rgba(74,140,255,0.35)' }}>
@@ -237,7 +237,7 @@ export function RoiCalculator() {
                 <Stat label="Annual profit" value={usd(r.annualProfit)} tone={r.annualProfit >= 0 ? 'good' : 'bad'} />
                 <Stat label="Net margin" value={`${Math.round((r.netMargin || 0) * 100)}%`} tone={(r.netMargin || 0) >= 0.30 ? 'good' : 'bad'} sub="of billed · ≥30% to pass" />
                 <Stat label="Start-up profit" value={usd(r.startupProfit)} tone={r.startupProfit >= 0 ? 'good' : 'bad'} sub={`fees − ${usd(r.startupCogs)} install`} />
-                <Stat label="GG equipment margin" value={usd(r.ggEquipmentMargin)} tone="good" sub={`dealer ${usd(r.startupCogs)} − GG cost ${usd(r.corpInstallCost)}`} />
+                <Stat label="GG hardware cost (ref)" value={usd(r.corpInstallCost)} sub="reference only — all set-up profit is the dealer's" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 11 }}>
                 <Breakdown title="Monthly revenue" lines={r.revenueBreakdown} total={r.monthlyRevenue} />
@@ -270,6 +270,8 @@ export function RoiCalculator() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 11, marginTop: 12 }}>
               {Array.isArray(r.revenueBreakdown) && r.revenueBreakdown.length > 0 && <Breakdown title="Monthly income" lines={r.revenueBreakdown} total={r.monthlyRevenue} />}
+              {Array.isArray(r.payrollBreakdown) && r.payrollBreakdown.length > 0 && <Breakdown title="Fees & payouts (dealer)" lines={r.payrollBreakdown} total={r.payroll} />}
+              {Array.isArray(r.monthlyBreakdown) && r.monthlyBreakdown.length > 0 && <Breakdown title="Monthly platform cost" lines={r.monthlyBreakdown} total={r.monthlyCogs} />}
               {Array.isArray(r.startupBreakdown) && r.startupBreakdown.length > 0 && <Breakdown title="Equipment & install — setup cost" lines={r.startupBreakdown} total={r.startupCogs} />}
             </div>
           </div>

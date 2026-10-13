@@ -181,7 +181,7 @@ export function SalesSurface() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <button type="button" onClick={() => router.push('/quotes/new')} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: BRAND, color: '#041018' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Quote</button>
+            <button type="button" onClick={() => setActivePanel('new-opp')} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: BRAND, color: '#041018' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Opportunity</button>
             <button type="button" onClick={() => setLeadsHub(true)} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> New Lead</button>
             <button type="button" onClick={() => setActivePanel('rough-calc')} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M9 7h6M9 11h6M9 15h4M5 3h14v18H5z" /></svg> ROI</button>
           </div>
@@ -206,7 +206,7 @@ export function SalesSurface() {
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
           {/* Active deals */}
           <div className="rounded-2xl" style={TILE_STYLE}>
-            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Active Sales Deals</span><button type="button" onClick={() => setOppsHub(true)} className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: 'rgba(0,163,224,0.12)', color: '#00A3E0', border: '1px solid rgba(0,163,224,0.3)' }}>Open board →</button></div>
+            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Open Opportunities</span><button type="button" onClick={() => setOppsHub(true)} className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: 'rgba(0,163,224,0.12)', color: '#00A3E0', border: '1px solid rgba(0,163,224,0.3)' }}>Open board →</button></div>
             <div className="p-4">
               {loading ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>Loading deals…</div>
                 : activeDeals.length === 0 ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>No open deals yet. Start a quote to build pipeline.</div>
