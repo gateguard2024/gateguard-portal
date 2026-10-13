@@ -21,7 +21,7 @@ import { GateReboots } from '@/components/nexus/GateReboots';
 import { SiteCameraEvents } from '@/components/nexus/SiteCameraEvents';
 import { SiteNetworkDevices } from '@/components/nexus/SiteNetworkDevices';
 
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 
 type Summary = {

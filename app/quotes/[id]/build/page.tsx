@@ -27,7 +27,7 @@ import { ModuleCard } from '@/components/quotes/ModuleCard'
 type Quote = Record<string, any>
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString()
 
-const FRAME = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const FRAME = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
 const HEADER = 'linear-gradient(180deg,#33465e,#151D2A)'
 const ACCENT = '#00A3FF'
 

@@ -26,9 +26,9 @@ type Dash = {
 }
 type WbOpp = { id: string; name?: string | null; account_name?: string | null; stage?: string | null; est_mrr?: number | null; updated_at?: string | null }
 
-const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
-const TILE_STYLE = { background: TILE, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -30px rgba(0,0,0,0.8)' } as const
+const TILE = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
+const TILE_STYLE = { background: TILE, border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 34px 70px -32px rgba(0,0,0,0.85)' } as const
 
 const FU_STYLE: Record<FollowUp['type'], { fg: string; bg: string; label: string }> = {
   call: { fg: '#00A3FF', bg: 'rgba(0,163,255,0.16)', label: 'Call' },
@@ -144,8 +144,8 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
             <div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Sales</div><h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Opportunity Hub</h2></div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-0.5 rounded-xl p-0.5" style={{ background: '#111826', border: '1px solid #1E293B' }}>
-                <button type="button" onClick={() => setMine(true)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#5a6c84' }}>My deals</button>
-                <button type="button" onClick={() => setMine(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={!mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#5a6c84' }}>All deals</button>
+                <button type="button" onClick={() => setMine(true)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#1E293B' }}>My deals</button>
+                <button type="button" onClick={() => setMine(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={!mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#1E293B' }}>All deals</button>
               </div>
               <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#1E293B', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#00A3FF' }}>⌕</span> Search deals…</button>
             </div>
@@ -275,7 +275,7 @@ function WorkExistingDeal({ initialQuery, onBack, onOpen }: { initialQuery: stri
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onBack}>
-      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Work Existing Deal</div>
         <h3 className="mb-3 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Pick a deal to work</h3>
         <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>

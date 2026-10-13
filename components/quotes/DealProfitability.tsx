@@ -56,7 +56,7 @@ export function DealProfitability({ lines, selected, laborRate }: {
     [mo ? `${money(mo)}/mo` : '', set ? money(set) : ''].filter(Boolean).join(' + ') + suffix || '—'
 
   return (
-    <div className="rounded-xl p-3 mb-3" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid rgba(0,163,255,0.34)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
+    <div className="rounded-xl p-3 mb-3" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(0,163,255,0.34)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
       <div className="flex items-center gap-2 mb-2.5">
         <div className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>📊 Deal profitability</div>
         <span className="ml-auto text-[11px] font-bold rounded-md px-2 py-0.5" style={{ background: `${marginColor}22`, border: `1px solid ${marginColor}66`, color: marginColor }}>{Math.round(roll.margin * 100)}% margin</span>

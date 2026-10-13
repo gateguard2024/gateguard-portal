@@ -27,8 +27,8 @@ type Dash = {
 }
 type WbLead = { id: string; contact_name?: string | null; company_name?: string | null; stage?: string | null; location?: string | null; source?: string | null; updated_at?: string | null }
 
-const FRAME_STYLE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE = 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)'
+const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
+const TILE = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
 const TILE_STYLE = { background: TILE, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const CELL_INPUT = { background: '#0f1a26', border: '1px solid rgba(0,163,255,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', width: 74, fontSize: 12, outline: 'none' } as const
 
@@ -321,7 +321,7 @@ function WorkExistingLead({ initialQuery, onBack, onOpen }: { initialQuery: stri
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onBack}>
-      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Work Existing Lead</div>
         <h3 className="mb-3 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Pick a lead to work</h3>
         <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>
@@ -373,7 +373,7 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const inStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>New Lead</div>
         <h3 className="mb-4 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Add a lead</h3>
 
@@ -381,7 +381,7 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <div className="mb-3 grid grid-cols-2 gap-1.5">
           {SOURCES.map(([val, label]) => {
             const on = f.source === val
-            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: '#c3d3e2' }}>{label}</button>
+            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: '#c3d3e2' }}>{label}</button>
           })}
         </div>
 

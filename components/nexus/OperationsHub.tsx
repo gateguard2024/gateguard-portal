@@ -48,7 +48,7 @@ const PRESET_PHASES = ["Wiring", "Trim", "Headend", "Program"];
 // Bucket key for steps with phase_id = null — they still show, never disappear.
 const PHASE_OTHER = "__other";
 
-const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18, boxShadow: "0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12)" } as const;
+const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18, boxShadow: "0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12)" } as const;
 const btn = { background: "#00A3FF", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
 const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(0,163,255,.28)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
 const sel = { background: "rgba(0,0,0,.34)", border: "1px solid rgba(0,163,255,.28)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;

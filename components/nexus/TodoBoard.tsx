@@ -128,7 +128,7 @@ export function TodoBoard() {
 
       {msg && <div className="rounded-xl p-3 text-xs" style={{ background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.3)', color: '#FF4D4D' }}>{msg}</div>}
       {loading && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading tasks…</div>}
-      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.5)' }}>No tasks here. Add one above.</div>}
+      {!loading && shown.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.5)' }}>No tasks here. Add one above.</div>}
 
       {/* Selected-task action bar — the side-panel actions operate on the chosen task */}
       {selectedTodo && (
@@ -157,7 +157,7 @@ export function TodoBoard() {
           const expanded = openId === t.id
           const selected = selectedId === t.id
           return (
-            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'repeating-linear-gradient(90deg,rgba(255,255,255,0.06) 0 1px,transparent 1px 4px), linear-gradient(180deg,#41566e,#33455c)' : 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: `1px solid ${selected ? 'rgba(0,163,255,0.6)' : expanded ? 'rgba(0,163,255,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
+            <div key={t.id} className="rounded-2xl" style={{ background: selected ? 'repeating-linear-gradient(90deg,rgba(255,255,255,0.06) 0 1px,transparent 1px 4px), linear-gradient(180deg,#41566e,#33455c)' : 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: `1px solid ${selected ? 'rgba(0,163,255,0.6)' : expanded ? 'rgba(0,163,255,0.4)' : 'rgba(255,255,255,0.06)'}` }}>
               <div className="flex items-center gap-2.5 px-3 py-2.5">
                 <button type="button" disabled={busy} onClick={() => void patch(t.id, { status: done ? 'open' : 'done' })}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"

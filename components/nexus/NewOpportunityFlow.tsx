@@ -244,7 +244,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   return (
     <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="mx-auto flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
+        style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,163,255,0.82)' }}>New Opportunity</div>
@@ -335,7 +335,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
             if (step === 'form') { setStep(source === 'blank' ? 'source' : 'pick'); return }
             if (step === 'pick') { setStep('source'); return }
             onClose()
-          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.7)' }}>
+          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.7)' }}>
             {result ? 'Close' : step === 'source' ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (

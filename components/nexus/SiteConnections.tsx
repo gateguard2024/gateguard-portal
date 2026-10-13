@@ -94,7 +94,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     finally { setLoadingSites(false); }
   }
 
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18 } as const;
+  const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (
@@ -190,7 +190,7 @@ function SiteQuickBooks({ siteId }: { siteId: string }) {
     setBusy(false);
     if (r?.ok) { setMsg("Linked ✓"); load(); } else setMsg(r?.error || "Couldn't save.");
   }
-  const card = { background: "repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)", border: "1px solid #1E293B", borderRadius: 18, padding: 18, marginTop: 12 } as const;
+  const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18, marginTop: 12 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
   return (
     <div style={card}>

@@ -24,12 +24,12 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
 // the ARIA detail popup reads as the same product (brushed light-steel frame,
 // dark steel tiles inside, one blue accent). Fortune-500 clean, no glass. ──
 const STEEL_FRAME = {
-  background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)',
+  background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))',
   border: '1px solid rgba(10,16,24,0.45)',
   boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -2px 2px rgba(0,0,0,0.40)',
 } as const
 const STEEL_TILE = {
-  background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)',
+  background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))',
   border: '1px solid #1E293B',
 } as const
 const STEEL_HEADER = 'linear-gradient(180deg,#33465e,#151D2A)'

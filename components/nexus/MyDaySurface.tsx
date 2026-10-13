@@ -246,7 +246,7 @@ function MessageChannelCard({ title, subtitle }: { title: string; subtitle: stri
 
 function SchedulePopout({ events, onOpen, onClose }: { events: MyDayEvent[]; onOpen: () => void; onClose: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
       <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
         <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#00A3FF', boxShadow: '0 0 8px #00A3FF' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Today&apos;s Schedule</span></div>
         <div className="flex items-center gap-2">
@@ -279,7 +279,7 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
     { key: 'low', label: 'Later', accent: '#94a3b8' },
   ]
   return (
-    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5f6e81,#4c5a6d)', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
+    <div className="relative overflow-hidden rounded-2xl border p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', borderColor: 'rgba(10,16,24,0.35)', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.24)' }}>
       <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
         <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: '#00A3FF', boxShadow: '0 0 8px #00A3FF' }} /><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">To-Dos</span></div>
         <div className="flex items-center gap-2">
@@ -632,7 +632,7 @@ export function MyDaySurface() {
       </DetailShell>}
 
       {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Highest urgency first. Tap one to open it and work it." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,163,255,0.09)', border: '1px solid rgba(0,163,255,0.2)', color: 'rgba(226,232,240,0.72)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         {top10.length > 0 ? (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
@@ -677,13 +677,13 @@ export function MyDaySurface() {
       )}
 
       {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <TodoBoard />
         </div>
       </DetailShell>}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
+        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
         <MessagesShell />
         </div>
       </DetailShell>}

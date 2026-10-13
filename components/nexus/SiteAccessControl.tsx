@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 
-const TILE = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
+const TILE = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
 const BTN = { borderRadius: 8, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' } as const;
 const ICE = { ...BTN, background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' } as const;

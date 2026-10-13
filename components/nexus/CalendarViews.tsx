@@ -623,7 +623,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
 
   return (
     <div className="relative flex w-full flex-1 flex-col rounded-3xl p-3 font-sans" style={{ background: NEXUS_BG }}>
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
 
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-200">

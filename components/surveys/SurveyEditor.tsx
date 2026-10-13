@@ -167,7 +167,7 @@ export function SurveyEditor({ id }: { id: string }) {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#EEF3FA 0%,#E7EEF7 100%)', display: 'flex' }}>
       <style>{`@media print { .sv-form { display:none !important } .sv-prev { width:100% !important } }`}</style>
-      <aside className="sv-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(10,16,24,0.4)', background: 'linear-gradient(180deg,#1E293B 0%,#16202e 100%)' }}>
+      <aside className="sv-form" style={{ width: 380, flexShrink: 0, height: '100vh', overflowY: 'auto', padding: 18, borderRight: '1px solid rgba(255,255,255,0.09)', background: 'linear-gradient(180deg,#1E293B 0%,#16202e 100%)' }}>
         <div style={{ marginBottom: 10 }}>
           <button onClick={() => {
             if (typeof window === 'undefined') return

@@ -24,7 +24,7 @@ export default function SurveyDocumentPage() {
   }, [id])
 
   if (err) return <div style={{ padding: 40, color: '#b91c1c' }}>{err}</div>
-  if (!survey) return <div style={{ padding: 40, color: '#5a6c84' }}>Loading…</div>
+  if (!survey) return <div style={{ padding: 40, color: '#1E293B' }}>Loading…</div>
   return (
     <div style={{ background: '#EEF3FA', minHeight: '100vh', padding: '24px 0' }}>
       <SurveyRecord survey={survey} cfg={survey.survey_doc || {}} />

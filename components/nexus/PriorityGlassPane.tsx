@@ -68,7 +68,7 @@ export function PriorityGlassPane({
   return (
     <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/70 px-4 py-6 backdrop-blur-sm" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
       <div className="mx-auto w-full max-w-2xl rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid rgba(150,180,210,0.32)', boxShadow: '0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+        style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(150,180,210,0.32)', boxShadow: '0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
         <button type="button" onClick={onBack} className="mb-3 text-[11px]" style={{ color: 'rgba(125,229,255,0.86)' }}>← Back to priorities</button>
 
         {/* Top card */}
@@ -82,7 +82,7 @@ export function PriorityGlassPane({
         </div>
 
         {/* Why it's here */}
-        <div className="mt-4 rounded-2xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B' }}>
+        <div className="mt-4 rounded-2xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B' }}>
           <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.4)' }}>Why this is here</div>
           <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.78)' }}>{item.reason || 'Flagged for your attention today.'}</p>
         </div>
@@ -99,7 +99,7 @@ export function PriorityGlassPane({
           <button type="button" disabled={busy} onClick={() => act({ action: 'mark_done' }, 'Marked done.')} className="rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50" style={{ background: 'rgba(0,230,153,0.16)', border: '1px solid rgba(0,230,153,0.4)', color: '#00E699' }}>Mark done</button>
           <button type="button" disabled={busy} onClick={() => act({ action: 'snooze', days: 1 }, 'Snoozed to tomorrow.')} className="rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50" style={{ background: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }}>Snooze +1 day</button>
           {isJob && (
-            <button type="button" disabled={busy} onClick={() => setNoteOpen(o => !o)} className="rounded-2xl px-4 py-2.5 text-sm font-semibold" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', color: 'rgba(226,232,240,0.85)' }}>Add note</button>
+            <button type="button" disabled={busy} onClick={() => setNoteOpen(o => !o)} className="rounded-2xl px-4 py-2.5 text-sm font-semibold" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: 'rgba(226,232,240,0.85)' }}>Add note</button>
           )}
         </div>
 

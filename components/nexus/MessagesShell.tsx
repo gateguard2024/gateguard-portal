@@ -717,7 +717,7 @@ export default function MessagesShell() {
       {/* New opportunity from email — center popup to name it + add the basics */}
       {oppModal && (
         <div onClick={() => !oppBusy && setOppModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid rgba(150,180,210,0.32)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(150,180,210,0.32)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ fontSize: 17, margin: 0 }}>New opportunity</h2>
               <button onClick={() => setOppModal(null)} aria-label="Close" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: 'white', borderRadius: 9, width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>×</button>

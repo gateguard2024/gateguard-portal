@@ -7,7 +7,7 @@ import { PIPELINE_STAGES, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
 type AnyRecord = Record<string, any>
 // Matches the Opportunity Hub / dashboard steel exactly (lighter steel accents).
-const WIN_FRAME = { background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.05) 0 1px,transparent 1px 4px), linear-gradient(180deg,#5a6c84,#45556a)', border: '1px solid rgba(10,16,24,0.4)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
+const WIN_FRAME = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 
 type OpportunityGlassData = {
   opportunity?: AnyRecord | null
@@ -34,7 +34,7 @@ function val(v: unknown, fallback = 'Not added yet') {
 
 function Section({ title, children, count }: { title: string; children: React.ReactNode; count?: number }) {
   return (
-    <div className="rounded-3xl p-4" style={{ background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+    <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)' }}>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{title}</div>
         {typeof count === 'number' && count > 0 && (
@@ -689,7 +689,7 @@ export function OpportunityGlassWindow({
     {/* Schedule follow-up popup */}
     {followupOpen && (
       <div onClick={() => setFollowupOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Schedule follow-up</h4>
             <button type="button" onClick={() => setFollowupOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -720,7 +720,7 @@ export function OpportunityGlassWindow({
     {/* Log activity popup */}
     {actOpen && (
       <div onClick={() => setActOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Log activity</h4>
             <button type="button" onClick={() => setActOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -748,7 +748,7 @@ export function OpportunityGlassWindow({
     {/* Add contact popup */}
     {addContactOpen && (
       <div onClick={() => setAddContactOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Add contact</h4>
             <button type="button" onClick={() => setAddContactOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -793,7 +793,7 @@ export function OpportunityGlassWindow({
     {/* Rep / agent picker — any user in the organization */}
     {assignOpen && (
       <div onClick={() => setAssignOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign rep / agent</h4>
             <button type="button" onClick={() => setAssignOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -818,7 +818,7 @@ export function OpportunityGlassWindow({
     {/* Dealer picker — assign this deal to a dealer org in your network */}
     {dealerOpen && (
       <div onClick={() => setDealerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign to dealer</h4>
             <button type="button" onClick={() => setDealerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
@@ -843,7 +843,7 @@ export function OpportunityGlassWindow({
     {/* Manager picker — org admins */}
     {managerOpen && (
       <div onClick={() => setManagerOpen(false)} className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(4,10,20,0.8)', backdropFilter: 'blur(6px)' }}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(180deg,#1E293B,#151D2A)', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-md rounded-[1.5rem] p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
           <div className="mb-1 flex items-center justify-between">
             <h4 className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Assign manager</h4>
             <button type="button" onClick={() => setManagerOpen(false)} className="rounded-full px-3 py-1 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>

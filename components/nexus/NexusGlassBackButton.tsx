@@ -9,7 +9,7 @@ export function NexusGlassBackButton({ label, onClick }: { label: string; onClic
       onClick={onClick}
       className="mb-5 inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0"
       style={{
-        background: 'repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 1px,transparent 1px 4px), linear-gradient(180deg,#1E293B,#151D2A)',
+        background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))',
         border: '1px solid #1E293B',
         color: '#EAF1F8',
         boxShadow: '0 10px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.16)',
