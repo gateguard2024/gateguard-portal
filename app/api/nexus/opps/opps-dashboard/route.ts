@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
+import { normalizeRole } from '@/lib/permissions'
 import { normalizeStage, STAGE_LABELS } from '@/lib/pipeline'
 
 export const dynamic = 'force-dynamic'
@@ -26,11 +27,17 @@ export async function GET(req: Request) {
     const user = await getCurrentUser()
     const scope = await resolveOrgScope(user)
 
-    // "My deals" filter — scope to the caller's own rep_id (their profiles.id).
-    const mine = new URL(req.url).searchParams.get('mine') === '1'
-    const { data: prof } = await supabase.from('profiles').select('id').eq('clerk_user_id', user.id).maybeSingle()
-    const profileId = (prof as { id?: string } | null)?.id ?? null
+    // "My deals" scopes to the caller's own rep_id; corporate/managers can also
+    // target any rep via ?rep=<profileId> ("deals by rep"). Resolve the caller's
+    // profile robustly (clerk id → email fallback) so a drifted clerk_user_id
+    // never silently hides a rep's own deals.
+    const urlParams = new URL(req.url).searchParams
+    const mine = urlParams.get('mine') === '1'
+    const repParam = urlParams.get('rep')
+    const profileId = await getProfileId(user.id, user.email)
+    const canPickRep = scope.all || normalizeRole(user.role) !== 'user'
     const mineFilter = mine && profileId ? profileId : null
+    const repScope = mineFilter ?? (canPickRep && repParam ? repParam : null)
 
     // Open deals (not won / lost / dead / deleted)
     let openQ = supabase
@@ -38,7 +45,7 @@ export async function GET(req: Request) {
       .select('id, name, account_name, stage, units, est_mrr, amount, close_date, next_step')
       .is('deleted_at', null).is('won_at', null).is('lost_at', null)
     openQ = applyOrgScope(openQ, scope, 'dealer_org_id')
-    if (mineFilter) openQ = openQ.eq('rep_id', mineFilter)
+    if (repScope) openQ = openQ.eq('rep_id', repScope)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: openRows, error: openErr } = await (openQ as any).order('updated_at', { ascending: false })
     if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 })
@@ -48,14 +55,14 @@ export async function GET(req: Request) {
     // Won (with dates for MTD) + lost counts → win rate
     let wonQ = supabase.from('opportunities').select('id, won_at').is('deleted_at', null).not('won_at', 'is', null)
     wonQ = applyOrgScope(wonQ, scope, 'dealer_org_id')
-    if (mineFilter) wonQ = wonQ.eq('rep_id', mineFilter)
+    if (repScope) wonQ = wonQ.eq('rep_id', repScope)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: wonRows } = await (wonQ as any)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wonArr: any[] = Array.isArray(wonRows) ? wonRows : []
     let lostQ = supabase.from('opportunities').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('lost_at', 'is', null)
     lostQ = applyOrgScope(lostQ, scope, 'dealer_org_id')
-    if (mineFilter) lostQ = lostQ.eq('rep_id', mineFilter)
+    if (repScope) lostQ = lostQ.eq('rep_id', repScope)
     const { count: lostCount } = await lostQ
     const won = wonArr.length
     const lost = lostCount ?? 0

@@ -216,13 +216,20 @@ export async function getProfileId(clerkUserId: string, email?: string | null): 
     if (data?.id) return data.id
   }
   // Fallback: resolve by email. Handles profiles whose clerk_user_id is stale or
-  // unset (e.g. users invited under shared Clerk across beta/main) so a rep still
-  // matches their own assigned rows instead of failing closed. Email is unique
-  // per profile, so this never resolves to someone else's record.
+  // unset (e.g. users invited under shared Clerk across beta/main). Duplicate
+  // profiles for one email exist in practice, so DON'T use maybeSingle() (it
+  // throws on >1 row). Prefer a row that already has a clerk_user_id, else the
+  // oldest, and take just that one.
   const e = (email ?? '').trim()
   if (e) {
-    const { data } = await sb.from('profiles').select('id').ilike('email', e).maybeSingle()
-    if (data?.id) return data.id
+    const { data } = await sb.from('profiles').select('id, clerk_user_id, created_at').ilike('email', e)
+    const rows = (data ?? []) as { id: string; clerk_user_id: string | null; created_at: string | null }[]
+    if (rows.length > 0) {
+      const withClerk = rows.find(r => r.clerk_user_id)
+      if (withClerk) return withClerk.id
+      rows.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      return rows[0].id
+    }
   }
   return null
 }

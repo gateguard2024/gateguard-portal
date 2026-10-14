@@ -81,14 +81,23 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
   const [work, setWork] = useState<string | null>(null)
 
   const [mine, setMine] = useState(false)
+  const [repFilter, setRepFilter] = useState('')
+  const [reps, setReps] = useState<{ profileId: string; name: string }[]>([])
+  // Corporate / managers get a "by rep" picker (empty for a plain rep).
+  useEffect(() => {
+    void fetch('/api/nexus/opps/leaderboard', { cache: 'no-store' })
+      .then(r => r.json()).then(j => { if (Array.isArray(j?.reps)) setReps(j.reps.map((x: { profileId: string; name: string }) => ({ profileId: x.profileId, name: x.name }))) })
+      .catch(() => {})
+  }, [])
   const loadDash = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch(`/api/nexus/opps/opps-dashboard${mine ? '?mine=1' : ''}`, { cache: 'no-store' })
+      const qs = mine ? '?mine=1' : (repFilter ? `?rep=${encodeURIComponent(repFilter)}` : '')
+      const r = await fetch(`/api/nexus/opps/opps-dashboard${qs}`, { cache: 'no-store' })
       const d = await r.json().catch(() => ({}))
       setDash(d && typeof d === 'object' ? d : {})
     } finally { setLoading(false) }
-  }, [mine])
+  }, [mine, repFilter])
   useEffect(() => { void loadDash() }, [loadDash])
 
   async function openDeal(id: string) {
@@ -147,6 +156,12 @@ export function OpportunityHub({ onClose }: { onClose: () => void }) {
                 <button type="button" onClick={() => setMine(true)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#1E293B' }}>My deals</button>
                 <button type="button" onClick={() => setMine(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold" style={!mine ? { background: '#1E293B', color: '#fff' } : { background: 'transparent', color: '#1E293B' }}>All deals</button>
               </div>
+              {reps.length > 0 && (
+                <select value={repFilter} onChange={e => { setRepFilter(e.target.value); if (e.target.value) setMine(false) }} className="rounded-xl px-3 py-2 text-[12px] font-semibold outline-none" style={{ background: '#111826', border: '1px solid #1E293B', color: repFilter ? '#fff' : 'rgba(255,255,255,0.55)' }}>
+                  <option value="">By rep · all</option>
+                  {reps.map(rp => <option key={rp.profileId} value={rp.profileId}>{rp.name}</option>)}
+                </select>
+              )}
               <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#1E293B', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#00A3FF' }}>⌕</span> Search deals…</button>
             </div>
           </div>
