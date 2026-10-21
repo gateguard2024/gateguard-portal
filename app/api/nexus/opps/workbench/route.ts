@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope, getProfileId } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,31 +41,21 @@ async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>,
 async function resolveProfileId(clerkUserId: string, email?: string): Promise<string | null> {
   if (!clerkUserId || clerkUserId === 'system') return null
 
+  // Dedup-safe shared resolver: clerk link → email fallback, tolerant of
+  // duplicate profile rows (never throws on >1 match).
+  const direct = await getProfileId(clerkUserId, email)
+  if (direct) return direct
+
+  // Last resort: a user whose Clerk email differs from their profiles.email but
+  // who has a user_permissions row carrying the profile's email. Recover that
+  // email and retry the dedup-safe lookup.
   try {
-    const { data } = await supabase.from('profiles').select('id').eq('clerk_user_id', clerkUserId).maybeSingle()
-    const profileId = (data as { id: string } | null)?.id
-    if (profileId) return profileId
-  } catch {}
-
-  let permissionEmail = cleanUnknown(email)
-
-  try {
-    const { data } = await supabase.from('user_permissions').select('*').eq('clerk_user_id', clerkUserId).maybeSingle()
-    const permission = data as PermissionRow | null
-    const directProfileId = cleanUnknown(permission?.profile_id ?? permission?.user_id)
-    if (directProfileId) return directProfileId
-    permissionEmail = cleanUnknown(permission?.email) || permissionEmail
-  } catch {}
-
-  if (permissionEmail) {
-    try {
-      const { data } = await supabase.from('profiles').select('id').ilike('email', permissionEmail).maybeSingle()
-      const profileId = (data as { id: string } | null)?.id
-      if (profileId) return profileId
-    } catch {
-      return null
+    const { data } = await supabase.from('user_permissions').select('email').eq('clerk_user_id', clerkUserId).maybeSingle()
+    const permEmail = cleanUnknown((data as PermissionRow | null)?.email)
+    if (permEmail && permEmail.toLowerCase() !== cleanUnknown(email).toLowerCase()) {
+      return await getProfileId(clerkUserId, permEmail)
     }
-  }
+  } catch {}
 
   return null
 }

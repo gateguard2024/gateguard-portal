@@ -45,7 +45,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
   // Axis 2 — a plain "user" (rep) may only open opportunities assigned to them.
   // Admin/supervisor/corporate are unrestricted. Fails closed if no profile id.
-  const getProfile = await getProfileId(user.id)
+  const getProfile = await getProfileId(user.id, user.email)
   oppQuery = applyAssignedScope(oppQuery, user.role, { clerkUserId: user.id, profileId: getProfile }, 'opportunities')
 
   const { data: opp, error: oppError } = await oppQuery.maybeSingle()
@@ -247,7 +247,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: false, message: 'Opportunity not found or outside your access.' }, { status: 404 })
   }
 
-  const profileId = await getProfileId(user.id)
+  const profileId = await getProfileId(user.id, user.email)
 
   // ── add_attachment ──────────────────────────────────────────────────────────
   if (action === 'add_attachment') {

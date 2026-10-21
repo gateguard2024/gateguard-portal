@@ -35,9 +35,15 @@ export async function GET(req: Request) {
     const mine = urlParams.get('mine') === '1'
     const repParam = urlParams.get('rep')
     const profileId = await getProfileId(user.id, user.email)
-    const canPickRep = scope.all || normalizeRole(user.role) !== 'user'
+    // A plain "user" (rep) is ALWAYS scoped to their own deals — so the KPI count
+    // can never disagree with the list below it. Fails closed (sentinel id → 0
+    // rows) if their profile can't be resolved, rather than leaking org-wide deals.
+    const isPlainRep = normalizeRole(user.role) === 'user'
+    const canPickRep = !isPlainRep
     const mineFilter = mine && profileId ? profileId : null
-    const repScope = mineFilter ?? (canPickRep && repParam ? repParam : null)
+    const repScope = isPlainRep
+      ? (profileId ?? '00000000-0000-0000-0000-000000000000')
+      : (mineFilter ?? (canPickRep && repParam ? repParam : null))
 
     // Open deals (not won / lost / dead / deleted)
     let openQ = supabase

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId as resolveProfileIdFromLib } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,14 +49,11 @@ function leadLabel(lead: LeadRecord): string {
 
 // Resolve internal profiles.id UUID from Clerk user ID
 // leads.assigned_to → profiles.id (UUID FK), NOT Clerk user ID
-async function getProfileId(clerkUserId: string): Promise<string | null> {
-  if (!clerkUserId || clerkUserId === 'system') return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('clerk_user_id', clerkUserId)
-    .maybeSingle()
-  return (data as { id: string } | null)?.id ?? null
+// Dedup-safe identity: clerk link first, then email fallback (handles users with
+// a drifted/absent clerk_user_id or duplicate profile rows). Delegates to the
+// shared resolver so every Nexus route resolves a rep the same way.
+async function getProfileId(clerkUserId: string, email?: string | null): Promise<string | null> {
+  return resolveProfileIdFromLib(clerkUserId, email)
 }
 
 // Fetch lead with org-scope enforcement — uses resolveOrgScope + applyOrgScope
@@ -284,7 +281,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: false, message: 'Lead not found or outside your access.' }, { status: 404 })
   }
 
-  const profileId = await getProfileId(user.id)
+  const profileId = await getProfileId(user.id, user.email)
 
   // ── add_note ────────────────────────────────────────────────────────────────
   if (action === 'add_note') {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { getProfileId } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,54 +60,27 @@ function sourceLabel(source: string): string {
  * 2. Try user_permissions.clerk_user_id for a direct profile_id/user_id if present.
  * 3. Use user_permissions.email or Clerk email to find profiles.email.
  */
+// Dedup-safe identity: clerk link → email fallback, tolerant of duplicate rows.
+// Falls back to a user_permissions email if the Clerk email differs from the
+// one stored on the profile.
 async function resolveProfileId(clerkUserId: string, email?: string): Promise<string | null> {
   if (!clerkUserId || clerkUserId === 'system') return null
 
-  try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle()
-
-    const profileId = (data as { id: string } | null)?.id
-    if (profileId) return profileId
-  } catch {
-    // Some live schemas/data do not have profiles.clerk_user_id filled.
-  }
-
-  let permissionEmail = clean(email)
+  const direct = await getProfileId(clerkUserId, email)
+  if (direct) return direct
 
   try {
     const { data } = await supabase
       .from('user_permissions')
-      .select('*')
+      .select('email')
       .eq('clerk_user_id', clerkUserId)
       .maybeSingle()
-
-    const permission = data as PermissionRow | null
-
-    const directProfileId = clean(permission?.profile_id ?? permission?.user_id)
-    if (directProfileId) return directProfileId
-
-    permissionEmail = clean(permission?.email) || permissionEmail
-  } catch {
-    // Fall through to email lookup.
-  }
-
-  if (permissionEmail) {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('email', permissionEmail)
-        .maybeSingle()
-
-      const profileId = (data as { id: string } | null)?.id
-      if (profileId) return profileId
-    } catch {
-      return null
+    const permEmail = clean((data as PermissionRow | null)?.email)
+    if (permEmail && permEmail.toLowerCase() !== clean(email).toLowerCase()) {
+      return await getProfileId(clerkUserId, permEmail)
     }
+  } catch {
+    // Fall through.
   }
 
   return null

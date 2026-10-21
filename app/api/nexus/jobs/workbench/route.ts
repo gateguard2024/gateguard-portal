@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,14 +36,9 @@ function escapeLike(value: string): string {
   return value.replace(/[%_]/g, m => `\\${m}`)
 }
 
-async function resolveProfileId(clerkUserId: string): Promise<string | null> {
-  if (!clerkUserId || clerkUserId === 'system') return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('clerk_user_id', clerkUserId)
-    .maybeSingle()
-  return (data as { id: string } | null)?.id ?? null
+// Dedup-safe identity: clerk link → email fallback, tolerant of duplicate rows.
+async function resolveProfileId(clerkUserId: string, email?: string | null): Promise<string | null> {
+  return getProfileId(clerkUserId, email)
 }
 
 export async function GET(req: NextRequest) {
@@ -55,7 +50,7 @@ export async function GET(req: NextRequest) {
 
   const [scope, profileId] = await Promise.all([
     resolveOrgScope(user),
-    resolveProfileId(user.id),
+    resolveProfileId(user.id, user.email),
   ])
 
   const { searchParams } = new URL(req.url)
