@@ -10,7 +10,7 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
 import { RoiCalculator } from '@/components/nexus/RoiCalculator'
-import { OpportunityLifecycle } from '@/components/nexus/OpportunityLifecycle'
+import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
 import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 
 type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'opps-workbench' | 'rough-calc'
@@ -98,8 +98,10 @@ export function SalesSurface() {
   const firstName = user?.firstName ?? 'there'
 
   const [activePanel, setActivePanel] = useState<PanelId | null>(null)
-  const [lifecycleOppId, setLifecycleOppId] = useState<string | null>(null)
-  const [pendingStage, setPendingStage] = useState<number | null>(null)
+  // Opportunity glass window (the Deal Life Cycle view is deprecated — every
+  // "open a deal" and "deal just created" path now opens this window instead).
+  const [oppWindowId, setOppWindowId] = useState<string | null>(null)
+  const [oppWindowData, setOppWindowData] = useState<Record<string, unknown> | null>(null)
   const [leadsHub, setLeadsHub] = useState(false)
   const [oppsHub, setOppsHub] = useState(false)
 
@@ -108,8 +110,19 @@ export function SalesSurface() {
   const [leadCount, setLeadCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
-  function openLifecycle(id: string) { setActivePanel(null); setLifecycleOppId(id) }
-  function closeLifecycle() { setLifecycleOppId(null); setPendingStage(null) }
+  const fetchOppWindow = useCallback(async (id: string) => {
+    const res = await fetch(`/api/nexus/opps/opportunity-window/${id}`)
+    const data = await res.json().catch(() => null)
+    if (res.ok && data && data.success !== false) setOppWindowData(data)
+  }, [])
+  const openLifecycle = useCallback(async (id: string) => {
+    setActivePanel(null); setOppWindowId(id); setOppWindowData(null)
+    try { await fetchOppWindow(id) } catch {}
+  }, [fetchOppWindow])
+  const refreshOppWindow = useCallback(async () => {
+    if (oppWindowId) { try { await fetchOppWindow(oppWindowId) } catch {} }
+  }, [oppWindowId, fetchOppWindow])
+  function closeLifecycle() { setOppWindowId(null); setOppWindowData(null) }
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -277,11 +290,13 @@ export function SalesSurface() {
       {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} onCreated={openLifecycle} />}
       {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} onOpen={openLifecycle} />}
 
-      {lifecycleOppId && (
+      {oppWindowId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 95, overflowY: 'auto', background: NEXUS_BG }}>
           <NexusBackdropLayers variant="page" />
           <div style={{ position: 'relative' }}>
-            <OpportunityLifecycle key={`${lifecycleOppId}-${pendingStage ?? 'x'}`} opportunityId={lifecycleOppId} initialStage={pendingStage ?? undefined} onClose={closeLifecycle} />
+            {oppWindowData
+              ? <OpportunityGlassWindow data={oppWindowData as Parameters<typeof OpportunityGlassWindow>[0]['data']} onBack={() => { closeLifecycle(); void loadDashboard() }} onRefresh={refreshOppWindow} />
+              : <div style={{ padding: 48, color: '#9fb4cc', fontSize: 13 }}>Loading opportunity…</div>}
           </div>
         </div>
       )}
