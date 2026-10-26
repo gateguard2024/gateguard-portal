@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
 import { LeadsHub } from '@/components/nexus/LeadsHub'
@@ -16,27 +16,18 @@ import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'opps-workbench' | 'rough-calc'
 
 // ---- Elevated glass tokens + control-center helpers ----
-const BRAND = 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)'
-const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
-const TILE_STYLE = { background: TILE_BG, backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' } as const
+// Calm pass — flat cards, one accent, hairline borders, tighter corners, legible text.
+const ACCENT = '#4A8CFF'
+const INK = '#eef4fb'
+const MUT = '#9aa7b8'    // legible secondary text
+const MUT2 = '#73839a'   // legible tertiary text
+const LINE = '#1e2a3a'
+const CARD = { background: '#121a27', border: `1px solid ${LINE}` } as const
 const STAGE_ORDER = ['contract', 'deposit', 'negotiate', 'propose', 'survey', 'meet_present']
 const STAGE_META: Record<string, { label: string; c: string }> = {
-  meet_present: { label: 'Meet', c: 'indigo' }, survey: { label: 'Survey', c: 'cyan' }, propose: { label: 'Proposal', c: 'warn' },
+  meet_present: { label: 'Meet', c: 'warn' }, survey: { label: 'Survey', c: 'warn' }, propose: { label: 'Proposal', c: 'cyan' },
   negotiate: { label: 'Negotiate', c: 'warn' }, contract: { label: 'Contract', c: 'safe' }, deposit: { label: 'Deposit', c: 'safe' },
 }
-function Ring({ size, pct, color, stroke, children }: { size: number; pct: number; color: string; stroke: number; children?: ReactNode }) {
-  const r = (size - stroke) / 2 - 1, c = 2 * Math.PI * r, off = c * (1 - pct / 100)
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
-      </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
-    </div>
-  )
-}
-
 type Activity = { id: string; type: string; subject: string | null; due_at: string | null; completed_at: string | null; opportunity_id: string | null; opportunity_name: string | null }
 type OppRow = { id: string; name?: string | null }
 type OppData = {
@@ -65,7 +56,7 @@ function timeLabel(iso: string | null): string {
 function SalesDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
-      <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[minmax(0,1fr)_260px]"
+      <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[16px] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[minmax(0,1fr)_260px]"
         style={{ background: NEXUS_BG, border: '1px solid rgba(255,255,255,0.085)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="min-h-0 overflow-y-auto pr-1 pb-28" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
@@ -74,7 +65,7 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid rgba(255,255,255,0.085)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <aside className="min-h-0 overflow-y-auto rounded-[12px] p-4" style={{ background: '#121a27', border: `1px solid ${LINE}`, WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
@@ -163,72 +154,62 @@ export function SalesSurface() {
 
   // Flatten open-stage opportunities into an "active deals" list (closest-to-close first).
   const activeDeals = STAGE_ORDER.flatMap(k => stageRecords(k).map(r => ({ id: r.id, name: r.name || 'Untitled', stage: k }))).slice(0, 8)
-  const col = (c: string) => ({ safe: '#22C55E', warn: '#F59E0B', cyan: '#00A3E0', indigo: '#6B7EFF' }[c] || '#9fb0c4')
+  const col = (c: string) => ({ safe: '#30c08b', warn: '#e0a53b', cyan: ACCENT, indigo: ACCENT }[c] || MUT)
 
   return (
     <section className="mt-4 w-full px-3 sm:px-5">
       <div className="mx-auto w-full" style={{ maxWidth: 1340, color: '#eef4fb' }}>
 
-        {/* Sales status hero */}
-        <div className="mb-5 grid grid-cols-1 items-center gap-5 rounded-[22px] p-5 sm:p-6 lg:grid-cols-[1.15fr_1fr_1.05fr]"
-          style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.08),rgba(107,126,255,0.07)), linear-gradient(180deg,rgba(26,36,54,0.78),rgba(15,22,36,0.82))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -30px rgba(0,0,0,0.8)' }}>
-          <div className="flex items-center gap-4">
-            <div className="flex h-[66px] w-[66px] shrink-0 items-center justify-center rounded-[19px]" style={{ background: BRAND, boxShadow: '0 0 28px rgba(74,140,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3)', color: '#eafaff' }}>
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M6 20V10M12 20V4M18 20v-6" /></svg>
-            </div>
-            <div>
-              <div className="text-[10.5px] font-extrabold uppercase tracking-[0.14em]" style={{ color: '#6d7f94' }}>Pipeline</div>
-              <div className="text-[27px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{money(opp.pipelineTotal)} · On Pace</div>
-              <div className="mt-1 text-[12.5px]" style={{ color: '#9fb0c4' }}>Hi {firstName} — {counts.open} open deals · {wonN} won</div>
-            </div>
+        {/* Sales summary */}
+        <div className="mb-4 flex flex-col gap-5 rounded-[12px] p-5 lg:flex-row lg:items-center" style={CARD}>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: MUT }}>Pipeline</div>
+            <div className="mt-1 text-[26px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{money(opp.pipelineTotal)} <span style={{ color: '#30c08b', fontSize: 14, fontWeight: 700 }}>· On Pace</span></div>
+            <div className="mt-1.5 text-[12.5px]" style={{ color: MUT }}>Hi {firstName} — {counts.open} open deals · {wonN} won</div>
           </div>
-          <div className="flex items-center justify-center gap-4 lg:border-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-            <Ring size={92} pct={winRate} color={col('safe')} stroke={8}>
-              <b style={{ fontSize: 23, fontWeight: 800 }}>{winRate}%</b>
-              <span style={{ fontSize: 9, fontWeight: 700, color: col('safe'), letterSpacing: '0.04em' }}>WIN RATE</span>
-            </Ring>
-            <div className="flex flex-col gap-1.5">
-              {[['Open deals', String(counts.open), 'cyan'], ['Won', String(wonN), 'safe'], ['Avg deal', money(avgDeal), 'warn']].map(([l, v, c]) => (
-                <div key={l} className="flex items-center gap-2 text-[12px]" style={{ color: '#9fb0c4' }}><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col(c) }} />{l} · <b style={{ color: '#eef4fb', fontWeight: 600 }}>{v}</b></div>
-              ))}
-            </div>
+          <div className="flex items-center gap-8 lg:ml-4 lg:border-l lg:pl-8" style={{ borderColor: LINE }}>
+            <div><div className="text-[20px] font-extrabold leading-none" style={{ color: ACCENT }}>{winRate}%</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Win rate</div></div>
+            <div><div className="text-[20px] font-extrabold leading-none">{counts.open}</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Open deals</div></div>
+            <div><div className="text-[20px] font-extrabold leading-none">{money(avgDeal)}</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Avg deal</div></div>
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <button type="button" onClick={() => setActivePanel('new-opp')} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: BRAND, color: '#041018' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Opportunity</button>
-            <button type="button" onClick={() => setLeadsHub(true)} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> New Lead</button>
-            <button type="button" onClick={() => setActivePanel('rough-calc')} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef4fb' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#00A3E0" strokeWidth={2}><path d="M9 7h6M9 11h6M9 15h4M5 3h14v18H5z" /></svg> ROI</button>
+          <div className="flex flex-wrap gap-2.5 lg:ml-auto">
+            <button type="button" onClick={() => setActivePanel('new-opp')} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-bold" style={{ background: ACCENT, color: '#fff' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Opportunity</button>
+            <button type="button" onClick={() => setLeadsHub(true)} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-semibold" style={{ background: 'transparent', border: `1px solid ${LINE}`, color: INK }}>New Lead</button>
+            <button type="button" onClick={() => setActivePanel('rough-calc')} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-semibold" style={{ background: 'transparent', border: `1px solid ${LINE}`, color: INK }}>ROI</button>
           </div>
         </div>
 
         {/* Metrics */}
-        <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
           {[
-            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'weighted open', pct: 72, c: 'safe', ic: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
-            { l: 'Open Deals', v: String(counts.open), s: `${stageN('contract')} contracts out`, pct: 100, c: 'cyan', ic: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6' },
-            { l: 'Win Rate', v: `${winRate}%`, s: 'won vs lost', pct: winRate, c: 'indigo', ic: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M6 3h12v6a6 6 0 0 1-12 0z' },
-            { l: 'Avg Deal', v: money(avgDeal), s: `${wonN} won to date`, pct: 55, c: 'warn', ic: 'M13 2 3 14h7l-1 8 10-12h-7z' },
+            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'Weighted open' },
+            { l: 'Open Deals', v: String(counts.open), s: `${stageN('contract')} contracts out` },
+            { l: 'Win Rate', v: `${winRate}%`, s: 'Won vs lost' },
+            { l: 'Avg Deal', v: money(avgDeal), s: `${wonN} won to date` },
           ].map((m, i) => (
-            <div key={i} className="flex items-center gap-4 rounded-2xl p-4" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.04),transparent 55%),rgba(20,28,43,0.5)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <Ring size={58} pct={m.pct} color={col(m.c)} stroke={5}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke={col(m.c)} strokeWidth={1.9}><path d={m.ic} /></svg></Ring>
-              <div><div className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: '#9fb0c4' }}>{m.l}</div><div className="mt-1.5 text-[23px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{loading ? '—' : m.v}</div><div className="mt-1.5 text-[11px]" style={{ color: '#6d7f94' }}>{m.s}</div></div>
+            <div key={i} className="rounded-[10px] p-4" style={CARD}>
+              <div className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: MUT }}>{m.l}</div>
+              <div className="mt-2.5 text-[23px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{loading ? '—' : m.v}</div>
+              <div className="mt-2 text-[11.5px]" style={{ color: MUT2 }}>{m.s}</div>
             </div>
           ))}
         </div>
 
-        {/* Active deals + pipeline/follow-ups */}
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
-          {/* Active deals */}
-          <div className="rounded-2xl" style={TILE_STYLE}>
-            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Open Opportunities</span><button type="button" onClick={() => setOppsHub(true)} className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: 'rgba(0,163,224,0.12)', color: '#00A3E0', border: '1px solid rgba(0,163,224,0.3)' }}>Open board →</button></div>
-            <div className="p-4">
-              {loading ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>Loading deals…</div>
-                : activeDeals.length === 0 ? <div className="px-1 py-6 text-center text-xs" style={{ color: '#9fb0c4' }}>No open deals yet. Start a quote to build pipeline.</div>
-                : activeDeals.map(d => {
+        {/* Open opportunities + pipeline/follow-ups */}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+          {/* Open opportunities */}
+          <div className="rounded-[12px]" style={CARD}>
+            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Open Opportunities</span><button type="button" onClick={() => setOppsHub(true)} className="text-[11.5px] font-semibold" style={{ color: ACCENT }}>Open board →</button></div>
+            <div className="px-2.5 py-2">
+              {loading ? <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: MUT }}>Loading deals…</div>
+                : activeDeals.length === 0 ? <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: MUT }}>No open deals yet. Start a quote to build pipeline.</div>
+                : activeDeals.map((d, i) => {
                   const meta = STAGE_META[d.stage] || { label: d.stage, c: 'cyan' }
                   return (
-                    <button key={d.id} type="button" onClick={() => openLifecycle(d.id)} className="mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: '#161f2e', border: '1px solid #1e2a3c', borderLeft: `3px solid ${col(meta.c)}` }}>
-                      <span className="truncate text-[13.5px] font-semibold">{d.name}</span>
-                      <span className="shrink-0 rounded-full px-3 py-1 text-[10px] font-extrabold" style={{ background: `${col(meta.c)}22`, color: col(meta.c) }}>{meta.label}</span>
+                    <button key={d.id} type="button" onClick={() => openLifecycle(d.id)} className="flex w-full items-center gap-3 rounded-[6px] px-3 py-3 text-left hover:bg-white/[0.03]" style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.045)' } : undefined}>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col(meta.c) }} />
+                      <span className="flex-1 truncate text-[13px] font-medium">{d.name}</span>
+                      <span className="shrink-0 text-[11.5px]" style={{ color: MUT }}>{meta.label}</span>
                     </button>
                   )
                 })}
@@ -236,34 +217,32 @@ export function SalesSurface() {
           </div>
 
           {/* Pipeline by stage + follow-ups */}
-          <div className="flex flex-col gap-5">
-            <div className="rounded-2xl" style={TILE_STYLE}>
-              <div className="border-b px-5 py-4 text-[14px] font-bold" style={{ borderColor: '#1e2a3c' }}>Pipeline by stage</div>
-              <div className="flex items-center gap-4 p-5">
-                <Ring size={100} pct={100} color={col('cyan')} stroke={9}><b style={{ fontSize: 28, fontWeight: 800 }}>{counts.open}</b><span style={{ fontSize: 9, fontWeight: 700, color: '#6d7f94', letterSpacing: '0.04em' }}>DEALS</span></Ring>
-                <div className="flex-1">
-                  {STAGE_ORDER.map(k => {
-                    const meta = STAGE_META[k]; const n = stageN(k)
-                    return (
-                      <div key={k} className="mb-2">
-                        <div className="mb-1 flex justify-between text-[12px]"><span style={{ color: '#9fb0c4' }}>{meta.label}</span><b>{n}</b></div>
-                        <div className="h-2 overflow-hidden rounded-full" style={{ background: '#0b111c' }}><i className="block h-full" style={{ width: `${(n / barMax) * 100}%`, background: col(meta.c) }} /></div>
-                      </div>
-                    )
-                  })}
-                </div>
+          <div className="flex flex-col gap-4">
+            <div className="rounded-[12px]" style={CARD}>
+              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Pipeline by stage</span><span className="text-[11.5px]" style={{ color: MUT }}>{counts.open} deals</span></div>
+              <div className="px-5 py-4">
+                {STAGE_ORDER.map(k => {
+                  const meta = STAGE_META[k]; const n = stageN(k)
+                  return (
+                    <div key={k} className="mb-3.5 flex items-center gap-3 last:mb-0">
+                      <span className="w-[72px] shrink-0 text-[12px]" style={{ color: MUT }}>{meta.label}</span>
+                      <span className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: '#172131' }}><i className="block h-full rounded-full" style={{ width: `${(n / barMax) * 100}%`, background: ACCENT }} /></span>
+                      <b className="w-6 text-right text-[12px]">{n}</b>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
-            <div className="rounded-2xl" style={TILE_STYLE}>
-              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: '#1e2a3c' }}><span className="text-[14px] font-bold">Follow-ups</span>{followups.length > 0 && <span className="text-[11px]" style={{ color: '#6d7f94' }}>{followups.length} due</span>}</div>
-              <div className="p-4">
-                {loading ? <div className="text-xs" style={{ color: '#9fb0c4' }}>Loading…</div>
-                  : followups.length === 0 ? <div className="rounded-xl px-3 py-4 text-xs" style={{ background: '#0b111c', color: '#9fb0c4' }}>No follow-ups due. Nice and clear.</div>
-                  : followups.slice(0, 5).map(a => (
-                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="mb-1.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-0.5" style={{ background: '#0b111c', border: '1px solid #1e2a3c' }}>
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#EF4444' : '#00A3E0' }} />
-                      <div className="min-w-0 flex-1"><div className="truncate text-[12px]" style={{ color: '#eef4fb' }}>{a.subject || a.type}</div><div className="truncate text-[10px]" style={{ color: '#9fb0c4' }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div></div>
+            <div className="rounded-[12px]" style={CARD}>
+              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Follow-ups</span>{followups.length > 0 && <span className="text-[11.5px]" style={{ color: MUT }}>{followups.length} due</span>}</div>
+              <div className="px-2.5 py-2">
+                {loading ? <div className="px-3 py-4 text-[12.5px]" style={{ color: MUT }}>Loading…</div>
+                  : followups.length === 0 ? <div className="px-3 py-4 text-[12.5px]" style={{ color: MUT }}>No follow-ups due. Nice and clear.</div>
+                  : followups.slice(0, 5).map((a, i) => (
+                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-start gap-2.5 rounded-[6px] px-3 py-2.5 text-left hover:bg-white/[0.03]" style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.045)' } : undefined}>
+                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#e0a53b' : ACCENT }} />
+                      <div className="min-w-0 flex-1"><div className="truncate text-[12.5px] font-semibold" style={{ color: INK }}>{a.subject || a.type}</div><div className="truncate text-[11px]" style={{ color: MUT }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div></div>
                     </button>
                   ))}
               </div>
