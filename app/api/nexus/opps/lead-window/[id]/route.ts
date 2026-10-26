@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope, getProfileId as resolveProfileIdFromLib } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope, getProfileId as resolveProfileIdFromLib } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,6 +101,9 @@ async function getScopedLead(
     .is('deleted_at', null)              // soft-deleted leads live in Deleted Items — window returns 404
 
   query = applyOrgScope(query, scope)
+  // A plain rep opens only leads assigned to them — consistent with the leads
+  // list, and required so relaxing the canViewCRM gate below can't widen access.
+  query = applyAssignedScope(query, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
 
   const { data, error } = await query.maybeSingle()
   if (error) return { lead: null, error: error.message }
@@ -111,8 +114,11 @@ async function getScopedLead(
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
   const user = await getCurrentUser()
+  const gProfile = await getProfileId(user.id, user.email)
 
-  if (!user.canViewCRM) {
+  // An assigned rep may open their own leads even without blanket CRM; getScopedLead
+  // restricts them to leads assigned to them, so this leaks nothing.
+  if (!user.canViewCRM && !gProfile) {
     return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
   }
 
@@ -263,8 +269,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
   const user = await getCurrentUser()
-
-  if (!user.canViewCRM) {
+  const profileId = await getProfileId(user.id, user.email)
+  if (!user.canViewCRM && !profileId) {
     return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
   }
 
@@ -280,8 +286,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (!lead) {
     return NextResponse.json({ success: false, message: 'Lead not found or outside your access.' }, { status: 404 })
   }
-
-  const profileId = await getProfileId(user.id, user.email)
 
   // ── add_note ────────────────────────────────────────────────────────────────
   if (action === 'add_note') {

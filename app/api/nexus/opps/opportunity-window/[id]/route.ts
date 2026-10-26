@@ -27,8 +27,13 @@ async function safe<T>(
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
   const user = await getCurrentUser()
+  const getProfile = await getProfileId(user.id, user.email)
 
-  if (!user.canViewCRM) {
+  // A rep who owns records (resolvable profile) may open their own deals even if
+  // their tier doesn't grant blanket CRM. The home list already shows a rep their
+  // assigned deals; this keeps "open the deal" consistent with that. Org + assigned
+  // scope below still restrict them to deals assigned to them in their org.
+  if (!user.canViewCRM && !getProfile) {
     return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
   }
 
@@ -45,7 +50,6 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
   // Axis 2 — a plain "user" (rep) may only open opportunities assigned to them.
   // Admin/supervisor/corporate are unrestricted. Fails closed if no profile id.
-  const getProfile = await getProfileId(user.id, user.email)
   oppQuery = applyAssignedScope(oppQuery, user.role, { clerkUserId: user.id, profileId: getProfile }, 'opportunities')
 
   const { data: opp, error: oppError } = await oppQuery.maybeSingle()
@@ -229,7 +233,10 @@ const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
   const user = await getCurrentUser()
-  if (!user.canViewCRM) {
+  const profileId = await getProfileId(user.id, user.email)
+  // Same rule as GET: an assigned rep can act on their own deals. The scope check
+  // below (applyOrgScope) still confirms the record is in the caller's access.
+  if (!user.canViewCRM && !profileId) {
     return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
   }
 
@@ -246,8 +253,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (!opp) {
     return NextResponse.json({ success: false, message: 'Opportunity not found or outside your access.' }, { status: 404 })
   }
-
-  const profileId = await getProfileId(user.id, user.email)
 
   // ── add_attachment ──────────────────────────────────────────────────────────
   if (action === 'add_attachment') {
