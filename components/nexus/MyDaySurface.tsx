@@ -10,6 +10,7 @@ import { TodoBoard } from '@/components/nexus/TodoBoard'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MessagesShell from '@/components/nexus/MessagesShell'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
+import { SiteStatusModule } from '@/components/nexus/SiteStatusModule'
 import { NEXUS_BG } from '@/components/nexus/NexusBackdrop'
 
 type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'messages' | null
@@ -599,6 +600,9 @@ export function MyDaySurface() {
           </div>
         </div>
       </div>
+
+      {/* Site Status — role-scoped site overview (corporate: all + dealer filter; dealers: theirs) */}
+      <SiteStatusModule />
 
       {/* Messages board */}
       <div className="mt-5 overflow-hidden rounded-2xl" style={GLASS}>
