@@ -528,10 +528,16 @@ export default function MessagesPage() {
     setLoading(false);
   }, []);
 
+  // Pull the latest Gmail into message_threads (best-effort — page still works
+  // if no Gmail is connected), then load the (now-populated) inbox.
+  const syncInbox = useCallback(async () => {
+    try { await fetch("/api/messages/sync", { method: "POST" }); } catch { /* best-effort */ }
+  }, []);
+
   useEffect(() => {
     void loadChannels();
-    void loadThreads();
-  }, [loadChannels, loadThreads]);
+    void (async () => { await syncInbox(); await loadThreads(); })();
+  }, [loadChannels, loadThreads, syncInbox]);
 
   // ── Open thread ──────────────────────────────────────────────────────────────
   async function openThread(thread: Thread) {
