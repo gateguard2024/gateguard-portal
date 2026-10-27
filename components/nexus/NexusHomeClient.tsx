@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { routeCommand } from '@/lib/command-router'
-import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
@@ -168,17 +167,18 @@ export default function NexusHomeClient() {
   }, [messages, isAdmin, router])
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg,#141d2e 0%,#0e1521 55%,#0b111b 100%)' }}>
-      {/* ambient depth — new elevated look */}
-      <div className="pointer-events-none absolute inset-0 z-0" style={{ background: 'radial-gradient(1100px 720px at 8% -8%, rgba(30,150,230,0.14), transparent 58%), radial-gradient(1100px 760px at 100% 112%, rgba(107,126,255,0.13), transparent 55%)' }} />
-      <NexusBackdropLayers variant="hero" />
+    <div className="relative flex h-screen flex-col overflow-hidden" style={activeTab === 'my-day'
+      ? { background: "linear-gradient(180deg, rgba(5,9,16,0.58), rgba(5,9,16,0.74)), url('/myday-fabric.jpg') center / cover fixed" }
+      : { background: 'linear-gradient(180deg,#141d2e 0%,#0e1521 55%,#0b111b 100%)' }}>
+      {activeTab !== 'my-day' && (<>
+        {/* ambient depth — new elevated look */}
+        <div className="pointer-events-none absolute inset-0 z-0" style={{ background: 'radial-gradient(1100px 720px at 8% -8%, rgba(30,150,230,0.14), transparent 58%), radial-gradient(1100px 760px at 100% 112%, rgba(107,126,255,0.13), transparent 55%)' }} />
+        <NexusBackdropLayers variant="hero" />
+      </>)}
 
       {/* Rails removed — center content is full width now. */}
       <main className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 pb-40 pt-4">
         <NexusMark />
-        <div className="mt-2 w-full max-w-md rounded-2xl" style={{ boxShadow: '0 0 34px rgba(74,140,255,0.18), 0 0 1px rgba(107,126,255,0.5)' }}>
-          <ActionCommandBar onSubmit={handleQuery} isLoading={isLoading} />
-        </div>
 
         {messages.length > 0 && (
           <div className="mt-6 w-full max-w-2xl space-y-3">

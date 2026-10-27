@@ -516,12 +516,12 @@ export function MyDaySurface() {
       {/* Metric ring gauges */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
-          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: C.safe, ic: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
+          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, onClick: () => openCard(cards[1]), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, onClick: () => openCard(cards[1]), ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
+          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, onClick: () => openCard(cards[2]), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: C.safe, onClick: () => { window.location.href = '/crm/leads' }, ic: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
         ].map((m) => (
-          <div key={m.l} className="flex items-center gap-3.5 rounded-2xl p-4" style={GLASS}>
+          <button key={m.l} type="button" onClick={m.onClick} className="flex w-full items-center gap-3.5 rounded-2xl p-4 text-left transition-transform hover:-translate-y-0.5" style={GLASS}>
             <MyRing size={58} pct={m.pct} color={m.col} stroke={5}>
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke={m.col} strokeWidth="1.9">{m.ic}</svg>
             </MyRing>
@@ -530,7 +530,7 @@ export function MyDaySurface() {
               <div className="mt-1 text-[24px] font-extrabold leading-none tracking-tight sm:text-[26px]" style={{ color: C.ink }}>{m.v}</div>
               <div className="mt-1.5 text-[11px]" style={{ color: C.ink3 }}>{m.s}</div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
