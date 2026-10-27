@@ -77,6 +77,8 @@
 
 ## DESIGN SYSTEM
 
+> **★ NORTH STAR — Apple-grade. Every interface (Portal, Property, Resident) should look and feel like an Apple interface (macOS/iOS): Fortune-500 polished, never cartoony.** Neutral graphite canvas + ONE accent (system blue `#0A84FF`); semibold (600) type, not black 800; tight corners (card 12 / control 10 / pill 6); 1px hairline separators; flat surfaces, NO neon glow; semantic colors (red `#FF453A` / green `#30D158` / orange `#FF9F0A`) only as small status dots, used sparingly. Full standard + tokens → **`docs/DESIGN_LANGUAGE.md`**; canonical mock → `outputs/gg-myday-apple.html`. The brand-blue/steel notes below are legacy; new work follows the Apple-grade standard.
+
 - **Portal:** light theme, `#F8FAFC` bg, `#6B7EFF` brand blue, dark sidebar `#0C111D`
 - **Sidebar gradient (May 2026):** `radial-gradient(ellipse at 50% 68%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)` — applied as inline style on `<aside>` in Sidebar.tsx; replaces flat `bg-[hsl(var(--sidebar-bg))]`
 - **Tech tool:** two-tone — `#0B1728` dark navy topBar + `#FFFFFF` cards on `#EEF2FF` bg
