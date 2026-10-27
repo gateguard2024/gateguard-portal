@@ -8,11 +8,19 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 
+// My Day glass palette — matches the other dashboard modules so it pops on the fabric
+// backdrop instead of reading as a flat black box.
 const C = {
-  surface: '#1c1c1e', surface2: '#2c2c2e', hair: 'rgba(255,255,255,0.09)', hair2: 'rgba(255,255,255,0.055)',
-  ink: '#f5f5f7', ink2: 'rgba(235,235,245,0.60)', ink3: 'rgba(235,235,245,0.30)',
-  blue: '#0A84FF', green: '#30D158', orange: '#FF9F0A', red: '#FF453A',
+  tile: 'rgba(14,21,33,0.5)', hair: 'rgba(255,255,255,0.09)', hair2: 'rgba(255,255,255,0.06)',
+  ink: '#eaf2fb', ink2: '#9fb0c4', ink3: '#6d7f94',
+  blue: '#00A3FF', green: '#34D399', orange: '#f59e0b', red: '#f43f5e',
 }
+const GLASS = {
+  background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))',
+  backdropFilter: 'blur(18px) saturate(1.15)',
+  border: '1px solid rgba(255,255,255,0.09)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)',
+} as const
 const HEALTH: Record<string, string> = { ok: C.green, watch: C.orange, down: C.red }
 
 type SiteRow = { id: string; name: string; dealer: string | null; location: string; status: string | null; health: 'ok' | 'watch' | 'down'; units: number | null }
@@ -55,7 +63,7 @@ function Donut({ counts, total }: { counts: { ok: number; watch: number; down: n
 
 function Kpi({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{ borderRadius: 10, background: C.surface2, border: `1px solid ${C.hair2}`, padding: '15px 17px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div style={{ borderRadius: 12, background: C.tile, border: `1px solid ${C.hair2}`, padding: '15px 17px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={{ fontSize: 10.5, color: C.ink2 }}>{label}</div>
       <div style={{ fontSize: 25, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
@@ -88,7 +96,7 @@ export function SiteStatusModule() {
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
         {data?.canPickDealer && (
           <select value={dealer} onChange={e => setDealer(e.target.value)}
-            style={{ background: C.surface2, border: `1px solid ${C.hair}`, borderRadius: 8, padding: '7px 11px', fontSize: 12, fontWeight: 500, color: C.ink, outline: 'none' }}>
+            style={{ background: C.tile, border: `1px solid ${C.hair}`, borderRadius: 8, padding: '7px 11px', fontSize: 12, fontWeight: 500, color: C.ink, outline: 'none' }}>
             <option value="">All dealers</option>
             {data.dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
@@ -99,7 +107,7 @@ export function SiteStatusModule() {
   )
 
   return (
-    <div style={{ borderRadius: 12, border: `1px solid ${C.hair}`, background: C.surface, color: C.ink, marginBottom: 20, boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset, 0 6px 20px -8px rgba(0,0,0,0.5)' }}>
+    <div style={{ ...GLASS, borderRadius: 16, color: C.ink, marginBottom: 20 }}>
       {title}
       {loading && !data ? (
         <div style={{ padding: 28, fontSize: 12.5, color: C.ink2 }}>Loading sites…</div>
