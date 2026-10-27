@@ -107,7 +107,7 @@ export function SiteStatusModule() {
   )
 
   return (
-    <div style={{ ...GLASS, borderRadius: 16, color: C.ink, marginBottom: 20 }}>
+    <div style={{ ...GLASS, borderRadius: 16, color: C.ink, marginTop: 20, marginBottom: 20 }}>
       {title}
       {loading && !data ? (
         <div style={{ padding: 28, fontSize: 12.5, color: C.ink2 }}>Loading sites…</div>
@@ -131,23 +131,39 @@ export function SiteStatusModule() {
             <Kpi label="Total units" value={data.units.toLocaleString()} />
             <Kpi label="Prospects" value={data.prospects} />
           </div>
-          <div style={{ padding: '2px 20px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, letterSpacing: '0.02em', color: C.ink3, textTransform: 'uppercase', padding: '12px 0 2px', borderTop: `1px solid ${C.hair2}` }}>
+          <div style={{ padding: '2px 20px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0 0', borderTop: `1px solid ${C.hair2}`, fontSize: 10.5, letterSpacing: '0.02em', color: C.ink3, textTransform: 'uppercase' }}>
               Needs attention first
+              <a href="/sites" style={{ marginLeft: 'auto', color: C.blue, fontSize: 11.5, fontWeight: 500, textTransform: 'none', letterSpacing: 0, textDecoration: 'none' }}>View all sites →</a>
             </div>
-            {data.sites.map((s, i) => (
-              <a key={s.id} href={`/sites/${s.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', textDecoration: 'none', color: 'inherit', borderTop: i > 0 ? `1px solid ${C.hair2}` : 'none' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: HEALTH[s.health] }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{s.name}</div>
-                  <div style={{ fontSize: 11, color: C.ink2, marginTop: 2 }}>{[s.location, s.dealer].filter(Boolean).join(' · ') || '—'}</div>
-                </div>
-                <div style={{ marginLeft: 'auto', textAlign: 'right', fontSize: 10.5, color: C.ink3 }}>
-                  <b style={{ display: 'block', fontSize: 11, fontWeight: 600, color: HEALTH[s.health], textTransform: 'capitalize' }}>{s.status ?? '—'}</b>
-                  {s.units ? `${s.units} units` : ''}
-                </div>
-              </a>
-            ))}
+            {/* column header */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) 92px 76px 80px 96px 78px', alignItems: 'center', gap: 10, padding: '9px 0 7px', fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.ink3 }}>
+              <span>Site</span>
+              <span style={{ textAlign: 'center' }}>Cameras</span>
+              <span style={{ textAlign: 'center' }}>Access</span>
+              <span style={{ textAlign: 'center' }}>Gates</span>
+              <span style={{ textAlign: 'center' }}>Packages</span>
+              <span style={{ textAlign: 'right' }}>Status</span>
+            </div>
+            {/* ~4 rows visible, the rest scroll */}
+            <div style={{ maxHeight: 192, overflowY: 'auto' }}>
+              {data.sites.map((s, i) => (
+                <a key={s.id} href={`/sites/${s.id}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) 92px 76px 80px 96px 78px', alignItems: 'center', gap: 10, padding: '10px 0', textDecoration: 'none', color: 'inherit', borderTop: i > 0 ? `1px solid ${C.hair2}` : 'none' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: HEALTH[s.health] }} />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                      <span style={{ display: 'block', fontSize: 11, color: C.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[s.location, s.dealer].filter(Boolean).join(' · ') || '—'}</span>
+                    </span>
+                  </span>
+                  <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
+                  <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
+                  <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
+                  <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
+                  <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: HEALTH[s.health], textTransform: 'capitalize' }}>{s.status ?? '—'}</span>
+                </a>
+              ))}
+            </div>
           </div>
         </>
       )}

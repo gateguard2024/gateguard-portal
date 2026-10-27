@@ -87,7 +87,7 @@ export async function GET(req: Request) {
 
     // Needs-attention first: non-active before active.
     const rank = (s: Record<string, unknown>) => (bucket(s.status as string) === 'down' ? 0 : bucket(s.status as string) === 'watch' ? 1 : 2)
-    const list = [...sites].sort((a, b) => rank(a) - rank(b)).slice(0, 8).map(s => ({
+    const list = [...sites].sort((a, b) => rank(a) - rank(b)).slice(0, 25).map(s => ({
       id: s.id,
       name: s.name,
       dealer: dealerOf(s),
