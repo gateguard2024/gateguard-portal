@@ -20,7 +20,7 @@ type Cam = { id: string; name: string; online?: boolean | null }
 type Seg = { startISO?: string; mp4Url?: string; start?: string }
 
 function panel(extra?: React.CSSProperties): React.CSSProperties {
-  return { background: 'linear-gradient(180deg,rgba(32,44,66,.78),rgba(18,26,42,.72))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,.085)', borderRadius: 16, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.09), 0 2px 6px rgba(0,0,0,.25), 0 34px 70px -32px rgba(0,0,0,.85)', ...extra }
+  return { background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px -12px rgba(0,0,0,.18)', ...extra }
 }
 const OFF_ICON = <svg viewBox="0 0 24 24" width={34} height={34} fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M2 2l20 20M17 17H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2m3-1h2l2 2" /></svg>
 
@@ -110,7 +110,7 @@ function Inner({ slug }: { slug: string }) {
                 {cams.map(c => {
                   const off = isOff(c)
                   return (
-                    <div key={c.id} onClick={() => setSel(c.id)} onDoubleClick={() => setModalCam(c)} title="Double-click to expand" style={{ position: 'relative', aspectRatio: '16 / 10', borderRadius: 11, overflow: 'hidden', cursor: 'pointer', background: '#05070b', border: `1px solid ${c.id === sel ? C.cyan : C.border2}`, boxShadow: c.id === sel ? '0 0 0 2px rgba(0,163,224,.4)' : 'none' }}>
+                    <div key={c.id} onClick={() => setSel(c.id)} onDoubleClick={() => setModalCam(c)} title="Double-click to expand" style={{ position: 'relative', aspectRatio: '16 / 10', borderRadius: 11, overflow: 'hidden', cursor: 'pointer', background: '#05070b', border: `1px solid ${c.id === sel ? C.cyan : C.border2}`, boxShadow: c.id === sel ? '0 0 0 2px rgba(0,113,227,.35)' : 'none' }}>
                       {off ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink3, fontSize: 10.5, fontWeight: 600 }}>No signal</div> :
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={src(c.id)} alt={c.name} onLoad={e => onImg(c, e)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
@@ -139,8 +139,8 @@ function CamModal({ slug, cam, off, tick, onClose }: { slug: string; cam: Cam; o
   }, [slug, cam.id])
   const fmt = (s: Seg) => { const t = s.startISO || s.start; return t ? new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—' }
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(5,8,14,.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ width: 980, maxWidth: '94vw', background: C.panel, border: `1px solid ${C.border2}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 40px 90px rgba(0,0,0,.7)' }}>
+    <div onClick={e => { if (e.target === e.currentTarget) onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ width: 980, maxWidth: '94vw', background: C.panel, border: `1px solid ${C.border2}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 20px 50px -12px rgba(0,0,0,.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontSize: 16, fontWeight: 800 }}>{cam.name}</span>
           <button onClick={onClose} style={{ background: 'transparent', border: 0, color: C.ink2, cursor: 'pointer' }}><X size={20} /></button>

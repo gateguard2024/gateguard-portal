@@ -14,7 +14,7 @@ type Evt = { id: string; time: string; date: string; label: string; user: string
 const toneColor: Record<string, string> = { safe: C.safe, cyan: C.cyan, warn: C.warn, alert: C.alert }
 
 function panel(extra?: React.CSSProperties): React.CSSProperties {
-  return { background: 'linear-gradient(180deg,rgba(32,44,66,.78),rgba(18,26,42,.72))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,.085)', borderRadius: 16, overflow: 'hidden', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.09), 0 2px 6px rgba(0,0,0,.25), 0 34px 70px -32px rgba(0,0,0,.85)', ...extra }
+  return { background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px -12px rgba(0,0,0,.18)', ...extra }
 }
 
 const CATS: [string, string][] = [['all', 'All events'], ['access', 'Valid access'], ['denied', 'Denied'], ['admin', 'Admin'], ['schedule', 'Scheduled']]
@@ -44,7 +44,7 @@ function Inner({ slug }: { slug: string }) {
     { v: stats.denied, l: 'Access denied', c: C.alert, Icon: XCircle },
     { v: stats.admin, l: 'Admin / manager actions', c: C.warn, Icon: ShieldCheck },
   ]
-  const chip = (active: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, borderRadius: 10, padding: '9px 13px', cursor: 'pointer', border: `1px solid ${active ? 'rgba(0,163,224,0.5)' : C.border2}`, background: active ? 'rgba(0,163,224,0.12)' : C.card, color: active ? C.cyan : C.ink })
+  const chip = (active: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, borderRadius: 10, padding: '9px 13px', cursor: 'pointer', border: `1px solid ${active ? 'rgba(0,113,227,0.5)' : C.border2}`, background: active ? 'rgba(0,113,227,0.08)' : C.card, color: active ? C.cyan : C.ink })
   const th: React.CSSProperties = { textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.ink3, borderBottom: `1px solid ${C.border}` }
   const td: React.CSSProperties = { padding: '11px 14px', fontSize: 12.5, borderBottom: `1px solid ${C.border}`, verticalAlign: 'middle' }
 
@@ -63,7 +63,7 @@ function Inner({ slug }: { slug: string }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 20 }} className="gg-evstats">
         {statCards.map((s, i) => (
-          <div key={i} style={{ background: 'linear-gradient(165deg,rgba(255,255,255,.035),transparent 55%),rgba(20,28,43,.5)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div key={i} style={{ background: C.well, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 46, height: 46, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: `${s.c}22`, color: s.c }}><s.Icon size={20} /></div>
             <div><div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>{loading ? '—' : s.v}</div><div style={{ fontSize: 11.5, color: C.ink2, marginTop: 4, fontWeight: 600 }}>{s.l}</div></div>
           </div>
@@ -93,7 +93,7 @@ function Inner({ slug }: { slug: string }) {
                     <td style={td}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor[e.tone] }} />{e.label}</span></td>
                     <td style={{ ...td, fontWeight: 600 }}>{e.user}</td>
                     <td style={{ ...td, color: C.ink2 }}>{e.gate}</td>
-                    <td style={td}><button onClick={() => router.push(`/portal/${slug}/video`)} title="View camera" style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,163,224,.12)', border: '1px solid rgba(0,163,224,.3)', color: C.cyan, cursor: 'pointer' }}><Play size={14} /></button></td>
+                    <td style={td}><button onClick={() => router.push(`/portal/${slug}/video`)} title="View camera" style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,113,227,.08)', border: '1px solid rgba(0,113,227,.3)', color: C.cyan, cursor: 'pointer' }}><Play size={14} /></button></td>
                   </tr>
                 ))}
           </tbody>

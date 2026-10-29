@@ -11,9 +11,9 @@ const HOLD_MS = 1100
 
 type Tone = 'cyan' | 'amber' | 'alert'
 const TONE: Record<Tone, { bg: string; fill: string; text: string; border: string }> = {
-  cyan: { bg: 'rgba(0,163,224,0.14)', fill: 'rgba(0,163,224,0.45)', text: '#7fd6f5', border: 'rgba(0,163,224,0.45)' },
-  amber: { bg: 'rgba(245,158,11,0.14)', fill: 'rgba(245,158,11,0.5)', text: '#fcd56b', border: 'rgba(245,158,11,0.45)' },
-  alert: { bg: 'rgba(239,68,68,0.16)', fill: 'rgba(239,68,68,0.55)', text: '#fca5a5', border: 'rgba(239,68,68,0.5)' },
+  cyan: { bg: 'rgba(0,113,227,0.08)', fill: 'rgba(0,113,227,0.22)', text: '#0058B0', border: 'rgba(0,113,227,0.35)' },
+  amber: { bg: 'rgba(255,149,0,0.1)', fill: 'rgba(255,149,0,0.3)', text: '#8A3D00', border: 'rgba(178,80,0,0.35)' },
+  alert: { bg: 'rgba(255,59,48,0.08)', fill: 'rgba(255,59,48,0.25)', text: '#B0000F', border: 'rgba(215,0,21,0.35)' },
 }
 
 export function HoldButton({ label, holdingLabel, onConfirm, tone = 'cyan', disabled, title }: {

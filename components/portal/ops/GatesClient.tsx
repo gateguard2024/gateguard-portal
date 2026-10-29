@@ -52,7 +52,7 @@ function Inner({ slug }: { slug: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Lockdown */}
-      <div style={{ ...card(), borderColor: lockActive ? 'rgba(239,68,68,0.5)' : C.border, boxShadow: lockActive ? '0 0 20px 2px rgba(239,68,68,0.25)' : undefined }}>
+      <div style={{ ...card(), borderColor: lockActive ? 'rgba(215,0,21,0.5)' : C.border, boxShadow: lockActive ? '0 0 0 3px rgba(215,0,21,0.1)' : undefined }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ShieldAlert size={18} color={lockActive ? C.alert : C.ink2} />
@@ -72,7 +72,7 @@ function Inner({ slug }: { slug: string }) {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8 }}>
         {([['all', `All (${counts.all})`], ['gates', `Gates (${counts.gates})`], ['doors', `Doors (${counts.doors})`]] as const).map(([k, lbl]) => (
-          <button key={k} onClick={() => setFilter(k)} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${filter === k ? 'rgba(0,163,224,0.5)' : C.border}`, background: filter === k ? 'rgba(0,163,224,0.16)' : 'transparent', color: filter === k ? C.cyan : C.ink2 }}>{lbl}</button>
+          <button key={k} onClick={() => setFilter(k)} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${filter === k ? 'rgba(0,113,227,0.5)' : C.border2}`, background: filter === k ? 'rgba(0,113,227,0.08)' : 'transparent', color: filter === k ? C.cyan : C.ink2 }}>{lbl}</button>
         ))}
       </div>
 
@@ -87,9 +87,9 @@ function Inner({ slug }: { slug: string }) {
               <div key={d.id} style={card()}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{d.name}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.12)', color: C.safe, border: '1px solid rgba(16,185,129,0.3)' }}>SECURED</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: 'rgba(31,138,59,0.08)', color: C.safe, border: '1px solid rgba(31,138,59,0.3)' }}>SECURED</span>
                 </div>
-                <button onClick={() => cmd(d, 'open')} disabled={busy === `${d.id}:open`} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid rgba(0,163,224,0.4)', background: 'rgba(0,163,224,0.14)', color: C.cyan, fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}><KeyRound size={14} /> Open (10s)</button>
+                <button onClick={() => cmd(d, 'open')} disabled={busy === `${d.id}:open`} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid rgba(0,113,227,0.4)', background: 'rgba(0,113,227,0.08)', color: C.cyan, fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}><KeyRound size={14} /> Open (10s)</button>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1 }}><HoldButton tone="amber" label="Hold 1 hr" holdingLabel="Holding…" onConfirm={() => cmd(d, 'hold_open')} disabled={!manager} /></div>
                   <div style={{ flex: 1 }}><HoldButton tone="alert" label="Force close" holdingLabel="Closing…" onConfirm={() => cmd(d, 'force_close')} disabled={!manager || egress} title={egress ? 'Egress/pedestrian routes cannot be force-closed' : undefined} /></div>
@@ -100,9 +100,9 @@ function Inner({ slug }: { slug: string }) {
           })}
         </div>
       )}
-      {!manager && <div style={{ fontSize: 11.5, color: C.ink2 }}>Sign in with your personal PIN (top right) to control gates.</div>}
+      {!manager && <div style={{ fontSize: 11.5, color: C.ink2 }}>Sign in with your personal PIN to control gates.</div>}
 
-      {toast && <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 130, background: C.surface, border: `1px solid ${C.border}`, color: C.ink, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 600 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 130, background: C.surface, border: `1px solid ${C.border}`, color: C.ink, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 600, boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>{toast}</div>}
     </div>
   )
 }
