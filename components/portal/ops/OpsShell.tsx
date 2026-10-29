@@ -26,6 +26,8 @@ export const C = {
 // The one accent. Kept as `BRAND` because pages import it; no more gradient.
 export const BRAND = '#0071E3'
 const DOT = { safe: '#34C759', alert: '#FF3B30', warn: '#FF9500' }
+// Navy sidebar (the first Nexus Vision concept's left rail), one blue accent.
+const NAV = { bg: '#0E1726', ink: '#FFFFFF', ink2: '#C9D2E0', ink3: '#8592A6', hover: '#18233A', well: '#18233A', line: '#1F2B44', line2: '#2C3A55' }
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif'
 
 type Manager = { id: string; name: string; email: string | null }
@@ -73,10 +75,15 @@ const ACCESS_SUB = [{ key: 'gates', label: 'Gates & doors' }, { key: 'activity',
 
 const CSS = `
 .ops-app{display:flex;min-height:100vh}
-.ops-side{width:240px;flex:none;position:sticky;top:0;height:100vh;overflow-y:auto;box-sizing:border-box;background:${C.nav};border-right:1px solid ${C.border};padding:18px 12px;display:flex;flex-direction:column;gap:2px}
+.ops-side{width:240px;flex:none;position:sticky;top:0;height:100vh;overflow-y:auto;box-sizing:border-box;background:${NAV.bg};color:${NAV.ink};padding:18px 12px;display:flex;flex-direction:column;gap:2px}
 .ops-nav{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:8px;color:${C.ink};font-size:14px;text-decoration:none;box-sizing:border-box}
 .ops-nav:hover{background:rgba(0,0,0,.04);color:${C.ink}}
 .ops-nav.on{background:${C.blue};color:#fff;font-weight:600}
+.ops-side .ops-nav{color:${NAV.ink2}}
+.ops-side .ops-nav:hover{background:${NAV.hover};color:#fff}
+.ops-side .ops-nav.on,.ops-side .ops-nav.on:hover{background:${C.blue};color:#fff}
+.ops-side .ops-btn{background:transparent;border-color:${NAV.line2};color:#fff}
+.ops-side .ops-btn:hover{background:${NAV.hover}}
 .ops-main{flex:1;min-width:0;padding:28px 36px 48px;box-sizing:border-box}
 .ops-sub{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:20px;padding:3px;border-radius:10px;background:rgba(0,0,0,.05);width:max-content;max-width:100%}
 .ops-sub a{min-height:36px;display:inline-flex;align-items:center;padding:0 14px;border-radius:8px;font-size:13px;font-weight:500;color:${C.ink2};text-decoration:none}
@@ -122,14 +129,14 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
 
   const tab = ACTIVE_ALIAS[active] ?? active
   const href = (path: string) => `/portal/${slug}/${path}`
-  const status = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.ink2 }}>
+  const status = (color: string) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color }}>
       <span style={{ width: 8, height: 8, borderRadius: 999, background: lockdown ? DOT.alert : DOT.safe, flex: 'none' }} />
       {lockdown ? 'Lockdown active' : 'All secure'}
     </span>
   )
   const mark = (
-    <span style={{ width: 26, height: 26, borderRadius: 7, background: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+    <span style={{ width: 26, height: 26, borderRadius: 7, background: C.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /></svg>
     </span>
   )
@@ -140,25 +147,25 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="ops-app" style={{ background: C.canvas, color: C.ink, fontFamily: FONT, fontSize: 14, lineHeight: 1.45, letterSpacing: '-0.01em' }}>
         <nav className="ops-side" aria-label="Property portal">
-          <Link href={href('dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 10px 16px', fontWeight: 600, fontSize: 15, color: C.ink, textDecoration: 'none' }}>
-            {mark}Nexus <span style={{ fontWeight: 400, color: C.ink3 }}>Property</span>
+          <Link href={href('dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 10px 16px', fontWeight: 600, fontSize: 15, color: NAV.ink, textDecoration: 'none' }}>
+            {mark}Nexus <span style={{ fontWeight: 400, color: NAV.ink3 }}>Property</span>
           </Link>
           {/* Site block. Becomes a switcher once a login can hold several sites. */}
-          <div style={{ padding: '10px 12px', marginBottom: 12, border: `1px solid ${C.border2}`, borderRadius: 10, background: '#fff' }}>
+          <div style={{ padding: '10px 12px', marginBottom: 12, border: `1px solid ${NAV.line}`, borderRadius: 10, background: NAV.well }}>
             <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-            <div style={{ marginTop: 2 }}>{status}</div>
+            <div style={{ marginTop: 2 }}>{status(NAV.ink2)}</div>
           </div>
           {PM_TABS.map(t => (
             <Link key={t.key} href={href(t.path)} className={`ops-nav${tab === t.key ? ' on' : ''}`} aria-current={tab === t.key ? 'page' : undefined}>
               <Icon k={t.key} />{t.label}
             </Link>
           ))}
-          <div style={{ marginTop: 'auto', padding: '14px 4px 4px', borderTop: `1px solid ${C.border}` }}>
+          <div style={{ marginTop: 'auto', padding: '14px 4px 4px', borderTop: `1px solid ${NAV.line}` }}>
             {manager ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 8px' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{manager.name}</div>
-                  <div style={{ fontSize: 13, color: C.ink3 }}>Signed in to control</div>
+                  <div style={{ fontSize: 13, color: NAV.ink3 }}>Signed in to control</div>
                 </div>
                 <button type="button" onClick={signOut} className="ops-btn" style={{ minHeight: 36, padding: '0 10px', fontSize: 13, flex: 'none', whiteSpace: 'nowrap' }}>Sign out</button>
               </div>
@@ -174,7 +181,7 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
               {mark}
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-                {status}
+                {status(C.ink2)}
               </div>
             </div>
             {manager
