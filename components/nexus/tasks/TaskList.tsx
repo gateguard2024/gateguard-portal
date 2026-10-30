@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react'
 import { STATUS, T, addDays, fmtDue, groupName, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, StatusPill, type GroupBy, type Task } from './shared'
 
-const CSS = `
+export const LIST_CSS = `
 .tkl-grp{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.18);overflow:hidden}
 .tkl-gh{display:flex;align-items:center;gap:10px;width:100%;padding:0 16px;min-height:48px;border:0;border-bottom:1px solid rgba(0,0,0,.06);background:#FBFBFD;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .tkl-gh b{font-size:14px;font-weight:600}
@@ -91,7 +91,7 @@ export function TaskList({ tasks, groupBy, openId, onOpen, onToggleDone }: {
 
   return (
     <div className="tkl" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: LIST_CSS }} />
       {groups.map(g => {
         const open = g.items.filter(t => t.status !== 'done').length
         const done = g.items.length - open

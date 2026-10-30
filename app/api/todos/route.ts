@@ -23,10 +23,13 @@ export async function GET(req: NextRequest) {
     const unscheduled = searchParams.get('unscheduled') === 'true'
     const limit       = parseInt(searchParams.get('limit') ?? '200', 10)
 
-    let query = supabase
+    // Completed list (status=done) comes back newest-finished first; everything else by due date.
+    const base = supabase
       .from('todos')
       .select(`*, todo_attachments(id, name, url, size_bytes, mime_type, created_at), todo_checklist_items(done)`)
-      .order('due_date', { ascending: true, nullsFirst: false })
+    let query = (status === 'done'
+      ? base.order('completed_at', { ascending: false, nullsFirst: false })
+      : base.order('due_date', { ascending: true, nullsFirst: false }))
       .order('created_at', { ascending: false })
       .limit(limit)
 

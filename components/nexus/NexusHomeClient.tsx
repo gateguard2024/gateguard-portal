@@ -45,9 +45,11 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
 const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps']
 
 const NEXUS_VERSION = 'v2.4.0'
+// Pages converted to the new light look show the new version.
+const NEXUS_VERSION_LIGHT = 'v2.5.0'
 
 // Small Nexus mark, top-left — keeps the page starting high (was a large centred logo).
-function NexusMark() {
+function NexusMark({ version }: { version: string }) {
   return (
     <div className="mb-2 flex w-full max-w-[1360px] items-center gap-2.5 px-1 sm:px-2" aria-label="Nexus by Gate Guard">
       <svg width="26" height="26" viewBox="0 0 68 68" fill="none" aria-hidden="true">
@@ -55,7 +57,7 @@ function NexusMark() {
         <circle cx="34" cy="34" r="6" fill="#4AA3FF" />
       </svg>
       <span className="text-[15px] font-semibold" style={{ color: '#fff', letterSpacing: '0.18em', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif' }}>NEXUS</span>
-      <span className="ml-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{NEXUS_VERSION}</span>
+      <span className="ml-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{version}</span>
     </div>
   )
 }
@@ -164,7 +166,7 @@ export default function NexusHomeClient() {
         // New look: navy at the top fading into the light canvas; scrolls with the page.
         ? { backgroundColor: '#EEF2F7', backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: 'no-repeat', backgroundAttachment: 'local' }
         : undefined}>
-        <NexusMark />
+        <NexusMark version={isLight ? NEXUS_VERSION_LIGHT : NEXUS_VERSION} />
 
         {messages.length > 0 && (
           <div className="mt-6 w-full max-w-2xl space-y-3">

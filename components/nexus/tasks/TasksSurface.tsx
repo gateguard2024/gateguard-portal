@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { TaskBoard } from './TaskBoard'
 import { TaskList } from './TaskList'
 import { TaskPanel } from './TaskPanel'
+import { TaskCompleted, type DoneGroupBy } from './TaskCompleted'
 
 export * from './shared'
 import { T, FONT, PAGE_BG, addDays, localISO, type DueFilter, type GroupBy, type Person, type Scope, type Task, type TaskStatus } from './shared'
@@ -55,6 +56,8 @@ const CSS = `
 .tk-head .tk-seg{background:rgba(255,255,255,.12)}
 .tk-head .tk-seg button{color:#C9D2E0}
 .tk-head .tk-seg button[aria-pressed=true]{background:#fff;color:${T.ink}}
+.tk-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:16px;max-width:min(520px,calc(100vw - 32px));padding:10px 12px 10px 16px;border-radius:12px;background:#1D1D1F;color:#fff;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.tk-toast button{border:0;background:none;color:#4AA3FF;font:600 13px ${FONT};cursor:pointer;padding:4px 6px;flex:none}
 @media (min-width:1200px){.tk-root.panel-open .tk-main{padding-right:592px}}
 @media (max-width:899px){.tk-main{padding:14px 16px 64px}}
 `
@@ -66,6 +69,16 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
   const [scope, setScope] = useState<Scope>('mine')
   const [due, setDue] = useState<DueFilter>(initialDue)
   const [groupBy, setGroupBy] = useState<GroupBy>('site')
+  // Open work vs. finished work. Done tasks never show on the open board/list.
+  const [tab, setTab] = useState<'open' | 'done'>('open')
+  const [doneGroup, setDoneGroup] = useState<DoneGroupBy>('date')
+  // "Moved to Completed — Undo" after a task is finished.
+  const [toast, setToast] = useState<{ id: string; title: string } | null>(null)
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 6000)
+    return () => clearTimeout(t)
+  }, [toast])
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,10 +109,15 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/todos?view=${scope}&limit=500`)
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error ?? 'Could not load tasks.')
-      setTasks((data.records ?? data.todos ?? []) as Task[])
+      // Open and completed load separately so a long history never crowds out open work.
+      const [openRes, doneRes] = await Promise.all([
+        fetch(`/api/todos?view=${scope}&status=open,in_progress,waiting&limit=500`),
+        fetch(`/api/todos?view=${scope}&status=done&limit=300`),
+      ])
+      const [openData, doneData] = await Promise.all([openRes.json().catch(() => ({})), doneRes.json().catch(() => ({}))])
+      if (!openRes.ok) throw new Error(openData?.error ?? 'Could not load tasks.')
+      if (!doneRes.ok) throw new Error(doneData?.error ?? 'Could not load completed tasks.')
+      setTasks([...((openData.records ?? openData.todos ?? []) as Task[]), ...((doneData.records ?? doneData.todos ?? []) as Task[])])
       setMsg(null)
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not load tasks.') }
     finally { setLoading(false) }
@@ -119,6 +137,7 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
   }, [openId, expanded, onClose])
 
   const patch = useCallback(async (id: string, updates: Partial<Task>) => {
+    if (updates.status === 'done') { const t = tasks.find(x => x.id === id); if (t && t.status !== 'done') setToast({ id, title: t.title }) }
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates, ...(updates.status ? { completed_at: updates.status === 'done' ? new Date().toISOString() : null } : {}) } : t)))
     try {
       const res = await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
@@ -127,7 +146,7 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
       if (data?.spawned) setTasks(prev => [...prev, data.spawned as Task]) // next repeat of a recurring task
       setMsg(null)
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not save.'); void load() }
-  }, [load])
+  }, [load, tasks])
 
   const create = useCallback(async (title: string, status: TaskStatus = 'open') => {
     const t = title.trim()
@@ -137,13 +156,17 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not create the task.')
       setTasks(prev => [data as Task, ...prev])
-      setNewTitle(''); setAdding(false); setOpenId((data as Task).id)
+      setNewTitle(''); setAdding(false); setTab('open'); setOpenId((data as Task).id)
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not create the task.') }
   }, [due])
 
   // The panel tells the list about changes so the board/list stay in step without a reload.
   const rowChanged = useCallback((id: string, changes: Partial<Task>) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...changes } : t)))
+    setTasks(prev => {
+      const before = prev.find(t => t.id === id)
+      if (changes.status === 'done' && before && before.status !== 'done') setToast({ id, title: before.title })
+      return prev.map(t => (t.id === id ? { ...t, ...changes } : t))
+    })
   }, [])
   const rowAdded = useCallback((t: Task) => setTasks(prev => (prev.some(x => x.id === t.id) ? prev : [t, ...prev])), [])
   const rowRemoved = useCallback((id: string) => {
@@ -161,17 +184,20 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
     }
   }, [tasks, today, weekEnd])
 
+  const doneCount = useMemo(() => tasks.filter(t => t.status === 'done').length, [tasks])
+  const openCount = tasks.length - doneCount
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return tasks.filter(t => {
       if (needle && !`${t.key ?? ''} ${t.title} ${t.linked_label ?? ''} ${t.assigned_to_name ?? ''} ${(t.tags ?? []).join(' ')}`.toLowerCase().includes(needle)) return false
-      if (due === 'all') return true
+      if (tab === 'done') return t.status === 'done'
       if (t.status === 'done') return false
+      if (due === 'all') return true
       if (due === 'today') return t.due_date === today
       if (due === 'overdue') return !!t.due_date && t.due_date < today
       return !!t.due_date && t.due_date >= today && t.due_date <= weekEnd
     })
-  }, [tasks, q, due, today, weekEnd])
+  }, [tasks, q, due, today, weekEnd, tab])
 
   const openTask = tasks.find(t => t.id === openId) ?? null
   const dueChip = (key: DueFilter, label: string, n: number, dot?: string) => (
@@ -199,14 +225,18 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Tasks</h1>
           </div>
           <div className="tk-bar">
-            <div className="tk-seg" role="group" aria-label="View">
+            <div className="tk-seg" role="tablist" aria-label="Open or completed">
+              <button type="button" role="tab" aria-selected={tab === 'open'} aria-pressed={tab === 'open'} onClick={() => setTab('open')}>Open <b style={{ fontWeight: 600, opacity: 0.7 }}>{openCount}</b></button>
+              <button type="button" role="tab" aria-selected={tab === 'done'} aria-pressed={tab === 'done'} onClick={() => { setTab('done'); setDue('all') }}>Completed <b style={{ fontWeight: 600, opacity: 0.7 }}>{doneCount}</b></button>
+            </div>
+            {tab === 'open' && <div className="tk-seg" role="group" aria-label="View">
               <button type="button" aria-pressed={view === 'board'} onClick={() => setView('board')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="11" rx="1" /><rect x="17" y="4" width="4" height="7" rx="1" /></svg>Board
               </button>
               <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>List
               </button>
-            </div>
+            </div>}
             <button type="button" className="tk-btn pri" onClick={() => setAdding(a => !a)} aria-expanded={adding}>New task</button>
           </div>
         </div>
@@ -224,14 +254,23 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
           <div className="tk-bar">
             <button type="button" className="tk-chip" aria-pressed={scope === 'mine'} onClick={() => setScope('mine')}>Mine</button>
             <button type="button" className="tk-chip" aria-pressed={scope === 'team'} onClick={() => setScope('team')}>Team</button>
-            <span style={{ width: 1, height: 22, background: T.line2 }} aria-hidden="true" />
-            {dueChip('today', 'Today', counts.today)}
-            {dueChip('overdue', 'Overdue', counts.overdue, '#FF3B30')}
-            {dueChip('week', 'This week', counts.week)}
+            {tab === 'open' && <>
+              <span style={{ width: 1, height: 22, background: T.line2 }} aria-hidden="true" />
+              {dueChip('today', 'Today', counts.today)}
+              {dueChip('overdue', 'Overdue', counts.overdue, '#FF3B30')}
+              {dueChip('week', 'This week', counts.week)}
+            </>}
           </div>
           <div className="tk-bar">
             <label><span className="tk-sr">Search tasks</span><input type="search" className="tk-input" placeholder="Search tasks" value={q} onChange={e => setQ(e.target.value)} style={{ width: 200 }} /></label>
-            {view === 'list' && (
+            {tab === 'done' && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#C9D2E0' }}>Group by
+                <select className="tk-select" value={doneGroup} onChange={e => setDoneGroup(e.target.value as DoneGroupBy)}>
+                  <option value="date">Date finished</option><option value="customer">Customer / site</option><option value="person">Person</option>
+                </select>
+              </label>
+            )}
+            {tab === 'open' && view === 'list' && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#C9D2E0' }}>Group by
                 <select className="tk-select" value={groupBy} onChange={e => setGroupBy(e.target.value as GroupBy)}>
                   <option value="site">Site / record</option><option value="status">Status</option><option value="owner">Owner</option><option value="due">Due date</option>
@@ -244,11 +283,19 @@ export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null
         {msg && <div className="tk-msg" role="alert">{msg}</div>}
 
         {loading && tasks.length === 0 ? <div className="tk-empty">Loading tasks…</div>
+          : tab === 'done'
+            ? <TaskCompleted tasks={shown} groupBy={doneGroup} openId={openId} onOpen={setOpenId} onReopen={t => void patch(t.id, { status: 'open' })} />
           : view === 'board'
-            ? <TaskBoard tasks={shown} openId={openId} onOpen={setOpenId} onMove={(id, status) => void patch(id, { status })} onAdd={(title, status) => void create(title, status)} />
+            ? <TaskBoard tasks={shown} openId={openId} onOpen={setOpenId} onMove={(id, status) => void patch(id, { status })} onAdd={(title, status) => void create(title, status)} doneCount={doneCount} onShowDone={() => setTab('done')} />
             : <TaskList tasks={shown} groupBy={groupBy} openId={openId} onOpen={setOpenId} onToggleDone={t => void patch(t.id, { status: t.status === 'done' ? 'open' : 'done' })} />}
       </div>
 
+      {toast && (
+        <div role="status" className="tk-toast">
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Moved to Completed — {toast.title}</span>
+          <button type="button" onClick={() => { void patch(toast.id, { status: 'open' }); setToast(null) }}>Undo</button>
+        </div>
+      )}
       {openId && (
         <TaskPanel
           key={openId}

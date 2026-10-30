@@ -1,10 +1,9 @@
 'use client'
 
-/** Tasks · Board view — one column per status; drag a card to change its status. */
+/** Tasks · Board view — one column per status; drag a card to change its status.
+ *  The Done column is only a drop target: finished tasks live on the Completed tab. */
 import { useState } from 'react'
 import { STATUS, T, fmtDue, initials, isOverdue, linkTypeLabel, PriorityIcon, type Task, type TaskStatus } from './shared'
-
-const DONE_SHOWN = 20
 
 const CSS = `
 .tkb-cols{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:14px;overflow-x:auto;align-items:start;padding-bottom:4px}
@@ -21,12 +20,16 @@ const CSS = `
 .tkb-add{min-height:40px;border:0;border-radius:8px;background:none;color:#6E6E73;font-family:inherit;font-size:13px;font-weight:500;text-align:left;padding:0 8px;cursor:pointer}
 .tkb-add:hover{background:rgba(0,0,0,.05)}
 @media (max-width:899px){.tkb-cols{grid-template-columns:repeat(4,minmax(250px,82vw))}}
+.tkb-drop{display:flex;flex-direction:column;align-items:center;gap:8px;padding:22px 10px;border:1.5px dashed rgba(0,0,0,.16);border-radius:10px;color:#6E6E73;font-size:12.5px;text-align:center;line-height:1.45}
+.tkb-col.over .tkb-drop{border-color:#0071E3;color:#0058B0}
 .tkb-key{font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#6E6E73}
 .tkb-prog{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#3A3A3C;font-variant-numeric:tabular-nums}
 `
 
-export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
+export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd, doneCount = 0, onShowDone }: {
   tasks: Task[]
+  doneCount?: number
+  onShowDone?: () => void
   openId: string | null
   onOpen: (id: string) => void
   onMove: (id: string, status: TaskStatus) => void
@@ -41,13 +44,8 @@ export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
     <div className="tkb-cols">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       {STATUS.map(col => {
-        let items = tasks.filter(t => t.status === col.key)
-        let hidden = 0
-        if (col.key === 'done') {
-          items = [...items].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
-          hidden = Math.max(0, items.length - DONE_SHOWN)
-          items = items.slice(0, DONE_SHOWN)
-        }
+        const isDoneCol = col.key === 'done'
+        const items = isDoneCol ? [] : tasks.filter(t => t.status === col.key)
         return (
           <section
             key={col.key}
@@ -63,7 +61,14 @@ export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
               setDragId(null); setOver(null)
             }}
           >
-            <div className="tkb-colh"><span className="tk-dot" style={{ background: col.dot }} />{col.label}<span className="n">{tasks.filter(t => t.status === col.key).length}</span></div>
+            <div className="tkb-colh"><span className="tk-dot" style={{ background: col.dot }} />{col.label}<span className="n">{isDoneCol ? doneCount : items.length}</span></div>
+            {isDoneCol && (
+              <div className="tkb-drop">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>
+                <span>Drag a card here to complete it.<br />Finished tasks move to the Completed tab.</span>
+                {onShowDone && doneCount > 0 && <button type="button" className="tkb-add" style={{ textAlign: 'center', color: '#0071E3' }} onClick={onShowDone}>View {doneCount} completed</button>}
+              </div>
+            )}
             {items.map(t => {
               const done = t.status === 'done'
               const late = isOverdue(t)
@@ -103,9 +108,8 @@ export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
                 </button>
               )
             })}
-            {hidden > 0 && <span className="tk-sub" style={{ padding: '2px 6px' }}>+ {hidden} older done — see List view</span>}
-            {items.length === 0 && hidden === 0 && <span className="tk-sub" style={{ padding: '6px' }}>Nothing here</span>}
-            {addingIn === col.key ? (
+            {!isDoneCol && items.length === 0 && <span className="tk-sub" style={{ padding: '6px' }}>Nothing here</span>}
+            {isDoneCol ? null : addingIn === col.key ? (
               <form onSubmit={e => { e.preventDefault(); if (draft.trim()) { onAdd(draft, col.key); setDraft(''); setAddingIn(null) } }} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label className="tk-sr" htmlFor={`tkb-add-${col.key}`}>New task in {col.label}</label>
                 <input id={`tkb-add-${col.key}`} autoFocus className="tk-input" placeholder="Task title" value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => { if (!draft.trim()) setAddingIn(null) }} />
