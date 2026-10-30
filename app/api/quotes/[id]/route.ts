@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { opportunityInScope } from '@/lib/crm-scope'
+import { quoteEvent, syncDealFromQuote } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -162,6 +164,13 @@ export async function PATCH(
 
   // Status transition side effects
   const newStatus = body.status as string | undefined
+  // Linking a quote to a deal: the deal must be one this user can see.
+  if ('opportunity_id' in body) {
+    if (body.opportunity_id && !(await opportunityInScope(String(body.opportunity_id)))) {
+      return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+    }
+    updates.opportunity_id = body.opportunity_id || null
+  }
   if (newStatus === 'sent'     && !body.sent_at)     updates.sent_at     = new Date().toISOString()
   if (newStatus === 'accepted' && !body.accepted_at) updates.accepted_at = new Date().toISOString()
   if (newStatus === 'declined' && !body.declined_at) updates.declined_at = new Date().toISOString()
@@ -190,8 +199,19 @@ export async function PATCH(
   }
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+
+  // Deal side: status events move/annotate the deal; any other save keeps deal values in step.
+  if (newStatus && newStatus !== existing.status && ['sent', 'accepted', 'declined'].includes(newStatus)) {
+    await quoteEvent(params.id, newStatus as 'sent' | 'accepted' | 'declined', { id: user.id, name: user.name })
+  } else {
+    await syncDealFromQuote(params.id)
+  }
   return NextResponse.json({ quote: updated })
 }
+
+// The quote builder's "Mark accepted / declined" buttons POST here (only "sent" uses
+// /send). There was no POST handler, so those buttons failed with 405.
+export const POST = PATCH
 
 // DELETE /api/quotes/[id] — delete quote (cascades to line_items)
 export async function DELETE(

@@ -978,8 +978,7 @@ export default function QuoteDetailPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             est_deposit:   Math.round(depositDue),
-            monthly_total: updatedQuote.total_mrr,
-            est_mrr:       updatedQuote.total_mrr,
+            // MRR / install fee now sync server-side from the deal's primary quote (lib/deal-sync).
             ...(updatedQuote.units ? { units: updatedQuote.units } : {}),
           }),
         }).catch(() => { /* non-blocking — don't let this fail the quote action */ });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { syncDealFromQuote } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -135,6 +136,7 @@ export async function POST(
 
   // Recalculate parent quote totals
   await recalcTotals(params.id)
+  await syncDealFromQuote(params.id) // deal values follow the primary quote
 
   const [enriched] = await withCatalogImages([item])
   return NextResponse.json({ item: enriched }, { status: 201 })

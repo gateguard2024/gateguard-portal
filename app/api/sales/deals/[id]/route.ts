@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
 import { STAGE_LABELS, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 import { kickoffProvisioning } from '@/lib/provisioning'
-import { OPEN_STAGES, dealCtx, loadVisibleDeal, profileNames, sb, shapeDeal, type DealCtx, type Row } from '@/lib/sales-deals'
+import { OPEN_STAGES, cardFor, dealCtx, loadVisibleDeal, sb, type DealCtx, type Row } from '@/lib/sales-deals'
+import { syncDealFromQuote } from '@/lib/deal-sync'
 
 export const dynamic = 'force-dynamic'
 type Ctx = { params: { id: string } }
@@ -46,21 +47,6 @@ async function logActivity(user: PortalUser, deal: Row, row: Row) {
     created_by: user.id, created_by_name: user.name, ...row,
   })
   return error?.message ?? null
-}
-
-/** Board card for one deal, with its live next step / overdue count / job flag. */
-async function cardFor(deal: Row, ctx: DealCtx) {
-  const [acts, wo, names] = await Promise.all([
-    sb.from('crm_activities').select('id, type, subject, due_at').eq('opportunity_id', deal.id).is('completed_at', null).not('due_at', 'is', null).order('due_at', { ascending: true }),
-    sb.from('work_orders').select('id').eq('opportunity_id', deal.id).limit(1),
-    profileNames([deal.rep_id]),
-  ])
-  const list = (acts.data ?? []) as Row[]
-  const now = Date.now()
-  return shapeDeal(deal, ctx, {
-    next: list[0] ?? null, overdue: list.filter(a => new Date(a.due_at).getTime() < now).length,
-    ownerName: (deal.rep_id && names[deal.rep_id]) || deal.owner_name || null, hasJob: !wo.error && (wo.data ?? []).length > 0,
-  })
 }
 
 async function repChoices(ctx: DealCtx) {
@@ -132,6 +118,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (typeof upd.name === 'string' && !upd.name.trim()) return bad('A deal needs a name')
   if (upd.budget_status != null && !BUDGET.includes(upd.budget_status)) return bad('Budget must be confirmed, not confirmed or unknown')
   if (!Object.keys(upd).length) return bad('Nothing to change')
+  // Typing your own monthly value / install fee stops them following the primary quote.
+  if (deal.quote_id && (('est_mrr' in upd && Number(upd.est_mrr) !== Number(deal.est_mrr)) || ('install_fee' in upd && Number(upd.install_fee) !== Number(deal.install_fee)))) upd.values_locked = true
   upd.updated_at = new Date().toISOString()
 
   const { data, error } = await sb.from('opportunities').update(upd).eq('id', deal.id).select('*').single()
@@ -214,6 +202,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       type, subject: subject.slice(0, 300), body: body.body ? String(body.body).slice(0, 4000) : null,
       due_at: body.due_at ? new Date(body.due_at).toISOString() : null,
       completed_at: body.done ? now : null, outcome: body.outcome ? String(body.outcome).slice(0, 200) : null,
+      duration_min: Number.isFinite(Number(body.duration_min)) && Number(body.duration_min) > 0 ? Math.round(Number(body.duration_min)) : null,
+      contact_name: body.contact_name ? String(body.contact_name).slice(0, 200) : null,
     })
     if (err) return NextResponse.json({ error: err }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -232,6 +222,21 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
     return NextResponse.json({ ok: true })
+  }
+
+  // ── Quotes: choose the primary quote / go back to following it ──
+  if (body.action === 'set_primary_quote' || body.action === 'use_quote_values') {
+    const qid = body.action === 'set_primary_quote' ? String(body.quote_id ?? '') : String(deal.quote_id ?? '')
+    if (!qid) return bad('This deal has no primary quote')
+    const { data: q } = await sb.from('quotes').select('id, quote_number, opportunity_id, status').eq('id', qid).maybeSingle()
+    if (!q || q.opportunity_id !== deal.id) return NextResponse.json({ error: 'Quote not found on this deal' }, { status: 404 })
+    const { error } = await sb.from('opportunities').update({ quote_id: q.id, values_locked: false, updated_at: now }).eq('id', deal.id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await syncDealFromQuote(q.id)
+    const logErr = await logActivity(user, deal, { type: 'quote', quote_id: q.id, subject: body.action === 'set_primary_quote' ? `Quote ${q.quote_number ?? ''} made primary` : `Deal values reset to quote ${q.quote_number ?? ''}`, completed_at: now })
+    if (logErr) console.error('[sales primary quote] history:', logErr)
+    const { data: fresh } = await sb.from('opportunities').select('*').eq('id', deal.id).single()
+    return NextResponse.json({ deal: fresh, card: await cardFor(fresh, ctx) })
   }
 
   // ── ARIA: find the researched property, then fill empty fields from it ──

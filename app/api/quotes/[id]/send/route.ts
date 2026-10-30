@@ -20,6 +20,7 @@ import { buildProposalEmail } from '@/lib/partnership-proposal'
 import { agreementPdfBuffer } from '@/lib/partnership-agreement-pdf'
 import { proposalPdfBuffer } from '@/lib/partnership-proposal-pdf'
 import { surveyPdfBuffer } from '@/lib/survey-doc-pdf'
+import { quoteEvent } from '@/lib/deal-sync'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -133,7 +134,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Mark sent + log to the opportunity timeline.
   const ts = new Date().toISOString()
-  await supabase.from('quotes').update({ status: 'sent', sent_at: ts, updated_at: ts }).eq('id', id)
+  const { error: markErr } = await supabase.from('quotes').update({ status: 'sent', sent_at: ts, updated_at: ts }).eq('id', id)
+  if (markErr) console.error('[quote send] mark sent:', markErr.message)
+  else await quoteEvent(id, 'sent', { id: user.id, name: user.name })
   if (quote.opportunity_id) {
     const profileId = await getProfileId(user.id)
     await supabase.from('crm_activities').insert({

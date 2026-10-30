@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { opportunityInScope } from '@/lib/crm-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,6 +93,12 @@ export async function POST(req: NextRequest) {
     line_items = [],
   } = body
 
+  // Optional link to a deal (migration 197) — must be a deal this user can see.
+  const opportunity_id: string | null = body.opportunity_id ? String(body.opportunity_id) : null
+  if (opportunity_id && !(await opportunityInScope(opportunity_id))) {
+    return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+  }
+
   // Determine org_id
   const org_id = user.org_id ?? body.org_id ?? null
 
@@ -134,6 +141,7 @@ export async function POST(req: NextRequest) {
       total,
       amount_paid:    0,
       notes:          notes ?? null,
+      ...(opportunity_id ? { opportunity_id } : {}),
     })
     .select()
     .single()
@@ -179,6 +187,16 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ error: liError.message }, { status: 500 })
     }
+  }
+
+  // Deal timeline: note the invoice on its deal.
+  if (opportunity_id) {
+    const { error: actErr } = await supabase.from('crm_activities').insert({
+      opportunity_id, type: 'note', subject: `Invoice ${invoice_number} created`,
+      body: `$${Math.round(total).toLocaleString()}${notes ? ` · ${String(notes).slice(0, 200)}` : ''}`,
+      created_by: user.id, created_by_name: user.name, completed_at: new Date().toISOString(),
+    })
+    if (actErr) console.error('[invoices POST] deal timeline:', actErr.message)
   }
 
   // Optionally create commission_payouts if site has a dealer assigned

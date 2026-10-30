@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { PIPELINE_STAGES, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
+import { DealPage } from '@/components/nexus/sales/DealPage'
 
 type AnyRecord = Record<string, any>
 // Matches the Opportunity Hub / dashboard steel exactly (lighter steel accents).
@@ -109,7 +110,22 @@ function agingLabel(v: unknown): string {
   return `${days} days`
 }
 
-export function OpportunityGlassWindow({
+/**
+ * Every place that opens a deal (Sales page, Leads hub, workbench, existing-deal flow…)
+ * renders OpportunityGlassWindow — so this now opens the new deal page (components/nexus/
+ * sales/DealPage). The previous window is kept below as OpportunityGlassWindowLegacy.
+ */
+export function OpportunityGlassWindow({ data, onBack, onRefresh }: {
+  data: OpportunityGlassData
+  onBack: () => void
+  onRefresh?: () => Promise<void> | void
+}) {
+  const id = String((data.opportunity as Record<string, unknown> | undefined)?.id ?? '')
+  if (!id) return <OpportunityGlassWindowLegacy data={data} onBack={onBack} onRefresh={onRefresh} />
+  return <DealPage dealId={id} onClose={() => { void onRefresh?.(); onBack() }} />
+}
+
+export function OpportunityGlassWindowLegacy({
   data,
   onBack,
   onRefresh,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { quoteEvent } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -176,6 +177,9 @@ export async function POST(req: NextRequest) {
       quote.total_mrr = mrr
     }
   }
+
+  // Deal side: timeline entry + primary quote + values (lib/deal-sync never throws).
+  if (quote.opportunity_id) await quoteEvent(quote.id, 'created', { id: user.id, name: user.name })
 
   return NextResponse.json({ quote }, { status: 201 })
 }

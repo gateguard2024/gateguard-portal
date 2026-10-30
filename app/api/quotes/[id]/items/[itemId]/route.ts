@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { syncDealFromQuote } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,6 +77,8 @@ export async function PATCH(
   // Recalc totals if pricing fields changed
   if ('qty' in body || 'unit_price' in body || 'is_recurring' in body || 'line_discount_percent' in body) {
     await recalcTotals(params.id)
+  await syncDealFromQuote(params.id)
+    await syncDealFromQuote(params.id)
   }
 
   // Resolve the image live from the products catalog (single source of truth).

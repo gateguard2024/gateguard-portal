@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { quoteEvent } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -205,6 +206,8 @@ export async function POST(
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.id)
+
+  if (survey.opportunity_id) await quoteEvent(quote.id, 'created', { id: user.id, name: user.name })
 
   return NextResponse.json(
     { quote_id: quote.id, quote_number: quote.quote_number },

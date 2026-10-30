@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { quoteEvent, quoteViewed } from '@/lib/deal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,6 +55,9 @@ export async function GET(
   }
 
   if (error || !quote) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // The customer opened the proposal (the rep editor passes ?internal=1 and isn't counted).
+  if (!internal) await quoteViewed(params.id)
 
   // Review gate: a partnership proposal is only client-visible once approved.
   // Legacy quotes (review_status null/undefined) are never gated, so existing
@@ -207,6 +211,9 @@ export async function POST(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Deal side: accepted → deal moves to Contract & Sign; declined → noted on the deal.
+  await quoteEvent(params.id, action === 'decline' ? 'declined' : 'accepted', { name: signer_name ?? null })
 
   // "Sent back to us" — notify the team when a proposal is accepted/signed.
   if (action === 'sign' || action === 'approve') {
