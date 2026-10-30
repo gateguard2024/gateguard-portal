@@ -295,7 +295,7 @@ export function SalesSurface() {
           subtitle={activePanel === 'new-lead-flow' ? 'Capture a new lead — phone, walk-in, outbound, or website.' : activePanel === 'opps-workbench' ? 'Work all your open deals in one place.' : 'Work your open leads and follow-ups.'}
           onClose={() => { setActivePanel(null); void loadDashboard() }}
           actions={<>
-            <ActionButton label="New Quote" onClick={() => router.push('/quotes/new')} />
+            <ActionButton label="New Proposal" onClick={() => router.push('/quotes/new')} />
             <ActionButton label="Research Property" onClick={() => router.push('/aria')} />
             <ActionButton label="Site Survey" onClick={() => router.push('/survey')} />
           </>}
@@ -330,7 +330,7 @@ export function SalesSurface() {
       {activePanel === 'rough-calc' && (
         <SalesDetailShell title="ROI Calculator" subtitle="Enter the site scope + terms — start-up, monthly profit, and ROI update live." onClose={() => setActivePanel(null)}
           actions={<>
-            <ActionButton label="Start a Quote" onClick={() => router.push('/quotes/new')} />
+            <ActionButton label="Start a Proposal" onClick={() => router.push('/quotes/new')} />
             <ActionButton label="New Opportunity" onClick={() => { setActivePanel('new-opp') }} />
           </>}>
           <RoiCalculator />

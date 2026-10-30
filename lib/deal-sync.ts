@@ -78,11 +78,11 @@ export async function quoteEvent(quoteId: string, event: QuoteEvent, actor: Acto
     if (!q?.opportunity_id) return
     let deal = await loadDeal(q.opportunity_id)
     if (!deal) return
-    const label = q.quote_number || q.title || 'Quote'
+    const label = q.quote_number || q.title || 'proposal'
     const who = event === 'accepted' || event === 'declined' ? (q.signer_name || q.client_name || actor.name) : actor.name
     await log(deal, {
       type: 'quote', quote_id: q.id,
-      subject: `Quote ${label} ${VERB[event]}${event === 'viewed' && q.view_count > 1 ? ` (${q.view_count} views)` : ''}`,
+      subject: `Proposal ${label} ${VERB[event]}${event === 'viewed' && q.view_count > 1 ? ` (${q.view_count} views)` : ''}`,
       body: event === 'viewed' ? null : `${fmt(q.total_mrr)}/mo · ${fmt(q.total_one_time)} one-time${who && (event === 'accepted' || event === 'declined') ? ` · by ${who}` : ''}`,
       created_by: actor.id ?? null, created_by_name: actor.name ?? (event === 'viewed' || event === 'accepted' || event === 'declined' ? (who || 'Customer') : null),
     })
@@ -98,7 +98,7 @@ export async function quoteEvent(quoteId: string, event: QuoteEvent, actor: Acto
       .update({ stage: target, probability: STAGE_PROB[target] ?? 0, updated_at: new Date().toISOString() })
       .eq('id', deal.id)
     if (error) { console.error('[deal-sync] stage:', error.message); return }
-    const reason = event === 'sent' ? 'Quote sent' : `Quote accepted${who ? ` by ${who}` : ''}`
+    const reason = event === 'sent' ? 'Proposal sent' : `Proposal accepted${who ? ` by ${who}` : ''}`
     await log(deal, {
       type: 'stage_change', quote_id: q.id,
       subject: `${STAGE_LABELS[from] ?? from} → ${STAGE_LABELS[target] ?? target}`,

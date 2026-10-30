@@ -22,6 +22,9 @@ export async function GET(req: NextRequest) {
     const status      = searchParams.get('status')
     const unscheduled = searchParams.get('unscheduled') === 'true'
     const limit       = parseInt(searchParams.get('limit') ?? '200', 10)
+    // Tasks for one record (a deal, customer, site…): main link OR an extra link (todo_links).
+    const recType     = searchParams.get('linked_type')
+    const recId       = searchParams.get('linked_id')
 
     // Completed list (status=done) comes back newest-finished first; everything else by due date.
     const base = supabase
@@ -33,7 +36,15 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    if (view === 'mine') {
+    if (recType && recId) {
+      if (!/^[a-z_]+$/.test(recType) || !/^[0-9a-f-]{36}$/i.test(recId)) return NextResponse.json({ error: 'Bad record.' }, { status: 400 })
+      const { data: extra, error: le } = await supabase.from('todo_links').select('todo_id').eq('linked_type', recType).eq('linked_id', recId).limit(500)
+      if (le) return NextResponse.json({ error: le.message }, { status: 500 })
+      const ids = (extra ?? []).map(l => l.todo_id as string)
+      query = query.or([`and(linked_type.eq.${recType},linked_id.eq.${recId})`, ...(ids.length ? [`id.in.(${ids.join(',')})`] : [])].join(','))
+      // Everyone on the record's team sees its tasks; corporate sees all.
+      if (!caller.isCorporate) query = query.or([caller.org_id ? `org_id.eq.${caller.org_id}` : null, `created_by.eq.${caller.id}`, `assigned_to.eq.${caller.id}`].filter(Boolean).join(','))
+    } else if (view === 'mine') {
       query = query.or(`created_by.eq.${caller.id},assigned_to.eq.${caller.id}`)
     } else if (view === 'assigned') {
       query = query

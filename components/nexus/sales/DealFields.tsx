@@ -100,8 +100,8 @@ export function DealFields({ dealId, d, save, contactCall, onChanged, reload, se
       <div className="dp-f"><span>Total contract (TCV)</span><b style={{ fontSize: 15 }}>{money(card.tcv, false)}</b>{card.term_assumed && <em className="sb-sub">assumes 36 months</em>}</div>
       <div className="dp-f"><span>Weighted</span><b style={{ fontSize: 15 }}>{money(card.weighted, false)}</b><em className="sb-sub">{card.probability}% win chance</em></div>
       <Field label="Forecast" k="forecast_cat" kind={{ options: FORECAST.map(f => ({ value: f.key, label: f.label })) }} value={deal.forecast_cat} onSave={save} />
-      <Field label="Quote link" k="quote_url" value={deal.quote_url} onSave={save} />
-      <Field label="Quote total" k="quote_total" kind="money" value={deal.quote_total} onSave={save} />
+      <Field label="Proposal link" k="quote_url" value={deal.quote_url} onSave={save} />
+      <Field label="Proposal total" k="quote_total" kind="money" value={deal.quote_total} onSave={save} />
     </div></section>
   )
 

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ACT_TYPES, STAGES, fmtDate, localISO, money, stageIndex, type Deal } from './salesShared'
 import { DealFields, Field } from './DealFields'
+import { startProposal } from './proposal'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -113,7 +114,7 @@ export function DealPanel({ dealId, onClose, onMoveRequest, onChanged, onOpenFul
       <div style={{ display: 'flex', gap: 8 }}>
         {card.tab !== 'won' && <button type="button" className="sb-btn green" style={{ flex: 1 }} onClick={() => onMoveRequest(card, 'won')}>Mark won</button>}
         {card.tab !== 'lost' && <button type="button" className="sb-btn" style={{ flex: 1, color: '#D70015' }} onClick={() => onMoveRequest(card, 'lost')}>Mark lost</button>}
-        <a className="sb-btn" style={{ flex: 1 }} href={`/quotes/new?opportunity_id=${deal.id}`}>Create quote</a>
+        <button type="button" className="sb-btn" style={{ flex: 1 }} onClick={async () => { const r = await startProposal(deal, d.contacts); if (!r.ok) setErr(r.error); else void load() }}>New proposal</button>
       </div>
       {err && <div className="sb-err" role="alert">{err}</div>}
     </>

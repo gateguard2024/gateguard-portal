@@ -233,7 +233,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { error } = await sb.from('opportunities').update({ quote_id: q.id, values_locked: false, updated_at: now }).eq('id', deal.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     await syncDealFromQuote(q.id)
-    const logErr = await logActivity(user, deal, { type: 'quote', quote_id: q.id, subject: body.action === 'set_primary_quote' ? `Quote ${q.quote_number ?? ''} made primary` : `Deal values reset to quote ${q.quote_number ?? ''}`, completed_at: now })
+    const logErr = await logActivity(user, deal, { type: 'quote', quote_id: q.id, subject: body.action === 'set_primary_quote' ? `Proposal ${q.quote_number ?? ''} made primary` : `Deal values reset to proposal ${q.quote_number ?? ''}`, completed_at: now })
     if (logErr) console.error('[sales primary quote] history:', logErr)
     const { data: fresh } = await sb.from('opportunities').select('*').eq('id', deal.id).single()
     return NextResponse.json({ deal: fresh, card: await cardFor(fresh, ctx) })

@@ -13,6 +13,7 @@ import {
 const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
 import { QuickActions } from "@/components/shared/QuickActions";
 import CustomerEmailsCard from "@/components/crm/CustomerEmailsCard";
+import CustomerTasksCard from "@/components/crm/CustomerTasksCard";
 import { TIER_SHORT } from '@/lib/tier-labels'
 
 type OrgTier =
@@ -800,6 +801,9 @@ export default function CustomerDetailPage() {
 
         {/* ── Emails (auto-matched via contact addresses) ─────────────────────── */}
         {id && <CustomerEmailsCard orgId={id} />}
+
+        {/* ── Tasks (same tasks as Nexus → Tasks, linked to this customer) ────── */}
+        {id && <CustomerTasksCard orgId={id} orgName={org.name} />}
 
         {/* ── Attachments ─────────────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-xl p-5">

@@ -5,7 +5,7 @@
  *   Header + stage path (days per stage) + 7 numbers incl. Deal health
  *   Left:   every CRM field (DealFields — shared with the board's deal panel)
  *   Middle: composer (note / call / email / task / meeting) + coming up + one merged timeline
- *   Right:  quotes (primary quote ⇄ deal values) · health risks with fixes · files · related
+ *   Right:  proposals (primary proposal ⇄ deal values) · health risks with fixes · files · related
  * Data: GET /api/sales/deals/[id]/page. Stage moves go through MoveDialog (always asks why).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { DealFields } from './DealFields'
 import { MoveDialog } from './MoveDialog'
 import { SALES_CSS } from './salesCss'
+import { proposalHref, startProposal } from './proposal'
 import { STAGES, fmtDate, initials, localISO, money, stageIndex, type Deal } from './salesShared'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,13 +39,13 @@ const FILTERS: { key: string; label: string; kinds: string[] }[] = [
   { key: 'note', label: 'Notes', kinds: ['note'] },
   { key: 'meeting', label: 'Meetings', kinds: ['meeting', 'visit', 'demo'] },
   { key: 'stage', label: 'Stage changes', kinds: ['stage_change'] },
-  { key: 'quote', label: 'Quotes', kinds: ['quote'] },
+  { key: 'quote', label: 'Proposals', kinds: ['quote'] },
   { key: 'task', label: 'Tasks', kinds: ['task'] },
   { key: 'file', label: 'Files & surveys', kinds: ['file', 'survey'] },
 ]
 const CALL_OUTCOMES = ['Connected', 'Left voicemail', 'No answer', 'Verbal yes', 'Needs follow-up', 'Not interested']
 const FILE_CATS = [
-  { key: 'document', label: 'Documents' }, { key: 'quote_survey', label: 'Quotes & surveys' }, { key: 'survey_photo', label: 'Survey photos' },
+  { key: 'document', label: 'Documents' }, { key: 'quote_survey', label: 'Proposals & surveys' }, { key: 'survey_photo', label: 'Survey photos' },
   { key: 'install_photo', label: 'Install photos' }, { key: 'service_photo', label: 'Service photos' },
 ]
 
@@ -251,11 +252,18 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
     finally { setBusy(false) }
   }
 
+  const newProposal = async () => {
+    if (!d) return
+    const r = await startProposal(d.deal, d.contacts)
+    if (!r.ok) setErr(r.error)
+    else { setToast('Proposal created — opening the proposal editor'); void load() }
+  }
+
   const fix = (key: string) => {
     if (!d) return
     if (key === 'steps') { setTab('task'); composerRef.current?.scrollIntoView({ block: 'center' }); setTimeout(() => document.getElementById('dpg-subject')?.focus(), 50); return }
     if (key === 'contacts') { document.getElementById('dp-sec-people')?.scrollIntoView({ block: 'center' }); return }
-    if (key === 'quote') { window.location.href = d.primaryQuoteId ? `/quotes/${d.primaryQuoteId}` : `/quotes/new?opportunity_id=${dealId}`; return }
+    if (key === 'quote') { const pq = d.quotes.find(q => q.id === d.primaryQuoteId); if (pq) window.open(proposalHref(pq), '_blank'); else void newProposal(); return }
     if (key === 'stage') { const i = stageIndex(d.card.stage); if (i >= 0 && i < STAGES.length - 1) setMoving(STAGES[i + 1].key); return }
     const el = document.getElementById(`dp-${key}`) as HTMLInputElement | null
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus() }
@@ -317,7 +325,7 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
       <div className="dpg-acts">
         {card.tab !== 'won' && <button type="button" className="dpg-dark g" onClick={() => setMoving('won')}>✓ Mark won</button>}
         {card.tab !== 'lost' && <button type="button" className="dpg-dark" onClick={() => setMoving('lost')}>✕ Mark lost</button>}
-        <a className="dpg-dark b" href={`/quotes/new?opportunity_id=${deal.id}`}>+ Create quote</a>
+        <button type="button" className="dpg-dark b" onClick={() => void newProposal()}>+ New proposal</button>
         <button type="button" className="dpg-dark" onClick={() => { setTab('call'); composerRef.current?.scrollIntoView({ block: 'center' }) }}>☎ Log call</button>
         <button type="button" className="dpg-dark" onClick={() => { setTab('email'); composerRef.current?.scrollIntoView({ block: 'center' }) }}>✉ Email</button>
         {card.tab === 'archived'
@@ -342,8 +350,8 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
     </div>
 
     <div className="dpg-kpis">
-      {can.money && <div className="dpg-k"><div className="l">Monthly (MRR)</div><div className="v">{money(card.mrr, false)}</div><div className="s">{primary && !d.valuesLocked ? `from quote ${primary.quote_number ?? ''}` : 'entered on the deal'}</div></div>}
-      {can.money && <div className="dpg-k"><div className="l">Install fee</div><div className="v">{money(deal.install_fee ?? deal.est_setup, false)}</div><div className="s">{primary && !d.valuesLocked ? `from quote ${primary.quote_number ?? ''}` : 'entered on the deal'}</div></div>}
+      {can.money && <div className="dpg-k"><div className="l">Monthly (MRR)</div><div className="v">{money(card.mrr, false)}</div><div className="s">{primary && !d.valuesLocked ? `from proposal ${primary.quote_number ?? ''}` : 'entered on the deal'}</div></div>}
+      {can.money && <div className="dpg-k"><div className="l">Install fee</div><div className="v">{money(deal.install_fee ?? deal.est_setup, false)}</div><div className="s">{primary && !d.valuesLocked ? `from proposal ${primary.quote_number ?? ''}` : 'entered on the deal'}</div></div>}
       {can.money && <div className="dpg-k"><div className="l">Total contract (TCV)</div><div className="v">{money(card.tcv, false)}</div><div className="s">{deal.contract_term ? `${deal.contract_term} months` : 'assumes 36 months'}</div></div>}
       {can.money && <div className="dpg-k"><div className="l">Weighted</div><div className="v">{money(card.weighted, false)}</div><div className="s">{card.probability}% · {card.stage_label}</div></div>}
       <div className="dpg-k"><div className="l">Expected close</div><div className="v">{card.close_date ? fmtDate(card.close_date) : '—'}</div>
@@ -463,21 +471,21 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
 
       <div className="dpg-right" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="dpg-card">
-          <div className="dpg-ch">Quotes<a href={`/quotes/new?opportunity_id=${deal.id}`}>+ New quote</a></div>
-          {d.quotes.length === 0 && <div className="sb-sub" style={{ padding: 16 }}>No quotes yet. Create one — the customer, contact, property and scope fill in from this deal.</div>}
+          <div className="dpg-ch">Proposals<button type="button" onClick={() => void newProposal()}>+ New proposal</button></div>
+          {d.quotes.length === 0 && <div className="sb-sub" style={{ padding: 16 }}>No proposals yet. Start one — the customer, contact, property and units fill in from this deal.</div>}
           {primary && (
             <div className="dpg-q">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="sb-key" style={{ marginLeft: 0 }}>{primary.quote_number}</span>
                 <span className={`sb-pill ${primary.status === 'accepted' ? 'late-stage' : primary.status === 'declined' ? 'late' : 'mid'}`}>{primary.status}</span>
                 <span className="sb-pill mid">Primary</span>
-                <a className="sb-link sm" style={{ marginLeft: 'auto' }} href={`/quotes/${primary.id}`}>Open</a>
+                <a className="sb-link sm" style={{ marginLeft: 'auto' }} href={proposalHref(primary)} target="_blank" rel="noreferrer">Open</a>
               </div>
               {primary.title && <div style={{ fontWeight: 600, marginTop: 4 }}>{primary.title}</div>}
               {can.money && <div className="dpg-qm"><div><div className="l">Monthly</div><div className="v">{money(primary.total_mrr, false)}</div></div><div><div className="l">One-time</div><div className="v">{money(primary.total_one_time, false)}</div></div><div><div className="l">Views</div><div className="v">{primary.view_count ?? 0}</div></div></div>}
               {can.money && (differs
-                ? <div className="dpg-sync diff">Deal values differ from this quote<button type="button" className="sb-link sm" style={{ marginLeft: 'auto' }} onClick={() => void act({ action: 'use_quote_values' }, 'Deal values now follow the quote')}>Use quote values</button></div>
-                : <div className="dpg-sync ok">✓ Deal values match this quote</div>)}
+                ? <div className="dpg-sync diff">Deal values differ from this proposal<button type="button" className="sb-link sm" style={{ marginLeft: 'auto' }} onClick={() => void act({ action: 'use_quote_values' }, 'Deal values now follow the proposal')}>Use proposal values</button></div>
+                : <div className="dpg-sync ok">✓ Deal values match this proposal</div>)}
             </div>
           )}
           {d.quotes.filter(q => q.id !== d.primaryQuoteId).map(q => (
@@ -485,8 +493,8 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
               <span className="sb-key" style={{ marginLeft: 0 }}>{q.quote_number}</span>
               <span className={`sb-pill ${q.status === 'accepted' ? 'late-stage' : q.status === 'declined' ? 'late' : 'early'}`}>{q.status}</span>
               {can.money && <span className="sb-sub">{money(q.total_mrr)}/mo</span>}
-              <button type="button" className="sb-link sm" style={{ marginLeft: 'auto' }} onClick={() => void act({ action: 'set_primary_quote', quote_id: q.id }, 'Primary quote changed — deal values updated')}>Make primary</button>
-              <a className="sb-link sm" style={{ marginLeft: 0 }} href={`/quotes/${q.id}`}>Open</a>
+              <button type="button" className="sb-link sm" style={{ marginLeft: 'auto' }} onClick={() => void act({ action: 'set_primary_quote', quote_id: q.id }, 'Primary proposal changed — deal values updated')}>Make primary</button>
+              <a className="sb-link sm" style={{ marginLeft: 0 }} href={proposalHref(q)} target="_blank" rel="noreferrer">Open</a>
             </div>
           ))}
         </div>
@@ -497,7 +505,7 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
             <div style={{ padding: '6px 16px 12px' }}>
               {health.risks.map(r => (
                 <div key={r.key} className="dpg-risk"><span className="dot" style={{ background: r.level === 'red' ? '#FF3B30' : '#FF9500' }} />{r.text}
-                  <button type="button" onClick={() => fix(r.fix)}>{r.fix === 'quote' ? (d.primaryQuoteId ? 'Open quote' : 'Create') : r.fix === 'steps' ? 'Add step' : r.fix === 'contacts' ? 'Add' : r.fix === 'stage' ? 'Move' : 'Set'}</button></div>
+                  <button type="button" onClick={() => fix(r.fix)}>{r.fix === 'quote' ? (d.primaryQuoteId ? 'Open proposal' : 'Create') : r.fix === 'steps' ? 'Add step' : r.fix === 'contacts' ? 'Add' : r.fix === 'stage' ? 'Move' : 'Set'}</button></div>
               ))}
               {health.ok.length > 0 && <div className="dpg-risk"><span className="dot" style={{ background: '#30A14E' }} />{health.ok.map(x => x[0].toUpperCase() + x.slice(1)).join(' · ')}</div>}
             </div>

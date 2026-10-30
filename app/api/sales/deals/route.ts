@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { dealCtx, profileNames, scopeDeals, sb, shapeDeal, type Row } from '@/lib/sales-deals'
+import { dealCtx, orgNames, ownerFor, profileNames, scopeDeals, sb, shapeDeal, type Row } from '@/lib/sales-deals'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,15 +45,31 @@ export async function GET() {
       if (new Date(a.due_at).getTime() < now) overdueBy[id] = (overdueBy[id] ?? 0) + 1
     }
 
-    const names = await profileNames(rows.map(r => r.rep_id as string))
-    const deals = rows.map(r => shapeDeal(r, ctx, {
-      next: nextBy[r.id] ?? null, overdue: overdueBy[r.id] ?? 0,
-      ownerName: (r.rep_id && names[r.rep_id]) || r.owner_name || null, hasJob: jobs.has(r.id),
-    }))
-    const owners = Object.entries(names).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    const repIds = [...new Set(rows.map(r => r.rep_id as string).filter(Boolean))]
+    const [names, reps] = await Promise.all([
+      profileNames(repIds),
+      repIds.length ? sb.from('profiles').select('id, org_id').in('id', repIds) : Promise.resolve({ data: [] as Row[] }),
+    ])
+    const repOrg: Record<string, string | null> = Object.fromEntries(((reps.data ?? []) as Row[]).map(p => [p.id, p.org_id ?? null]))
+    const orgs = await orgNames([...rows.map(r => r.dealer_org_id as string), ...Object.values(repOrg).filter(Boolean) as string[]])
+    // Company = the deal's dealer; if the deal has none, the rep's company (e.g. Gate Guard's own deals).
+    const deals = rows.map(r => {
+      const co = (r.dealer_org_id as string | null) ?? (r.rep_id ? repOrg[r.rep_id as string] ?? null : null)
+      const d = shapeDeal(r, ctx, {
+        next: nextBy[r.id] ?? null, overdue: overdueBy[r.id] ?? 0,
+        ownerName: ownerFor(r, names), hasJob: jobs.has(r.id),
+        dealerName: co ? orgs[co] ?? null : null,
+      })
+      return { ...d, dealer_id: co }
+    })
+    // Reps grouped under their company (for the Team filter: company → rep).
+    const owners = Object.entries(names).map(([id, name]) => ({ id, name, company_id: repOrg[id] ?? null, company: repOrg[id] ? orgs[repOrg[id] as string] ?? null : null }))
+      .sort((a, b) => (a.company ?? '~').localeCompare(b.company ?? '~') || a.name.localeCompare(b.name))
+    const companies = [...new Map(deals.filter(d => d.dealer_id).map(d => [d.dealer_id as string, d.dealer_name ?? 'Unnamed company'])).entries()]
+      .map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
 
     return NextResponse.json({
-      deals, owners, me: ctx.profileId,
+      deals, owners, companies, me: ctx.profileId,
       canSeeTeam: !ctx.repOnly, canViewFinancials: user.canViewFinancials,
     })
   } catch (e) {

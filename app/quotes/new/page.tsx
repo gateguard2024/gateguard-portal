@@ -832,8 +832,84 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
 export default function NewQuotePageWrapper() {
   return (
     <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
-      <NewQuotePage />
+      <NewProposalOrBuilder />
     </Suspense>
+  );
+}
+
+// Gate Guard sells proposals, not quotes. Every "New quote" link in the portal lands here,
+// so /quotes/new now starts a partnership proposal (pre-filled from the deal / customer / site
+// in the URL) and opens the proposal editor. The old line-item builder is still at ?builder=1.
+function NewProposalOrBuilder() {
+  const sp = useSearchParams();
+  if (sp.get('builder') === '1') return <NewQuotePage />;
+  return <StartProposal />;
+}
+
+function StartProposal() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const oppId  = sp.get('opportunity_id') || sp.get('opportunity') || null;
+    const orgId  = sp.get('client_org_id') || null;
+    const siteId = sp.get('site_id') || null;
+    const named  = sp.get('customer') || sp.get('site_name') || null;
+    (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const body: Record<string, any> = { title: named || 'New proposal', quote_mode: 'partnership', opportunity_id: oppId, client_org_id: orgId, site_id: siteId, property_name: named };
+        if (oppId) {
+          const r = await fetch(`/api/crm/opportunities/${oppId}`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const o: any = r.ok ? await r.json().catch(() => null) : null;
+          const opp = o?.opportunity ?? o;
+          if (opp) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pc = (opp.contacts ?? []).find((c: any) => c.is_primary) ?? (opp.contacts ?? [])[0] ?? null;
+            body.title = opp.name || opp.account_name || body.title;
+            body.property_name = opp.account_name || opp.name || body.property_name;
+            body.units = opp.units ?? null;
+            body.client_name = pc?.name ?? pc?.contact_name ?? opp.site_contact_name ?? null;
+            body.client_email = pc?.email ?? pc?.contact_email ?? opp.site_contact_email ?? null;
+            body.client_phone = pc?.phone ?? pc?.contact_phone ?? opp.site_contact_phone ?? null;
+          }
+        } else if (orgId) {
+          const r = await fetch(`/api/customers/${orgId}`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const org: any = r.ok ? await r.json().catch(() => null) : null;
+          if (org) {
+            body.title = org.name || body.title;
+            body.property_name = org.name || body.property_name;
+            body.client_name = org.primary_contact_name ?? org.name ?? null;
+            body.client_email = org.primary_contact_email ?? null;
+            body.client_phone = org.primary_contact_phone ?? null;
+          }
+        }
+        const res = await fetch('/api/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await res.json().catch(() => ({}));
+        const id = j?.quote?.id || j?.id;
+        if (!res.ok || !id) { setError(j?.error || 'Could not start the proposal.'); return; }
+        router.replace(`/quotes/${id}/partnership`);
+      } catch {
+        setError('Could not start the proposal.');
+      }
+    })();
+  }, [router, sp]);
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {error ? (
+        <>
+          <p role="alert" style={{ color: '#B42318', fontSize: 15 }}>{error}</p>
+          <button type="button" onClick={() => window.location.reload()} style={{ height: 36, padding: '0 16px', borderRadius: 10, background: '#0071E3', color: '#fff', fontWeight: 600, border: 0 }}>Try again</button>
+        </>
+      ) : <p style={{ color: '#6E6E73', fontSize: 15 }}>Starting your proposal…</p>}
+    </div>
   );
 }
 

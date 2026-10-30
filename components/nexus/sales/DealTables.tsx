@@ -8,7 +8,7 @@ type SortKey = 'name' | 'account' | 'stage' | 'mrr' | 'tcv' | 'probability' | 'c
 const STAGE_ORDER = ['meet_present', 'survey', 'propose', 'negotiate', 'contract', 'deposit']
 const pillCls = (s: string) => (['contract', 'deposit'].includes(s) ? 'late-stage' : s === 'propose' ? 'mid' : 'early')
 
-export function ListView({ deals, selectedId, showMoney, onOpen }: { deals: Deal[]; selectedId: string | null; showMoney: boolean; onOpen: (id: string) => void }) {
+export function ListView({ deals, selectedId, showMoney, onOpen, groupByCompany = false }: { deals: Deal[]; selectedId: string | null; showMoney: boolean; onOpen: (id: string) => void; groupByCompany?: boolean }) {
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'close_date', dir: 1 })
   const rows = useMemo(() => {
     const v = (d: Deal): string | number => {
@@ -35,27 +35,51 @@ export function ListView({ deals, selectedId, showMoney, onOpen }: { deals: Deal
     </th>
   )
   if (!rows.length) return <div className="sb-empty">No deals match these filters.</div>
+  const head = <thead><tr>{th('name', 'Deal')}{th('account', 'Account')}{th('stage', 'Stage')}{showMoney && th('mrr', 'MRR', true)}{showMoney && th('tcv', 'TCV', true)}{th('probability', 'Prob.', true)}{th('close_date', 'Close')}{th('next', 'Next step')}{th('owner', 'Owner')}{th('days', 'In stage', true)}</tr></thead>
+  const cols = showMoney ? 10 : 8
+  const row = (d: Deal) => {
+    const nx = nextChip(d)
+    return (
+      <tr key={d.id} className={selectedId === d.id ? 'sel' : undefined}>
+        <td><button type="button" className="sb-link" onClick={() => onOpen(d.id)}>{d.name}</button><span className="sb-key">{d.key}</span></td>
+        <td>{d.account ?? <span className="sb-sub">—</span>}</td>
+        <td><span className={`sb-pill ${pillCls(d.stage)}`}>{d.stage_label}</span></td>
+        {showMoney && <td className="num">{money(d.mrr)}</td>}
+        {showMoney && <td className="num"><b>{money(d.tcv)}</b></td>}
+        <td className="num">{d.probability}%</td>
+        <td>{d.close_date ? fmtDate(d.close_date) : <span className="sb-sub">—</span>}</td>
+        <td><span className={`sb-act ${nx.cls}`}>{nx.text}</span></td>
+        <td><span className="sb-av" title={d.owner_name ?? ''}>{d.owner_name ? initials(d.owner_name) : '?'}</span> <span className="sb-sub">{d.owner_name ?? 'No rep assigned'}</span></td>
+        <td className={`num${d.stalled ? ' sb-days r' : ''}`}>{d.days_in_stage}d</td>
+      </tr>
+    )
+  }
+  const sum = (xs: Deal[]) => `${xs.length} deal${xs.length === 1 ? '' : 's'}${showMoney ? ` · ${money(xs.reduce((n, d) => n + (d.tcv ?? 0), 0))}` : ''}`
+  if (!groupByCompany) return <div className="sb-tbl"><div className="sb-tw"><table>{head}<tbody>{rows.map(row)}</tbody></table></div></div>
+
+  // Team view: company → rep, each with totals.
+  const byCo = new Map<string, Deal[]>()
+  for (const d of rows) { const k = d.dealer_name ?? 'No company'; if (!byCo.has(k)) byCo.set(k, []); byCo.get(k)!.push(d) }
+  const companies = [...byCo.entries()].sort((a, b) => Number(a[0] === 'No company') - Number(b[0] === 'No company') || a[0].localeCompare(b[0]))
   return (
-    <div className="sb-tbl"><div className="sb-tw"><table>
-      <thead><tr>{th('name', 'Deal')}{th('account', 'Account')}{th('stage', 'Stage')}{showMoney && th('mrr', 'MRR', true)}{showMoney && th('tcv', 'TCV', true)}{th('probability', 'Prob.', true)}{th('close_date', 'Close')}{th('next', 'Next step')}{th('owner', 'Owner')}{th('days', 'In stage', true)}</tr></thead>
-      <tbody>{rows.map(d => {
-        const nx = nextChip(d)
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {companies.map(([co, list]) => {
+        const byRep = new Map<string, Deal[]>()
+        for (const d of list) { const k = d.owner_name ?? 'No rep assigned'; if (!byRep.has(k)) byRep.set(k, []); byRep.get(k)!.push(d) }
+        const reps = [...byRep.entries()].sort((a, b) => Number(a[0] === 'No rep assigned') - Number(b[0] === 'No rep assigned') || a[0].localeCompare(b[0]))
         return (
-          <tr key={d.id} className={selectedId === d.id ? 'sel' : undefined}>
-            <td><button type="button" className="sb-link" onClick={() => onOpen(d.id)}>{d.name}</button><span className="sb-key">{d.key}</span></td>
-            <td>{d.account ?? <span className="sb-sub">—</span>}</td>
-            <td><span className={`sb-pill ${pillCls(d.stage)}`}>{d.stage_label}</span></td>
-            {showMoney && <td className="num">{money(d.mrr)}</td>}
-            {showMoney && <td className="num"><b>{money(d.tcv)}</b></td>}
-            <td className="num">{d.probability}%</td>
-            <td>{d.close_date ? fmtDate(d.close_date) : <span className="sb-sub">—</span>}</td>
-            <td><span className={`sb-act ${nx.cls}`}>{nx.text}</span></td>
-            <td><span className="sb-av" title={d.owner_name ?? ''}>{initials(d.owner_name)}</span> <span className="sb-sub">{d.owner_name ?? 'No owner'}</span></td>
-            <td className={`num${d.stalled ? ' sb-days r' : ''}`}>{d.days_in_stage}d</td>
-          </tr>
+          <section key={co} className="sb-tbl" aria-label={co}>
+            <div className="sb-gh" style={{ cursor: 'default' }}><b>{co}</b><span className="sb-sub">{sum(list)}</span></div>
+            <div className="sb-tw"><table>{head}<tbody>
+              {reps.map(([rep, ds]) => [
+                <tr key={`h-${rep}`}><td colSpan={cols} className="sb-sub2">{rep} <span style={{ fontWeight: 400, color: '#6E6E73' }}>· {sum(ds)}</span></td></tr>,
+                ...ds.map(row),
+              ])}
+            </tbody></table></div>
+          </section>
         )
-      })}</tbody>
-    </table></div></div>
+      })}
+    </div>
   )
 }
 

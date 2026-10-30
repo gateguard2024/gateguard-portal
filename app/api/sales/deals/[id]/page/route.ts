@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { STAGE_LABELS } from '@/lib/pipeline'
-import { cardFor, dealCtx, dealHealth, loadVisibleDeal, profileNames, sb, type Row } from '@/lib/sales-deals'
+import { cardFor, dealCtx, dealHealth, loadVisibleDeal, ownerFor, profileNames, sb, type Row } from '@/lib/sales-deals'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,10 +35,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const [contacts, quotes, surveys, files, todos, invoices, jobs, threads, lead, org, card, reps, aria] = await Promise.all([
     safe(sb.from('opportunity_contacts').select('*').eq('opportunity_id', id).order('is_primary', { ascending: false }).order('created_at', { ascending: true }), [] as Row[]),
-    safe(sb.from('quotes').select('id, quote_number, title, status, total_mrr, total_one_time, dealer_mrr, sent_at, accepted_at, declined_at, view_count, last_viewed_at, created_at, updated_at').eq('opportunity_id', id).order('created_at', { ascending: false }), [] as Row[]),
+    safe(sb.from('quotes').select('id, quote_number, title, quote_mode, status, total_mrr, total_one_time, dealer_mrr, sent_at, accepted_at, declined_at, view_count, last_viewed_at, created_at, updated_at').eq('opportunity_id', id).order('created_at', { ascending: false }), [] as Row[]),
     safe(sb.from('surveys').select('id, survey_number, property_name, status, survey_date, devices, created_at').eq('opportunity_id', id).order('created_at', { ascending: false }), [] as Row[]),
     safe(sb.from('attachments').select('id, file_name, url, file_type, size_bytes, category, created_at').eq('opportunity_id', id).order('created_at', { ascending: false }).limit(200), [] as Row[]),
-    safe(sb.from('todos').select('id, title, status, priority, due_date, assigned_to_name, task_number, completed_at, created_at').eq('linked_type', 'opportunity').eq('linked_id', id).order('created_at', { ascending: false }).limit(100), [] as Row[]),
+    // Tasks on this deal: main link, or linked as an extra record from the Tasks panel (todo_links).
+    (async () => {
+      const cols = 'id, title, status, priority, due_date, assigned_to_name, task_number, completed_at, created_at'
+      const extra = await safe(sb.from('todo_links').select('todo_id').eq('linked_type', 'opportunity').eq('linked_id', id).limit(200), [] as Row[])
+      const ids = extra.map(l => l.todo_id as string)
+      const or = [`and(linked_type.eq.opportunity,linked_id.eq.${id})`, ...(ids.length ? [`id.in.(${ids.join(',')})`] : [])].join(',')
+      return safe(sb.from('todos').select(cols).or(or).order('created_at', { ascending: false }).limit(150), [] as Row[])
+    })(),
     safe(sb.from('invoices').select('id, invoice_number, status, total, balance_due, due_date, paid_at, created_at').eq('opportunity_id', id).order('created_at', { ascending: false }), [] as Row[]),
     safe(sb.from('work_orders').select('id, wo_number, title, status, created_at').eq('opportunity_id', id).order('created_at', { ascending: false }), [] as Row[]),
     safe(sb.from('message_threads').select('id, subject, participants, last_message_at, link_source, created_at').eq('linked_opportunity_id', id).order('last_message_at', { ascending: false }).limit(50), [] as Row[]),
@@ -116,7 +123,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     deal: raw, card, health, timeline: tl, upcoming, stageDays,
     contacts, quotes, primaryQuoteId: deal.quote_id ?? null, valuesLocked: !!deal.values_locked,
     surveys, files, todos, invoices, jobs, threads: threads.length, lead, aria,
-    dealer: org?.name ?? null, owner: (deal.rep_id && names[deal.rep_id]) || deal.owner_name || null,
+    dealer: org?.name ?? null, owner: ownerFor(deal, names),
     reps, activities: acts,
     can: { edit: true, reassign: !ctx.repOnly, money: user.canViewFinancials },
   })

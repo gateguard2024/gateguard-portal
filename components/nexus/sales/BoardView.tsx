@@ -4,8 +4,8 @@
 import { useState } from 'react'
 import { STAGES, fmtDate, initials, money, nextChip, type Deal } from './salesShared'
 
-function Card({ d, sel, dragging, onOpen, onDragStart, onDragEnd, showMoney }: {
-  d: Deal; sel: boolean; dragging: boolean; onOpen: () => void; onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void; showMoney: boolean
+function Card({ d, sel, dragging, onOpen, onDragStart, onDragEnd, showMoney, showCompany }: {
+  d: Deal; sel: boolean; dragging: boolean; onOpen: () => void; onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void; showMoney: boolean; showCompany?: boolean
 }) {
   const nx = nextChip(d)
   return (
@@ -18,7 +18,8 @@ function Card({ d, sel, dragging, onOpen, onDragStart, onDragEnd, showMoney }: {
       {showMoney && d.mrr == null && d.tcv != null && <span className="sb-money"><b>{money(d.tcv)}</b><span>total</span></span>}
       <span className={`sb-act ${nx.cls}`}>{nx.cls === 'late' ? '⚠ ' : nx.cls === 'none' ? '! ' : ''}{nx.text}</span>
       <span className="sb-cf">
-        <span className="sb-av" title={d.owner_name ?? 'No owner'}>{initials(d.owner_name)}</span>
+        <span className="sb-av" title={d.owner_name ?? 'No rep assigned'} style={d.owner_name ? undefined : { background: '#C7C7CC' }}>{d.owner_name ? initials(d.owner_name) : '?'}</span>
+        {showCompany && <span className="sb-co" title={d.dealer_name ?? ''}>{d.dealer_name ?? '—'}</span>}
         <span>{d.close_date ? `Close ${fmtDate(d.close_date)}` : 'No close date'}</span>
         <span style={{ flex: 1 }} />
         <span className={d.stalled ? 'sb-days r' : 'sb-days'}>{d.days_in_stage}d in stage</span>
@@ -27,8 +28,8 @@ function Card({ d, sel, dragging, onOpen, onDragStart, onDragEnd, showMoney }: {
   )
 }
 
-export function BoardView({ deals, selectedId, showMoney, onOpen, onMove, onQuickAdd }: {
-  deals: Deal[]; selectedId: string | null; showMoney: boolean
+export function BoardView({ deals, selectedId, showMoney, showCompany, onOpen, onMove, onQuickAdd }: {
+  deals: Deal[]; selectedId: string | null; showMoney: boolean; showCompany?: boolean
   onOpen: (id: string) => void
   onMove: (d: Deal, to: string) => void
   onQuickAdd: (stage: string, name: string) => Promise<void>
@@ -66,7 +67,7 @@ export function BoardView({ deals, selectedId, showMoney, onOpen, onMove, onQuic
                 <div className="sb-prob"><i style={{ width: `${s.prob}%` }} /></div>
               </div>
               {items.map(d => (
-                <Card key={d.id} d={d} sel={selectedId === d.id} dragging={dragId === d.id} showMoney={showMoney} onOpen={() => onOpen(d.id)}
+                <Card key={d.id} d={d} sel={selectedId === d.id} dragging={dragId === d.id} showMoney={showMoney} showCompany={showCompany} onOpen={() => onOpen(d.id)}
                   onDragStart={e => { e.dataTransfer.setData('text/plain', d.id); e.dataTransfer.effectAllowed = 'move'; setDragId(d.id) }}
                   onDragEnd={() => { setDragId(null); setOver(null) }} />
               ))}

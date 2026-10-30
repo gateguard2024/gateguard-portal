@@ -14,7 +14,7 @@ import { ClosedView, ListView, type ClosedGroup } from './DealTables'
 import { DealPanel } from './DealPanel'
 import { DealPage } from './DealPage'
 import { MoveDialog } from './MoveDialog'
-import { localISO, money, needsAttention, stageLabel, type Deal, type Owner } from './salesShared'
+import { localISO, money, needsAttention, stageLabel, type Company, type Deal, type Owner } from './salesShared'
 
 
 type CloseFilter = 'any' | 'month' | 'quarter' | '90' | 'past'
@@ -24,6 +24,7 @@ type Tab = 'open' | 'won' | 'lost' | 'archived'
 export function SalesBoard({ onClose, onNewDeal, onOpenFull }: { onClose: () => void; onNewDeal: () => void; onOpenFull: (id: string) => void }) {
   const [deals, setDeals] = useState<Deal[]>([])
   const [owners, setOwners] = useState<Owner[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [me, setMe] = useState<string | null>(null)
   const [canTeam, setCanTeam] = useState(false)
   const [showMoney, setShowMoney] = useState(true)
@@ -57,7 +58,7 @@ export function SalesBoard({ onClose, onNewDeal, onOpenFull }: { onClose: () => 
       const res = await fetch('/api/sales/deals')
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not load deals.')
-      setDeals(data.deals ?? []); setOwners(data.owners ?? []); setMe(data.me ?? null)
+      setDeals(data.deals ?? []); setOwners(data.owners ?? []); setCompanies(data.companies ?? []); setMe(data.me ?? null)
       setCanTeam(!!data.canSeeTeam); setShowMoney(data.canViewFinancials !== false)
       if (!data.canSeeTeam) setScope('mine')
       setMsg(null)
@@ -93,8 +94,11 @@ export function SalesBoard({ onClose, onNewDeal, onOpenFull }: { onClose: () => 
     const qEnd = localISO(new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0))
     const d90 = localISO(new Date(now.getTime() + 90 * 86400000))
     return deals.filter(d => {
-      if (scope === 'mine' && d.owner_id !== me) return false
-      if (owner && d.owner_id !== owner) return false
+      // Mine = deals where I'm the rep. Unassigned deals are never "mine".
+      if (scope === 'mine' && !(me && d.owner_id === me)) return false
+      if (owner.startsWith('org:') && d.dealer_id !== owner.slice(4)) return false
+      if (owner.startsWith('rep:') && d.owner_id !== owner.slice(4)) return false
+      if (owner === 'none' && d.owner_id) return false
       if (type && d.type !== type) return false
       if (needle && !`${d.key} ${d.name} ${d.account ?? ''} ${d.owner_name ?? ''} ${(d.tags ?? []).join(' ')}`.toLowerCase().includes(needle)) return false
       if (d.tab === 'open') {
@@ -195,9 +199,14 @@ export function SalesBoard({ onClose, onNewDeal, onOpenFull }: { onClose: () => 
             {canTeam && <>
               <button type="button" className="sb-chip" aria-pressed={scope === 'mine'} onClick={() => { setScope('mine'); setOwner('') }}>Mine</button>
               <button type="button" className="sb-chip" aria-pressed={scope === 'team'} onClick={() => setScope('team')}>Team</button>
-              {scope === 'team' && owners.length > 1 && (
-                <select className="sb-in" value={owner} onChange={e => setOwner(e.target.value)} aria-label="Owner">
-                  <option value="">Owner: All</option>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              {scope === 'team' && (owners.length > 0 || companies.length > 1) && (
+                <select className="sb-in" value={owner} onChange={e => setOwner(e.target.value)} aria-label="Company or rep">
+                  <option value="">All companies &amp; reps</option>
+                  {companies.length > 1 && <optgroup label="Company">{companies.map(c => <option key={c.id} value={`org:${c.id}`}>{c.name}</option>)}</optgroup>}
+                  {[...new Set(owners.map(o => o.company ?? 'Other'))].map(co => (
+                    <optgroup key={co} label={`${co} — reps`}>{owners.filter(o => (o.company ?? 'Other') === co).map(o => <option key={o.id} value={`rep:${o.id}`}>{o.name}{o.id === me ? ' (me)' : ''}</option>)}</optgroup>
+                  ))}
+                  <option value="none">No rep assigned</option>
                 </select>
               )}
             </>}
@@ -237,8 +246,8 @@ export function SalesBoard({ onClose, onNewDeal, onOpenFull }: { onClose: () => 
 
         {loading && !deals.length ? <div className="sb-empty">Loading deals…</div>
           : tab === 'open'
-            ? (view === 'board' ? <BoardView deals={open} selectedId={openId} showMoney={showMoney} onOpen={setOpenId} onMove={(d, to) => void requestMove(d, to)} onQuickAdd={quickAdd} />
-              : view === 'list' ? <ListView deals={open} selectedId={openId} showMoney={showMoney} onOpen={setOpenId} />
+            ? (view === 'board' ? <BoardView deals={open} selectedId={openId} showMoney={showMoney} showCompany={scope === 'team' && companies.length > 1} onOpen={setOpenId} onMove={(d, to) => void requestMove(d, to)} onQuickAdd={quickAdd} />
+              : view === 'list' ? <ListView deals={open} selectedId={openId} showMoney={showMoney} onOpen={setOpenId} groupByCompany={scope === 'team'} />
               : <ForecastView deals={open} showMoney={showMoney} onOpen={setOpenId} />)
           : tab === 'archived'
             ? <>

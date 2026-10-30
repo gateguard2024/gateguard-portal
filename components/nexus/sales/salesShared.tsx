@@ -8,6 +8,7 @@ export type Deal = {
   stage: string; stage_label: string; probability: number; tab: 'open' | 'won' | 'lost' | 'archived'
   close_date: string | null; mrr: number | null; tcv: number | null; weighted: number | null; term_assumed: boolean
   owner_id: string | null; owner_name: string | null
+  dealer_id: string | null; dealer_name: string | null
   days_in_stage: number; stalled: boolean
   next: { id: string; type: string; subject: string | null; due_at: string | null } | null
   overdue: number
@@ -16,7 +17,8 @@ export type Deal = {
   lost_reason: string | null; lost_competitor: string | null; lost_note: string | null
   has_job: boolean
 }
-export type Owner = { id: string; name: string }
+export type Owner = { id: string; name: string; company_id?: string | null; company?: string | null }
+export type Company = { id: string; name: string }
 
 export const STAGES: { key: string; label: string; short: string; prob: number }[] = [
   { key: 'meet_present', label: 'Meet & Present', short: 'Meet', prob: 20 },

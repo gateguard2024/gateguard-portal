@@ -80,7 +80,7 @@ export function dealTab(d: Row): 'open' | 'won' | 'lost' | 'archived' {
 export const dealKey = (n: unknown) => (n ? `D-${n}` : '')
 
 /** Shape a row for the board (money hidden for roles without financial access). */
-export function shapeDeal(d: Row, ctx: DealCtx, extra: { next?: Row | null; overdue?: number; ownerName?: string | null; hasJob?: boolean } = {}) {
+export function shapeDeal(d: Row, ctx: DealCtx, extra: { next?: Row | null; overdue?: number; ownerName?: string | null; hasJob?: boolean; dealerName?: string | null } = {}) {
   const stage = normalizeStage(d.stage)
   const m = dealMoney(d)
   const fin = ctx.user.canViewFinancials
@@ -103,6 +103,8 @@ export function shapeDeal(d: Row, ctx: DealCtx, extra: { next?: Row | null; over
     term_assumed: m.termAssumed,
     owner_id: d.rep_id ?? null,
     owner_name: extra.ownerName ?? null,
+    dealer_id: (d.dealer_org_id as string | null) ?? null,
+    dealer_name: extra.dealerName ?? null,
     days_in_stage: days, stalled: days >= STALLED_DAYS,
     next: extra.next ? { id: extra.next.id, type: extra.next.type, subject: extra.next.subject, due_at: extra.next.due_at } : null,
     overdue: extra.overdue ?? 0,
@@ -134,7 +136,8 @@ export async function cardFor(deal: Row, ctx: DealCtx) {
   const now = Date.now()
   return shapeDeal(deal, ctx, {
     next: list[0] ?? null, overdue: list.filter(a => new Date(a.due_at).getTime() < now).length,
-    ownerName: (deal.rep_id && names[deal.rep_id]) || deal.owner_name || null, hasJob: !wo.error && (wo.data ?? []).length > 0,
+    ownerName: ownerFor(deal, names), hasJob: !wo.error && (wo.data ?? []).length > 0,
+    dealerName: await orgName(deal.dealer_org_id),
   })
 }
 
@@ -162,11 +165,28 @@ export function dealHealth(deal: Row, card: ReturnType<typeof shapeDeal>, extra:
   if (extra.hasDecisionMaker) ok.push('decision maker known')
   else risks.push({ key: 'dm', level: 'orange', text: 'No decision maker among the contacts', fix: 'contacts' })
   const qs = extra.primaryQuote?.status as string | undefined
-  if (rank >= 2 && (!qs || qs === 'draft')) risks.push({ key: 'quote_unsent', level: 'orange', text: qs ? 'Quote not sent yet' : 'No quote on this deal', fix: 'quote' })
-  else if (rank >= 4 && qs !== 'accepted') risks.push({ key: 'quote_unaccepted', level: 'orange', text: 'Quote not accepted yet', fix: 'quote' })
-  else if (qs === 'accepted') ok.push('quote accepted')
+  if (rank >= 2 && (!qs || qs === 'draft')) risks.push({ key: 'quote_unsent', level: 'orange', text: qs ? 'Proposal not sent yet' : 'No proposal on this deal', fix: 'quote' })
+  else if (rank >= 4 && qs !== 'accepted') risks.push({ key: 'quote_unaccepted', level: 'orange', text: 'Proposal not accepted yet', fix: 'quote' })
+  else if (qs === 'accepted') ok.push('proposal accepted')
   if (rank >= 4 && !deal.target_install_date) risks.push({ key: 'install', level: 'orange', text: "No install date — Operations can't plan", fix: 'target_install_date' })
   const weight: Record<string, number> = { overdue: 15, no_next: 15, close_passed: 15, no_close: 5, stalled: 10, budget: 10, dm: 10, quote_unsent: 10, quote_unaccepted: 10, install: 10 }
   const score = Math.max(0, 100 - risks.reduce((n, r) => n + (weight[r.key] ?? 5), 0))
   return { score, label: score >= 80 ? 'Healthy' : score >= 60 ? 'Needs work' : 'At risk', risks, ok }
 }
+
+/**
+ * Who owns a deal = its rep (rep_id → profile). The old owner_name column defaulted to
+ * "Russel Feldman" on every row (migration 008), so it is only trusted when rep_id is set.
+ */
+export function ownerFor(d: Row, names: Record<string, string>): string | null {
+  if (!d.rep_id) return null
+  return names[d.rep_id] || d.owner_name || null
+}
+
+export async function orgNames(ids: string[]): Promise<Record<string, string>> {
+  const uniq = [...new Set(ids.filter(Boolean))]
+  if (!uniq.length) return {}
+  const { data } = await sb.from('organizations').select('id, name').in('id', uniq)
+  return Object.fromEntries(((data ?? []) as Row[]).map(o => [o.id as string, (o.name as string) || 'Unnamed company']))
+}
+async function orgName(id: string | null | undefined) { return id ? (await orgNames([id]))[id] ?? null : null }
