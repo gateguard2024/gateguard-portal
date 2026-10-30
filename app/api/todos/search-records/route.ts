@@ -1,5 +1,5 @@
 /**
- * GET /api/todos/search-records?q=text&type=lead|opportunity|customer|property|dealer
+ * GET /api/todos/search-records?q=text&type=lead|opportunity|customer|property|dealer|work_order
  * Powers the linked-record typeahead picker on the todo slide-over.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    await getCurrentUser()
+    const caller = await getCurrentUser()
     const { searchParams } = new URL(req.url)
     const q    = searchParams.get('q')?.trim() ?? ''
     const type = searchParams.get('type') ?? 'all'
@@ -88,6 +88,24 @@ export async function GET(req: NextRequest) {
         id: r.id, type: 'dealer',
         label: r.name,
         sublabel: r.org_tier === 'master_dealer' ? 'MSO' : 'Dealer',
+      }))
+    }
+
+    if (type === 'work_order' || type === 'all') {
+      // Work orders are scoped to the caller's org (corporate sees all).
+      let woq = supabase
+        .from('work_orders')
+        .select('id, wo_number, title, status')
+        .or(`title.ilike.%${q.replace(/[%,()]/g, ' ')}%,wo_number.ilike.%${q.replace(/[%,()]/g, ' ')}%`)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      // work_orders.created_by is a profiles UUID, not a Clerk ID — so no-org users get no WO results.
+      if (!caller.isCorporate) woq = woq.eq('org_id', caller.org_id ?? '00000000-0000-0000-0000-000000000000')
+      const { data } = await woq
+      ;(data ?? []).forEach(r => results.push({
+        id: r.id, type: 'work_order',
+        label: [r.wo_number, r.title].filter(Boolean).join(' · ') || 'Work order',
+        sublabel: r.status ?? undefined,
       }))
     }
 

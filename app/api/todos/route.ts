@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { pushTodoToGcal } from '@/lib/gcal-sync'
+import { loadTodoFor, logActivity, notify, taskKey } from '@/lib/todo-activity'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('todos')
-      .select(`*, todo_attachments(id, name, url, size_bytes, mime_type, created_at)`)
+      .select(`*, todo_attachments(id, name, url, size_bytes, mime_type, created_at), todo_checklist_items(done)`)
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -57,8 +58,15 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    // Board cards show the key (T-123) and checklist progress; send counts, not every item.
+    const rows = (data ?? []).map(({ todo_checklist_items: items, ...t }) => ({
+      ...t,
+      key: taskKey(t.task_number),
+      checklist_total: (items ?? []).length,
+      checklist_done: (items ?? []).filter((i: { done: boolean }) => i.done).length,
+    }))
     // Return both keys so callers expecting either shape work
-    return NextResponse.json({ todos: data ?? [], records: data ?? [] })
+    return NextResponse.json({ todos: rows, records: rows })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -82,10 +90,24 @@ export async function POST(req: NextRequest) {
       recurrence_type    = 'none',
       recurrence_interval = 1,
       recurrence_ends_at,
+      status = 'open',
+      start_date,
+      tags,
+      watcher_ids,
+      estimate_mins,
+      parent_task_id,
     } = body
 
     if (!title?.trim()) {
       return NextResponse.json({ error: 'title is required' }, { status: 400 })
+    }
+
+    // A subtask needs edit rights on its parent and inherits the parent's org.
+    let parentOrg: string | null | undefined
+    if (parent_task_id) {
+      const parent = await loadTodoFor(parent_task_id, caller, 'edit')
+      if ('error' in parent) return NextResponse.json({ error: parent.error }, { status: parent.status })
+      parentOrg = parent.todo.org_id
     }
 
     const { data, error } = await supabase
@@ -94,9 +116,15 @@ export async function POST(req: NextRequest) {
         title: title.trim(),
         body:  todoBody ?? null,
         priority,
-        status: 'open',
+        status,
+        completed_at:       status === 'done' ? new Date().toISOString() : null,
         due_date:           due_date ?? null,
-        org_id:             caller.org_id ?? null,
+        start_date:         start_date ?? null,
+        org_id:             parentOrg !== undefined ? parentOrg : (caller.org_id ?? null),
+        tags:               Array.isArray(tags) ? tags : [],
+        watcher_ids:        Array.isArray(watcher_ids) ? watcher_ids : [],
+        estimate_mins:      estimate_mins ?? null,
+        parent_task_id:     parent_task_id ?? null,
         created_by:         caller.id,
         created_by_name:    caller.name,
         // Default to self-assignment so it lands in the creator's own tasks + calendar.
@@ -114,13 +142,19 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    await logActivity(data.id, caller, [{ action: 'created', new_value: data.title }])
+    if (parent_task_id) await logActivity(parent_task_id, caller, [{ action: 'subtask', field_name: 'subtask added', new_value: data.title }])
+    if (data.assigned_to && data.assigned_to !== caller.id) {
+      await notify([data.assigned_to], caller, { type: 'task_assigned', title: `${caller.name} assigned you ${taskKey(data.task_number)} ${data.title}`.trim(), todo: data })
+    }
+
     // Push-on-create: a dated task lands on the creator's Google Calendar instantly
     // (no-op if they haven't connected Google). Best-effort — never blocks the save.
     if (data?.due_date) {
       try { await pushTodoToGcal(caller.id, { id: data.id, title: data.title, due_date: data.due_date, status: data.status, priority: data.priority }) } catch { /* best-effort */ }
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json({ ...data, key: taskKey(data.task_number), checklist_total: 0, checklist_done: 0 }, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
