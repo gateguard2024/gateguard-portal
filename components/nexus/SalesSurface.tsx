@@ -22,7 +22,16 @@ const INK = '#eef4fb'
 const MUT = '#9aa7b8'    // legible secondary text
 const MUT2 = '#73839a'   // legible tertiary text
 const LINE = '#1e2a3a'
-const CARD = { background: '#121a27', border: `1px solid ${LINE}` } as const
+// Light look for the main page (white cards on the navy fade) — same palette as My Day / Tasks.
+// The pop-up shells below still use the dark tokens above until they're converted.
+const L = { ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73', line: 'rgba(0,0,0,0.08)', blue: '#0071E3', red: '#D70015', font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif' }
+const CARD: React.CSSProperties = { background: '#FFFFFF', borderRadius: 14, boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)' }
+const DARK_BTN: React.CSSProperties = { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff', fontWeight: 500 }
+const HDR_BTN = 'flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:flex-none sm:gap-2 sm:px-4 sm:text-[14px]'
+// Stage pills: green = late stage, orange = early, blue = proposal.
+const PILL: Record<string, React.CSSProperties> = {
+  safe: { background: '#E8F6EC', color: '#1A7F37' }, warn: { background: '#FFF4E5', color: '#B25000' }, cyan: { background: '#EEF4FF', color: '#0058B0' },
+}
 const STAGE_ORDER = ['contract', 'deposit', 'negotiate', 'propose', 'survey', 'meet_present']
 const STAGE_META: Record<string, { label: string; c: string }> = {
   meet_present: { label: 'Meet', c: 'warn' }, survey: { label: 'Survey', c: 'warn' }, propose: { label: 'Proposal', c: 'cyan' },
@@ -154,101 +163,114 @@ export function SalesSurface() {
 
   // Flatten open-stage opportunities into an "active deals" list (closest-to-close first).
   const activeDeals = STAGE_ORDER.flatMap(k => stageRecords(k).map(r => ({ id: r.id, name: r.name || 'Untitled', stage: k }))).slice(0, 8)
-  const col = (c: string) => ({ safe: '#30c08b', warn: '#e0a53b', cyan: ACCENT, indigo: ACCENT }[c] || MUT)
 
   return (
-    <section className="mt-4 w-full px-3 sm:px-5">
-      <div className="mx-auto w-full" style={{ maxWidth: 1340, color: '#eef4fb' }}>
+    <section className="w-full px-1 sm:px-2">
+      <div className="mx-auto w-full" style={{ maxWidth: 1360, color: L.ink, fontFamily: L.font, letterSpacing: '-0.01em' }}>
 
-        {/* Sales summary */}
-        <div className="mb-4 flex flex-col gap-5 rounded-[12px] p-5 lg:flex-row lg:items-center" style={CARD}>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: MUT }}>Pipeline</div>
-            <div className="mt-1 text-[26px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{money(opp.pipelineTotal)} <span style={{ color: '#30c08b', fontSize: 14, fontWeight: 700 }}>· On Pace</span></div>
-            <div className="mt-1.5 text-[12.5px]" style={{ color: MUT }}>Hi {firstName} — {counts.open} open deals · {wonN} won</div>
+        {/* Header — sits on the navy part of the fade */}
+        <div className="mb-5 mt-2 flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="m-0 text-[24px] font-semibold leading-tight sm:text-[30px]" style={{ color: '#fff', letterSpacing: '-0.025em' }}>Sales</h1>
+            <div className="mt-1 text-[14px]" style={{ color: 'rgba(255,255,255,0.66)' }}>
+              Hi {firstName} — <b style={{ color: '#fff', fontWeight: 600 }}>{counts.open}</b> open deals · <b style={{ color: '#fff', fontWeight: 600 }}>{wonN}</b> won
+              {followups.length > 0 && <> · <b style={{ color: '#fff', fontWeight: 600 }}>{followups.length}</b> follow-up{followups.length === 1 ? '' : 's'} due</>}
+            </div>
           </div>
-          <div className="flex items-center gap-8 lg:ml-4 lg:border-l lg:pl-8" style={{ borderColor: LINE }}>
-            <div><div className="text-[20px] font-extrabold leading-none" style={{ color: ACCENT }}>{winRate}%</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Win rate</div></div>
-            <div><div className="text-[20px] font-extrabold leading-none">{counts.open}</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Open deals</div></div>
-            <div><div className="text-[20px] font-extrabold leading-none">{money(avgDeal)}</div><div className="mt-1.5 text-[11.5px]" style={{ color: MUT }}>Avg deal</div></div>
-          </div>
-          <div className="flex flex-wrap gap-2.5 lg:ml-auto">
-            <button type="button" onClick={() => setActivePanel('new-opp')} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-bold" style={{ background: ACCENT, color: '#fff' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> New Opportunity</button>
-            <button type="button" onClick={() => setLeadsHub(true)} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-semibold" style={{ background: 'transparent', border: `1px solid ${LINE}`, color: INK }}>New Lead</button>
-            <button type="button" onClick={() => setActivePanel('rough-calc')} className="flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[12.5px] font-semibold" style={{ background: 'transparent', border: `1px solid ${LINE}`, color: INK }}>ROI</button>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <button type="button" onClick={() => setActivePanel('new-opp')} className={HDR_BTN} style={{ background: L.blue, color: '#fff', fontWeight: 600 }}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg> <span className="sm:hidden">New deal</span><span className="hidden sm:inline">New opportunity</span>
+            </button>
+            <button type="button" onClick={() => setLeadsHub(true)} className={HDR_BTN} style={DARK_BTN}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> New lead
+            </button>
+            <button type="button" onClick={() => setActivePanel('rough-calc')} className={HDR_BTN} style={DARK_BTN}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9}><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2" /></svg> ROI
+            </button>
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="mb-4 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        {/* Four numbers */}
+        <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
           {[
-            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'Weighted open' },
-            { l: 'Open Deals', v: String(counts.open), s: `${stageN('contract')} contracts out` },
-            { l: 'Win Rate', v: `${winRate}%`, s: 'Won vs lost' },
-            { l: 'Avg Deal', v: money(avgDeal), s: `${wonN} won to date` },
-          ].map((m, i) => (
-            <div key={i} className="rounded-[10px] p-4" style={CARD}>
-              <div className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: MUT }}>{m.l}</div>
-              <div className="mt-2.5 text-[23px] font-extrabold leading-none" style={{ letterSpacing: '-0.02em' }}>{loading ? '—' : m.v}</div>
-              <div className="mt-2 text-[11.5px]" style={{ color: MUT2 }}>{m.s}</div>
-            </div>
+            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'Weighted open', onClick: () => setOppsHub(true) },
+            { l: 'Open deals', v: String(counts.open), s: `${stageN('contract')} contract${stageN('contract') === 1 ? '' : 's'} out`, onClick: () => setOppsHub(true) },
+            { l: 'Win rate', v: `${winRate}%`, s: `${wonN} won · ${lostN} lost`, onClick: () => setOppsHub(true) },
+            { l: 'Avg deal', v: money(avgDeal), s: 'Per open deal', onClick: () => setOppsHub(true) },
+          ].map(m => (
+            <button key={m.l} type="button" onClick={m.onClick} title="Open the opportunities board" className="min-w-0 p-3 text-left transition-transform hover:-translate-y-0.5 sm:px-[18px] sm:py-4" style={CARD}>
+              <div className="text-[12px] font-medium" style={{ color: L.ink3 }}>{m.l}</div>
+              <div className="mt-1 text-[22px] font-semibold leading-tight sm:text-[26px]" style={{ letterSpacing: '-0.02em' }}>{loading ? '—' : m.v}</div>
+              <div className="mt-0.5 truncate text-[12px]" style={{ color: L.ink3 }}>{m.s}</div>
+            </button>
           ))}
         </div>
 
-        {/* Open opportunities + pipeline/follow-ups */}
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
-          {/* Open opportunities */}
-          <div className="rounded-[12px]" style={CARD}>
-            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Open Opportunities</span><button type="button" onClick={() => setOppsHub(true)} className="text-[11.5px] font-semibold" style={{ color: ACCENT }}>Open board →</button></div>
-            <div className="px-2.5 py-2">
-              {loading ? <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: MUT }}>Loading deals…</div>
-                : activeDeals.length === 0 ? <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: MUT }}>No open deals yet. Start a quote to build pipeline.</div>
-                : activeDeals.map((d, i) => {
-                  const meta = STAGE_META[d.stage] || { label: d.stage, c: 'cyan' }
-                  return (
-                    <button key={d.id} type="button" onClick={() => openLifecycle(d.id)} className="flex w-full items-center gap-3 rounded-[6px] px-3 py-3 text-left hover:bg-white/[0.03]" style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.045)' } : undefined}>
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col(meta.c) }} />
-                      <span className="flex-1 truncate text-[13px] font-medium">{d.name}</span>
-                      <span className="shrink-0 text-[11.5px]" style={{ color: MUT }}>{meta.label}</span>
-                    </button>
-                  )
-                })}
+        {/* Open opportunities + pipeline / follow-ups */}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="min-w-0 overflow-hidden" style={CARD}>
+            <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+              <span className="text-[15px] font-semibold">Open opportunities</span>
+              <button type="button" onClick={() => setOppsHub(true)} className="text-[13px] font-medium" style={{ color: L.blue }}>Open board</button>
             </div>
+            {loading ? <div className="px-[18px] py-8 text-center text-[13px]" style={{ color: L.ink3 }}>Loading deals…</div>
+              : activeDeals.length === 0 ? <div className="px-[18px] py-8 text-center text-[13px]" style={{ color: L.ink3 }}>No open deals yet. Start a quote to build pipeline.</div>
+              : activeDeals.map((d, i) => {
+                const meta = STAGE_META[d.stage] || { label: d.stage, c: 'cyan' }
+                const pill = PILL[meta.c] ?? PILL.cyan
+                return (
+                  <button key={d.id} type="button" onClick={() => openLifecycle(d.id)} className="flex w-full items-center gap-3 px-[18px] py-3 text-left hover:bg-[#F7F8FA]" style={i > 0 ? { borderTop: `1px solid ${L.line}` } : undefined}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[12px] font-semibold" style={{ background: '#EEF4FF', color: L.blue }}>{(d.name || '?').trim().charAt(0).toUpperCase()}</span>
+                    <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{d.name}</span>
+                    <span className="shrink-0 rounded-md px-2 py-0.5 text-[12px] font-medium" style={pill}>{meta.label}</span>
+                  </button>
+                )
+              })}
           </div>
 
-          {/* Pipeline by stage + follow-ups */}
-          <div className="flex flex-col gap-4">
-            <div className="rounded-[12px]" style={CARD}>
-              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Pipeline by stage</span><span className="text-[11.5px]" style={{ color: MUT }}>{counts.open} deals</span></div>
-              <div className="px-5 py-4">
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="overflow-hidden" style={CARD}>
+              <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+                <span className="text-[15px] font-semibold">Pipeline by stage</span>
+                <span className="text-[13px]" style={{ color: L.ink3 }}>{counts.open} deals</span>
+              </div>
+              <div className="px-[18px] py-4">
                 {STAGE_ORDER.map(k => {
                   const meta = STAGE_META[k]; const n = stageN(k)
                   return (
-                    <div key={k} className="mb-3.5 flex items-center gap-3 last:mb-0">
-                      <span className="w-[72px] shrink-0 text-[12px]" style={{ color: MUT }}>{meta.label}</span>
-                      <span className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: '#172131' }}><i className="block h-full rounded-full" style={{ width: `${(n / barMax) * 100}%`, background: ACCENT }} /></span>
-                      <b className="w-6 text-right text-[12px]">{n}</b>
+                    <div key={k} className="mb-3 flex items-center gap-3 last:mb-0">
+                      <span className="w-[76px] shrink-0 text-[13px]" style={{ color: L.ink2 }}>{meta.label}</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: '#EEF0F4' }}><i className="block h-full rounded-full" style={{ width: `${(n / barMax) * 100}%`, background: L.blue }} /></span>
+                      <b className="w-6 text-right text-[13px] font-semibold">{n}</b>
                     </div>
                   )
                 })}
               </div>
             </div>
 
-            <div className="rounded-[12px]" style={CARD}>
-              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: LINE }}><span className="text-[14px] font-bold">Follow-ups</span>{followups.length > 0 && <span className="text-[11.5px]" style={{ color: MUT }}>{followups.length} due</span>}</div>
-              <div className="px-2.5 py-2">
-                {loading ? <div className="px-3 py-4 text-[12.5px]" style={{ color: MUT }}>Loading…</div>
-                  : followups.length === 0 ? <div className="px-3 py-4 text-[12.5px]" style={{ color: MUT }}>No follow-ups due. Nice and clear.</div>
-                  : followups.slice(0, 5).map((a, i) => (
-                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-start gap-2.5 rounded-[6px] px-3 py-2.5 text-left hover:bg-white/[0.03]" style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.045)' } : undefined}>
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: (a.due_at && new Date(a.due_at) < new Date()) ? '#e0a53b' : ACCENT }} />
-                      <div className="min-w-0 flex-1"><div className="truncate text-[12.5px] font-semibold" style={{ color: INK }}>{a.subject || a.type}</div><div className="truncate text-[11px]" style={{ color: MUT }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div></div>
-                    </button>
-                  ))}
+            <div className="overflow-hidden" style={CARD}>
+              <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+                <span className="text-[15px] font-semibold">Follow-ups</span>
+                {followups.length > 0 && <span className="text-[13px]" style={{ color: L.ink3 }}>{followups.length} due</span>}
               </div>
+              {loading ? <div className="px-[18px] py-5 text-[13px]" style={{ color: L.ink3 }}>Loading…</div>
+                : followups.length === 0 ? <div className="px-[18px] py-5 text-[13px]" style={{ color: L.ink3 }}>No follow-ups due. Nice and clear.</div>
+                : followups.slice(0, 5).map((a, i) => {
+                  const late = !!a.due_at && new Date(a.due_at) < new Date()
+                  return (
+                    <button key={a.id} type="button" onClick={() => a.opportunity_id && openLifecycle(a.opportunity_id)} className="flex w-full items-start gap-2.5 px-[18px] py-2.5 text-left hover:bg-[#F7F8FA]" style={i > 0 ? { borderTop: `1px solid ${L.line}` } : undefined}>
+                      <span className="mt-[7px] h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: late ? '#FF3B30' : L.blue }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14px] font-medium">{a.subject || a.type}</div>
+                        <div className="truncate text-[12px]" style={{ color: late ? L.red : L.ink3 }}>{a.opportunity_name || 'General'} · {timeLabel(a.due_at)}</div>
+                      </div>
+                    </button>
+                  )
+                })}
             </div>
           </div>
         </div>
+        <div className="h-6" />
       </div>
 
       {(activePanel === 'new-lead-flow' || activePanel === 'opps-workbench') && (

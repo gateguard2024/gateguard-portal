@@ -42,6 +42,8 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Events', id: 'events' },
 ]
 
+const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps']
+
 const NEXUS_VERSION = 'v2.4.0'
 
 // Small Nexus mark, top-left — keeps the page starting high (was a large centred logo).
@@ -144,18 +146,21 @@ export default function NexusHomeClient() {
     }
   }, [messages, isAdmin, router])
 
+  // Tabs converted to the new light look (navy fade + white cards). Add tabs here as they're converted.
+  const isLight = LIGHT_TABS.includes(activeTab)
+
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden" style={activeTab === 'my-day'
+    <div className="relative flex h-screen flex-col overflow-hidden" style={isLight
       ? { background: '#EEF2F7' }
       : { background: 'linear-gradient(180deg,#141d2e 0%,#0e1521 55%,#0b111b 100%)' }}>
-      {activeTab !== 'my-day' && (<>
+      {!isLight && (<>
         {/* ambient depth — new elevated look */}
         <div className="pointer-events-none absolute inset-0 z-0" style={{ background: 'radial-gradient(1100px 720px at 8% -8%, rgba(30,150,230,0.14), transparent 58%), radial-gradient(1100px 760px at 100% 112%, rgba(107,126,255,0.13), transparent 55%)' }} />
         <NexusBackdropLayers variant="hero" />
       </>)}
 
       {/* Rails removed — center content is full width now. */}
-      <main className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-4 pb-40 pt-5 sm:px-6" style={activeTab === 'my-day'
+      <main className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-4 pb-40 pt-5 sm:px-6" style={isLight
         // New look: navy at the top fading into the light canvas; scrolls with the page.
         ? { backgroundColor: '#EEF2F7', backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: 'no-repeat', backgroundAttachment: 'local' }
         : undefined}>
