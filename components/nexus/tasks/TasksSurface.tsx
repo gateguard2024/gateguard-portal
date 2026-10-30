@@ -15,11 +15,11 @@ import { TaskList } from './TaskList'
 import { TaskPanel } from './TaskPanel'
 
 export * from './shared'
-import { T, FONT, addDays, localISO, type DueFilter, type GroupBy, type Person, type Scope, type Task, type TaskStatus } from './shared'
+import { T, FONT, PAGE_BG, addDays, localISO, type DueFilter, type GroupBy, type Person, type Scope, type Task, type TaskStatus } from './shared'
 
 // Shared CSS for the four Tasks files. Raw so server and client output match.
 const CSS = `
-.tk-root{position:fixed;inset:0;z-index:90;overflow-y:auto;background-color:#EEF2F7;background-image:linear-gradient(180deg,#0E1726 0px,#1C2B47 150px,#E6ECF4 420px,#EEF2F7 640px);background-repeat:no-repeat;background-attachment:local;color:${T.ink};font-family:${FONT};font-size:14px;line-height:1.45;letter-spacing:-0.01em;-webkit-overflow-scrolling:touch}
+.tk-root{position:fixed;inset:0;z-index:90;overflow-y:auto;${PAGE_BG}color:${T.ink};font-family:${FONT};font-size:14px;line-height:1.45;letter-spacing:-0.01em;-webkit-overflow-scrolling:touch}
 .tk-root *{box-sizing:border-box}
 .tk-main{max-width:1600px;margin:0 auto;padding:20px 32px calc(64px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
 .tk-root a{color:${T.blue};text-decoration:none}
@@ -59,7 +59,7 @@ const CSS = `
 @media (max-width:899px){.tk-main{padding:14px 16px 64px}}
 `
 
-export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => void; initialDue?: DueFilter }) {
+export function TasksSurface({ onClose, initialDue = 'all', initialTaskId = null }: { onClose: () => void; initialDue?: DueFilter; initialTaskId?: string | null }) {
   const [view, setView] = useState<'board' | 'list'>(() => {
     try { return (localStorage.getItem('nexus.tasks.view') as 'board' | 'list') || 'board' } catch { return 'board' }
   })
@@ -70,7 +70,16 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(initialTaskId)
+  // A notification clicked while Tasks is open → switch the panel to that task.
+  useEffect(() => {
+    function onOpenTask(e: Event) {
+      const id = (e as CustomEvent<string>).detail
+      if (id) { setExpanded(false); setOpenId(id) }
+    }
+    window.addEventListener('nexus:open-task', onOpenTask)
+    return () => window.removeEventListener('nexus:open-task', onOpenTask)
+  }, [])
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [expanded, setExpanded] = useState(false)

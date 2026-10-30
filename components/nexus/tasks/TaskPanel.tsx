@@ -8,7 +8,7 @@
  * edit; watchers can comment.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { PRIORITY, STATUS, T, addDays, fmtDue, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, type Person, type Task, type TaskPriority, type TaskStatus } from './shared'
+import { PAGE_BG, PRIORITY, STATUS, T, addDays, fmtDue, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, type Person, type Task, type TaskPriority, type TaskStatus } from './shared'
 import { DatesEditor, OptionsEditor, PeoplePicker, Pop, RecordSearch, StatusEditor, TagsEditor, TaskSearch, WAITING_ON, type RecordHit } from './TaskEditors'
 import { ActivitySection, Checklist, Description, Files, SectionStyles, Subtasks, type Activity, type ChecklistItem, type Comment, type FileRow, type Subtask } from './TaskSections'
 
@@ -37,7 +37,7 @@ const REPEAT: { value: string; label: string }[] = [
 
 const CSS = `
 .tkp{position:fixed;top:0;right:0;bottom:0;z-index:95;width:560px;max-width:100%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.06),-20px 0 50px -20px rgba(0,0,0,.35);display:flex;flex-direction:column}
-.tkp-full{position:fixed;inset:0;z-index:96;overflow-y:auto;background-color:#EEF2F7;background-image:linear-gradient(180deg,#0E1726 0px,#1C2B47 150px,#E6ECF4 420px,#EEF2F7 640px);background-repeat:no-repeat;background-attachment:local}
+.tkp-full{position:fixed;inset:0;z-index:96;overflow-y:auto;${PAGE_BG}}
 .tkp-full-main{max-width:1440px;margin:0 auto;padding:20px 32px calc(48px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
 .tkp-full-grid{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
 .tkp-card{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.18);padding:22px 26px;display:flex;flex-direction:column;gap:24px;min-width:0}

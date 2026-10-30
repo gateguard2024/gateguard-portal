@@ -19,7 +19,7 @@ import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { EventsSurface } from '@/components/nexus/EventsSurface'
-import { Bell } from 'lucide-react'
+import { NotificationsBell } from '@/components/nexus/NotificationsBell'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
 const { HelpCircle, Shield } = require('lucide-react') as any
 
@@ -148,6 +148,16 @@ export default function NexusHomeClient() {
     return () => window.removeEventListener('nexus:navigate', navigate)
   }, [])
 
+  // Open a task from a notification: on My Day already → tell it directly; otherwise
+  // put ?task= in the URL and switch to My Day, which reads it on mount.
+  const openTaskFromBell = useCallback((taskId: string) => {
+    if (activeTab === 'my-day') { window.dispatchEvent(new CustomEvent('nexus:open-task', { detail: taskId })); return }
+    const params = new URLSearchParams(window.location.search)
+    params.set('task', taskId)
+    window.history.replaceState({}, '', `/?${params.toString()}`)
+    goTab('my-day')
+  }, [activeTab, goTab])
+
   const handleQuery = useCallback(async (query: string) => {
     const cmd = routeCommand(query, isAdmin)
     if (cmd.kind === 'tab') { setActiveTab(cmd.tab); return }
@@ -204,10 +214,7 @@ export default function NexusHomeClient() {
           {/* Help + Admin relocated here from the removed left rail so nothing's lost. */}
           <button type="button" aria-label="Help" onClick={() => goTab('help')} title="Help" className="shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.6)' }}><HelpCircle size={16} /></button>
           {isAdmin && <button type="button" aria-label="Admin" onClick={() => goTab('people')} title="Admin" className="shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.45)' }}><Shield size={15} /></button>}
-          <button type="button" aria-label="Priorities" onClick={() => goTab('my-day')} title="Priorities & alerts" className="relative shrink-0 rounded-full p-2 transition-colors hover:opacity-90" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            <Bell size={16} />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: '#2dd4bf' }} />
-          </button>
+          <NotificationsBell onOpenTask={openTaskFromBell} />
           <div
             className="ml-0.5 h-8 w-8 shrink-0 rounded-full bg-cover bg-center"
             aria-label="You"

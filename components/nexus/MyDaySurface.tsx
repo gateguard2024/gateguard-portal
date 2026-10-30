@@ -335,7 +335,9 @@ export function MyDaySurface() {
   const [activePanel, setActivePanel] = useState<MyDayPanel>(null)
   // Which filter the Tasks screen opens with (Open Tasks / Overdue / To-Dos cards).
   const [tasksDue, setTasksDue] = useState<DueFilter>('all')
-  const openTasks = (due: DueFilter) => { setTasksDue(due); setActivePanel('todos') }
+  const openTasks = (due: DueFilter) => { setTasksDue(due); setTasksTaskId(null); setActivePanel('todos') }
+  // A task to open straight away (from a ?task= link or a notification).
+  const [tasksTaskId, setTasksTaskId] = useState<string | null>(null)
   const [selectedTopItemId, setSelectedTopItemId] = useState<string | null>(null)
   const [selectedTodoItemId, setSelectedTodoItemId] = useState<string | null>(null)
   const [topActionBusy, setTopActionBusy] = useState(false)
@@ -373,10 +375,30 @@ export function MyDaySurface() {
     void loadSummary()
   }, [loadSummary])
 
+  // A notification clicked while My Day is showing → open Tasks on that task.
+  // (If Tasks is already open it listens for the same event and switches task itself.)
+  useEffect(() => {
+    function onOpenTask(e: Event) {
+      const id = (e as CustomEvent<string>).detail
+      if (!id) return
+      setTasksTaskId(id)
+      setActivePanel(p => { if (p !== 'todos') setTasksDue('all'); return 'todos' })
+    }
+    window.addEventListener('nexus:open-task', onOpenTask)
+    return () => window.removeEventListener('nexus:open-task', onOpenTask)
+  }, [])
+
   // Deep-link: returning from Gmail OAuth (?view=messages) opens the Messages panel.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
+    const task = params.get('task')
+    if (task) {
+      setTasksDue('all'); setTasksTaskId(task); setActivePanel('todos')
+      params.delete('task')
+      const qs = params.toString()
+      window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
+    }
     if (params.get('view') === 'messages') {
       setActivePanel('messages')
       params.delete('view')
@@ -684,7 +706,7 @@ export function MyDaySurface() {
       )}
 
       {/* To-Dos opens the Tasks screen (board + list). TodoBoard.tsx is kept until Tasks is confirmed. */}
-      {activePanel === 'todos' && <TasksSurface initialDue={tasksDue} onClose={() => { setActivePanel(null); void loadSummary(); }} />}
+      {activePanel === 'todos' && <TasksSurface initialDue={tasksDue} initialTaskId={tasksTaskId} onClose={() => { setActivePanel(null); setTasksTaskId(null); void loadSummary(); }} />}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
         <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>

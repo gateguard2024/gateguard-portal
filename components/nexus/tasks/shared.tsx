@@ -48,6 +48,10 @@ export const T = {
   line: 'rgba(0,0,0,0.08)', line2: 'rgba(0,0,0,0.12)', blue: '#0071E3', blueDark: '#0058B0',
   red: '#D70015', orange: '#B25000', green: '#1A6B32',
 }
+// Page background: navy at the top fading down into the light canvas. One place so every
+// page can share it. Use inside a CSS rule: `.x{${PAGE_BG}}` (it's a full declaration list).
+export const PAGE_BG_GRADIENT = 'linear-gradient(180deg,#0E1726 0px,#18263F 200px,#283B5E 380px,#5D7193 560px,#B4C1D6 760px,#E2E8F1 940px,#EEF2F7 1100px)'
+export const PAGE_BG = `background-color:#EEF2F7;background-image:${PAGE_BG_GRADIENT};background-repeat:no-repeat;background-attachment:local;`
 export const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif'
 
 export const STATUS: { key: TaskStatus; label: string; dot: string; bg: string; fg: string }[] = [
