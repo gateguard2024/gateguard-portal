@@ -9,6 +9,7 @@
  * Light look on its own full-screen layer until the dealer app moves to the navy shell.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { TaskBoard } from './TaskBoard'
 import { TaskList } from './TaskList'
 import { TaskPanel } from './TaskPanel'
@@ -83,7 +84,7 @@ export const groupName = (t: Task) => (t.linked_label?.trim() ? t.linked_label.t
 const CSS = `
 .tk-root{position:fixed;inset:0;z-index:90;overflow-y:auto;background-color:#EEF2F7;background-image:linear-gradient(180deg,#0E1726 0px,#1C2B47 150px,#E6ECF4 420px,#EEF2F7 640px);background-repeat:no-repeat;background-attachment:local;color:${T.ink};font-family:${FONT};font-size:14px;line-height:1.45;letter-spacing:-0.01em;-webkit-overflow-scrolling:touch}
 .tk-root *{box-sizing:border-box}
-.tk-main{max-width:1600px;margin:0 auto;padding:20px 32px 64px;display:flex;flex-direction:column;gap:16px}
+.tk-main{max-width:1600px;margin:0 auto;padding:20px 32px calc(64px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
 .tk-root a{color:${T.blue};text-decoration:none}
 .tk-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid ${T.line2};background:#fff;color:${T.ink};font:600 14px ${FONT};cursor:pointer;white-space:nowrap}
 .tk-btn:hover{background:#FAFAFB}
@@ -235,7 +236,14 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
     </button>
   )
 
-  return (
+  // Lock the page behind Tasks so only Tasks scrolls.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  return createPortal(
     <div className={`tk-root${openTask ? ' panel-open' : ''}`} role="dialog" aria-modal="true" aria-label="Tasks">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="tk-main">
@@ -298,7 +306,8 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
       </div>
 
       {openTask && <TaskPanel key={openTask.id} task={openTask} onClose={() => setOpenId(null)} onPatch={updates => void patch(openTask.id, updates)} onDelete={() => void remove(openTask.id)} />}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
