@@ -6,7 +6,7 @@ import { AddEventModal } from '@/components/calendar/AddEventModal'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
-import { TodoBoard } from '@/components/nexus/TodoBoard'
+import { TasksSurface } from '@/components/nexus/tasks/TasksSurface'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MessagesShell from '@/components/nexus/MessagesShell'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
@@ -680,11 +680,8 @@ export function MyDaySurface() {
         />
       )}
 
-      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => { setActivePanel(null); void loadSummary(); }} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
-        <TodoBoard />
-        </div>
-      </DetailShell>}
+      {/* To-Dos opens the Tasks screen (board + list). TodoBoard.tsx is kept until Tasks is confirmed. */}
+      {activePanel === 'todos' && <TasksSurface onClose={() => { setActivePanel(null); void loadSummary(); }} />}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
         <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
