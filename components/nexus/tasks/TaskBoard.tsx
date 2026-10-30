@@ -2,12 +2,12 @@
 
 /** Tasks · Board view — one column per status; drag a card to change its status. */
 import { useState } from 'react'
-import { STATUS, T, fmtDue, initials, isOverdue, linkTypeLabel, PriorityIcon, type Task, type TaskStatus } from './TasksSurface'
+import { STATUS, T, fmtDue, initials, isOverdue, linkTypeLabel, PriorityIcon, type Task, type TaskStatus } from './shared'
 
 const DONE_SHOWN = 20
 
 const CSS = `
-.tkb-cols{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:14px;overflow-x:auto;align-items:start;padding-bottom:4px}
+.tkb-cols{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:14px;overflow-x:auto;align-items:start;padding-bottom:4px}
 .tkb-col{background:rgba(220,227,238,.92);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:120px;transition:background .12s}
 .tkb-col.over{background:#DCE8F8}
 .tkb-colh{display:flex;align-items:center;gap:8px;padding:4px 4px 6px;font-size:13px;font-weight:600}
@@ -20,7 +20,9 @@ const CSS = `
 .tkb-ttl{font-size:14px;font-weight:600;line-height:1.35;word-break:break-word}
 .tkb-add{min-height:40px;border:0;border-radius:8px;background:none;color:#6E6E73;font-family:inherit;font-size:13px;font-weight:500;text-align:left;padding:0 8px;cursor:pointer}
 .tkb-add:hover{background:rgba(0,0,0,.05)}
-@media (max-width:899px){.tkb-cols{grid-template-columns:repeat(3,minmax(260px,82vw))}}
+@media (max-width:899px){.tkb-cols{grid-template-columns:repeat(4,minmax(250px,82vw))}}
+.tkb-key{font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#6E6E73}
+.tkb-prog{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#3A3A3C;font-variant-numeric:tabular-nums}
 `
 
 export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
@@ -76,14 +78,23 @@ export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd }: {
                   className={`tkb-card${openId === t.id ? ' sel' : ''}${dragId === t.id ? ' drag' : ''}`}
                 >
                   <span className="tkb-ttl" style={done ? { color: T.ink3, textDecoration: 'line-through' } : undefined}>{t.title}</span>
-                  {t.linked_label && (
+                  {(t.linked_label || t.parent_task_id || (t.tags ?? []).length > 0) && (
                     <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <span className="tk-tag">{t.linked_label}</span>
-                      {t.linked_type && t.linked_type !== 'site' && <span className={`tk-tag${t.linked_type === 'work_order' ? ' wo' : ''}`}>{linkTypeLabel(t.linked_type)}</span>}
+                      {t.parent_task_id && <span className="tk-tag">Subtask</span>}
+                      {t.linked_label && <span className="tk-tag">{t.linked_label}</span>}
+                      {t.linked_type && t.linked_type !== 'site' && t.linked_type !== 'property' && <span className={`tk-tag${t.linked_type === 'work_order' ? ' wo' : ''}`}>{linkTypeLabel(t.linked_type)}</span>}
+                      {(t.tags ?? []).slice(0, 3).map(tag => <span key={tag} className="tk-tag" style={{ background: '#EFEAFB', color: '#5B3BB0' }}>{tag}</span>)}
                     </span>
                   )}
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {t.key && <span className="tkb-key">{t.key}</span>}
                     <PriorityIcon p={t.priority} />
+                    {(t.checklist_total ?? 0) > 0 && (
+                      <span className="tkb-prog" title="Checklist">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M9 11l3 3 8-8" /><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" /></svg>
+                        {t.checklist_done ?? 0}/{t.checklist_total}
+                      </span>
+                    )}
                     {t.recurrence_type && t.recurrence_type !== 'none' && <span className="tk-sub" style={{ fontSize: 12 }}>Repeats</span>}
                     <span style={{ flex: 1 }} />
                     {t.due_date && <span className={`tk-due${late ? ' late' : ''}`}>{late ? 'Overdue · ' : ''}{fmtDue(t.due_date)}</span>}

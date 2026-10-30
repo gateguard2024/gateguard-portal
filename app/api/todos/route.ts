@@ -103,11 +103,14 @@ export async function POST(req: NextRequest) {
     }
 
     // A subtask needs edit rights on its parent and inherits the parent's org.
+    // A subtask also takes the parent's link (site / work order…) when none is given, so it groups with it.
     let parentOrg: string | null | undefined
+    let parentLink: { linked_type: unknown; linked_id: unknown; linked_label: unknown } | null = null
     if (parent_task_id) {
       const parent = await loadTodoFor(parent_task_id, caller, 'edit')
       if ('error' in parent) return NextResponse.json({ error: parent.error }, { status: parent.status })
       parentOrg = parent.todo.org_id
+      if (!linked_type && parent.todo.linked_type) parentLink = { linked_type: parent.todo.linked_type, linked_id: parent.todo.linked_id, linked_label: parent.todo.linked_label }
     }
 
     const { data, error } = await supabase
@@ -130,9 +133,9 @@ export async function POST(req: NextRequest) {
         // Default to self-assignment so it lands in the creator's own tasks + calendar.
         assigned_to:        assigned_to ?? caller.id,
         assigned_to_name:   assigned_to_name ?? caller.name,
-        linked_type:        linked_type ?? null,
-        linked_id:          linked_id ?? null,
-        linked_label:       linked_label ?? null,
+        linked_type:        linked_type ?? parentLink?.linked_type ?? null,
+        linked_id:          linked_id ?? parentLink?.linked_id ?? null,
+        linked_label:       linked_label ?? parentLink?.linked_label ?? null,
         recurrence_type:    recurrence_type,
         recurrence_interval: recurrence_interval,
         recurrence_ends_at: recurrence_ends_at ?? null,

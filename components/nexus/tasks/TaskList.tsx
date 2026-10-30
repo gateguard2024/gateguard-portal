@@ -2,7 +2,7 @@
 
 /** Tasks · List view — a table grouped by site / record (default), status, owner or due date. */
 import { useMemo, useState } from 'react'
-import { STATUS, T, addDays, fmtDue, groupName, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, StatusPill, type GroupBy, type Task } from './TasksSurface'
+import { STATUS, T, addDays, fmtDue, groupName, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, StatusPill, type GroupBy, type Task } from './shared'
 
 const CSS = `
 .tkl-grp{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.18);overflow:hidden}
@@ -18,6 +18,7 @@ const CSS = `
 .tkl tbody tr.sel:hover td{background:#F0F6FE}
 .tkl-ttl{border:0;background:none;padding:0;font-family:inherit;font-size:13px;font-weight:600;color:#1D1D1F;cursor:pointer;text-align:left;white-space:normal}
 .tkl-ttl:hover{color:#0071E3}
+.tkl-key{font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#6E6E73;white-space:nowrap}
 .tkl input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#0071E3;cursor:pointer}
 `
 
@@ -45,6 +46,17 @@ function buildGroups(tasks: Task[], by: GroupBy): Group[] {
     return groupName(t)
   }
   for (const t of tasks) { const k = keyOf(t); map.set(k, [...(map.get(k) ?? []), t]) }
+  // Subtasks sit right under their parent when the parent is in the same group.
+  const nest = (items: Task[]) => {
+    const ids = new Set(items.map(t => t.id))
+    const top = items.filter(t => !t.parent_task_id || !ids.has(t.parent_task_id)).sort(sortTasks)
+    const out: Task[] = []
+    for (const t of top) {
+      out.push(t)
+      out.push(...items.filter(c => c.parent_task_id === t.id).sort(sortTasks))
+    }
+    return out
+  }
 
   let order: string[]
   const labels: Record<string, string> = {}
@@ -62,7 +74,7 @@ function buildGroups(tasks: Task[], by: GroupBy): Group[] {
     })
     if (map.has(tail)) order.push(tail)
   }
-  return order.filter(k => map.has(k)).map(k => ({ key: k, label: labels[k] ?? k, items: [...(map.get(k) ?? [])].sort(sortTasks) }))
+  return order.filter(k => map.has(k)).map(k => ({ key: k, label: labels[k] ?? k, items: nest(map.get(k) ?? []) }))
 }
 
 export function TaskList({ tasks, groupBy, openId, onOpen, onToggleDone }: {
@@ -94,7 +106,7 @@ export function TaskList({ tasks, groupBy, openId, onOpen, onToggleDone }: {
             {!isCollapsed && (
               <div className="tkl-tw">
                 <table>
-                  <thead><tr><th style={{ width: 40 }}><span className="tk-sr">Done</span></th><th>Task</th>{groupBy !== 'status' && <th style={{ width: 130 }}>Status</th>}<th style={{ width: 110 }}>Priority</th>{groupBy !== 'owner' && <th style={{ width: 190 }}>Owner</th>}<th style={{ width: 90 }}>Due</th></tr></thead>
+                  <thead><tr><th style={{ width: 40 }}><span className="tk-sr">Done</span></th><th style={{ width: 72 }}>Key</th><th>Task</th>{groupBy !== 'status' && <th style={{ width: 130 }}>Status</th>}<th style={{ width: 110 }}>Priority</th>{groupBy !== 'owner' && <th style={{ width: 190 }}>Owner</th>}<th style={{ width: 90 }}>Due</th></tr></thead>
                   <tbody>
                     {g.items.map(t => {
                       const isDone = t.status === 'done'
@@ -102,11 +114,14 @@ export function TaskList({ tasks, groupBy, openId, onOpen, onToggleDone }: {
                       return (
                         <tr key={t.id} className={openId === t.id ? 'sel' : undefined}>
                           <td><input type="checkbox" checked={isDone} onChange={() => onToggleDone(t)} aria-label={`${isDone ? 'Reopen' : 'Mark done'}: ${t.title}`} /></td>
+                          <td><span className="tkl-key">{t.key}</span></td>
                           <td style={{ whiteSpace: 'normal' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingLeft: t.parent_task_id && g.items.some(x => x.id === t.parent_task_id) ? 22 : 0 }}>
+                              {t.parent_task_id && g.items.some(x => x.id === t.parent_task_id) && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#AEAEB2" strokeWidth={2} aria-hidden="true" style={{ marginLeft: -18 }}><path d="M5 4v9h12" /></svg>}
                               <button type="button" className="tkl-ttl" onClick={() => onOpen(t.id)} style={isDone ? { color: T.ink3, textDecoration: 'line-through' } : undefined}>{t.title}</button>
                               {groupBy !== 'site' && t.linked_label && <span className="tk-tag">{t.linked_label}</span>}
-                              {t.linked_type && t.linked_type !== 'site' && <span className={`tk-tag${t.linked_type === 'work_order' ? ' wo' : ''}`}>{linkTypeLabel(t.linked_type)}</span>}
+                              {(t.checklist_total ?? 0) > 0 && <span className="tk-sub" style={{ fontSize: 12 }}>✓ {t.checklist_done ?? 0}/{t.checklist_total}</span>}
+                              {t.linked_type && t.linked_type !== 'site' && t.linked_type !== 'property' && <span className={`tk-tag${t.linked_type === 'work_order' ? ' wo' : ''}`}>{linkTypeLabel(t.linked_type)}</span>}
                             </span>
                           </td>
                           {groupBy !== 'status' && <td><StatusPill s={t.status} /></td>}

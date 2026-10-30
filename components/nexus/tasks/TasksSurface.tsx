@@ -3,10 +3,10 @@
 /**
  * Tasks — My Day's task screen (Jira-style board + Wrike-style list).
  * Design: "Dealer · My Day" page of the design canvas (Tasks · Board / List / Task detail).
- * Data: /api/todos (GET, POST) and /api/todos/[id] (PATCH, DELETE). No schema changes yet:
- * statuses are open / in_progress / done; the "Waiting" status, task keys, comments,
- * history and subtasks arrive with the next migration.
- * Light look on its own full-screen layer until the dealer app moves to the navy shell.
+ * Data: /api/todos (list, create), /api/todos/[id] (detail, edit, delete) and its sub-routes
+ * (checklist, comments, links, time, attachments); /api/todos/people for the pickers.
+ * Needs migration 194 (Waiting status, task keys, checklist, subtasks, comments, history…).
+ * Rendered in a portal on <body> so the dealer app's bottom bar can't cover it.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -14,71 +14,8 @@ import { TaskBoard } from './TaskBoard'
 import { TaskList } from './TaskList'
 import { TaskPanel } from './TaskPanel'
 
-export type TaskStatus = 'open' | 'in_progress' | 'done'
-export type TaskPriority = 'high' | 'normal' | 'low'
-export type Task = {
-  id: string
-  title: string
-  body?: string | null
-  priority: TaskPriority
-  status: TaskStatus
-  due_date: string | null
-  assigned_to?: string | null
-  assigned_to_name?: string | null
-  created_by_name?: string | null
-  linked_type?: string | null
-  linked_id?: string | null
-  linked_label?: string | null
-  recurrence_type?: string | null
-  completed_at?: string | null
-  created_at?: string | null
-  todo_attachments?: { id: string; name: string; url: string }[]
-}
-export type GroupBy = 'site' | 'status' | 'owner' | 'due'
-type Scope = 'mine' | 'team'
-export type DueFilter = 'all' | 'today' | 'overdue' | 'week'
-
-// Same palette as the property portal shell (components/portal/ops/OpsShell.tsx).
-export const T = {
-  canvas: '#F5F5F7', card: '#FFFFFF', ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73',
-  line: 'rgba(0,0,0,0.08)', line2: 'rgba(0,0,0,0.12)', blue: '#0071E3', blueDark: '#0058B0',
-  red: '#D70015', orange: '#B25000', green: '#1A6B32',
-}
-export const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif'
-
-export const STATUS: { key: TaskStatus; label: string; dot: string; bg: string; fg: string }[] = [
-  { key: 'open', label: 'To do', dot: '#8E8E93', bg: '#F2F2F4', fg: '#3A3A3C' },
-  { key: 'in_progress', label: 'In progress', dot: '#0071E3', bg: '#E8F1FD', fg: '#0058B0' },
-  { key: 'done', label: 'Done', dot: '#34C759', bg: '#E6F6EA', fg: '#1A6B32' },
-]
-export const statusOf = (s: string) => STATUS.find(x => x.key === s) ?? STATUS[0]
-export const PRIORITY: Record<TaskPriority, { label: string; color: string }> = {
-  high: { label: 'High', color: '#D70015' },
-  normal: { label: 'Normal', color: '#B25000' },
-  low: { label: 'Low', color: '#0071E3' },
-}
-const LINK_LABEL: Record<string, string> = { work_order: 'Work order', site: 'Site', lead: 'Lead', opportunity: 'Opportunity', customer: 'Customer' }
-export const linkTypeLabel = (t?: string | null) => (t ? LINK_LABEL[t] ?? t : '')
-
-// Local calendar dates (not UTC) so "today" is right in the evening.
-export function localISO(d = new Date()) {
-  const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
-export function addDays(iso: string | null, n: number) {
-  const base = iso ? new Date(`${iso}T00:00:00`) : new Date()
-  base.setDate(base.getDate() + n)
-  return localISO(base)
-}
-export function fmtDue(iso: string | null) {
-  if (!iso) return ''
-  const d = new Date(`${iso}T00:00:00`)
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-export const isOverdue = (t: Task) => t.status !== 'done' && !!t.due_date && t.due_date < localISO()
-export const initials = (name?: string | null) =>
-  (name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || '—'
-export const groupName = (t: Task) => (t.linked_label?.trim() ? t.linked_label.trim() : 'Internal')
+export * from './shared'
+import { T, FONT, addDays, localISO, type DueFilter, type GroupBy, type Person, type Scope, type Task, type TaskStatus } from './shared'
 
 // Shared CSS for the four Tasks files. Raw so server and client output match.
 const CSS = `
@@ -118,24 +55,9 @@ const CSS = `
 .tk-head .tk-seg{background:rgba(255,255,255,.12)}
 .tk-head .tk-seg button{color:#C9D2E0}
 .tk-head .tk-seg button[aria-pressed=true]{background:#fff;color:${T.ink}}
-@media (min-width:1200px){.tk-root.panel-open .tk-main{padding-right:512px}}
+@media (min-width:1200px){.tk-root.panel-open .tk-main{padding-right:592px}}
 @media (max-width:899px){.tk-main{padding:14px 16px 64px}}
 `
-
-export function PriorityIcon({ p, label = false }: { p: TaskPriority; label?: boolean }) {
-  const c = PRIORITY[p]?.color ?? T.ink3
-  const path = p === 'high' ? 'M6 15l6-6 6 6M6 10l6-6 6 6' : p === 'low' ? 'M6 9l6 6 6-6' : 'M5 9h14M5 15h14'
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 500, color: T.ink2 }} title={`${PRIORITY[p]?.label ?? p} priority`}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
-      {label ? PRIORITY[p]?.label ?? p : <span className="tk-sr">{PRIORITY[p]?.label ?? p} priority</span>}
-    </span>
-  )
-}
-export function StatusPill({ s }: { s: string }) {
-  const st = statusOf(s)
-  return <span className="tk-st" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
-}
 
 export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => void; initialDue?: DueFilter }) {
   const [view, setView] = useState<'board' | 'list'>(() => {
@@ -151,6 +73,14 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
   const [openId, setOpenId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const [expanded, setExpanded] = useState(false)
+  const [people, setPeople] = useState<Person[]>([])
+  const [me, setMe] = useState<string>('')
+
+  // Team list for the owner / watcher / @mention pickers.
+  useEffect(() => {
+    fetch('/api/todos/people').then(r => r.json()).then(d => { setPeople(d.people ?? []); setMe(d.me ?? '') }).catch(() => {})
+  }, [])
 
   useEffect(() => { try { localStorage.setItem('nexus.tasks.view', view) } catch { /* ignore */ } }, [view])
 
@@ -167,12 +97,17 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
   }, [scope])
   useEffect(() => { void load() }, [load])
 
-  // Close the detail panel (or the screen) with Escape.
+  // Escape: close an open editor first, then the full page, then the panel, then Tasks.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (openId) setOpenId(null); else onClose() } }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('[data-tk-pop]')) return
+      if (expanded) setExpanded(false)
+      else if (openId) setOpenId(null)
+      else onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openId, onClose])
+  }, [openId, expanded, onClose])
 
   const patch = useCallback(async (id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates, ...(updates.status ? { completed_at: updates.status === 'done' ? new Date().toISOString() : null } : {}) } : t)))
@@ -185,27 +120,27 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not save.'); void load() }
   }, [load])
 
-  const remove = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error ?? 'Could not delete.')
-      setTasks(prev => prev.filter(t => t.id !== id)); setOpenId(null)
-    } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not delete.') }
-  }, [])
-
   const create = useCallback(async (title: string, status: TaskStatus = 'open') => {
     const t = title.trim()
     if (!t) return
     try {
-      const res = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t, due_date: due === 'today' ? localISO() : null }) })
+      const res = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t, status, due_date: due === 'today' ? localISO() : null }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not create the task.')
       setTasks(prev => [data as Task, ...prev])
-      if (status !== 'open') void patch((data as Task).id, { status })
       setNewTitle(''); setAdding(false); setOpenId((data as Task).id)
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not create the task.') }
-  }, [due, patch])
+  }, [due])
+
+  // The panel tells the list about changes so the board/list stay in step without a reload.
+  const rowChanged = useCallback((id: string, changes: Partial<Task>) => {
+    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...changes } : t)))
+  }, [])
+  const rowAdded = useCallback((t: Task) => setTasks(prev => (prev.some(x => x.id === t.id) ? prev : [t, ...prev])), [])
+  const rowRemoved = useCallback((id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id && t.parent_task_id !== id))
+    setOpenId(null); setExpanded(false)
+  }, [])
 
   const today = localISO(); const weekEnd = addDays(today, 7)
   const counts = useMemo(() => {
@@ -220,7 +155,7 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return tasks.filter(t => {
-      if (needle && !`${t.title} ${t.linked_label ?? ''} ${t.assigned_to_name ?? ''}`.toLowerCase().includes(needle)) return false
+      if (needle && !`${t.key ?? ''} ${t.title} ${t.linked_label ?? ''} ${t.assigned_to_name ?? ''} ${(t.tags ?? []).join(' ')}`.toLowerCase().includes(needle)) return false
       if (due === 'all') return true
       if (t.status === 'done') return false
       if (due === 'today') return t.due_date === today
@@ -244,7 +179,7 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
   }, [])
 
   return createPortal(
-    <div className={`tk-root${openTask ? ' panel-open' : ''}`} role="dialog" aria-modal="true" aria-label="Tasks">
+    <div className={`tk-root${openTask && !expanded ? ' panel-open' : ''}`} role="dialog" aria-modal="true" aria-label="Tasks">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="tk-main">
         <div className="tk-head" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
@@ -305,7 +240,23 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
             : <TaskList tasks={shown} groupBy={groupBy} openId={openId} onOpen={setOpenId} onToggleDone={t => void patch(t.id, { status: t.status === 'done' ? 'open' : 'done' })} />}
       </div>
 
-      {openTask && <TaskPanel key={openTask.id} task={openTask} onClose={() => setOpenId(null)} onPatch={updates => void patch(openTask.id, updates)} onDelete={() => void remove(openTask.id)} />}
+      {openId && (
+        <TaskPanel
+          key={openId}
+          taskId={openId}
+          row={openTask}
+          allTasks={tasks}
+          people={people}
+          me={me}
+          expanded={expanded}
+          onExpand={setExpanded}
+          onClose={() => { setOpenId(null); setExpanded(false) }}
+          onOpen={id => setOpenId(id)}
+          onRowChange={rowChanged}
+          onRowAdd={rowAdded}
+          onRowRemove={rowRemoved}
+        />
+      )}
     </div>,
     document.body,
   )
