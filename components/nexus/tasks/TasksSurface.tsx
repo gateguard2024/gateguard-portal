@@ -35,7 +35,7 @@ export type Task = {
 }
 export type GroupBy = 'site' | 'status' | 'owner' | 'due'
 type Scope = 'mine' | 'team'
-type DueFilter = 'all' | 'today' | 'overdue' | 'week'
+export type DueFilter = 'all' | 'today' | 'overdue' | 'week'
 
 // Same palette as the property portal shell (components/portal/ops/OpsShell.tsx).
 export const T = {
@@ -131,12 +131,12 @@ export function StatusPill({ s }: { s: string }) {
   return <span className="tk-st" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
 }
 
-export function TasksSurface({ onClose }: { onClose: () => void }) {
+export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => void; initialDue?: DueFilter }) {
   const [view, setView] = useState<'board' | 'list'>(() => {
     try { return (localStorage.getItem('nexus.tasks.view') as 'board' | 'list') || 'board' } catch { return 'board' }
   })
   const [scope, setScope] = useState<Scope>('mine')
-  const [due, setDue] = useState<DueFilter>('all')
+  const [due, setDue] = useState<DueFilter>(initialDue)
   const [groupBy, setGroupBy] = useState<GroupBy>('site')
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])

@@ -6,7 +6,7 @@ import { AddEventModal } from '@/components/calendar/AddEventModal'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
-import { TasksSurface } from '@/components/nexus/tasks/TasksSurface'
+import { TasksSurface, type DueFilter } from '@/components/nexus/tasks/TasksSurface'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MessagesShell from '@/components/nexus/MessagesShell'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
@@ -333,6 +333,9 @@ export function MyDaySurface() {
   const [leads, setLeads] = useState<{ stage?: string }[]>([])
   const [addEventOpen, setAddEventOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<MyDayPanel>(null)
+  // Which filter the Tasks screen opens with (Open Tasks / Overdue / To-Dos cards).
+  const [tasksDue, setTasksDue] = useState<DueFilter>('all')
+  const openTasks = (due: DueFilter) => { setTasksDue(due); setActivePanel('todos') }
   const [selectedTopItemId, setSelectedTopItemId] = useState<string | null>(null)
   const [selectedTodoItemId, setSelectedTodoItemId] = useState<string | null>(null)
   const [topActionBusy, setTopActionBusy] = useState(false)
@@ -516,9 +519,9 @@ export function MyDaySurface() {
       {/* Metric ring gauges */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, onClick: () => openCard(cards[1]), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, onClick: () => openCard(cards[1]), ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
-          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, onClick: () => openCard(cards[2]), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, onClick: () => openTasks('all'), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, onClick: () => openTasks('overdue'), ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
+          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, onClick: () => openTasks('today'), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
           { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: C.safe, onClick: () => { window.location.href = '/crm/leads' }, ic: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
         ].map((m) => (
           <button key={m.l} type="button" onClick={m.onClick} className="flex w-full items-center gap-3.5 rounded-2xl p-4 text-left transition-transform hover:-translate-y-0.5" style={GLASS}>
@@ -574,7 +577,7 @@ export function MyDaySurface() {
         <div className="overflow-hidden rounded-2xl" style={GLASS}>
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
             <span className="text-[14px] font-bold" style={{ color: C.ink }}>To-Dos</span>
-            <button type="button" onClick={() => openCard(cards[2])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: C.ink2, border: '1px solid rgba(255,255,255,0.14)' }}>Open board →</button>
+            <button type="button" onClick={() => openTasks('all')} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: C.ink2, border: '1px solid rgba(255,255,255,0.14)' }}>Open board →</button>
           </div>
           <div className="space-y-3 p-4">
             {([['NOW', 'high', C.alert], ['NEXT', 'medium', C.warn], ['LATER', 'low', C.ink3]] as const).map(([label, key, dot]) => {
@@ -681,7 +684,7 @@ export function MyDaySurface() {
       )}
 
       {/* To-Dos opens the Tasks screen (board + list). TodoBoard.tsx is kept until Tasks is confirmed. */}
-      {activePanel === 'todos' && <TasksSurface onClose={() => { setActivePanel(null); void loadSummary(); }} />}
+      {activePanel === 'todos' && <TasksSurface initialDue={tasksDue} onClose={() => { setActivePanel(null); void loadSummary(); }} />}
 
       {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
         <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
