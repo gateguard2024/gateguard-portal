@@ -8,7 +8,7 @@ const DONE_SHOWN = 20
 
 const CSS = `
 .tkb-cols{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:14px;overflow-x:auto;align-items:start;padding-bottom:4px}
-.tkb-col{background:#EBEBEF;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:120px;transition:background .12s}
+.tkb-col{background:rgba(220,227,238,.92);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:120px;transition:background .12s}
 .tkb-col.over{background:#DCE8F8}
 .tkb-colh{display:flex;align-items:center;gap:8px;padding:4px 4px 6px;font-size:13px;font-weight:600}
 .tkb-colh span.n{font-weight:500;color:#6E6E73}

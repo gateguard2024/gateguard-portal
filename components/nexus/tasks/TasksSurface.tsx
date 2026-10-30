@@ -81,7 +81,7 @@ export const groupName = (t: Task) => (t.linked_label?.trim() ? t.linked_label.t
 
 // Shared CSS for the four Tasks files. Raw so server and client output match.
 const CSS = `
-.tk-root{position:fixed;inset:0;z-index:90;overflow-y:auto;background:${T.canvas};color:${T.ink};font-family:${FONT};font-size:14px;line-height:1.45;letter-spacing:-0.01em;-webkit-overflow-scrolling:touch}
+.tk-root{position:fixed;inset:0;z-index:90;overflow-y:auto;background-color:#EEF2F7;background-image:linear-gradient(180deg,#0E1726 0px,#1C2B47 150px,#E6ECF4 420px,#EEF2F7 640px);background-repeat:no-repeat;background-attachment:local;color:${T.ink};font-family:${FONT};font-size:14px;line-height:1.45;letter-spacing:-0.01em;-webkit-overflow-scrolling:touch}
 .tk-root *{box-sizing:border-box}
 .tk-main{max-width:1600px;margin:0 auto;padding:20px 32px 64px;display:flex;flex-direction:column;gap:16px}
 .tk-root a{color:${T.blue};text-decoration:none}
@@ -112,6 +112,11 @@ const CSS = `
 .tk-msg{padding:10px 14px;border-radius:10px;background:#FDECEA;color:#8A1209;font-size:13px}
 .tk-empty{padding:28px;text-align:center;color:${T.ink3};font-size:13px}
 .tk-sr{position:absolute;left:-9999px}
+.tk-head h1{color:#fff}
+.tk-head .tk-back{color:#8EC1FF}
+.tk-head .tk-seg{background:rgba(255,255,255,.12)}
+.tk-head .tk-seg button{color:#C9D2E0}
+.tk-head .tk-seg button[aria-pressed=true]{background:#fff;color:${T.ink}}
 @media (min-width:1200px){.tk-root.panel-open .tk-main{padding-right:512px}}
 @media (max-width:899px){.tk-main{padding:14px 16px 64px}}
 `
@@ -234,7 +239,7 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
     <div className={`tk-root${openTask ? ' panel-open' : ''}`} role="dialog" aria-modal="true" aria-label="Tasks">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="tk-main">
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+        <div className="tk-head" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
           <div>
             <button type="button" className="tk-back" onClick={onClose}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>My Day
@@ -275,7 +280,7 @@ export function TasksSurface({ onClose, initialDue = 'all' }: { onClose: () => v
           <div className="tk-bar">
             <label><span className="tk-sr">Search tasks</span><input type="search" className="tk-input" placeholder="Search tasks" value={q} onChange={e => setQ(e.target.value)} style={{ width: 200 }} /></label>
             {view === 'list' && (
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.ink3 }}>Group by
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#C9D2E0' }}>Group by
                 <select className="tk-select" value={groupBy} onChange={e => setGroupBy(e.target.value as GroupBy)}>
                   <option value="site">Site / record</option><option value="status">Status</option><option value="owner">Owner</option><option value="due">Due date</option>
                 </select>
