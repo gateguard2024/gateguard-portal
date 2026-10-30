@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
 import { LeadsHub } from '@/components/nexus/LeadsHub'
-import { OpportunityHub } from '@/components/nexus/OpportunityHub'
+import { SalesBoard } from '@/components/nexus/sales/SalesBoard'
+import type { Deal } from '@/components/nexus/sales/salesShared'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
@@ -47,6 +48,7 @@ type OppData = {
 
 function money(n: number | null | undefined): string {
   if (n == null) return '—'
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`
   if (n >= 1000) return `$${Math.round(n / 1000)}k`
   return `$${Math.round(n)}`
 }
@@ -129,13 +131,27 @@ export function SalesSurface() {
     try {
       const [aRes, oRes, lRes] = await Promise.all([
         fetch('/api/crm/activities').then(r => r.json()).catch(() => []),
-        fetch('/api/crm/opportunities').then(r => r.json()).catch(() => ({})),
+        // Same source + scoping as the Sales board, so the numbers here match it.
+        fetch('/api/sales/deals').then(r => r.json()).catch(() => ({})),
         fetch('/api/crm/leads').then(r => r.json()).catch(() => []),
       ])
       const acts: Activity[] = Array.isArray(aRes) ? aRes : (aRes?.records ?? [])
       const end = new Date(); end.setHours(23, 59, 59, 999)
       setFollowups(acts.filter(a => !a.completed_at && a.due_at && new Date(a.due_at) <= end).sort((x, y) => new Date(x.due_at!).getTime() - new Date(y.due_at!).getTime()))
-      setOpp((oRes && typeof oRes === 'object') ? oRes as OppData : {})
+      const deals: Deal[] = Array.isArray(oRes?.deals) ? oRes.deals : []
+      const grouped: NonNullable<OppData['grouped']> = {}
+      for (const d of deals) {
+        const k = d.tab === 'open' ? d.stage : d.tab
+        if (!grouped[k]) grouped[k] = { label: k, records: [], total: 0 }
+        grouped[k].records.push({ id: d.id, name: d.name })
+        grouped[k].total += d.tcv ?? 0
+      }
+      const openDeals = deals.filter(d => d.tab === 'open')
+      setOpp({
+        grouped,
+        pipelineTotal: oRes?.canViewFinancials === false ? null : openDeals.reduce((n, d) => n + (d.tcv ?? 0), 0),
+        counts: { total: deals.length, open: openDeals.length, won: deals.filter(d => d.tab === 'won').length },
+      })
       setLeadCount(Array.isArray(lRes) ? lRes.length : (lRes?.records?.length ?? null))
     } finally { setLoading(false) }
   }, [])
@@ -193,7 +209,7 @@ export function SalesSurface() {
         {/* Four numbers */}
         <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
           {[
-            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'Weighted open', onClick: () => setOppsHub(true) },
+            { l: 'Pipeline', v: money(opp.pipelineTotal), s: 'Open deals, total contract value', onClick: () => setOppsHub(true) },
             { l: 'Open deals', v: String(counts.open), s: `${stageN('contract')} contract${stageN('contract') === 1 ? '' : 's'} out`, onClick: () => setOppsHub(true) },
             { l: 'Win rate', v: `${winRate}%`, s: `${wonN} won · ${lostN} lost`, onClick: () => setOppsHub(true) },
             { l: 'Avg deal', v: money(avgDeal), s: 'Per open deal', onClick: () => setOppsHub(true) },
@@ -303,7 +319,13 @@ export function SalesSurface() {
       )}
 
       {leadsHub && <LeadsHub onClose={() => { setLeadsHub(false); void loadDashboard() }} />}
-      {oppsHub && <OpportunityHub onClose={() => { setOppsHub(false); void loadDashboard() }} />}
+      {oppsHub && (
+        <SalesBoard
+          onClose={() => { setOppsHub(false); void loadDashboard() }}
+          onNewDeal={() => { setOppsHub(false); setActivePanel('new-opp') }}
+          onOpenFull={id => void openLifecycle(id)}
+        />
+      )}
 
       {activePanel === 'rough-calc' && (
         <SalesDetailShell title="ROI Calculator" subtitle="Enter the site scope + terms — start-up, monthly profit, and ROI update live." onClose={() => setActivePanel(null)}
