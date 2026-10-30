@@ -8,20 +8,19 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 
-// My Day glass palette — matches the other dashboard modules so it pops on the fabric
-// backdrop instead of reading as a flat black box.
+// Light card palette — matches the new My Day (white cards on the navy fade).
 const C = {
-  tile: 'rgba(14,21,33,0.5)', hair: 'rgba(255,255,255,0.09)', hair2: 'rgba(255,255,255,0.06)',
-  ink: '#eaf2fb', ink2: '#9fb0c4', ink3: '#6d7f94',
-  blue: '#00A3FF', green: '#34D399', orange: '#f59e0b', red: '#f43f5e',
+  tile: '#F5F6F8', hair: 'rgba(0,0,0,0.12)', hair2: 'rgba(0,0,0,0.08)',
+  ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73',
+  blue: '#0071E3', green: '#30A14E', orange: '#FF9500', red: '#FF3B30',
 }
 const GLASS = {
-  background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))',
-  backdropFilter: 'blur(18px) saturate(1.15)',
-  border: '1px solid rgba(255,255,255,0.09)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)',
+  background: '#FFFFFF',
+  boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)',
 } as const
 const HEALTH: Record<string, string> = { ok: C.green, watch: C.orange, down: C.red }
+// Darker versions for text, so status words stay readable on white.
+const HEALTH_TEXT: Record<string, string> = { ok: '#1A7F37', watch: '#C25E00', down: '#D70015' }
 
 type SiteRow = { id: string; name: string; dealer: string | null; location: string; status: string | null; health: 'ok' | 'watch' | 'down'; units: number | null }
 type Data = {
@@ -45,7 +44,7 @@ function Donut({ counts, total }: { counts: { ok: number; watch: number; down: n
   return (
     <div style={{ position: 'relative', width: 122, height: 122 }}>
       <svg viewBox="0 0 122 122" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="61" cy="61" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="9" />
+        <circle cx="61" cy="61" r={r} fill="none" stroke="#EEF0F4" strokeWidth="9" />
         {segs.map((s, i) => {
           const len = (circ * s.v) / t
           const el = <circle key={i} cx="61" cy="61" r={r} fill="none" stroke={s.c} strokeWidth="9" strokeLinecap={i === 0 ? 'round' : 'butt'} strokeDasharray={`${len} ${circ}`} strokeDashoffset={-off} />
@@ -89,7 +88,7 @@ export function SiteStatusModule() {
 
   const title = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 20px', borderBottom: `1px solid ${C.hair2}` }}>
-      <span style={{ fontSize: 14, fontWeight: 600 }}>Site Status</span>
+      <span style={{ fontSize: 15, fontWeight: 600 }}>Site status</span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: C.ink2 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} />Live
       </span>
@@ -160,7 +159,7 @@ export function SiteStatusModule() {
                   <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
                   <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
                   <span style={{ textAlign: 'center', fontSize: 11.5, color: C.ink3 }}>—</span>
-                  <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: HEALTH[s.health], textTransform: 'capitalize' }}>{s.status ?? '—'}</span>
+                  <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: HEALTH_TEXT[s.health], textTransform: 'capitalize' }}>{s.status ?? '—'}</span>
                 </a>
               ))}
             </div>

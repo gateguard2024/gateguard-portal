@@ -6,7 +6,7 @@ import { AddEventModal } from '@/components/calendar/AddEventModal'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
-import { TasksSurface, type DueFilter } from '@/components/nexus/tasks/TasksSurface'
+import { TasksSurface, addDays, fmtDue, localISO, type DueFilter, type Task } from '@/components/nexus/tasks/TasksSurface'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MessagesShell from '@/components/nexus/MessagesShell'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
@@ -308,8 +308,10 @@ function TodosPopout({ items, onOpen, onClose }: { items: MyDayTopItem[]; onOpen
 }
 
 const C = { cyan: '#00A3E0', indigo: '#6B7EFF', safe: '#22C55E', warn: '#F59E0B', alert: '#EF4444', ink: '#eef4fb', ink2: '#9fb0c4', ink3: '#6d7f94' }
-const BRAND = 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)'
-const GLASS: React.CSSProperties = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 6px rgba(0,0,0,0.25), 0 28px 64px -30px rgba(0,0,0,0.85)' }
+// Light look (white cards on the navy fade) — same palette as the Tasks screen.
+const L = { ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73', line: 'rgba(0,0,0,0.08)', blue: '#0071E3', red: '#D70015', green: '#30A14E', font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif' }
+const CARD: React.CSSProperties = { background: '#FFFFFF', borderRadius: 14, boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)' }
+const DARK_BTN: React.CSSProperties = { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff' }
 
 function MyRing({ size, pct, color, stroke = 6, children }: { size: number; pct: number; color: string; stroke?: number; children: React.ReactNode }) {
   const r = (size - stroke) / 2 - 1
@@ -318,7 +320,7 @@ function MyRing({ size, pct, color, stroke = 6, children }: { size: number; pct:
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#EEF0F4" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} />
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
@@ -338,6 +340,7 @@ export function MyDaySurface() {
   const openTasks = (due: DueFilter) => { setTasksDue(due); setTasksTaskId(null); setActivePanel('todos') }
   // A task to open straight away (from a ?task= link or a notification).
   const [tasksTaskId, setTasksTaskId] = useState<string | null>(null)
+  const [myTasks, setMyTasks] = useState<Task[]>([])
   const [selectedTopItemId, setSelectedTopItemId] = useState<string | null>(null)
   const [selectedTodoItemId, setSelectedTodoItemId] = useState<string | null>(null)
   const [topActionBusy, setTopActionBusy] = useState(false)
@@ -364,6 +367,8 @@ export function MyDaySurface() {
       const res = await fetch('/api/nexus/my-day')
       const data = await res.json().catch(() => null) as MyDaySummary | null
       if (res.ok && data?.success) setSummary(data)
+      const tasksData = await fetch('/api/todos?view=mine&status=open,in_progress,waiting&limit=500').then(r => r.ok ? r.json() : null).catch(() => null) as { todos?: Task[] } | null
+      if (tasksData?.todos) setMyTasks(tasksData.todos)
       const leadsData = await fetch('/api/crm/leads').then(r => r.json()).catch(() => [])
       setLeads(Array.isArray(leadsData) ? leadsData : [])
     } catch {
@@ -424,8 +429,28 @@ export function MyDaySurface() {
   const leadStageCounts = leads.reduce<Record<string, number>>((acc, l) => { const st = (l.stage || 'new'); acc[st] = (acc[st] || 0) + 1; return acc }, {})
   const leadStages = Object.entries(leadStageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, value]) => ({ label, value }))
   const overdueCount = todayEvents.filter(e => e.overdue).length
-  const heroState = overdueCount > 0 ? 'Attention Needed' : 'On Track'
-  const openLoadPct = Math.min(100, (workSignalCount / 12) * 100)
+  // Task numbers come from the real task list (same as the Tasks screen), not the top-10.
+  const today = localISO()
+  const weekEnd = addDays(today, 7) ?? today
+  const openTasksList = myTasks.filter(t => t.status !== 'done')
+  const taskOverdue = openTasksList.filter(t => !!t.due_date && t.due_date < today)
+  const taskToday = openTasksList.filter(t => t.due_date === today)
+  const taskHigh = openTasksList.filter(t => t.priority === 'high').length
+  const byDue = (a: Task, b: Task) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')
+  const taskGroups = [
+    { label: 'Now', dot: '#FF3B30', items: openTasksList.filter(t => !!t.due_date && t.due_date <= today).sort(byDue).slice(0, 3) },
+    { label: 'Next', dot: '#FF9500', items: openTasksList.filter(t => !!t.due_date && t.due_date > today && t.due_date <= weekEnd).sort(byDue).slice(0, 3) },
+    { label: 'Later', dot: '#C7C7CC', items: openTasksList.filter(t => !t.due_date || t.due_date > weekEnd).sort(byDue).slice(0, 3) },
+  ]
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const openTaskById = (id: string) => { setTasksDue('all'); setTasksTaskId(id); setActivePanel('todos') }
+  async function completeTask(id: string) {
+    const prev = myTasks
+    setMyTasks(ts => ts.map(t => t.id === id ? { ...t, status: 'done' } : t))
+    const res = await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'done' }) }).catch(() => null)
+    if (!res?.ok) setMyTasks(prev)
+  }
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
@@ -497,163 +522,143 @@ export function MyDaySurface() {
   }
 
   return (
-    <section className="mt-6 w-full px-3 sm:px-4">
-      {/* Workspace status hero */}
-      <div className="mb-5 grid grid-cols-1 items-center gap-5 rounded-[1.75rem] p-5 sm:p-6 lg:grid-cols-[1.2fr_1fr_1.1fr]"
-        style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.08),rgba(107,126,255,0.07)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', backdropFilter: 'blur(18px) saturate(1.15)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -30px rgba(0,0,0,0.8)' }}>
-        <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-[1.1rem]" style={{ background: BRAND, boxShadow: '0 0 28px rgba(74,140,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3)', color: '#eafaff' }}>
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
-          </div>
-          <div>
-            <div className="text-[10.5px] font-extrabold uppercase tracking-[0.14em]" style={{ color: C.ink3 }}>Workspace status</div>
-            <div className="mt-0.5 text-[24px] font-extrabold leading-tight tracking-tight sm:text-[26px]" style={{ color: C.ink }}>Hi {firstName} — {heroState}</div>
-            <div className="mt-1 text-[12.5px]" style={{ color: C.ink2 }}>{top10.length} priorities · {todayCount} scheduled today{overdueCount ? ` · ${overdueCount} overdue` : ''}</div>
+    <section className="w-full max-w-[1360px] px-1 sm:px-2" style={{ color: L.ink, fontFamily: L.font, letterSpacing: '-0.01em' }}>
+      {/* Greeting — sits on the navy part of the fade */}
+      <div className="mb-5 mt-2 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="m-0 text-[24px] font-semibold leading-tight sm:text-[30px]" style={{ color: '#fff', letterSpacing: '-0.025em' }}>{greeting}, {firstName}</h1>
+          <div className="mt-1 text-[14px]" style={{ color: 'rgba(255,255,255,0.66)' }}>
+            <b style={{ color: '#fff', fontWeight: 600 }}>{top10.length}</b> priorities · <b style={{ color: '#fff', fontWeight: 600 }}>{todayCount}</b> scheduled today
+            {taskOverdue.length > 0 && <> · <span style={{ color: '#FF8A80' }}><b style={{ fontWeight: 600 }}>{taskOverdue.length}</b> overdue</span></>}
           </div>
         </div>
-        <div className="flex items-center justify-center gap-4 lg:border-x lg:border-white/10 lg:px-4">
-          <MyRing size={92} pct={openLoadPct} color={C.cyan} stroke={8}>
-            <b style={{ fontSize: 24, fontWeight: 800, color: C.ink }}>{workSignalCount}</b>
-            <span style={{ fontSize: 9, fontWeight: 700, color: C.cyan, letterSpacing: '0.04em' }}>OPEN</span>
-          </MyRing>
-          <div className="flex flex-col gap-1.5">
-            {([['Open tasks', workSignalCount, C.warn], ['Overdue', overdueCount, C.alert], ['Leads', leads.length, C.safe]] as const).map(([l, v, col]) => (
-              <div key={l} className="flex items-center gap-2 text-[12px]" style={{ color: C.ink2 }}>
-                <span className="h-2 w-2 rounded-full" style={{ background: col }} />
-                {l} · <b style={{ color: C.ink, fontWeight: 600 }}>{v}</b>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <button type="button" onClick={() => { window.location.href = '/quotes/new' }} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: BRAND, color: '#041018' }}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#041018" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg> New Quote
+        <div className="flex w-full gap-2 sm:w-auto">
+          <button type="button" onClick={() => { window.location.href = '/quotes/new' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-semibold sm:flex-none" style={{ background: L.blue, color: '#fff' }}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg> New quote
           </button>
-          <button type="button" onClick={() => { window.location.href = '/dispatch' }} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: C.ink }}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={C.cyan} strokeWidth="2"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg> Work Order
+          <button type="button" onClick={() => { window.location.href = '/dispatch' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-medium sm:flex-none" style={DARK_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg> Work order
           </button>
-          <button type="button" onClick={() => { window.location.href = '/crm/leads' }} className="flex items-center justify-center gap-2 rounded-xl py-3 text-[12.5px] font-bold transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: C.ink }}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={C.cyan} strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> Add Lead
+          <button type="button" onClick={() => { window.location.href = '/crm/leads' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-medium sm:flex-none" style={DARK_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> Add lead
           </button>
         </div>
       </div>
 
-      {/* Metric ring gauges */}
-      <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* Four numbers */}
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
         {[
-          { l: 'Open Tasks', v: workSignalCount, s: `${highCount} high priority`, pct: Math.min(100, (workSignalCount / 12) * 100), col: C.warn, onClick: () => openTasks('all'), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-          { l: 'Overdue', v: overdueCount, s: overdueCount ? 'needs attention' : 'all clear', pct: Math.min(100, (overdueCount / 6) * 100), col: C.alert, onClick: () => openTasks('overdue'), ic: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
-          { l: 'To-Dos', v: todoCount, s: 'due today', pct: Math.min(100, (todoCount / 10) * 100), col: C.cyan, onClick: () => openTasks('today'), ic: <path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: C.safe, onClick: () => { window.location.href = '/crm/leads' }, ic: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
-        ].map((m) => (
-          <button key={m.l} type="button" onClick={m.onClick} className="flex w-full items-center gap-3.5 rounded-2xl p-4 text-left transition-transform hover:-translate-y-0.5" style={GLASS}>
-            <MyRing size={58} pct={m.pct} color={m.col} stroke={5}>
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke={m.col} strokeWidth="1.9">{m.ic}</svg>
-            </MyRing>
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: C.ink2 }}>{m.l}</div>
-              <div className="mt-1 text-[24px] font-extrabold leading-none tracking-tight sm:text-[26px]" style={{ color: C.ink }}>{m.v}</div>
-              <div className="mt-1.5 text-[11px]" style={{ color: C.ink3 }}>{m.s}</div>
+          { l: 'Open tasks', v: openTasksList.length, s: `${taskHigh} high priority`, pct: Math.min(100, (openTasksList.length / 20) * 100), col: L.blue, red: false, onClick: () => openTasks('all') },
+          { l: 'Overdue', v: taskOverdue.length, s: taskOverdue.length ? 'Needs attention' : 'All clear', pct: Math.min(100, (taskOverdue.length / 12) * 100), col: '#FF3B30', red: taskOverdue.length > 0, onClick: () => openTasks('overdue') },
+          { l: 'Due today', v: taskToday.length, s: taskToday.length ? 'Due today' : 'Nothing due today', pct: Math.min(100, (taskToday.length / 8) * 100), col: L.blue, red: false, onClick: () => openTasks('today') },
+          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: L.green, red: false, onClick: () => { window.location.href = '/crm/leads' } },
+        ].map(m => (
+          <button key={m.l} type="button" onClick={m.onClick} className="flex w-full min-w-0 items-center gap-2.5 p-3 text-left transition-transform hover:-translate-y-0.5 sm:gap-3.5 sm:px-[18px] sm:py-4" style={CARD}>
+            <MyRing size={46} pct={m.pct} color={m.col} stroke={4.5}><span /></MyRing>
+            <div className="min-w-0">
+              <div className="text-[12px] font-medium" style={{ color: L.ink3 }}>{m.l}</div>
+              <div className="mt-0.5 text-[22px] font-semibold leading-tight sm:text-[26px]" style={{ letterSpacing: '-0.02em' }}>{m.v}</div>
+              <div className="mt-0.5 truncate text-[12px]" style={{ color: m.red ? L.red : L.ink3 }}>{m.s}</div>
             </div>
           </button>
         ))}
       </div>
 
-      {/* Schedule + To-Dos */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.3fr_1fr]">
-        <div className="overflow-hidden rounded-2xl" style={GLASS}>
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <span className="text-[14px] font-bold" style={{ color: C.ink }}>Today&apos;s Schedule</span>
-            <button type="button" onClick={() => openCard(cards[0])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(0,163,224,0.12)', color: C.cyan, border: '1px solid rgba(0,163,224,0.3)' }}>Open calendar →</button>
+      {/* Schedule + Tasks */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="min-w-0 overflow-hidden" style={CARD}>
+          <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+            <span className="text-[15px] font-semibold">Today&apos;s schedule</span>
+            <button type="button" onClick={() => openCard(cards[0])} className="text-[13px] font-medium" style={{ color: L.blue }}>Open calendar</button>
           </div>
-          <div className="p-4">
-            {todayEvents.length === 0 ? (
-              <button type="button" onClick={() => setAddEventOpen(true)} className="w-full rounded-xl py-8 text-center text-[12.5px]" style={{ color: C.ink2, border: '1px dashed rgba(255,255,255,0.12)' }}>Nothing scheduled today — add an event</button>
-            ) : todayEvents.slice(0, 6).map((e) => {
-              const col = e.overdue ? C.alert : C.cyan
-              const isWO = e.type === 'work_order'
-              const meta = [e.type?.replace(/_/g, ' '), e.reason].filter(Boolean).join(' · ')
-              return (
-                <button key={e.id} type="button" onClick={() => openCard(cards[0])} className="mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[0.6rem]" style={{ background: `${col}22`, border: `1px solid ${col}55`, color: col }}>
-                      {isWO
-                        ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg>
-                        : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /></svg>}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold">{e.title}</span>
-                      {meta && <span className="mt-0.5 block truncate text-[11px] capitalize" style={{ color: C.ink3 }}>{meta}</span>}
-                    </span>
-                  </span>
-                  <span className="shrink-0">
-                    {e.overdue
-                      ? <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase" style={{ background: 'rgba(239,68,68,0.14)', color: C.alert }}>Overdue</span>
-                      : <span className="font-mono text-[11px]" style={{ color: C.ink2 }}>{formatEventTime(e)}</span>}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          {todayEvents.length === 0 ? (
+            <div className="p-4">
+              <button type="button" onClick={() => setAddEventOpen(true)} className="w-full rounded-[10px] py-8 text-center text-[13px]" style={{ color: L.ink3, border: '1px dashed rgba(0,0,0,0.15)' }}>Nothing scheduled today — add an event</button>
+            </div>
+          ) : todayEvents.slice(0, 6).map((e, i, arr) => {
+            const isWO = e.type === 'work_order'
+            const meta = [e.type?.replace(/_/g, ' '), e.reason].filter(Boolean).join(' · ')
+            return (
+              <button key={e.id} type="button" onClick={() => openCard(cards[0])} className="flex w-full items-center gap-3 px-[18px] py-[11px] text-left hover:bg-[#F7F8FA]" style={{ borderBottom: i < arr.length - 1 ? `1px solid ${L.line}` : 'none' }}>
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={e.overdue ? { background: '#FFECEC', color: L.red } : { background: '#EEF4FF', color: L.blue }}>
+                  {e.overdue
+                    ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                    : isWO
+                      ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg>
+                      : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /></svg>}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-medium">{e.title}</span>
+                  {meta && <span className="block truncate text-[12px] capitalize" style={{ color: L.ink3 }}>{meta}</span>}
+                </span>
+                {e.overdue
+                  ? <span className="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold" style={{ background: '#FFECEC', color: L.red }}>Overdue</span>
+                  : <span className="shrink-0 whitespace-nowrap text-[13px] tabular-nums" style={{ color: L.ink2 }}>{formatEventTime(e)}</span>}
+              </button>
+            )
+          })}
         </div>
-        <div className="overflow-hidden rounded-2xl" style={GLASS}>
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <span className="text-[14px] font-bold" style={{ color: C.ink }}>To-Dos</span>
-            <button type="button" onClick={() => openTasks('all')} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: C.ink2, border: '1px solid rgba(255,255,255,0.14)' }}>Open board →</button>
+
+        <div className="min-w-0 overflow-hidden" style={CARD}>
+          <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+            <span className="text-[15px] font-semibold">Tasks</span>
+            <button type="button" onClick={() => openTasks('all')} className="text-[13px] font-medium" style={{ color: L.blue }}>Open board</button>
           </div>
-          <div className="space-y-3 p-4">
-            {([['NOW', 'high', C.alert], ['NEXT', 'medium', C.warn], ['LATER', 'low', C.ink3]] as const).map(([label, key, dot]) => {
-              const colItems = todoItems.filter((i) => i.urgency === key).slice(0, 3)
-              return (
-                <div key={label} className="rounded-xl p-3" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wide" style={{ color: C.ink3 }}>
-                    <span className="h-2 w-2 rounded-full" style={{ background: dot }} />{label}
+          {openTasksList.length === 0 ? (
+            <div className="px-[18px] py-8 text-center text-[13px]" style={{ color: L.ink3 }}>No open tasks. Nice.</div>
+          ) : (
+            <div className="pb-2">
+              {taskGroups.map(g => g.items.length === 0 ? null : (
+                <div key={g.label}>
+                  <div className="flex items-center gap-[7px] px-[18px] pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-[0.04em]" style={{ color: L.ink3 }}>
+                    <span className="h-[7px] w-[7px] rounded-full" style={{ background: g.dot }} />{g.label}
                   </div>
-                  {colItems.length === 0 ? (
-                    <div className="text-[12px]" style={{ color: C.ink3 }}>—</div>
-                  ) : colItems.map((i) => (
-                    <button key={i.id} type="button" onClick={() => openCard(cards[2])} className="mb-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-transform hover:-translate-y-0.5" style={{ background: 'rgba(11,17,28,0.6)', border: '1px solid rgba(255,255,255,0.06)', color: C.ink }}>
-                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: `${dot}22`, border: `1px solid ${dot}55`, color: dot }}>
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.1"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /></svg>
-                      </span>
-                      <span className="truncate text-[12.5px] font-medium">{i.title}</span>
-                    </button>
+                  {g.items.map(t => (
+                    <div key={t.id} className="flex items-center gap-2.5 px-[18px] py-[7px] hover:bg-[#F7F8FA]">
+                      <input type="checkbox" aria-label={`Mark done: ${t.title}`} checked={false} onChange={() => void completeTask(t.id)} className="h-4 w-4 flex-shrink-0 cursor-pointer" style={{ accentColor: L.blue }} />
+                      <button type="button" onClick={() => openTaskById(t.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                        <span className="w-[38px] flex-shrink-0 font-mono text-[11px] font-semibold" style={{ color: L.ink3 }}>{t.key}</span>
+                        <span className="min-w-0 flex-1 truncate text-[14px]">{t.title}</span>
+                        <span className="shrink-0 whitespace-nowrap text-[12px]" style={{ color: t.due_date && t.due_date < today ? L.red : L.ink3 }}>{fmtDue(t.due_date)}</span>
+                      </button>
+                    </div>
                   ))}
                 </div>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Site Status — role-scoped site overview (corporate: all + dealer filter; dealers: theirs) */}
       <SiteStatusModule />
 
-      {/* Messages board */}
-      <div className="mt-5 overflow-hidden rounded-2xl" style={GLASS}>
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-          <span className="text-[14px] font-bold" style={{ color: C.ink }}>Messages</span>
-          <button type="button" onClick={() => openCard(cards[3])} className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: 'rgba(0,163,224,0.12)', color: C.cyan, border: '1px solid rgba(0,163,224,0.3)' }}>Open messages →</button>
+      {/* Messages board (your saved message notes) */}
+      <div className="mb-6 overflow-hidden" style={CARD}>
+        <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+          <span className="text-[15px] font-semibold">Messages</span>
+          <button type="button" onClick={() => openCard(cards[3])} className="text-[13px] font-medium" style={{ color: L.blue }}>Open inbox</button>
         </div>
-        <div className="p-4">
-          {messageNotes.length === 0 ? (
-            <button type="button" onClick={() => openCard(cards[3])} className="w-full rounded-xl py-8 text-center text-[12.5px]" style={{ color: C.ink2, border: '1px dashed rgba(255,255,255,0.12)' }}>No messages yet — customer calls, emails, texts and notes land here</button>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {messageNotes.slice(0, 6).map((note) => (
-                <button key={note.id} type="button" onClick={() => openCard(cards[3])} className="rounded-xl p-3 text-left" style={{ background: 'rgba(14,21,33,0.5)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: C.indigo, color: '#fff' }}>
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                    </span>
-                    <span className="text-[10px]" style={{ color: C.ink3 }}>{new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                  </div>
-                  <div className="line-clamp-3 text-[11.5px] leading-relaxed" style={{ color: C.ink2 }}>{note.text}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {messageNotes.length === 0 ? (
+          <div className="p-4">
+            <button type="button" onClick={() => openCard(cards[3])} className="w-full rounded-[10px] py-8 text-center text-[13px]" style={{ color: L.ink3, border: '1px dashed rgba(0,0,0,0.15)' }}>No messages yet — open the inbox to add one</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {messageNotes.slice(0, 6).map(note => (
+              <button key={note.id} type="button" onClick={() => openCard(cards[3])} className="px-[18px] py-3.5 text-left hover:bg-[#F7F8FA]" style={{ borderBottom: `1px solid ${L.line}`, borderRight: `1px solid ${L.line}` }}>
+                <div className="flex items-center gap-2 text-[13px] font-semibold">
+                  <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full" style={{ background: '#1C2B47', color: '#fff' }}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                  </span>
+                  Note
+                  <span className="ml-auto text-[11px] font-normal" style={{ color: L.ink3 }}>{new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                </div>
+                <div className="mt-1.5 line-clamp-2 text-[13px]" style={{ color: L.ink2 }}>{note.text}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {activePanel === 'schedule' && <DetailShell title="Schedule" subtitle="Your calendar — day, week, month, and list views." onClose={() => { setActivePanel(null); void loadSummary(); }}>
