@@ -10,6 +10,7 @@
  * rollup writes live status). Tiles drill into the Operations Hub tabs.
  */
 import { useEffect, useState } from 'react'
+import { OpsComingSoon } from '@/components/nexus/OpsComingSoon'
 
 // ---- Console tokens (identical to Sales / My Day) ----
 const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
@@ -292,6 +293,9 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
             </Tile>
           </div>
         </div>
+
+        {/* Roadmap — features not built yet, shown honestly as Coming soon */}
+        <OpsComingSoon />
       </div>
     </section>
   )
