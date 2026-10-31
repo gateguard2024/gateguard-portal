@@ -147,17 +147,17 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg> <span className="sm:hidden">Hub</span><span className="hidden sm:inline">Operations Hub</span>
             </button>
             <button type="button" onClick={refreshFleet} disabled={refreshing} className={HDR_BTN} style={DARK_BTN}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" /></svg> {refreshing ? 'Syncing…' : 'Sync fleet'}
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" /></svg> {refreshing ? 'Syncing…' : 'Sync systems'}
             </button>
           </div>
         </div>
 
-        {/* Four numbers — the fleet */}
+        {/* Four numbers — the systems */}
         <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
           {[
             { l: 'Active sites', v: dash(f?.sitesActive ?? 0), s: `${(f?.units ?? 0).toLocaleString()} units` },
             { l: 'Gates', v: dash(f?.gates ?? 0), s: `Across ${f?.sitesTotal ?? 0} sites` },
-            { l: 'Cameras', v: dash(f?.cameras ?? 0), s: live ? `${f?.camerasOnline ?? 0} online now` : 'Live status after first fleet sync' },
+            { l: 'Cameras', v: dash(f?.cameras ?? 0), s: live ? `${f?.camerasOnline ?? 0} online now` : 'Live status after first sync' },
             { l: 'Doors & panels', v: dash(f?.doors ?? 0), s: `${f?.panelsLive ?? 0} panels live` },
           ].map(m => (
             <button key={m.l} type="button" onClick={() => onOpenTab('Locations')} title="Open locations" className="min-w-0 p-3 text-left transition-transform hover:-translate-y-0.5 sm:px-[18px] sm:py-4" style={CARD}>
@@ -220,7 +220,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
 
           {/* RIGHT */}
           <div className="flex min-w-0 flex-col gap-4">
-            <Card title="Fleet health" right={<span className="text-[13px]" style={{ color: L.ink3 }}>{f?.devicesTotal ?? 0} devices</span>}>
+            <Card title="System health" right={<span className="text-[13px]" style={{ color: L.ink3 }}>{f?.devicesTotal ?? 0} devices</span>}>
               <div className="flex items-center gap-4 px-[18px] py-4">
                 <svg width="92" height="92" viewBox="0 0 42 42" aria-hidden>
                   <circle cx="21" cy="21" r="15.9" fill="none" stroke={L.track} strokeWidth="5" />
@@ -236,7 +236,7 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
                   <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.red }} />Offline <b className="font-semibold" style={{ color: L.ink }}>{health.offline}</b></span>
                 </div>
               </div>
-              <div className="px-[18px] pb-3.5 text-[12px]" style={{ color: L.ink3 }}>{live ? 'Cameras and network report live. Gates show last-service status.' : 'Status from last service. Live monitoring turns on after the first fleet sync.'}</div>
+              <div className="px-[18px] pb-3.5 text-[12px]" style={{ color: L.ink3 }}>{live ? 'Cameras and network report live. Gates show last-service status.' : 'Status from last service. Live monitoring turns on after the first sync.'}</div>
             </Card>
 
             <Card title="Open requests" right={<span className="rounded-md px-2 py-0.5 text-[12px] font-medium" style={reqs > 0 ? { background: '#FFECEC', color: L.red } : { background: '#F5F5F7', color: L.ink3 }}>{reqs} open</span>}>
