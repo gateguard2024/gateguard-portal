@@ -151,7 +151,7 @@ export const OPS_ROADMAP: OpsRoadmapItem[] = [
   },
 ]
 
-const TILE_STYLE = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
+const CARD: React.CSSProperties = { background: '#FFFFFF', borderRadius: 14, boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)' }
 const PHASE_LABEL: Record<1 | 2 | 3, string> = { 1: 'Next', 2: 'Then', 3: 'Later' }
 
 export function OpsComingSoon() {
@@ -165,30 +165,25 @@ export function OpsComingSoon() {
   }, [open])
 
   return (
-    <div className="mt-4">
-      <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>Coming soon</div>
-          <div className="text-[12px]" style={{ color: '#c3d3e2' }}>What we&rsquo;re building next for Operations. Tap one to see what it will do.</div>
-        </div>
+    <div className="mt-4 min-w-0 overflow-hidden" style={CARD}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-[18px] py-3.5" style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+        <span className="text-[15px] font-semibold">Coming soon</span>
+        <span className="text-[13px]" style={{ color: '#6E6E73' }}>What we&rsquo;re building next. Tap one to see what it will do.</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2.5 p-[18px] sm:grid-cols-2 lg:grid-cols-5">
         {OPS_ROADMAP.map(item => (
           <button
             key={item.key}
             type="button"
             onClick={() => setOpen(item)}
-            className="flex flex-col gap-1.5 rounded-2xl p-3.5 text-left transition-transform hover:-translate-y-0.5"
-            style={TILE_STYLE}
+            className="flex flex-col gap-1 rounded-xl p-3.5 text-left transition-colors hover:bg-[#EDEDF0]"
+            style={{ background: '#F5F5F7' }}
             aria-label={`${item.title} — coming soon. Show details`}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{item.glyph}</span>
-              <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.25)', color: 'rgba(210,245,255,0.92)' }}>Coming soon</span>
-            </div>
-            <div className="text-[13px] font-semibold leading-snug" style={{ color: '#eaf2fb' }}>{item.title}</div>
-            <div className="text-[11px] leading-snug" style={{ color: '#c3d3e2' }}>{item.line}</div>
+            <span className="w-max rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ background: '#EEF4FF', color: '#0058B0' }}>{PHASE_LABEL[item.phase]}</span>
+            <span className="mt-1 text-[14px] font-semibold leading-snug" style={{ color: '#1D1D1F' }}>{item.title}</span>
+            <span className="text-[12.5px] leading-snug" style={{ color: '#6E6E73' }}>{item.line}</span>
           </button>
         ))}
       </div>

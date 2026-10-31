@@ -1,22 +1,24 @@
 'use client'
 
 /**
- * OperationsLanding — the Operations tab's command-center landing.
- * Same steel console as My Day + Sales (FRAME_STYLE / TILE_STYLE / dashboard width).
+ * OperationsLanding — the Operations tab's landing page.
+ * Light look, same as Sales / My Day / Tasks: white header text on the navy part
+ * of the fade, white cards, one blue accent (#0071E3), Apple system fonts.
  *
- * Phase 1: 100% real data from existing tables via /api/nexus/operations/dashboard
- * + the existing /api/dispatch/analytics for crew utilization. Device counts are
- * real; "online" is NOT shown yet (Phase 2 lights it up once the UniFi/Eagle-Eye
- * rollup writes live status). Tiles drill into the Operations Hub tabs.
+ * Data is 100% real from existing tables via /api/nexus/operations/dashboard
+ * + /api/dispatch/analytics for crew utilization. Device counts are real;
+ * "online" shows only once the UniFi / Eagle Eye rollup writes live status.
+ * Cards drill into the Operations Hub tabs.
  */
 import { useEffect, useState } from 'react'
 import { OpsComingSoon } from '@/components/nexus/OpsComingSoon'
 
-// ---- Console tokens (identical to Sales / My Day) ----
-const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
-const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
+// ---- Light tokens (identical to SalesSurface's `L` / `CARD`) ----
+const L = { ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73', line: 'rgba(0,0,0,0.08)', blue: '#0071E3', green: '#248A3D', amber: '#B25000', red: '#D70015', track: '#EEF0F4', font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif' }
+const DOT = { green: '#34C759', amber: '#FF9F0A', red: '#FF3B30' }
+const CARD: React.CSSProperties = { background: '#FFFFFF', borderRadius: 14, boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)' }
+const DARK_BTN: React.CSSProperties = { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff', fontWeight: 500 }
+const HDR_BTN = 'flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:flex-none sm:gap-2 sm:px-4 sm:text-[14px] disabled:opacity-60'
 
 type FleetHealth = { online: number; attention: number; offline: number }
 type OpsData = {
@@ -30,63 +32,56 @@ type OpsData = {
 }
 type Analytics = { totals?: { ftfPct?: number; avgUtilizationPct?: number; callbacks?: number; completed?: number } }
 
-const priorityColor = (p: string) => /urgent|critical/i.test(p) ? '#f87171' : /high/i.test(p) ? '#fbbf24' : '#00A3FF'
+const priorityDot = (p: string) => /urgent|critical/i.test(p) ? DOT.red : /high/i.test(p) ? DOT.amber : L.blue
 const ageLabel = (h: number | null) => h == null ? '' : h < 24 ? `${h}h` : `${Math.round(h / 24)}d`
 
-function Tile({ children, onClick, className = '' }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
-  const base = `rounded-2xl p-3.5 ${className}`
-  if (onClick) return <button type="button" onClick={onClick} className={`${base} text-left transition-transform hover:-translate-y-0.5`} style={TILE_STYLE}>{children}</button>
-  return <div className={base} style={TILE_STYLE}>{children}</div>
-}
-function CardHead({ title, right, onOpen }: { title: string; right?: React.ReactNode; onOpen?: () => void }) {
+// Card with a header row (title left, link or count right) — the Sales card pattern.
+function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 flex items-center justify-between">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>{title}</div>
-      {right ?? (onOpen && <span className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>Open →</span>)}
+    <div className="min-w-0 overflow-hidden" style={CARD}>
+      <div className="flex items-center justify-between gap-2 px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
+        <span className="text-[15px] font-semibold">{title}</span>
+        {right}
+      </div>
+      {children}
     </div>
   )
 }
-function Kpi({ glyph, value, label, sub, onClick }: { glyph: string; value: string | number; label: string; sub?: string; onClick?: () => void }) {
-  return (
-    <Tile onClick={onClick}>
-      <div className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{glyph}</div>
-      <div className="mt-0.5 text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
-      <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
-      {sub && <div className="mt-1 text-[9px]" style={{ color: '#00A3FF' }}>{sub}</div>}
-    </Tile>
-  )
+function LinkBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="text-[13px] font-medium" style={{ color: L.blue }}>{label}</button>
 }
-function Dial({ label, value, unit, pct, color, note }: { label: string; value: string; unit?: string; pct: number; color: string; note: string }) {
-  // 180° gauge: track sweeps LEFT (12,60) → over the top → RIGHT (108,60).
-  // The filled portion always sweeps the SHORT way (clockwise, sweep-flag 1),
-  // and a semicircle is never >180°, so large-arc-flag is ALWAYS 0.
-  const p = Math.max(0, Math.min(1, pct))
-  const end = { x: 60 - 48 * Math.cos(Math.PI * p), y: 60 - 48 * Math.sin(Math.PI * p) }
+function Empty({ text }: { text: string }) {
+  return <div className="px-[18px] py-6 text-center text-[13px]" style={{ color: L.ink3 }}>{text}</div>
+}
+// A clickable list row (work order / schedule / request).
+function Row({ first, onClick, left, right }: { first: boolean; onClick?: () => void; left: React.ReactNode; right: React.ReactNode }) {
   return (
-    <div className="rounded-2xl p-3 text-center" style={TILE_STYLE}>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>{label}</div>
-      <svg width="112" height="62" viewBox="0 0 120 66" className="mx-auto">
-        <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="#12202c" strokeWidth="9" strokeLinecap="round" />
-        {p > 0.001 && (
-          <path d={`M12 60 A48 48 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" />
-        )}
-        <text x="60" y="50" textAnchor="middle" fontSize="20" fill="#eaf2fb" fontWeight="800">{value}{unit ?? ''}</text>
-      </svg>
-      <div className="text-[9px]" style={{ color: '#c3d3e2' }}>{note}</div>
-    </div>
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-[18px] py-2.5 text-left hover:bg-[#F7F8FA]" style={first ? undefined : { borderTop: `1px solid ${L.line}` }}>
+      <span className="min-w-0 flex-1 truncate text-[14px]">{left}</span>
+      <span className="flex shrink-0 items-center gap-2 text-[12px]" style={{ color: L.ink3 }}>{right}</span>
+    </button>
   )
 }
 
-// Bare semicircle gauge (no card) — for the compact Service Performance tile.
+// Semicircle gauge, light track.
 function Gauge({ pct, color, label }: { pct: number; color: string; label: string }) {
   const p = Math.max(0, Math.min(1, pct))
   const end = { x: 60 - 48 * Math.cos(Math.PI * p), y: 60 - 48 * Math.sin(Math.PI * p) }
   return (
-    <svg width="76" height="42" viewBox="0 0 120 66" className="mx-auto">
-      <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="#12202c" strokeWidth="10" strokeLinecap="round" />
+    <svg width="84" height="46" viewBox="0 0 120 66" className="mx-auto" aria-hidden>
+      <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke={L.track} strokeWidth="10" strokeLinecap="round" />
       {p > 0.001 && <path d={`M12 60 A48 48 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />}
-      <text x="60" y="53" textAnchor="middle" fontSize="27" fill="#eaf2fb" fontWeight="800">{label}</text>
+      <text x="60" y="54" textAnchor="middle" fontSize="26" fill={L.ink} fontWeight="600">{label}</text>
     </svg>
+  )
+}
+
+function Bar({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1 flex items-center justify-between"><span className="text-[13px]" style={{ color: L.ink2 }}>{label}</span><span className="text-[13px] font-semibold">{value}</span></div>
+      <div className="h-2 overflow-hidden rounded-full" style={{ background: L.track }}><i className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} /></div>
+    </div>
   )
 }
 
@@ -122,175 +117,162 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
   const seg = (v: number) => (v / hTotal) * 100
   const healthPct = Math.round((health.online / hTotal) * 100)
   const t = an?.totals ?? {}
-
-  // donut dash offsets
   const onDash = seg(health.online), atDash = seg(health.attention), offDash = seg(health.offline)
+  const dash = (v: number | string) => (loading ? '—' : v)
+
+  const openWo = d?.openWorkOrders.open ?? 0
+  const today = d?.schedule.todayCount ?? (d?.schedule.items.length ?? 0)
+  const reqs = d?.requests.open ?? 0
 
   return (
-    <section className="mt-6 w-full px-3 sm:px-4">
-      <div className="mx-auto w-full max-w-5xl xl:max-w-none rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
+    <section className="w-full px-1 sm:px-2">
+      <div className="mx-auto w-full" style={{ maxWidth: 1360, color: L.ink, fontFamily: L.font, letterSpacing: '-0.01em' }}>
 
-        {/* Header */}
-        <div className="relative mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Operations</div>
-            <h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Command Center</h2>
-          </div>
-          {/* Centered Operations Hub entry — dark grey steel, slightly larger */}
-          <button type="button" onClick={() => onOpenTab('Dashboard')}
-            className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl px-6 py-2.5 text-[13.5px] font-semibold transition-transform hover:-translate-y-[calc(50%+2px)] lg:inline-flex lg:items-center lg:gap-2"
-            style={{ background: 'linear-gradient(180deg,#3a4552,#2a333d)', border: '1px solid rgba(150,168,190,0.28)', color: '#e4ebf2', boxShadow: '0 8px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
-            ⊞ Operations Hub →
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#00E699', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#00E699'}` }} />{loading ? 'Loading…' : 'Live'}
-            </span>
-            <button type="button" onClick={() => onOpenTab('Dashboard')} className="rounded-xl px-3 py-2 text-[12px] font-semibold lg:hidden" style={{ background: 'linear-gradient(180deg,#3a4552,#2a333d)', border: '1px solid rgba(150,168,190,0.28)', color: '#e4ebf2' }}>⊞ Hub</button>
-            <button type="button" onClick={refreshFleet} disabled={refreshing} className="rounded-xl px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{refreshing ? 'Syncing…' : '↻ Sync fleet'}</button>
-            <button type="button" onClick={() => onOpenTab('Work Orders')} className="rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0' }}>＋ New Work Order</button>
-          </div>
-        </div>
-
-        {/* Readable source legend — light text on a dark well */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl px-3 py-2 text-[10px]" style={{ background: WELL, border: '1px solid #1E293B', color: '#c3d3e2' }}>
-          <span><span style={{ color: '#00E699' }}>●</span> <b style={{ color: '#eaf2fb' }}>REAL</b> — computed from your records</span>
-          <span><span style={{ color: '#00A3FF' }}>●</span> <b style={{ color: '#eaf2fb' }}>COUNTS</b> — true device totals</span>
-          <span><span style={{ color: '#fbbf24' }}>●</span> <b style={{ color: '#eaf2fb' }}>LIVE ONLINE</b> — arrives in Phase 2 (UniFi / Eagle Eye)</span>
-        </div>
-
-        {/* 3-column cockpit — minmax(0,…) so columns SHRINK to fit instead of
-            overflowing the panel to the right (raw 1fr defaults to min-width:auto). */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)]">
-
-          {/* ===== COL 1 · FLEET ===== */}
-          <div className="flex flex-col gap-3">
-            <Tile>
-              <CardHead title="Fleet Health" right={<span className="text-[10px]" style={{ color: '#c3d3e2' }}>{f?.devicesTotal ?? 0} devices</span>} />
-              <div className="flex items-center gap-3">
-                <svg width="92" height="92" viewBox="0 0 42 42">
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#12202c" strokeWidth="5" />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00E699" strokeWidth="5" strokeDasharray={`${onDash} ${100 - onDash}`} strokeDashoffset="25" />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#fbbf24" strokeWidth="5" strokeDasharray={`${atDash} ${100 - atDash}`} strokeDashoffset={`${25 - onDash}`} />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f87171" strokeWidth="5" strokeDasharray={`${offDash} ${100 - offDash}`} strokeDashoffset={`${25 - onDash - atDash}`} />
-                  <text x="21" y="20" textAnchor="middle" fontSize="8" fill="#eaf2fb" fontWeight="700">{healthPct}%</text>
-                  <text x="21" y="26.5" textAnchor="middle" fontSize="3.2" fill="#c3d3e2">healthy</text>
-                </svg>
-                <div className="text-[11px] leading-[1.7]" style={{ color: '#c3d3e2' }}>
-                  <div><span style={{ color: '#00E699' }}>●</span> Online · {health.online}</div>
-                  <div><span style={{ color: '#fbbf24' }}>●</span> Attn · {health.attention}</div>
-                  <div><span style={{ color: '#f87171' }}>●</span> Offline · {health.offline}</div>
-                </div>
-              </div>
-              <div className="mt-2 border-t pt-1.5 text-[9px]" style={{ borderColor: '#1E293B', color: '#00A3FF' }}>{live ? 'Cameras & network report live · gates show last-service status' : 'Status from last service · live monitoring turns on after first fleet sync'}</div>
-            </Tile>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Kpi glyph="⛩" value={loading ? '–' : (f?.gates ?? 0)} label="Gates" sub={`across ${f?.sitesTotal ?? 0} sites`} onClick={() => onOpenTab('Locations')} />
-              <Kpi glyph="◉" value={loading ? '–' : (f?.cameras ?? 0)} label="Cameras" sub={live ? `${f?.camerasOnline ?? 0} online · live` : 'online tracking soon'} onClick={() => onOpenTab('Locations')} />
-              <Kpi glyph="▤" value={loading ? '–' : (f?.doors ?? 0)} label="Doors / Panels" sub={`${f?.panelsLive ?? 0} panels live`} onClick={() => onOpenTab('Locations')} />
-              <Kpi glyph="⌂" value={loading ? '–' : (f?.sitesActive ?? 0)} label="Active Sites" sub={`${(f?.units ?? 0).toLocaleString()} units`} onClick={() => onOpenTab('Locations')} />
+        {/* Header — sits on the navy part of the fade */}
+        <div className="mb-5 mt-2 flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="m-0 text-[24px] font-semibold leading-tight sm:text-[30px]" style={{ color: '#fff', letterSpacing: '-0.025em' }}>Operations</h1>
+            <div className="mt-1 text-[14px]" style={{ color: 'rgba(255,255,255,0.66)' }}>
+              {loading ? 'Loading…' : <>
+                <b style={{ color: '#fff', fontWeight: 600 }}>{openWo}</b> open work order{openWo === 1 ? '' : 's'} · <b style={{ color: '#fff', fontWeight: 600 }}>{today}</b> scheduled today
+                {reqs > 0 && <> · <b style={{ color: '#fff', fontWeight: 600 }}>{reqs}</b> new request{reqs === 1 ? '' : 's'}</>}
+              </>}
             </div>
           </div>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <button type="button" onClick={() => onOpenTab('Work Orders')} className={HDR_BTN} style={{ background: L.blue, color: '#fff', fontWeight: 600 }}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 5v14M5 12h14" /></svg> <span className="sm:hidden">Work order</span><span className="hidden sm:inline">New work order</span>
+            </button>
+            <button type="button" onClick={() => onOpenTab('Dashboard')} className={HDR_BTN} style={DARK_BTN}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg> <span className="sm:hidden">Hub</span><span className="hidden sm:inline">Operations Hub</span>
+            </button>
+            <button type="button" onClick={refreshFleet} disabled={refreshing} className={HDR_BTN} style={DARK_BTN}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" /></svg> {refreshing ? 'Syncing…' : 'Sync fleet'}
+            </button>
+          </div>
+        </div>
 
-          {/* ===== COL 2 · SERVICE PERFORMANCE ===== */}
-          <div className="flex flex-col gap-3">
+        {/* Four numbers — the fleet */}
+        <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+          {[
+            { l: 'Active sites', v: dash(f?.sitesActive ?? 0), s: `${(f?.units ?? 0).toLocaleString()} units` },
+            { l: 'Gates', v: dash(f?.gates ?? 0), s: `Across ${f?.sitesTotal ?? 0} sites` },
+            { l: 'Cameras', v: dash(f?.cameras ?? 0), s: live ? `${f?.camerasOnline ?? 0} online now` : 'Live status after first fleet sync' },
+            { l: 'Doors & panels', v: dash(f?.doors ?? 0), s: `${f?.panelsLive ?? 0} panels live` },
+          ].map(m => (
+            <button key={m.l} type="button" onClick={() => onOpenTab('Locations')} title="Open locations" className="min-w-0 p-3 text-left transition-transform hover:-translate-y-0.5 sm:px-[18px] sm:py-4" style={CARD}>
+              <div className="text-[12px] font-medium" style={{ color: L.ink3 }}>{m.l}</div>
+              <div className="mt-1 text-[22px] font-semibold leading-tight sm:text-[26px]" style={{ letterSpacing: '-0.02em' }}>{m.v}</div>
+              <div className="mt-0.5 truncate text-[12px]" style={{ color: L.ink3 }}>{m.s}</div>
+            </button>
+          ))}
+        </div>
 
-            {/* Open Work Orders — the full open queue */}
-            <Tile>
-              <CardHead title="Open Work Orders" right={
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,163,255,0.14)', border: '1px solid rgba(0,163,255,0.35)', color: '#00A3FF' }}>{d?.openWorkOrders.open ?? 0} open</span>
-                  <button type="button" onClick={() => onOpenTab('Work Orders')} className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>View all →</button>
+        {/* Main grid — work on the left, upkeep on the right */}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+
+          {/* LEFT */}
+          <div className="flex min-w-0 flex-col gap-4">
+            <Card title="Open work orders" right={<LinkBtn label="View all" onClick={() => onOpenTab('Work Orders')} />}>
+              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                {(d?.openWorkOrders.items ?? []).length === 0
+                  ? <Empty text={loading ? 'Loading…' : 'No open work orders.'} />
+                  : (d?.openWorkOrders.items ?? []).map((w, i) => (
+                    <Row key={w.id} first={i === 0} onClick={() => onOpenJob?.(w.id)}
+                      left={<>{w.wo && <span style={{ color: L.ink3 }}>#{w.wo} · </span>}<span className="font-medium">{w.title}</span>{w.site && <span style={{ color: L.ink3 }}> · {w.site}</span>}</>}
+                      right={<><span className="capitalize">{String(w.status).replace(/_/g, ' ')}</span><span className="h-2 w-2 rounded-full" style={{ background: priorityDot(w.priority) }} aria-label={`${w.priority} priority`} /></>} />
+                  ))}
+              </div>
+            </Card>
+
+            <Card title="Today's schedule" right={<LinkBtn label="Calendar" onClick={() => onOpenTab('Calendar')} />}>
+              {(d?.schedule.items ?? []).length === 0
+                ? <Empty text={loading ? 'Loading…' : 'Nothing scheduled today.'} />
+                : <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                  {(d?.schedule.items ?? []).map((j, i) => (
+                    <Row key={j.id} first={i === 0} onClick={() => onOpenJob?.(j.id)}
+                      left={<><span className="font-medium">{j.title}</span>{j.site && <span style={{ color: L.ink3 }}> · {j.site}</span>}</>}
+                      right={<><span>{j.tech ?? String(j.status).replace(/_/g, ' ')}</span><span className="h-2 w-2 rounded-full" style={{ background: priorityDot(j.priority) }} /></>} />
+                  ))}
+                </div>}
+            </Card>
+
+            <Card title="Service performance" right={<span className="text-[13px]" style={{ color: L.ink3 }}>Rolling</span>}>
+              <div className="grid grid-cols-3 gap-2 px-[18px] py-4 text-center">
+                <div>
+                  <Gauge pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0} color={L.blue} label={d?.response.avgResponseHours != null ? `${d.response.avgResponseHours}h` : '—'} />
+                  <div className="mt-1 text-[13px] font-medium">Avg response</div>
+                  <div className="text-[12px]" style={{ color: L.ink3 }}>to on-site</div>
                 </div>
-              } />
-              <div className="flex flex-col gap-1.5" style={{ maxHeight: 152, overflowY: 'auto' }}>
-                {(d?.openWorkOrders.items ?? []).length === 0 && <div className="py-4 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'No open work orders.'}</div>}
-                {(d?.openWorkOrders.items ?? []).map(w => (
-                  <button key={w.id} type="button" onClick={() => onOpenJob?.(w.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                    <span className="min-w-0 flex-1 truncate text-[12px]" style={{ color: '#e7eff7' }}>{w.wo ? `#${w.wo} · ` : ''}{w.title}{w.site ? ` · ${w.site}` : ''}</span>
-                    <span className="ml-2 flex shrink-0 items-center gap-2">
-                      <span className="whitespace-nowrap text-[10px] capitalize" style={{ color: '#c3d3e2' }}>{String(w.status).replace(/_/g, ' ')}</span>
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: priorityColor(w.priority) }} />
-                    </span>
+                <div>
+                  <Gauge pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0} color={DOT.green} label={d?.response.avgResolveDays != null ? `${d.response.avgResolveDays}d` : '—'} />
+                  <div className="mt-1 text-[13px] font-medium">Avg resolve</div>
+                  <div className="text-[12px]" style={{ color: L.ink3 }}>to close</div>
+                </div>
+                <div className="flex flex-col items-center justify-end">
+                  <div className="text-[26px] font-semibold leading-none" style={{ letterSpacing: '-0.02em' }}>{dash(d?.serviceLoad.ratio ?? 0)}</div>
+                  <div className="mt-2 text-[13px] font-medium">Visits per device</div>
+                  <div className="text-[12px]" style={{ color: L.ink3 }}>{d?.serviceLoad.visits90d ?? 0} visits · 90 days</div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* RIGHT */}
+          <div className="flex min-w-0 flex-col gap-4">
+            <Card title="Fleet health" right={<span className="text-[13px]" style={{ color: L.ink3 }}>{f?.devicesTotal ?? 0} devices</span>}>
+              <div className="flex items-center gap-4 px-[18px] py-4">
+                <svg width="92" height="92" viewBox="0 0 42 42" aria-hidden>
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={L.track} strokeWidth="5" />
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.green} strokeWidth="5" strokeDasharray={`${onDash} ${100 - onDash}`} strokeDashoffset="25" />
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.amber} strokeWidth="5" strokeDasharray={`${atDash} ${100 - atDash}`} strokeDashoffset={`${25 - onDash}`} />
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.red} strokeWidth="5" strokeDasharray={`${offDash} ${100 - offDash}`} strokeDashoffset={`${25 - onDash - atDash}`} />
+                  <text x="21" y="21" textAnchor="middle" fontSize="8" fill={L.ink} fontWeight="600">{healthPct}%</text>
+                  <text x="21" y="27" textAnchor="middle" fontSize="3.4" fill={L.ink3}>healthy</text>
+                </svg>
+                <div className="flex flex-col gap-1 text-[13px]" style={{ color: L.ink2 }}>
+                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.green }} />Online <b className="font-semibold" style={{ color: L.ink }}>{health.online}</b></span>
+                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.amber }} />Needs attention <b className="font-semibold" style={{ color: L.ink }}>{health.attention}</b></span>
+                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.red }} />Offline <b className="font-semibold" style={{ color: L.ink }}>{health.offline}</b></span>
+                </div>
+              </div>
+              <div className="px-[18px] pb-3.5 text-[12px]" style={{ color: L.ink3 }}>{live ? 'Cameras and network report live. Gates show last-service status.' : 'Status from last service. Live monitoring turns on after the first fleet sync.'}</div>
+            </Card>
+
+            <Card title="Open requests" right={<span className="rounded-md px-2 py-0.5 text-[12px] font-medium" style={reqs > 0 ? { background: '#FFECEC', color: L.red } : { background: '#F5F5F7', color: L.ink3 }}>{reqs} open</span>}>
+              {(d?.requests.items ?? []).length === 0
+                ? <Empty text={loading ? 'Loading…' : 'No open requests.'} />
+                : <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {(d?.requests.items ?? []).map((r, i) => (
+                    <Row key={r.id} first={i === 0} onClick={() => onOpenTab('Requests')}
+                      left={<><span className="font-medium">{r.title}</span>{r.site && <span style={{ color: L.ink3 }}> · {r.site}</span>}</>}
+                      right={<><span>{ageLabel(r.ageHours)}</span><span className="h-2 w-2 rounded-full" style={{ background: priorityDot(r.priority) }} /></>} />
+                  ))}
+                </div>}
+            </Card>
+
+            <Card title="Preventive maintenance" right={<LinkBtn label="Open" onClick={() => onOpenTab('PM')} />}>
+              <div className="grid grid-cols-3 gap-2 px-[18px] py-4">
+                {[
+                  { n: d?.pm.overdue ?? 0, l: 'Overdue', c: L.red, bg: '#FFECEC' },
+                  { n: d?.pm.dueSoon ?? 0, l: 'Due in 14 days', c: L.amber, bg: '#FFF4E5' },
+                  { n: d?.pm.onTrack ?? 0, l: 'On track', c: L.green, bg: '#E8F6EC' },
+                ].map(x => (
+                  <button key={x.l} type="button" onClick={() => onOpenTab('PM')} className="rounded-xl px-2 py-3 text-center" style={{ background: x.bg }}>
+                    <div className="text-[22px] font-semibold leading-none" style={{ color: x.c }}>{dash(x.n)}</div>
+                    <div className="mt-1.5 text-[12px]" style={{ color: L.ink2 }}>{x.l}</div>
                   </button>
                 ))}
               </div>
-            </Tile>
+            </Card>
 
-            {/* Service performance — response, resolve, load in one compact tile */}
-            <Tile>
-              <CardHead title="Service Performance" right={<span className="text-[10px]" style={{ color: '#c3d3e2' }}>REAL · rolling</span>} />
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                  <Gauge pct={d?.response.avgResponseHours != null ? Math.min(1, d.response.avgResponseHours / 24) : 0} color="#00A3FF" label={d?.response.avgResponseHours != null ? `${d.response.avgResponseHours}h` : '—'} />
-                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Avg Response</div>
-                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>to on-site</div>
-                </div>
-                <div className="rounded-xl px-2 pb-2.5 pt-1.5 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                  <Gauge pct={d?.response.avgResolveDays != null ? Math.min(1, d.response.avgResolveDays / 7) : 0} color="#00E699" label={d?.response.avgResolveDays != null ? `${d.response.avgResolveDays}d` : '—'} />
-                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Avg Resolve</div>
-                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>to close</div>
-                </div>
-                <div className="flex flex-col items-center justify-center rounded-xl px-2 py-2 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                  <div className="text-[24px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : (d?.serviceLoad.ratio ?? 0)}</div>
-                  <div className="mt-1 text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Load / device</div>
-                  <div className="text-[8px]" style={{ color: '#00A3FF' }}>{d?.serviceLoad.visits90d ?? 0} visits · 90d</div>
-                </div>
+            <Card title="Crew performance · 30 days" right={<LinkBtn label="Open" onClick={() => onOpenTab('Analytics')} />}>
+              <div className="px-[18px] pb-2 pt-4">
+                <Bar label="First-time fix" value={`${t.ftfPct ?? 0}%`} pct={t.ftfPct ?? 0} color={DOT.green} />
+                <Bar label="Utilization" value={`${t.avgUtilizationPct ?? 0}%`} pct={t.avgUtilizationPct ?? 0} color={L.blue} />
+                <div className="flex items-center justify-between pb-2"><span className="text-[13px]" style={{ color: L.ink2 }}>Callbacks / re-work</span><span className="text-[13px] font-semibold" style={{ color: (t.callbacks ?? 0) > 0 ? L.amber : L.ink }}>{t.callbacks ?? 0}</span></div>
               </div>
-            </Tile>
-
-            {/* Today's schedule — slim (thin when empty) */}
-            <Tile>
-              <CardHead title="Today's Schedule" right={<button type="button" onClick={() => onOpenTab('Calendar')} className="text-[10px] font-semibold" style={{ color: '#8FD3EC' }}>Calendar →</button>} />
-              {(d?.schedule.items ?? []).length === 0 ? (
-                <div className="py-1.5 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'Nothing scheduled today.'}</div>
-              ) : (
-                <div className="flex flex-col gap-1.5" style={{ maxHeight: 120, overflowY: 'auto' }}>
-                  {(d?.schedule.items ?? []).map(j => (
-                    <button key={j.id} type="button" onClick={() => onOpenJob?.(j.id)} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                      <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{j.title}{j.site ? ` · ${j.site}` : ''}</span>
-                      <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(j.priority) }}>{j.tech ?? j.status}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Tile>
-          </div>
-
-          {/* ===== COL 3 · WORKLOAD & UPKEEP ===== */}
-          <div className="flex flex-col gap-3">
-            <Tile>
-              <CardHead title="Open Requests" right={<span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(255,77,77,0.16)', border: '1px solid rgba(255,77,77,0.4)', color: '#f7a3b3' }}>{d?.requests.open ?? 0} open</span>} />
-              {(d?.requests.items ?? []).length === 0 ? (
-                <div className="py-1.5 text-center text-[11px]" style={{ color: '#00A3FF' }}>{loading ? 'Loading…' : 'No open requests.'}</div>
-              ) : (
-                <div className="flex flex-col gap-1.5" style={{ maxHeight: 124, overflowY: 'auto' }}>
-                  {(d?.requests.items ?? []).map(r => (
-                    <button key={r.id} type="button" onClick={() => onOpenTab('Requests')} className="flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:brightness-110" style={{ background: WELL, border: '1px solid #1E293B' }}>
-                      <span className="truncate text-[12px]" style={{ color: '#e7eff7' }}>{r.title}{r.site ? ` · ${r.site}` : ''}</span>
-                      <span className="ml-2 whitespace-nowrap text-[10px]" style={{ color: priorityColor(r.priority) }}>{ageLabel(r.ageHours)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Tile>
-
-            <Tile onClick={() => onOpenTab('PM')}>
-              <CardHead title="Preventive Maintenance" onOpen={() => onOpenTab('PM')} />
-              <div className="flex gap-2">
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(255,77,77,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#f87171' }}>{d?.pm.overdue ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Overdue</div></div>
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid rgba(251,191,36,0.3)' }}><div className="text-[22px] font-extrabold" style={{ color: '#fbbf24' }}>{d?.pm.dueSoon ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>Due 14d</div></div>
-                <div className="flex-1 rounded-xl p-2 text-center" style={{ background: WELL, border: '1px solid #1E293B' }}><div className="text-[22px] font-extrabold" style={{ color: '#00E699' }}>{d?.pm.onTrack ?? 0}</div><div className="text-[9px]" style={{ color: '#c3d3e2' }}>On track</div></div>
-              </div>
-            </Tile>
-
-            <Tile onClick={() => onOpenTab('Analytics')}>
-              <CardHead title="Crew Performance · 30d" onOpen={() => onOpenTab('Analytics')} />
-              <Bar label="First-time fix" value={`${t.ftfPct ?? 0}%`} pct={t.ftfPct ?? 0} color="#00E699" />
-              <Bar label="Utilization" value={`${t.avgUtilizationPct ?? 0}%`} pct={t.avgUtilizationPct ?? 0} color="#00A3FF" />
-              <div className="flex items-center justify-between pt-0.5"><span className="text-[12px]" style={{ color: '#c3d3e2' }}>Callbacks / re-work</span><span className="text-[13px] font-bold" style={{ color: '#fbbf24' }}>{t.callbacks ?? 0}</span></div>
-            </Tile>
+            </Card>
           </div>
         </div>
 
@@ -298,14 +280,5 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
         <OpsComingSoon />
       </div>
     </section>
-  )
-}
-
-function Bar({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }) {
-  return (
-    <div className="mb-2.5">
-      <div className="mb-1 flex items-center justify-between"><span className="text-[12px]" style={{ color: '#c3d3e2' }}>{label}</span><span className="text-[13px] font-bold" style={{ color }}>{value}</span></div>
-      <div style={{ height: 6, borderRadius: 4, background: '#12202c' }}><div style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', borderRadius: 4, background: color }} /></div>
-    </div>
   )
 }
