@@ -468,7 +468,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
-| 210 | Gate Watch: `gate_watches` (config + live state), `gate_watch_refs` (taught pictures), `gate_watch_checks` (log) + GRANT/RLS. Needs `incidents` category/cause/source (167) | ⏳ run on beta then prod |
+| 210 | Gate Watch: `gate_watches` (config + live state), `gate_watch_refs` (taught pictures), `gate_watch_checks` (log) + GRANT/RLS. Needs `incidents` category/cause/source (167) | ✅ run (Nov 1 2026) |
 | 209 | QuickBooks sync: `qbo_settings`, `qbo_sync_log`, `qbo_report_cache` (+GRANT/RLS), link columns on products/invoices/organizations/commission_payouts, `qbo_claim_sync` RPC. Needs 174 + 179 | ✅ run (Nov 1 2026) |
 | 208 | Events: per-guest send log + lock + auto-send, `shift_event_dates`, `event_rollups`, `claim_campaign_step` RPCs (205–207 are Nexus Resident's numbers) | ✅ run (Nov 1 2026) |
 | 204 | Events pro fields + 4 starter plans + RLS service-role-only on all event tables | ✅ run (Nov 1 2026) |
