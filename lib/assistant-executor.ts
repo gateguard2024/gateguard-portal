@@ -61,6 +61,10 @@ async function runTool(
           assigned_to: ctx.user.id,
           assigned_to_name: ctx.user.name,
           org_id: ctx.user.org_id,
+          // Optional link to the record it's about (e.g. tasks from a recording).
+          ...(typeof args.linked_type === 'string' && /^(opportunity|site|work_order|lead|customer)$/.test(args.linked_type) && typeof args.linked_id === 'string' && /^[0-9a-f-]{36}$/i.test(args.linked_id)
+            ? { linked_type: args.linked_type, linked_id: args.linked_id, linked_label: typeof args.linked_label === 'string' ? args.linked_label.slice(0, 200) : null }
+            : {}),
         })
 
       if (error) return { success: false, error: error.message }

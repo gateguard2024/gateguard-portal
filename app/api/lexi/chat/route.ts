@@ -16,6 +16,8 @@
  * actions run via /api/assistant/execute; undo via /api/assistant/revert.
  *
  * Phase 1: Gate Guard corporate only.
+ * Phase 2: the Brain (company knowledge + personal memory, lib/lexi/brain.ts) is
+ * added to the instructions on every message; remember / forget edit it.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -25,6 +27,7 @@ import { executeToolWithRevert, isSignedIn, ALLOWED_TOOLS } from '@/lib/assistan
 import { ACTION_TOOLS, TOOL_RISK_PROFILES, buildActionSummary } from '@/lib/assistant-tools'
 import { READ_TOOLS, READ_TOOL_NAMES, TOOL_LABEL, lexiCtx, runReadTool, type LexiCard } from '@/lib/lexi/tools'
 import { NEXUS_MAP } from '@/lib/lexi/nexus-guide'
+import { BRAIN_TOOLS, BRAIN_TOOL_NAMES, brainPrompt, loadBrain, runBrainTool } from '@/lib/lexi/brain'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -37,7 +40,7 @@ const FAST_MODEL = process.env.LEXI_FAST_MODEL || 'claude-haiku-4-5-20251001'
 const MAX_ROUNDS = 6
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function systemPrompt(name: string, role: string) {
+function systemPrompt(name: string, role: string, brain: string) {
   const now = new Date()
   return `You are Lexi, the AI assistant inside Nexus — Gate Guard's operating system for a gate, access-control and camera company that sells to apartment communities.
 You work for ${name} (${role}). Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}.
@@ -53,8 +56,13 @@ How you work:
 - The records you find are shown to the user as cards under your reply, so don't repeat every field — summarize what matters and what to do next.
 - Be brief and plain. Short paragraphs, a short list only when listing several things. No headings. End with the one most useful next step when there is one.
 - Money: say "$12,400". Dates: say "Tue Nov 3", not ISO.
+- Inbox: "who's waiting on me" → waiting_on_me. To reply, read the thread with get_thread, then write the draft in your answer under a line "Draft reply:" — short, in the user's own voice (match their style samples and any "voice" notes in the Brain). Offer to log it to the deal or set a follow-up.
 - You can't yet send emails, text customers, place calls or open gates. If asked, say that's coming soon and offer what you can do now (draft the text, create a task).
-- Only discuss Gate Guard work. Be warm and confident, never chatty.`
+- Memory: when the user states a lasting preference or fact, or says "remember…", save it with remember (one fact per call). Company-wide facts (pricing, policies, scripts) go to the shared Brain only when they clearly mean the whole team. When they correct a saved fact, forget the old one and remember the new one.
+- Only discuss Gate Guard work. Be warm and confident, never chatty.
+
+── The Brain ──
+${brain}`
 }
 
 type Msg = Anthropic.MessageParam
@@ -81,7 +89,9 @@ export async function POST(req: NextRequest) {
   const message = typeof body?.message === 'string' ? body.message.trim().slice(0, 4000) : ''
   if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
 
-  const ctx = await lexiCtx(user)
+  const [ctx, brain] = await Promise.all([lexiCtx(user), loadBrain(user)])
+  if (brain.error) console.error('[lexi/chat] brain load failed:', brain.error)
+  const brainText = brainPrompt(brain)
   const toolCtx = { user, scope: ctx.scope }
 
   // ── Conversation + history ────────────────────────────────────────────────
@@ -132,8 +142,8 @@ export async function POST(req: NextRequest) {
           const s = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1500,
-            system: systemPrompt(user.name, user.role),
-            tools: [...READ_TOOLS, ...(pending ? [] : ACTION_TOOLS)],
+            system: systemPrompt(user.name, user.role, brainText),
+            tools: [...READ_TOOLS, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)],
             messages,
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })
@@ -154,6 +164,12 @@ export async function POST(req: NextRequest) {
                 if (fresh.length) send({ type: 'cards', items: fresh })
               }
               results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(out.data).slice(0, 14000) })
+            } else if (BRAIN_TOOL_NAMES.has(block.name)) {
+              send({ type: 'tool', name: block.name, label: block.name === 'remember' ? 'Saving to the Brain' : 'Updating the Brain' })
+              const r = await runBrainTool(block.name, args, user)
+              const ev = { ok: r.ok, summary: r.summary, message: r.message, revertPayload: null }
+              did.push(ev); send({ type: 'did', ...ev })
+              results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(r), ...(r.ok ? {} : { is_error: true }) })
             } else if (ALLOWED_TOOLS.has(block.name)) {
               const risk = TOOL_RISK_PROFILES[block.name] ?? 'medium'
               const summary = buildActionSummary(block.name, args)

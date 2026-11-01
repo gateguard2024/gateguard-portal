@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
-import { OperationsHub } from '@/components/nexus/OperationsHub'
+import { JobDetailDrawer, OperationsHub } from '@/components/nexus/OperationsHub'
 import { OperationsLanding } from '@/components/nexus/OperationsLanding'
 import { PAGE_BG_GRADIENT } from '@/components/nexus/tasks/shared'
 
@@ -81,13 +80,6 @@ async function loadJobsWorkbench(query?: string): Promise<JobsWorkbenchData> {
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load jobs.')
   return data as JobsWorkbenchData
-}
-
-async function fetchJobWindow(id: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/nexus/jobs/job-window/${id}`)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not open job.')
-  return data
 }
 
 function jobDisplayName(job: JobRecord): string {
@@ -232,9 +224,6 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
   const [boardVisitDate, setBoardVisitDate] = useState('')
   const [boardVisitTime, setBoardVisitTime] = useState('')
   const [boardCompleteNote, setBoardCompleteNote] = useState('')
-  const [jobWindowData, setJobWindowData] = useState<Record<string, unknown> | null>(null)
-  const [jobWindowBusy, setJobWindowBusy] = useState(false)
-  const [loadingJobId, setLoadingJobId] = useState<string | null>(null)
 
   async function openJobsWorkbench(focus: JobsFocus = 'needsAttention') {
     setBusy(true)
@@ -270,37 +259,17 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function openJob(id: string) {
-    setJobWindowBusy(true)
-    setLoadingJobId(id)
+  // Opens the full job page (same one the Operations Hub uses).
+  function openJob(id: string) {
     setStatus(null)
-    try {
-      const data = await fetchJobWindow(id)
-      setSelectedJobId(id)
-      setJobWindowData(data)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not open job.')
-    } finally {
-      setJobWindowBusy(false)
-      setLoadingJobId(null)
-    }
+    setSelectedJobId(id)
   }
 
   function closeJobWindow() {
     setSelectedJobId(null)
-    setJobWindowData(null)
+    void refreshBoard()
   }
 
-  async function refreshOpenJob() {
-    if (!selectedJobId) return
-    try {
-      const data = await fetchJobWindow(selectedJobId)
-      setJobWindowData(data)
-      await refreshBoard()
-    } catch {
-      // Keep current job visible if refresh fails.
-    }
-  }
 
   async function submitBoardAction(payload: Record<string, unknown>) {
     if (!selectedBoardJobId) return
@@ -368,17 +337,10 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
           </div>
         </div>
       )}
-      {selectedJobId && jobWindowData ? (
-        <div className="mx-auto mt-6 w-full max-w-5xl xl:max-w-none px-3 sm:px-4">
-          <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,163,255,0.14), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,163,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,163,255,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
-            <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
-          </div>
-        </div>
-      ) : (
-        <OperationsLanding onOpenTab={(tab) => { setOpsTab(tab); setShowOps(true) }} onOpenJob={openJob} />
-      )}
+      <OperationsLanding onOpenTab={(tab) => { setOpsTab(tab); setShowOps(true) }} onOpenJob={openJob} />
+      {selectedJobId && <JobDetailDrawer id={selectedJobId} onClose={closeJobWindow} />}
 
-      {activePanel && !(selectedJobId && jobWindowData) && (
+      {activePanel && !selectedJobId && (
         <JobsDetailShell
           title={activeTitle}
           subtitle={activeSubtitle}
@@ -442,7 +404,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
               <button type="button" onClick={() => void openJobsWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#00A3FF', color: 'white' }}>Search</button>
             </div>
           )}
-          <JobRecordList records={focusedJobs} emptyText={focusedJobsEmptyText} onJobSelect={id => { setSelectedBoardJobId(id); setBoardAction(null); setBoardMessage(null) }} onJobOpen={openJob} selectedJobId={selectedBoardJobId} jobWindowBusy={jobWindowBusy} loadingJobId={loadingJobId} />
+          <JobRecordList records={focusedJobs} emptyText={focusedJobsEmptyText} onJobSelect={id => { setSelectedBoardJobId(id); setBoardAction(null); setBoardMessage(null) }} onJobOpen={openJob} selectedJobId={selectedBoardJobId} />
         </JobsDetailShell>
       )}
     </section>

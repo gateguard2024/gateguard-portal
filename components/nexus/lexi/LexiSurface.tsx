@@ -10,9 +10,12 @@
  *     as a Confirm card (runs via /api/assistant/execute).
  *   • History from /api/lexi/conversations.
  *   • Mic: browser dictation where supported.
+ *   • Phase 2: Brain panel (what Lexi remembers) and Recording panel (meeting →
+ *     notes, to-dos, deal note, follow-up email). Drafted replies get a Copy button.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { T, FONT } from '@/components/nexus/tasks/shared'
+import { BrainPanel, RecordingPanel } from '@/components/nexus/lexi/LexiPanels'
 
 type Card = { kind: string; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
 type RevertPayload = { operation: 'delete' | 'update'; table: string; id: string; data?: Record<string, unknown> }
@@ -23,7 +26,8 @@ type Conv = { id: string; title: string | null; updated_at: string }
 type Brief = { name?: string; tasks: number; today: number; unassigned: number; overdue: number; stalled: number; incidents: number; expiring: number; error?: string }
 
 const CSS = `
-.lx{color:${T.ink};font-family:${FONT};letter-spacing:-.01em;width:100%;max-width:1100px;margin:0 auto;padding:0 4px 24px}
+.lx{color:${T.ink};font-family:${FONT};letter-spacing:-.01em;width:100%;max-width:1100px;margin:0 auto;padding:0 4px calc(170px + env(safe-area-inset-bottom))}
+.lx-end{height:1px;scroll-margin-bottom:calc(190px + env(safe-area-inset-bottom))}
 .lx *{box-sizing:border-box}
 .lx-hd{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:6px 0 18px}
 .lx-hi{display:flex;align-items:center;gap:16px;min-width:0}
@@ -103,7 +107,7 @@ const CSS = `
 
 const KIND_LABEL: Record<string, string> = { deal: 'Deal', work_order: 'Job', site: 'Site', task: 'Task', lead: 'Lead', customer: 'Customer', thread: 'Email', event: 'Calendar', manual: 'Manual' }
 const TONE: Record<string, string> = { red: '#FF3B30', orange: '#FF9F0A', green: '#34C759', blue: '#0071E3' }
-const CHIPS = ['Brief me on today', 'What jobs are overdue?', 'Which deals are stalled?', 'Who’s waiting on me in email?', 'How do I send a proposal?', 'Make me a task to call Marbella tomorrow']
+const CHIPS = ['Brief me on today', 'Who’s waiting on me in email?', 'What jobs are overdue?', 'Which deals are stalled?', 'Remember that I like short answers', 'How do I send a proposal?', 'Make me a task to call Marbella tomorrow']
 const uid = () => Math.random().toString(36).slice(2)
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' }
 
@@ -129,6 +133,8 @@ export function LexiSurface() {
   const [convs, setConvs] = useState<Conv[] | null>(null)
   const [locked, setLocked] = useState<string | null>(null)
   const [rec, setRec] = useState(false)
+  const [panel, setPanel] = useState<'brain' | 'recording' | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const recRef = useRef<{ stop: () => void } | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const taRef = useRef<HTMLTextAreaElement | null>(null)
@@ -273,6 +279,8 @@ export function LexiSurface() {
         </div>
       </div>
       <div className="lx-acts">
+        <button type="button" className="lx-btn dark" onClick={() => setPanel('recording')}>Recording</button>
+        <button type="button" className="lx-btn dark" onClick={() => setPanel('brain')}>Brain</button>
         <button type="button" className="lx-btn dark" onClick={openHistory}>History</button>
         <button type="button" className="lx-btn dark" onClick={newChat} disabled={!msgs.length}>New chat</button>
       </div>
@@ -297,6 +305,10 @@ export function LexiSurface() {
             <span className="av" aria-hidden />
             <div className="body">
               {m.text && <Md text={m.text} />}
+              {!m.streaming && /draft( reply)?:/i.test(m.text) && <button type="button" className="lx-btn line" style={{ marginTop: 8, height: 32 }} onClick={() => {
+                const draft = m.text.split(/draft( reply)?:/i).pop()!.replace(/\*\*/g, '').trim()
+                navigator.clipboard?.writeText(draft).then(() => { setCopiedId(m.id); setTimeout(() => setCopiedId(c => (c === m.id ? null : c)), 1800) }).catch(() => {})
+              }}>{copiedId === m.id ? 'Copied ✓' : 'Copy draft'}</button>}
               {m.status && <div className="lx-status"><span className="lx-spin" />{m.status}…</div>}
               {m.cards.length > 0 && <div className="lx-cards">
                 {m.cards.map(c => <a key={`${c.kind}-${c.id}`} className="lx-card" href={c.href || '#'} target={c.href?.startsWith('http') ? '_blank' : undefined} rel="noreferrer" onClick={c.href ? undefined : e => e.preventDefault()}>
@@ -324,7 +336,7 @@ export function LexiSurface() {
               {m.error && <div className="lx-err">{m.error}</div>}
             </div>
           </div>)}
-        <div ref={endRef} />
+        <div ref={endRef} className="lx-end" />
       </div>
       {msgs.length === 0 && <div className="lx-chips">{CHIPS.map(c => <button key={c} type="button" className="lx-chip" onClick={() => send(c)}>{c}</button>)}</div>}
       <form className="lx-comp" onSubmit={e => { e.preventDefault(); void send(input) }}>
@@ -340,6 +352,9 @@ export function LexiSurface() {
       </form>
     </section>
     <div className="lx-note">Lexi can make mistakes. Small changes can be undone for 30 seconds; bigger ones always ask first.</div>
+
+    {panel === 'brain' && <BrainPanel onClose={() => setPanel(null)} />}
+    {panel === 'recording' && <RecordingPanel onClose={() => setPanel(null)} />}
 
     {histOpen && <div className="lx-hist" onClick={() => setHistOpen(false)}>
       <div className="p" onClick={e => e.stopPropagation()} role="dialog" aria-label="Lexi history">

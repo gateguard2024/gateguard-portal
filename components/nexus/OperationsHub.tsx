@@ -1824,7 +1824,60 @@ function Playbooks() {
 
 /* ── Job drawer: detail + money + checklist + parts + team chat + complete ─ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: RealTech[]; onClose: () => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
+// Customer sign-off pad (touch or mouse). Saves a PNG.
+function SignOffPad({ onSave, onCancel, busy }: { onSave: (dataUrl: string) => void; onCancel: () => void; busy?: boolean }) {
+  const ref = React.useRef<HTMLCanvasElement | null>(null);
+  const drawing = React.useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const pos = (e: React.PointerEvent<HTMLCanvasElement>) => { const c = ref.current!; const r = c.getBoundingClientRect(); return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) }; };
+  const clear = () => { const c = ref.current; if (!c) return; const ctx = c.getContext("2d")!; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); setDirty(false); };
+  useEffect(() => { clear(); }, []);
+  return <div>
+    <canvas ref={ref} width={640} height={200} aria-label="Sign here"
+      onPointerDown={e => { drawing.current = true; const ctx = ref.current!.getContext("2d")!; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.currentTarget.setPointerCapture(e.pointerId); }}
+      onPointerMove={e => { if (!drawing.current) return; const ctx = ref.current!.getContext("2d")!; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = "#1D1D1F"; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.stroke(); setDirty(true); }}
+      onPointerUp={() => { drawing.current = false; }} onPointerLeave={() => { drawing.current = false; }}
+      style={{ width: "100%", height: 160, borderRadius: 12, background: "#fff", touchAction: "none", border: "1px dashed rgba(0,0,0,0.25)", display: "block" }} />
+    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <button type="button" disabled={!dirty || busy} onClick={() => onSave(ref.current!.toDataURL("image/png"))} style={{ ...btn, flex: 1, opacity: !dirty || busy ? 0.55 : 1 }}>{busy ? "Saving…" : "Save signature"}</button>
+      <button type="button" onClick={clear} style={btn2}>Clear</button>
+      <button type="button" onClick={onCancel} style={btn2}>Cancel</button>
+    </div>
+  </div>;
+}
+
+// The job page. Opened from the Operations Hub and from the Operations page
+// (JobsSurface). Full-screen, light look, every feature of the old drawer kept.
+export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpdateProp }: { id: string; techs?: RealTech[]; onClose: () => void; onUpdate?: (id: string, patch: Record<string, unknown>) => void | Promise<void> }) {
+  // Self-sufficient when opened outside the Hub: load the tech list and save
+  // changes directly (and say so when a change doesn't save).
+  const [techsOwn, setTechsOwn] = useState<RealTech[]>([]);
+  useEffect(() => { if (!techsProp?.length) fetch("/api/dispatch").then(r => r.json()).then(d => setTechsOwn(d.techs ?? [])).catch(() => {}); }, [techsProp]);
+  const techs = techsProp?.length ? techsProp : techsOwn;
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const onUpdate = async (wid: string, patch: Record<string, unknown>) => {
+    setSaveErr(null);
+    if (onUpdateProp) { await onUpdateProp(wid, patch); return; }
+    try {
+      const r = await fetch(`/api/maintenance/${wid}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      if (!r.ok) setSaveErr("That change didn’t save. Try again.");
+    } catch { setSaveErr("That change didn’t save. Try again."); }
+  };
+  // Linked tasks, files and follow-up work orders (from the job window feed).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [extra, setExtra] = useState<{ tasks: any[]; files: any[]; subs: any[] }>({ tasks: [], files: [], subs: [] });
+  const [taskForm, setTaskForm] = useState({ title: "", due: "" });
+  const [extraBusy, setExtraBusy] = useState(false);
+  const [extraMsg, setExtraMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  // Job timer (clock in / out) and customer sign-off.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [activeEntry, setActiveEntry] = useState<any>(null);
+  const [timerBusy, setTimerBusy] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [showSign, setShowSign] = useState(false);
+  const [signBusy, setSignBusy] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [wo, setWo] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1900,7 +1953,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
       fetch(`/api/maintenance/${id}/phases`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/parts`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/purchase-orders?work_order_id=${id}`).then(r => r.json()).catch(() => ({})),
-    ]).then(([d, t, ph, cr, vs, pp, pos]) => {
+      fetch(`/api/nexus/jobs/job-window/${id}`).then(r => r.json()).catch(() => ({})),
+    ]).then(([d, t, ph, cr, vs, pp, pos, jw]) => {
+      setExtra({ tasks: jw?.tasks ?? [], files: jw?.files ?? [], subs: jw?.subWorkOrders ?? [] });
       setWo(d.work_order ?? null);
       // Prefer the procurement-aware parts feed (same rows, plus each part's PO
       // number / supplier). Fall back to the plain list on the detail payload so
@@ -1908,7 +1963,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
       setParts(Array.isArray(pp?.parts) ? pp.parts : (d.parts_used ?? []));
       setJobPos(Array.isArray(pos?.records) ? pos.records : []);
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
-      setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
+      setLaborMins(t.totalMins ?? 0); setActiveEntry(t.activeEntry ?? null); setSiteId(d.work_order?.site_id ?? null);
       setPhotos(ph.photos ?? []); setCrew(cr.crew ?? []); setPhases(vs.phases ?? []);
     }).finally(() => { if (!silent) setLoading(false); });
   }, [id]);
@@ -2143,6 +2198,58 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "DELETE" }).catch(() => {});
     load(true);
   }
+  async function jobAction(payload: Record<string, unknown>, okMsg: string): Promise<boolean> {
+    setExtraBusy(true); setExtraMsg(null);
+    try {
+      const r = await fetch(`/api/nexus/jobs/job-window/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.success === false) { setExtraMsg(d?.message || "That didn’t save. Try again."); return false; }
+      setExtraMsg(okMsg); load(true); return true;
+    } catch { setExtraMsg("That didn’t save. Try again."); return false; }
+    finally { setExtraBusy(false); }
+  }
+  async function addJobTask() {
+    if (!taskForm.title.trim()) return;
+    if (await jobAction({ action: "create_task", title: taskForm.title.trim(), due_date: taskForm.due }, "Task added.")) setTaskForm({ title: "", due: "" });
+  }
+  async function uploadJobFile(file: File) {
+    setExtraBusy(true); setExtraMsg(null);
+    try {
+      const u = await fetch(`/api/nexus/jobs/job-window/${id}/attachment-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) });
+      const ud = await u.json().catch(() => ({}));
+      if (!u.ok) throw new Error(ud?.error || "Couldn’t start the upload.");
+      const put = await fetch(ud.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!put.ok) throw new Error("Upload failed.");
+      setExtraBusy(false);
+      await jobAction({ action: "add_attachment", file_name: file.name, url: ud.publicUrl, file_type: file.type, size_bytes: file.size }, "File added.");
+    } catch (e) { setExtraMsg(e instanceof Error ? e.message : "Upload failed."); setExtraBusy(false); }
+  }
+  useEffect(() => { if (!activeEntry) return; const t = setInterval(() => setNowTick(Date.now()), 1000); return () => clearInterval(t); }, [activeEntry]);
+  async function toggleTimer() {
+    if (timerBusy) return; setTimerBusy(true); setSaveErr(null);
+    try {
+      const r = activeEntry
+        ? await fetch(`/api/maintenance/${id}/time`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entry_id: activeEntry.id }) })
+        : await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      if (!r.ok && r.status !== 409) setSaveErr(activeEntry ? "Couldn’t stop the timer. Try again." : "Couldn’t start the timer. Try again.");
+    } catch { setSaveErr("Couldn’t reach the server. Try again."); }
+    setTimerBusy(false); load(true);
+  }
+  async function saveSignature(dataUrl: string) {
+    setSignBusy(true); setExtraMsg(null);
+    try {
+      const b64 = dataUrl.split(",")[1] ?? ""; const bin = atob(b64); const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const up = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: "customer-signature.png" }) }).then(r => r.json());
+      if (!up?.signedUrl) throw new Error("no url");
+      const put = await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: new Blob([arr], { type: "image/png" }) });
+      if (!put.ok) throw new Error("upload");
+      const r = await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, file_name: "signature|customer-signature.png", caption: "signature" }) });
+      if (!r.ok) throw new Error("save");
+      setShowSign(false); setExtraMsg("Customer signature saved.");
+    } catch { setExtraMsg("The signature didn’t save. Try again."); }
+    setSignBusy(false); load(true);
+  }
   async function notifyCustomer(event: string) {
     setSmsBusy(true); setSmsMsg(null);
     const r = await fetch(`/api/maintenance/${id}/notify-customer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event, tech_eta: event === "in_route" ? (eta || undefined) : undefined }) }).then(x => x.json()).catch(() => null);
@@ -2214,32 +2321,155 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     </div>;
   }
 
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(15,23,42,0.42)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 18, padding: 24, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "#1D1D1F", boxShadow: "0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
-        <button onClick={onClose} style={{ ...btn2, border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
-        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn2, border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
-      </div>
-      {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 18 }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#0071E3", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
-          <h2 style={{ margin: "4px 0", fontSize: 22 }}>{wo.title || "Work order"}</h2>
-          <Small>{wo.customer_name || wo.site_address || "—"}{wo.scheduled_date ? ` · ${String(wo.scheduled_date).slice(0, 10)}` : ""}</Small>
-        </div>
+  // ── Page header data ──────────────────────────────────────────────────────
+  const bucket = wo ? bucketOf(stOf(wo)) : "New";
+  const onHold = bucket === "Procurement" || bucket === "Stuck";
+  const STEPS: { key: string; label: string }[] = [{ key: "New", label: "New" }, { key: "Scheduled", label: "Scheduled" }, { key: "In Progress", label: "Working" }, { key: "Done", label: "Done" }];
+  const stepIdx = onHold ? 1 : Math.max(0, STEPS.findIndex(x => x.key === bucket));
+  const addr = wo ? [wo.site_address, wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).join(", ") : "";
+  const phone = wo ? (wo.site_contact_phone || wo.site_pm_phone || "") : "";
+  const sched = wo?.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : null;
+  const late = !!sched && bucket !== "Done" && sched < todayKey();
+  const laborHrs = Math.round((laborMins / 60) * 10) / 10;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const signed = photos.some((p: any) => String(p.file_name ?? p.caption ?? "").split("|")[0].toLowerCase() === "signature");
+  const runSecs = activeEntry?.clock_in ? Math.max(0, Math.floor((nowTick - new Date(activeEntry.clock_in).getTime()) / 1000)) : 0;
+  const runLabel = `${Math.floor(runSecs / 3600)}:${String(Math.floor((runSecs % 3600) / 60)).padStart(2, "0")}:${String(runSecs % 60).padStart(2, "0")}`;
+  function goStep(key: string) {
+    if (!wo) return;
+    if (key === "Done" && !canComplete) { setHint(completeBlockReason + " — then finish the job."); setTab(!allStepsDone ? "Execution" : "Activity"); return; }
+    setHint(null); patchField({ status: COL_TO_DB[key] });
+  }
+  // The one obvious next thing to do (ServiceTitan / Housecall Pro style).
+  const primary: { label: string; run: () => void; tone?: string } | null = !wo ? null
+    : bucket === "Done" ? { label: invBusy ? "Creating invoice…" : "Create invoice", run: createInvoice, tone: "#248A3D" }
+    : onHold ? { label: "Resume job", run: () => goStep("Scheduled") }
+    : bucket === "In Progress" ? { label: "Finish job", run: () => goStep("Done"), tone: "#248A3D" }
+    : bucket === "Scheduled" ? { label: "Start job", run: () => goStep("In Progress") }
+    : !wo.assignee_id ? { label: "Assign a tech", run: () => { setTab("Overview"); setTimeout(() => document.getElementById("jp-tech")?.focus(), 60); } }
+    : !sched ? { label: "Set a date", run: () => { setTab("Overview"); setTimeout(() => document.getElementById("jp-date")?.focus(), 60); } }
+    : { label: "Mark scheduled", run: () => goStep("Scheduled") };
+  const link = typeof window !== "undefined" ? `${window.location.origin}/maintenance/${id}` : `/maintenance/${id}`;
 
-        {/* Tabs — keep every feature one click away in a clean console */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "#FFFFFF", paddingBottom: 4 }}>
-          {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => (
-            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(0,163,255,0.5)" : "1px solid rgba(0,0,0,0.12)", background: tab === tb ? "#EEF4FF" : "#F5F5F7", color: tab === tb ? "#0071E3" : "#6E6E73" }}>{tb}</button>
-          ))}
+  return <div className="jp" style={{ position: "fixed", inset: 0, zIndex: 130, overflowY: "auto", backgroundColor: "#EEF2F7", backgroundImage: "linear-gradient(180deg,#0E1726 0px,#18263F 200px,#283B5E 380px,#5D7193 560px,#B4C1D6 760px,#E2E8F1 940px,#EEF2F7 1100px)", backgroundRepeat: "no-repeat", backgroundAttachment: "local", color: INK, fontFamily: FONT, letterSpacing: "-0.01em", WebkitOverflowScrolling: "touch" }}>
+    <style>{`
+      .jp *{box-sizing:border-box}
+      .jp h2{font-weight:600;letter-spacing:-.01em}
+      .jp button,.jp select,.jp input,.jp textarea{font-family:inherit}
+      .jp-wrap{max-width:1180px;margin:0 auto;padding:20px 24px calc(140px + env(safe-area-inset-bottom))}
+      .jp-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+      .jp-back{display:inline-flex;align-items:center;gap:6px;min-height:34px;border:0;background:none;color:#8EC1FF;font:500 14px ${FONT};cursor:pointer;padding:0 2px}
+      .jp-tbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font:500 13px ${FONT};cursor:pointer;text-decoration:none;white-space:nowrap}
+      .jp-hd{margin:14px 0 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+      .jp-hd .no{color:#8EC1FF;font-size:13px;font-weight:500;letter-spacing:.02em}
+      .jp-hd h1{margin:2px 0 0;color:#fff;font-size:28px;font-weight:600;letter-spacing:-.025em;line-height:1.2}
+      .jp-hd .sub{color:rgba(255,255,255,.72);font-size:14px;margin-top:4px}
+      .jp-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+      .jp-cmd{background:#fff;border-radius:16px;box-shadow:0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08);padding:16px 18px;margin-bottom:16px;display:grid;gap:14px}
+      .jp-steps{display:flex;align-items:flex-start;flex:1;min-width:260px}
+      .jp-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;border:0;background:none;cursor:pointer;padding:0;font:inherit;color:${INK3};position:relative}
+      .jp-step .d{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:#F0F1F4;color:${INK3};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08);z-index:1}
+      .jp-step.done .d{background:${BLUE};color:#fff}
+      .jp-step.cur .d{background:#fff;color:${BLUE};box-shadow:0 0 0 2px ${BLUE}}
+      .jp-step.cur{color:${INK};font-weight:600}
+      .jp-step .l{font-size:12.5px}
+      .jp-step:not(:last-child)::after{content:'';position:absolute;top:13px;left:calc(50% + 14px);right:calc(-50% + 14px);height:2px;background:#E5E5EA}
+      .jp-step.done:not(:last-child)::after{background:${BLUE}}
+      .jp-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+      .jp-pri{height:42px;padding:0 20px;border-radius:12px;border:0;color:#fff;font:600 15px ${FONT};cursor:pointer;white-space:nowrap}
+      .jp-pri:disabled{opacity:.6}
+      .jp-quick{display:flex;gap:8px;flex-wrap:wrap}
+      .jp-q{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:#fff;color:${INK};font:500 13px ${FONT};cursor:pointer;text-decoration:none}
+      .jp-q[aria-disabled=true]{opacity:.45;pointer-events:none}
+      .jp-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid ${LINE};padding-top:12px}
+      .jp-k{padding:0 12px;border-left:1px solid ${LINE};min-width:0}
+      .jp-k:first-child{border-left:0;padding-left:0}
+      .jp-k .l{font-size:12px;color:${INK3};font-weight:500}
+      .jp-k .v{font-size:16px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .jp-k .bar{height:4px;border-radius:2px;background:#EEF0F4;margin-top:6px;overflow:hidden}
+      .jp-k .bar i{display:block;height:100%;background:${BLUE}}
+      .jp-tabs{display:flex;gap:2px;padding:3px;border-radius:12px;background:#E8EBF0;width:max-content;max-width:100%;overflow-x:auto;position:sticky;top:8px;z-index:3;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+      .jp-tabs button{min-height:34px;padding:0 16px;border-radius:9px;border:0;background:none;font:500 13.5px ${FONT};color:${INK2};cursor:pointer;white-space:nowrap}
+      .jp-tabs button[aria-selected=true]{background:#fff;color:${INK};font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+      @media (max-width:860px){.jp-kpis{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:12px}.jp-k:nth-child(4){border-left:0;padding-left:0}}
+      @media (max-width:640px){.jp-row>div:last-child{width:100%}.jp-row>div:last-child select{flex:1}.jp-wrap{padding:16px 14px calc(140px + env(safe-area-inset-bottom))}.jp-hd h1{font-size:23px}.jp-pri{width:100%}.jp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.jp-k{border-left:0!important;padding-left:0!important}}
+    `}</style>
+    <div className="jp-wrap">
+      <div className="jp-top">
+        <button type="button" className="jp-back" onClick={onClose}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><path d="M15 18l-6-6 6-6" /></svg> Back</button>
+        {wo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="jp-tbtn" onClick={() => { navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? "Link copied ✓" : "Copy link"}</button>
+          <button type="button" className="jp-tbtn" onClick={() => printWorkOrder(wo, siteEquip)}><Printer size={14} /> Print</button>
+        </div>}
+      </div>
+      {loading ? <div style={{ color: "rgba(255,255,255,.75)", marginTop: 30 }}>Loading the job…</div> : !wo ? <div style={{ color: "#fff", marginTop: 30 }}>Couldn’t load this work order. <button type="button" className="jp-tbtn" onClick={() => load()}>Try again</button></div> : <>
+      <div className="jp-hd">
+        <div style={{ minWidth: 0 }}>
+          <div className="no">{wo.wo_number || "Work order"}{wo.job_type ? ` · ${wo.job_type}` : ""}</div>
+          <h1>{wo.title || "Work order"}</h1>
+          <div className="sub">{wo.customer_name || "No site"}{addr ? ` · ${addr}` : ""}</div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {wo.priority && <span className="jp-pill" style={/crit|urg/.test(String(wo.priority).toLowerCase()) ? { background: "#FFECEC", color: "#D70015" } : String(wo.priority).toLowerCase() === "high" ? { background: "#FFF4E5", color: "#B25000" } : { background: "rgba(255,255,255,.14)", color: "#fff" }}>{String(wo.priority)[0].toUpperCase() + String(wo.priority).slice(1)} priority</span>}
+          {onHold && <span className="jp-pill" style={{ background: "#FFF4E5", color: "#B25000" }}>{bucket === "Procurement" ? "Waiting on parts" : "Stuck"}</span>}
+          {late && <span className="jp-pill" style={{ background: "#FFECEC", color: "#D70015" }}>Late</span>}
+          {wo.is_callback && <span className="jp-pill" style={{ background: "#FFF4E5", color: "#B25000" }}>Callback</span>}
+        </div>
+      </div>
+
+      {/* Command card: where the job is, the next thing to do, reach the customer, the numbers. */}
+      <section className="jp-cmd" aria-label="Job status">
+        <div className="jp-row">
+          <div className="jp-steps" role="group" aria-label="Job progress — tap a step to move the job">
+            {STEPS.map((st, i) => <button key={st.key} type="button" className={`jp-step${i < stepIdx || (bucket === "Done" && i === stepIdx) ? " done" : ""}${i === stepIdx && bucket !== "Done" ? " cur" : ""}`} onClick={() => goStep(st.key)} aria-current={i === stepIdx ? "step" : undefined}>
+              <span className="d">{i < stepIdx || bucket === "Done" ? "✓" : i + 1}</span><span className="l">{st.label}</span>
+            </button>)}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {!onHold && bucket !== "Done" && <select aria-label="Put on hold" value="" onChange={e => { if (e.target.value) goStep(e.target.value); }} style={{ ...sel, height: 34 }}>
+              <option value="">Put on hold…</option><option value="Procurement">Waiting on parts</option><option value="Stuck">Stuck / blocked</option>
+            </select>}
+            {primary && <button type="button" className="jp-pri" onClick={primary.run} disabled={invBusy} style={{ background: primary.tone ?? BLUE }}>{primary.label}</button>}
+          </div>
+        </div>
+        {(hint || saveErr) && <div role="status" style={{ fontSize: 13, color: "#B25000", background: "#FFF4E5", borderRadius: 10, padding: "8px 12px" }}>{saveErr || hint}</div>}
+        {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div role="status" style={{ fontSize: 13, color: smsMsg.includes("✓") ? "#1A7F37" : "#D70015", background: smsMsg.includes("✓") ? "#E8F6EC" : "#FFECEC", borderRadius: 10, padding: "8px 12px" }}>{smsMsg}</div>}
+        <div className="jp-quick">
+          <a className="jp-q" href={phone ? `tel:${phone}` : undefined} aria-disabled={!phone} title={phone || "No phone on this site"}>Call{wo.site_contact_name ? ` ${String(wo.site_contact_name).split(" ")[0]}` : ""}</a>
+          <a className="jp-q" href={phone ? `sms:${phone}` : undefined} aria-disabled={!phone}>Text</a>
+          <a className="jp-q" href={addr ? `https://maps.google.com/?q=${encodeURIComponent(addr)}` : undefined} target="_blank" rel="noreferrer" aria-disabled={!addr}>Directions</a>
+          <button type="button" className="jp-q" onClick={() => setTab("Overview")}>Send customer an update</button>
+          <button type="button" className="jp-q" onClick={toggleTimer} disabled={timerBusy} style={activeEntry ? { background: "#E8F6EC", borderColor: "rgba(36,138,61,.35)", color: "#1A7F37", fontVariantNumeric: "tabular-nums" } : undefined}>{activeEntry ? `● Stop timer · ${runLabel}` : "▶ Start timer"}</button>
+          <button type="button" className="jp-q" onClick={() => { setTab("Activity"); setShowSign(true); }} style={signed ? { background: "#E8F6EC", borderColor: "rgba(36,138,61,.35)", color: "#1A7F37" } : undefined}>{signed ? "Customer signed ✓" : "Get customer signature"}</button>
+          {wo.site_access_notes && <span className="jp-q" style={{ background: "#FFF4E5", borderColor: "rgba(245,158,11,.35)", color: "#B25000", cursor: "default" }} title={String(wo.site_access_notes)}>Access: {String(wo.site_access_notes).slice(0, 40)}{String(wo.site_access_notes).length > 40 ? "…" : ""}</span>}
+        </div>
+        <div className="jp-kpis">
+          <div className="jp-k"><div className="l">Scheduled</div><div className="v" style={late ? { color: "#D70015" } : undefined}>{sched ? dayLabel(sched) : "Not set"}</div></div>
+          <div className="jp-k"><div className="l">Tech</div><div className="v">{wo.assignee_name || "Unassigned"}{crew.length ? ` +${crew.length}` : ""}</div></div>
+          <div className="jp-k"><div className="l">Steps</div><div className="v">{doneCount}/{checklist.length}</div><div className="bar"><i style={{ width: `${checklist.length ? (doneCount / checklist.length) * 100 : 0}%` }} /></div></div>
+          <div className="jp-k"><div className="l">Parts here</div><div className="v" style={parts.length && partsHere < parts.length ? { color: "#B25000" } : undefined}>{parts.length ? `${partsHere}/${parts.length}` : "None"}</div></div>
+          <div className="jp-k"><div className="l">Labor</div><div className="v">{laborHrs} hrs{activeEntry ? <span style={{ color: "#1A7F37", fontSize: 12, fontWeight: 500 }}> · running</span> : null}</div></div>
+          <div className="jp-k"><div className="l">Parts margin</div><div className="v">{partsRev > 0 ? `${money(margin)} · ${marginPct}%` : "—"}</div></div>
+        </div>
+      </section>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 16 }}>
+        {/* Tabs — every feature one tap away */}
+        <div className="jp-tabs" role="tablist" aria-label="Job sections">
+          {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => <button key={tb} type="button" role="tab" aria-selected={tab === tb} onClick={() => setTab(tb)}>{tb === "Execution" ? "Work & money" : tb === "Activity" ? "Notes, photos & files" : tb}</button>)}
         </div>
 
         {tab === "Overview" && (<>
         <Card>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(stOf(wo))} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select id="jp-tech" value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input id="jp-date" type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Priority</Small><select value={String(wo.priority ?? "medium").toLowerCase() === "normal" ? "medium" : String(wo.priority ?? "medium").toLowerCase()} onChange={e => patchField({ priority: e.target.value })} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="low">Low</option><option value="medium">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Due by (promised to customer)</Small><input type="date" value={wo.due_date ? String(wo.due_date).slice(0, 10) : ""} onChange={e => patchField({ due_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Job type</Small><div style={{ ...sel, width: "100%", marginTop: 4, display: "flex", alignItems: "center", background: "#F7F8FA" }}>{wo.job_type || "—"}</div></div>
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6E6E73", cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
@@ -2543,6 +2773,18 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
+        {/* Customer sign-off (ServiceTitan / Housecall Pro style) */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: showSign ? 10 : 0 }}>
+            <div>
+              <h2 style={{ fontSize: 15 }}>Customer sign-off</h2>
+              <Small>{signed ? "Signed ✓ — saved with the job photos." : "Have the customer sign on your phone or tablet when the work is done."}</Small>
+            </div>
+            {!showSign && <button type="button" onClick={() => setShowSign(true)} style={signed ? btn2 : btn}>{signed ? "Sign again" : "Get signature"}</button>}
+          </div>
+          {showSign && <SignOffPad onSave={saveSignature} onCancel={() => setShowSign(false)} busy={signBusy} />}
+        </Card>
+
         {/* Photos (proof) */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -2559,13 +2801,60 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         </Card>
 
         {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "#3A3A3C", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
+
+        {extraMsg && <div role="status" style={{ fontSize: 13, color: /didn|fail|couldn/i.test(extraMsg) ? "#D70015" : "#1A7F37", background: /didn|fail|couldn/i.test(extraMsg) ? "#FFECEC" : "#E8F6EC", borderRadius: 10, padding: "8px 12px" }}>{extraMsg}</div>}
+
+        {/* Tasks linked to this job (they also show in To-Dos and on My Day) */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Tasks ({extra.tasks.length})</h2>
+          {extra.tasks.length === 0 ? <Small>No tasks yet. Add follow-ups like “order the replacement motor”.</Small> : <div style={{ display: "grid", gap: 6 }}>
+            {extra.tasks.map(t => { const done = t.status === "done" || t.status === "completed"; const due = t.due_date ? String(t.due_date).slice(0, 10) : null; const lateT = !!due && !done && due < todayKey();
+              return <div key={t.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 10, background: "#F7F8FA" }}>
+                <span style={{ fontSize: 14, textDecoration: done ? "line-through" : undefined, color: done ? "#6E6E73" : INK }}>{t.title}</span>
+                <span style={{ fontSize: 12.5, color: lateT ? "#D70015" : "#6E6E73", whiteSpace: "nowrap" }}>{due ? `${lateT ? "Late · " : ""}${dayLabel(due)}` : "No date"}</span>
+              </div>; })}
+          </div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <input aria-label="New task" placeholder="Add a task…" value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} onKeyDown={e => { if (e.key === "Enter") addJobTask(); }} style={{ ...input, padding: 9, flex: "1 1 200px" }} />
+            <input aria-label="Task due date" type="date" value={taskForm.due} onChange={e => setTaskForm({ ...taskForm, due: e.target.value })} style={{ ...input, padding: 9, width: 150, flex: "0 0 auto" }} />
+            <button onClick={addJobTask} disabled={extraBusy || !taskForm.title.trim()} style={{ ...btn, opacity: extraBusy || !taskForm.title.trim() ? 0.6 : 1 }}>Add</button>
+          </div>
+        </Card>
+
+        {/* Files: drawings, quotes, permits, manuals */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h2 style={{ fontSize: 15 }}>Files ({extra.files.length})</h2>
+            <label style={{ ...btn, padding: "6px 12px", display: "inline-block" }}>{extraBusy ? "Working…" : "+ File"}
+              <input type="file" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadJobFile(f); e.target.value = ""; }} />
+            </label>
+          </div>
+          {extra.files.length === 0 ? <Small>No files yet. Add drawings, permits or the signed quote.</Small> : <div style={{ display: "grid", gap: 6 }}>
+            {extra.files.map(f => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 10, background: "#F7F8FA", color: INK, textDecoration: "none", fontSize: 14 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.file_name || "File"}</span>
+              <span style={{ fontSize: 12.5, color: "#6E6E73", whiteSpace: "nowrap" }}>{f.created_at ? dayLabel(String(f.created_at).slice(0, 10)) : ""}</span>
+            </a>)}
+          </div>}
+        </Card>
+
+        {/* Follow-up work orders spun off this job */}
+        {extra.subs.length > 0 && <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Follow-up work orders ({extra.subs.length})</h2>
+          <div style={{ display: "grid", gap: 6 }}>
+            {extra.subs.map(w => <a key={w.id} href={`/maintenance/${w.id}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 10, background: "#F7F8FA", color: INK, textDecoration: "none", fontSize: 14 }}>
+              <span>{w.wo_number ? `${w.wo_number} · ` : ""}{w.title || "Work order"}</span>
+              <span style={{ fontSize: 12.5, color: "#6E6E73", whiteSpace: "nowrap" }}>{bucketOf(String(w.status ?? ""))}{w.assignee_name ? ` · ${w.assignee_name}` : ""}</span>
+            </a>)}
+          </div>
+        </Card>}
         </>)}
 
         {bucketOf(stOf(wo)) !== "Done" && <div>
           <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#248A3D" : "#F5F5F7", color: canComplete ? "white" : "#6E6E73", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
           {!canComplete && <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#B25000", textAlign: "center", marginTop: 8 }}><Lock size={12} /> {completeBlockReason}</p>}
         </div>}
-      </div>}
+      </div>
+      </>}
     </div>
   </div>;
 }

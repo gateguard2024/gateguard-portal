@@ -106,6 +106,16 @@ export const READ_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: { query: { type: 'string' }, unread: { type: 'boolean' }, limit: { type: 'number' } } },
   },
   {
+    name: 'waiting_on_me',
+    description: 'Who is waiting on the user: email threads in their synced inbox where the LAST message came from someone else (they owe a reply), oldest wait first, with the linked deal if any. Skips automated senders. Use for "who\'s waiting on me", "what emails do I owe", "inbox", "follow-ups".',
+    input_schema: { type: 'object', properties: { days: { type: 'number', description: 'Look back this many days (default 14).' }, limit: { type: 'number' } } },
+  },
+  {
+    name: 'get_thread',
+    description: 'Read one email thread from the user\'s own inbox by id: the last few messages (who said what), the linked deal, plus a few of the user\'s own recent sent emails as style samples. Use before drafting a reply so it sounds like the user. Lexi cannot send email yet — write the draft in the reply for the user to copy.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
     name: 'my_calendar',
     description: 'The user\'s calendar for the next N days (default 1 = today): Google Calendar events plus jobs scheduled to them.',
     input_schema: { type: 'object', properties: { days: { type: 'number' } } },
@@ -128,7 +138,7 @@ export const TOOL_LABEL: Record<string, string> = {
   daily_brief: 'Pulling your day together', find_deals: 'Looking through deals', get_deal: 'Opening the deal',
   find_work_orders: 'Checking jobs', get_work_order: 'Opening the job', find_sites: 'Finding the property',
   site_status: 'Checking the systems', find_tasks: 'Checking tasks', find_leads: 'Looking through leads',
-  find_customers: 'Finding the customer', find_messages: 'Checking your inbox', my_calendar: 'Checking your calendar',
+  find_customers: 'Finding the customer', find_messages: 'Checking your inbox', waiting_on_me: 'Checking who’s waiting on you', get_thread: 'Reading the email', my_calendar: 'Checking your calendar',
   search_manuals: 'Searching the manuals', nexus_help: 'Checking the Nexus guide',
 }
 
@@ -273,6 +283,44 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       if (error) return { data: { error: error.message } }
       const rows = (data ?? []) as Row[]
       return { data: rows, cards: rows.slice(0, 6).map(t => ({ kind: 'thread', id: t.id, title: t.subject || '(no subject)', sub: [Array.isArray(t.participants) ? t.participants.slice(0, 2).join(', ') : null, t.unread_count ? `${t.unread_count} unread` : null].filter(Boolean).join(' · '), href: '/?tab=my-day', tone: t.unread_count ? 'orange' : 'blue' })) }
+    }
+    case 'waiting_on_me': {
+      const days = clamp(input.days, 14, 60)
+      const since = new Date(Date.now() - days * 86400000).toISOString()
+      const { data: th, error } = await sb.from('message_threads').select('*').eq('user_id', ctx.user.id).gte('last_message_at', since).order('last_message_at', { ascending: false }).limit(80)
+      if (error) return { data: { error: error.message } }
+      const threads = (th ?? []) as Row[]
+      if (!threads.length) return { data: { waiting: [], note: 'No email in the last ' + days + ' days. Is Gmail connected (Settings → Connections)?' } }
+      const { data: ms, error: mErr } = await sb.from('messages').select('thread_id, direction, from_name, from_address, subject, body, created_at, sent_at').in('thread_id', threads.map(t => t.id)).order('created_at', { ascending: false }).limit(400)
+      if (mErr) return { data: { error: mErr.message } }
+      const last = new Map<string, Row>()
+      for (const m of (ms ?? []) as Row[]) if (!last.has(m.thread_id)) last.set(m.thread_id, m)
+      const BOT = /(no-?reply|do-?not-?reply|notifications?@|mailer-daemon|postmaster|bounce|newsletter|marketing@|@.*\.(hubspot|mailchimp|sendgrid)\.)/i
+      const waiting = threads.map(t => ({ t, m: last.get(t.id) }))
+        .filter(x => x.m && x.m.direction === 'inbound' && !BOT.test(String(x.m.from_address ?? '')))
+        .map(({ t, m }) => ({ id: t.id, subject: t.subject || m!.subject || '(no subject)', from: m!.from_name || m!.from_address, from_address: m!.from_address, waiting_since: m!.sent_at ?? m!.created_at, waiting_days: daysAgo(m!.sent_at ?? m!.created_at), preview: String(m!.body ?? '').replace(/\s+/g, ' ').slice(0, 220), deal_id: t.linked_opportunity_id ?? (t.linked_type === 'opportunity' ? t.linked_id : null), linked: t.linked_label ?? null }))
+        .sort((a, b) => String(a.waiting_since).localeCompare(String(b.waiting_since)))
+        .slice(0, clamp(input.limit, 12))
+      return { data: { waiting, count: waiting.length }, cards: waiting.slice(0, 6).map(w => ({ kind: 'thread', id: w.id, title: w.subject, sub: [w.from, w.waiting_days != null ? `waiting ${w.waiting_days === 0 ? 'since today' : `${w.waiting_days}d`}` : null].filter(Boolean).join(' · '), href: '/messages', tone: (w.waiting_days ?? 0) >= 2 ? 'orange' : 'blue' })) }
+    }
+    case 'get_thread': {
+      if (!has(input.id)) return { data: { error: 'id is required' } }
+      const { data: t, error } = await sb.from('message_threads').select('*').eq('id', input.id).eq('user_id', ctx.user.id).maybeSingle()
+      if (error) return { data: { error: error.message } }
+      if (!t) return { data: { error: 'That thread isn’t in your inbox.' } }
+      const [msgs, sent] = await Promise.all([
+        sb.from('messages').select('direction, from_name, from_address, subject, body, created_at, sent_at').eq('thread_id', t.id).order('created_at', { ascending: false }).limit(6),
+        sb.from('messages').select('body, thread_id, message_threads!inner(user_id)').eq('direction', 'outbound').eq('message_threads.user_id', ctx.user.id).order('created_at', { ascending: false }).limit(4),
+      ])
+      const clean = (b: unknown) => String(b ?? '').split(/\n\s*(On .+wrote:|-----Original Message-----|From: )/)[0].replace(/\s+\n/g, '\n').trim().slice(0, 1800)
+      return {
+        data: {
+          subject: t.subject, deal_id: t.linked_opportunity_id ?? (t.linked_type === 'opportunity' ? t.linked_id : null), linked: t.linked_label ?? null,
+          messages: ((msgs.data ?? []) as Row[]).reverse().map(m => ({ from: m.direction === 'outbound' ? 'the user' : (m.from_name || m.from_address), from_address: m.direction === 'outbound' ? undefined : m.from_address, at: m.sent_at ?? m.created_at, text: clean(m.body) })),
+          your_style_samples: sent.error ? [] : ((sent.data ?? []) as Row[]).map(m => clean(m.body).slice(0, 500)).filter(Boolean),
+        },
+        cards: [{ kind: 'thread', id: t.id, title: t.subject || '(no subject)', sub: t.linked_label ?? 'Email thread', href: '/messages', tone: 'blue' }],
+      }
     }
     case 'my_calendar': {
       const days = clamp(input.days, 1, 14)

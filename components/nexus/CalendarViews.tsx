@@ -146,6 +146,34 @@ const formatTime = (iso?: string | null, allDay?: boolean) => {
   if (!iso) return '';
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
+// ── "Needs a date": open tasks and jobs that are late or have no date ──────────
+type NeedItem = { id: string; kind: 'todo' | 'job'; title: string; sub?: string | null; due: string | null; late: boolean; rawStatus?: string };
+const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const CLOSED_JOB = /^(completed|closed|cancel+ed|done|invoiced)$/i;
+const loadNeeds = async (scope: 'me' | 'team'): Promise<NeedItem[]> => {
+  const today = ymdLocal(new Date());
+  const [t, j] = await Promise.all([
+    fetch(`/api/todos?view=${scope === 'team' ? 'team' : 'mine'}&status=open,in_progress,waiting&limit=300`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : {})).catch(() => ({})),
+    fetch('/api/dispatch', { cache: 'no-store' }).then(r => (r.ok ? r.json() : {})).catch(() => ({})),
+  ]);
+  const out: NeedItem[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const x of ((t as any).todos ?? []) as any[]) {
+    const due = x.due_date ? String(x.due_date).slice(0, 10) : null;
+    if (!due || due < today) out.push({ id: x.id, kind: 'todo', title: x.title || 'Task', sub: x.linked_label ?? null, due, late: !!due });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const x of ((j as any).jobs ?? []) as any[]) {
+    if (CLOSED_JOB.test(String(x.rawStatus ?? ''))) continue;
+    const raw = x.eta && x.eta !== 'TBD' ? String(x.eta).slice(0, 10) : null;
+    const due = raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+    if (!due || due < today) out.push({ id: x.id, kind: 'job', title: `${x.woNumber ? `${x.woNumber} · ` : ''}${x.title || 'Work order'}`, sub: [x.property, x.assignedTech].filter(Boolean).join(' · ') || null, due, late: !!due, rawStatus: x.rawStatus });
+  }
+  // Late first (oldest first), then undated.
+  return out.sort((a, b) => (a.due && b.due ? a.due.localeCompare(b.due) : a.due ? -1 : b.due ? 1 : 0));
+};
+const dueLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
 const INITIAL_DATE = new Date();
 export default function CalendarViews({ onChange }: { onChange?: () => void } = {}) {
   const [currentDate, setCurrentDate] = useState(INITIAL_DATE);
@@ -241,6 +269,86 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       setIsLoading(false);
     });
   }, [currentDate, scope, view]);
+  // Needs a date
+  const [needs, setNeeds] = useState<NeedItem[]>([]);
+  const [needsTab, setNeedsTab] = useState<'late' | 'none'>('late');
+  const [needsOpen, setNeedsOpen] = useState(true);
+  const [needsMsg, setNeedsMsg] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
+  useEffect(() => { loadNeeds(scope).then(setNeeds); }, [scope]);
+  const lateNeeds = needs.filter(n => n.late);
+  const noDateNeeds = needs.filter(n => !n.late);
+  useEffect(() => { if (needsTab === 'late' && lateNeeds.length === 0 && noDateNeeds.length > 0) setNeedsTab('none'); }, [needsTab, lateNeeds.length, noDateNeeds.length]);
+  const reschedule = async (item: NeedItem, day: string) => {
+    if (!day) return;
+    setNeedsMsg(null);
+    try {
+      const r = item.kind === 'todo'
+        ? await fetch(`/api/todos/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ due_date: day }) })
+        : await fetch(`/api/maintenance/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduled_date: day, ...(/^(open|new)$/i.test(item.rawStatus ?? '') ? { status: 'scheduled' } : {}) }) });
+      if (!r.ok) { setNeedsMsg(`Couldn’t move “${item.title}”. Try again.`); return; }
+      setNeeds(prev => prev.filter(n => !(n.id === item.id && n.kind === item.kind)));
+      setNeedsMsg(`Moved “${item.title}” to ${dueLabel(day)}.`);
+      setTimeout(() => setNeedsMsg(null), 3500);
+      // Show it on the calendar right away.
+      const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+      loadEvents(start, start, scope).then(setEvents);
+      onChange?.();
+    } catch { setNeedsMsg(`Couldn’t move “${item.title}”. Try again.`); }
+  };
+  const dropOn = (day: Date) => ({
+    onDragOver: (e: React.DragEvent) => { if (dragId) { e.preventDefault(); setDropKey(day.toDateString()); } },
+    onDragLeave: () => setDropKey(k => (k === day.toDateString() ? null : k)),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setDropKey(null); const it = needs.find(n => `${n.kind}:${n.id}` === dragId); setDragId(null); if (it) void reschedule(it, ymdLocal(day)); },
+  });
+  const renderNeedsPanel = () => {
+    if (needs.length === 0 && !needsMsg) return null;
+    const list = needsTab === 'late' ? lateNeeds : noDateNeeds;
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    return (
+      <section aria-label="Needs a date" className="mb-3 rounded-2xl border border-black/10 bg-[#FAFAFB]">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
+          <button type="button" onClick={() => setNeedsOpen(o => !o)} className="flex items-center gap-2 text-left" aria-expanded={needsOpen}>
+            <span className="text-sm font-semibold text-[#1D1D1F]">Needs a date</span>
+            {lateNeeds.length > 0 && <span className="rounded-full bg-[#FFECEC] px-2 py-0.5 text-[11px] font-semibold text-[#D70015]">{lateNeeds.length} late</span>}
+            {noDateNeeds.length > 0 && <span className="rounded-full bg-[#F0F1F4] px-2 py-0.5 text-[11px] font-semibold text-[#3A3A3C]">{noDateNeeds.length} no date</span>}
+            <ChevronDown size={14} className={`text-[#6E6E73] transition-transform ${needsOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {needsOpen && <div className="flex items-center gap-1 rounded-lg bg-[#E8EBF0] p-0.5 text-xs" role="tablist">
+            {([['late', `Late (${lateNeeds.length})`], ['none', `No date (${noDateNeeds.length})`]] as const).map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={needsTab === k} onClick={() => setNeedsTab(k)} className={`rounded-md px-2.5 py-1 font-medium ${needsTab === k ? 'bg-white font-semibold text-[#1D1D1F] shadow-sm' : 'text-[#3A3A3C]'}`}>{l}</button>
+            ))}
+          </div>}
+        </div>
+        {needsMsg && <div role="status" className={`mx-3.5 mb-2 rounded-lg px-3 py-1.5 text-xs ${/Couldn/.test(needsMsg) ? 'bg-[#FFECEC] text-[#D70015]' : 'bg-[#E8F6EC] text-[#1A7F37]'}`}>{needsMsg}</div>}
+        {needsOpen && (
+          <div className="max-h-[260px] overflow-y-auto border-t border-black/5 px-2 py-1.5">
+            {list.length === 0 ? <div className="px-2 py-4 text-center text-xs text-[#6E6E73]">{needsTab === 'late' ? 'Nothing is late. Nice.' : 'Everything has a date.'}</div> : list.map(n => {
+              const key = `${n.kind}:${n.id}`;
+              return (
+                <div key={key} draggable onDragStart={e => { setDragId(key); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', key); }} onDragEnd={() => { setDragId(null); setDropKey(null); }}
+                  className={`flex flex-wrap items-center gap-2 rounded-xl px-2 py-2 hover:bg-white sm:flex-nowrap ${dragId === key ? 'opacity-50' : ''}`} style={{ cursor: 'grab' }} title="Drag onto a day, or pick a date">
+                  <span className="hidden text-[#AEAEB2] sm:inline" aria-hidden>⋮⋮</span>
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: n.kind === 'job' ? CATEGORIES.jobs.color : CATEGORIES.todos.color }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-medium text-[#1D1D1F]">{n.title}</div>
+                    <div className="truncate text-[11.5px] text-[#6E6E73]">{n.kind === 'job' ? 'Job' : 'Task'}{n.sub ? ` · ${n.sub}` : ''}{n.due ? <span className="text-[#D70015]"> · was due {dueLabel(n.due)}</span> : ''}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => void reschedule(n, ymdLocal(new Date()))} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11.5px] font-medium text-[#1D1D1F] hover:bg-[#F0F1F4]">Today</button>
+                    <button type="button" onClick={() => void reschedule(n, ymdLocal(tomorrow))} className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11.5px] font-medium text-[#1D1D1F] hover:bg-[#F0F1F4]">Tomorrow</button>
+                    <input type="date" aria-label={`Pick a date for ${n.title}`} min={ymdLocal(new Date())} onChange={e => { if (e.target.value) void reschedule(n, e.target.value); }} className="w-[124px] rounded-lg border border-black/10 bg-white px-1.5 py-[3px] text-[11.5px] text-[#1D1D1F]" />
+                  </div>
+                </div>
+              );
+            })}
+            {list.length > 0 && <div className="hidden px-2 pb-1 pt-0.5 text-[11px] text-[#8E8E93] sm:block">Tip: drag an item onto a day in the calendar.</div>}
+          </div>
+        )}
+      </section>
+    );
+  };
   const filteredEvents = useMemo(() => {
     return events.filter(e => activeFilters.has(e.category));
   }, [events, activeFilters]);
@@ -291,8 +399,11 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                 key={idx}
                 type="button"
                 onClick={() => setSelectedDate(date)}
+                {...dropOn(date)}
                 className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
-                  isSelected
+                  dropKey === date.toDateString()
+                    ? 'border-[#0071E3] bg-[#DCE8F8] ring-2 ring-[#0071E3]/40'
+                    : isSelected
                     ? 'border-[#0071E3] bg-[#EEF4FF]'
                     : isToday
                     ? 'border-[#0071E3]/50 bg-[#EEF4FF]'
@@ -333,7 +444,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
           const isToday = new Date().toDateString() === day.toDateString();
           const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === day.toDateString());
           return (
-            <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-black/5">
+            <div key={idx} {...dropOn(day)} className={`flex-1 flex flex-col border-r last:border-r-0 border-black/5 ${dropKey === day.toDateString() ? 'bg-[#DCE8F8]' : ''}`}>
               <div className="p-3 border-b border-black/5 flex flex-col items-center bg-white">
                 <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
@@ -671,6 +782,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
 
       <div className="relative z-10 flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col">
+          {renderNeedsPanel()}
           {view === 'Month' && renderMonthView()}
           {view === 'Week' && renderWeekView()}
           {view === 'Day' && renderDayView()}

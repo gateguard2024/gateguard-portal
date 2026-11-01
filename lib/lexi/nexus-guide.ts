@@ -22,8 +22,8 @@ export const NEXUS_GUIDE: GuideSection[] = [
   },
   {
     id: 'my-day', title: 'My Day', where: 'My Day tab',
-    keywords: 'my day today tasks calendar inbox messages schedule summary overdue',
-    text: `My Day is your home base: your tasks (overdue first), today's calendar, and your email inbox synced from Gmail. Tap a task to open it. The calendar shows jobs, maintenance visits, to-dos and Google Calendar events; switch Month / Week / Day / List at the top, and use Add Event to create one. Connect Google Calendar from the calendar's Sync button.`,
+    keywords: 'my day today tasks calendar inbox messages schedule summary overdue reschedule needs a date unscheduled late',
+    text: `My Day is your home base: your tasks (overdue first), today's calendar, and your email inbox synced from Gmail. Tap a task to open it. The calendar shows jobs, maintenance visits, to-dos and Google Calendar events; switch Month / Week / Day / List at the top, and use Add Event to create one. Connect Google Calendar from the calendar's Sync button. Above the calendar, "Needs a date" lists late and undated tasks and jobs: tap Today, Tomorrow or pick a date, or drag one onto a day.`,
   },
   {
     id: 'tasks', title: 'Tasks (to-dos)', where: 'My Day → Tasks, or any deal / customer / work order',
@@ -57,8 +57,8 @@ export const NEXUS_GUIDE: GuideSection[] = [
   },
   {
     id: 'work-order', title: 'Working a job (work order)', where: 'Open any work order',
-    keywords: 'work order job create assign tech schedule status complete checklist photos crew visits text customer on my way arrived review print invoice parts labor',
-    text: `Create one with New work order: pick the site, say what needs doing, set priority, tech and date (tick "Email the assigned tech"). Inside a job: Overview has status, tech, schedule date, Text the customer (On my way with ETA, Arrived, Job done, Ask for review), crew and extra visits. Scope has the work to perform, the site's past work and equipment. Execution has AI Tech Support, money on the job (parts, labor, margin, Create invoice), steps / checklist (assign a playbook, group into phases), and parts. Activity has team chat, photos and notes. Complete Work Order unlocks when all steps are done and a photo is added. Print makes a paper work order.`,
+    keywords: 'work order job create assign tech schedule status complete checklist photos crew visits text customer on my way arrived review print invoice parts labor timer clock signature sign-off priority due hold tasks files',
+    text: `Create one with New work order: pick the site, say what needs doing, set priority, tech and date (tick "Email the assigned tech"). Opening a job shows the full job page. At the top: the progress steps New → Scheduled → Working → Done (tap one to move the job), one big button for the next step (Assign a tech, Set a date, Start job, Finish job, Create invoice), "Put on hold" (waiting on parts / stuck), and quick buttons: Call, Text, Directions, Send customer an update, Start timer (clocks labor on the job) and Get customer signature. Below that: Scheduled, Tech, Steps, Parts here, Labor and Parts margin. Tabs: Overview (status, tech, schedule date, priority, due-by date, text the customer — On my way with ETA, Arrived, Job done, Ask for review — crew and extra visits). Scope (work to perform, the site's past work and equipment). Work & money (AI Tech Support, parts, labor, margin, Create invoice, steps / checklist with playbooks and phases, parts and purchase orders). Notes, photos & files (team chat, customer sign-off, photos, notes, tasks for this job, files, follow-up work orders). Done unlocks when all steps are checked and a photo is added. Copy link and Print are top right.`,
   },
   {
     id: 'sites', title: 'Sites (properties)', where: 'Operations Hub → Locations, or Customers',
@@ -92,8 +92,8 @@ export const NEXUS_GUIDE: GuideSection[] = [
   },
   {
     id: 'lexi', title: 'Lexi (this assistant)', where: 'Center tab (Nexus logo)',
-    keywords: 'lexi ai assistant what can you do help undo confirm',
-    text: `Lexi reads deals, jobs, sites, tasks, leads, customers, your inbox and calendar, equipment manuals and this guide, and does work for you: tasks, notes and follow-ups happen right away with Undo; work orders, deals, leads, proposals, assigning techs and won/lost wait for you to tap Confirm. Coming soon: sending email, texting customers, calls, and opening gates.`,
+    keywords: 'lexi ai assistant what can you do help undo confirm brain remember memory forget recording plaud meeting transcript notes inbox waiting reply draft',
+    text: `Lexi reads deals, jobs, sites, tasks, leads, customers, your inbox and calendar, equipment manuals and this guide, and does work for you: tasks, notes and follow-ups happen right away with Undo; work orders, deals, leads, proposals, assigning techs and won/lost wait for you to tap Confirm. Brain: tap Brain to see what Lexi remembers — "Just for me" preferences and the shared company Brain (pricing, policies, scripts, how we write; admins and supervisors edit it). You can also say "remember that…" or "forget…". Inbox: ask "who's waiting on me?" — Lexi lists emails where you owe a reply and drafts replies in your voice (tap Copy draft). Recording: tap Recording, add an audio file (Plaud, phone voice memo) or paste a transcript; Lexi writes a summary, to-dos (tap Add tasks), a note to log on the deal, and a follow-up email to copy. Coming soon: sending email, texting customers, calls, and opening gates.`,
   },
 ]
 
