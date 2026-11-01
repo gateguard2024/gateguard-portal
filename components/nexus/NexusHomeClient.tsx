@@ -85,6 +85,18 @@ export default function NexusHomeClient() {
   const { user } = useUser()
   const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
   const isCorporate = meta.org_tier === 'corporate'
+  // Lexi has something for you: count of urgent "I noticed…" items (red/orange) → glowing ring on the center button.
+  const [lexiCount, setLexiCount] = useState(0)
+  useEffect(() => {
+    if (!isCorporate) return
+    let alive = true
+    const check = () => fetch('/api/lexi/nudges').then(r => (r.ok ? r.json() : { nudges: [] })).then(d => {
+      if (alive) setLexiCount((Array.isArray(d?.nudges) ? d.nudges : []).filter((n: { tone?: string }) => n.tone === 'red' || n.tone === 'orange').length)
+    }).catch(() => {})
+    void check()
+    const t = setInterval(check, 10 * 60 * 1000)
+    return () => { alive = false; clearInterval(t) }
+  }, [isCorporate])
   const isAdmin =
     meta.org_tier === 'corporate' ||
     meta.org_tier === 'master_dealer' ||
@@ -200,13 +212,17 @@ export default function NexusHomeClient() {
             return <button key={id} type="button" onClick={() => goTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: '#FFFFFF', border: '1px solid #FFFFFF', color: '#1D1D1F', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.2)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.82)' }}>{label}</button>
           })}
           {/* Lexi — the Nexus logo, center of the bar (Phase 1: corporate only). */}
-          {isCorporate && <button type="button" onClick={() => goTab('lexi')} aria-label="Lexi — Nexus AI" title="Lexi — Nexus AI" aria-current={activeTab === 'lexi' ? 'page' : undefined}
-            className="mx-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105"
+          {isCorporate && <button type="button" onClick={() => goTab('lexi')} aria-label={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} title={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} aria-current={activeTab === 'lexi' ? 'page' : undefined}
+            className="relative mx-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105"
             style={{ background: activeTab === 'lexi' ? 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)' : 'rgba(255,255,255,0.08)', border: activeTab === 'lexi' ? '1px solid rgba(255,255,255,0.7)' : '1px solid rgba(107,126,255,0.45)', boxShadow: activeTab === 'lexi' ? '0 0 22px rgba(74,140,255,0.55)' : '0 0 14px rgba(74,140,255,0.25)' }}>
             <svg width="24" height="24" viewBox="0 0 68 68" fill="none" aria-hidden="true">
               <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="#fff" strokeWidth="4" fill={activeTab === 'lexi' ? 'rgba(255,255,255,0.18)' : 'rgba(0,113,227,0.25)'} />
               <circle cx="34" cy="34" r="7" fill={activeTab === 'lexi' ? '#fff' : '#4AA3FF'} />
             </svg>
+            {lexiCount > 0 && activeTab !== 'lexi' && <>
+              <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full" style={{ border: '2px solid rgba(74,163,255,0.7)', animationDuration: '2.4s' }} />
+              <span aria-hidden className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10.5px] font-semibold text-white" style={{ background: '#FF3B30', boxShadow: '0 0 0 2px #0E1726' }}>{lexiCount > 9 ? '9+' : lexiCount}</span>
+            </>}
           </button>}
           {NAV_RIGHT.map(({ label, id }) => {
             const active = activeTab === id

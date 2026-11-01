@@ -12,18 +12,22 @@
  *   • Mic: browser dictation where supported.
  *   • Phase 2: Brain panel (what Lexi remembers) and Recording panel (meeting →
  *     notes, to-dos, deal note, follow-up email). Drafted replies get a Copy button.
+ *   • Phase 4: hands-free voice — Talk: listen → Lexi answers out loud → listens again.
+ *     Say "confirm" / "skip" for actions, "undo", or "stop". Uses the browser's own
+ *     speech (Web Speech API), so there's no extra cost or account. Read-aloud toggle too.
  *   • Phase 3: "I noticed…" list (/api/lexi/nudges) with Ask / Open / Later, and the
  *     weekday morning-brief email switch + "Send me one now" (/api/lexi/brief).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { T, FONT } from '@/components/nexus/tasks/shared'
 import { BrainPanel, RecordingPanel } from '@/components/nexus/lexi/LexiPanels'
+import { LexiChart, type LexiChartData } from '@/components/nexus/lexi/LexiChart'
 
 type Card = { kind: string; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
 type RevertPayload = { operation: 'delete' | 'update'; table: string; id: string; data?: Record<string, unknown> }
 type Did = { ok: boolean; summary: string; message?: string; revertPayload?: RevertPayload | null; undone?: boolean; at: number }
 type Pending = { toolName: string; toolArgs: Record<string, unknown>; summary: string; reasoning?: string; riskLevel: 'medium' | 'high'; state?: 'waiting' | 'running' | 'done' | 'skipped' | 'failed'; result?: string; revertPayload?: RevertPayload | null }
-type Msg = { id: string; role: 'user' | 'assistant'; text: string; cards: Card[]; did: Did[]; pending: Pending | null; status?: string; error?: string; streaming?: boolean }
+type Msg = { id: string; role: 'user' | 'assistant'; text: string; cards: Card[]; charts?: LexiChartData[]; did: Did[]; pending: Pending | null; status?: string; error?: string; streaming?: boolean }
 type Conv = { id: string; title: string | null; updated_at: string }
 type Brief = { name?: string; email?: string; emailBrief?: boolean; settingsError?: string; tasks: number; today: number; unassigned: number; overdue: number; stalled: number; incidents: number; expiring: number; error?: string }
 type Nudge = { key: string; tone: 'red' | 'orange' | 'blue'; kind: string; title: string; detail: string; ask: string; href?: string }
@@ -36,7 +40,7 @@ const CSS = `
 .lx-hi{display:flex;align-items:center;gap:16px;min-width:0}
 .lx-hd h1{margin:0;color:#fff;font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15}
 .lx-hd .sub{margin-top:4px;color:rgba(255,255,255,.7);font-size:14px}
-.lx-acts{display:flex;gap:8px}
+.lx-acts{display:flex;gap:8px;flex-wrap:wrap}
 .lx-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:0;font:600 13px ${FONT};cursor:pointer;white-space:nowrap}
 .lx-btn.dark{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-weight:500}
 .lx-btn.pri{background:${T.blue};color:#fff}.lx-btn.pri:hover{background:${T.blueDark}}
@@ -96,6 +100,19 @@ const CSS = `
 .lx-ico{width:42px;height:42px;border-radius:12px;border:1px solid ${T.line2};background:#fff;color:${T.ink2};display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
 .lx-ico.send{background:${T.blue};border-color:${T.blue};color:#fff}
 .lx-ico.rec{background:#FFECEC;border-color:#F5C2C2;color:${T.red}}
+.lx-ico.on{background:#EEF4FF;border-color:#D6E4FF;color:${T.blue}}
+.lx-orb.listen{animation:lx-listen 1.2s ease-in-out infinite}
+.lx-orb.speak{animation:lx-speak .45s ease-in-out infinite alternate}
+@keyframes lx-listen{0%,100%{box-shadow:0 0 18px rgba(74,140,255,.45),0 0 0 0 rgba(74,140,255,.5)}50%{box-shadow:0 0 30px rgba(74,140,255,.8),0 0 0 10px rgba(74,140,255,0)}}
+@keyframes lx-speak{from{transform:scale(.97)}to{transform:scale(1.07)}}
+.lx-voice{position:sticky;bottom:calc(160px + env(safe-area-inset-bottom));z-index:3;display:flex;align-items:center;gap:12px;margin:0 14px 8px;padding:10px 12px;border-radius:14px;background:#EEF4FF;border:1px solid #D6E4FF;font-size:14px}
+.lx-voice b{font-weight:600}
+.lx-voice .h{font-size:13px;color:${T.ink2};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lx-vorb{width:40px;height:40px;border-radius:50%;border:0;flex:none;cursor:pointer;background:radial-gradient(circle at 35% 30%,#fff 0,#9fd4ff 18%,#4A8CFF 52%,#6B4CFF 100%)}
+.lx-vorb.listening{animation:lx-listen 1.2s ease-in-out infinite}
+.lx-vorb.speaking{animation:lx-speak .45s ease-in-out infinite alternate}
+.lx-vorb.thinking{animation:lx-think 1.1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.lx-orb.listen,.lx-orb.speak,.lx-vorb{animation:none!important}}
 .lx-ico:disabled{opacity:.45;cursor:default}
 .lx-hist{position:fixed;inset:0;z-index:120;background:rgba(15,23,42,.42);display:flex;justify-content:flex-end}
 .lx-hist .p{width:min(380px,100%);height:100%;background:#fff;padding:18px;overflow-y:auto;font-family:${FONT}}
@@ -120,12 +137,12 @@ const CSS = `
 .lx-sw i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
 .lx-sw[aria-checked=true] i{transform:translateX(16px)}
 @media (max-width:640px){.lx-nrow{flex-wrap:wrap}.lx-nrow .a{width:100%}.lx-nrow .a .lx-btn{flex:1}}
-@media (max-width:640px){.lx-hd h1{font-size:24px}.lx-orb{width:44px;height:44px}.lx-acts{width:100%}.lx-acts .lx-btn{flex:1}.lx-u{max-width:90%}}
+@media (max-width:640px){.lx-hd h1{font-size:24px}.lx-orb{width:44px;height:44px}.lx-acts{width:100%}.lx-acts .lx-btn{flex:1 1 auto;padding:0 10px}.lx-u{max-width:90%}}
 `
 
 const KIND_LABEL: Record<string, string> = { product: 'Product', deal: 'Deal', work_order: 'Job', site: 'Site', task: 'Task', lead: 'Lead', customer: 'Customer', thread: 'Email', event: 'Calendar', manual: 'Manual' }
 const TONE: Record<string, string> = { red: '#FF3B30', orange: '#FF9F0A', green: '#34C759', blue: '#0071E3' }
-const CHIPS = ['Brief me on today', 'Who’s waiting on me in email?', 'What jobs are overdue?', 'Which deals are stalled?', 'Remember that I like short answers', 'How do I send a proposal?', 'Make me a task to call Marbella tomorrow']
+const CHIPS = ['Brief me on today', 'Who’s waiting on me in email?', 'Show my pipeline by rep', 'Is the Marbella gate working?', 'What jobs are overdue?', 'Remember that I like short answers', 'How do I send a proposal?']
 const uid = () => Math.random().toString(36).slice(2)
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' }
 
@@ -158,9 +175,23 @@ export function LexiSurface() {
   const [mailMsg, setMailMsg] = useState<string | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
   const recRef = useRef<{ stop: () => void } | null>(null)
+  // ── Voice (Phase 4) ─────────────────────────────────────────────────────────
+  const [voice, setVoice] = useState(false)
+  const [vstate, setVstate] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle')
+  const [vHeard, setVHeard] = useState('')
+  const [vNote, setVNote] = useState<string | null>(null)
+  const [speakReplies, setSpeakReplies] = useState(false)
+  const voiceRef = useRef(false)
+  const replyRef = useRef<{ text: string; pending: boolean; error: string | null }>({ text: '', pending: false, error: null })
+  const msgsRef = useRef<Msg[]>([])
+  const sendRef = useRef<(t: string) => Promise<void>>(async () => {})
+  const quietRef = useRef(0)
+  const speakRepliesRef = useRef(false)
+  useEffect(() => { try { const v = localStorage.getItem('lexi_speak') === '1'; setSpeakReplies(v); speakRepliesRef.current = v } catch { /* ignore */ } }, [])
   const endRef = useRef<HTMLDivElement | null>(null)
   const taRef = useRef<HTMLTextAreaElement | null>(null)
   const [, tick] = useState(0)
+  const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window
   const canDictate = typeof window !== 'undefined' && !!((window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition)
 
   useEffect(() => {
@@ -202,6 +233,7 @@ export function LexiSurface() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
 
   const patchLast = (fn: (m: Msg) => Msg) => setMsgs(ms => ms.length ? [...ms.slice(0, -1), fn(ms[ms.length - 1])] : ms)
+  useEffect(() => { msgsRef.current = msgs }, [msgs])
 
   const send = useCallback(async (raw: string) => {
     const text = raw.trim()
@@ -211,10 +243,13 @@ export function LexiSurface() {
     setMsgs(ms => [...ms, { id: uid(), role: 'user', text, cards: [], did: [], pending: null }, { id: uid(), role: 'assistant', text: '', cards: [], did: [], pending: null, status: 'Thinking', streaming: true }])
     setBusy(true)
     try {
-      const r = await fetch('/api/lexi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, conversationId: convId, history }) })
+      replyRef.current = { text: '', pending: false, error: null }
+      if (voiceRef.current) setVstate('thinking')
+      const r = await fetch('/api/lexi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, conversationId: convId, history, voice: voiceRef.current }) })
       if (!r.ok || !r.body) {
         const d = await r.json().catch(() => ({}))
         patchLast(m => ({ ...m, streaming: false, status: undefined, error: d?.error || `Lexi couldn’t answer (${r.status}).` }))
+        replyRef.current.error = d?.error || 'Lexi couldn’t answer.'
         return
       }
       const reader = r.body.getReader()
@@ -231,42 +266,149 @@ export function LexiSurface() {
           let ev: Record<string, unknown>
           try { ev = JSON.parse(line) } catch { continue }
           if (ev.type === 'start' && ev.conversationId) setConvId(String(ev.conversationId))
-          else if (ev.type === 'text') patchLast(m => ({ ...m, text: m.text + String(ev.delta ?? ''), status: undefined }))
+          else if (ev.type === 'text') { replyRef.current.text += String(ev.delta ?? ''); patchLast(m => ({ ...m, text: m.text + String(ev.delta ?? ''), status: undefined })) }
           else if (ev.type === 'tool') patchLast(m => ({ ...m, status: String(ev.label ?? 'Looking that up') }))
           else if (ev.type === 'cards') patchLast(m => ({ ...m, cards: [...m.cards, ...((ev.items as Card[]) ?? [])] }))
+          else if (ev.type === 'chart' && ev.chart) patchLast(m => ({ ...m, charts: [...(m.charts ?? []), ev.chart as LexiChartData] }))
           else if (ev.type === 'did') patchLast(m => ({ ...m, did: [...m.did, { ok: !!ev.ok, summary: String(ev.summary ?? ''), message: ev.message as string | undefined, revertPayload: (ev.revertPayload as RevertPayload) ?? null, at: Date.now() }] }))
-          else if (ev.type === 'pending') patchLast(m => ({ ...m, pending: { ...(ev.action as Pending), state: 'waiting' } }))
-          else if (ev.type === 'error') patchLast(m => ({ ...m, error: String(ev.error ?? 'Something went wrong.') }))
+          else if (ev.type === 'pending') { replyRef.current.pending = true; patchLast(m => ({ ...m, pending: { ...(ev.action as Pending), state: 'waiting' } })) }
+          else if (ev.type === 'error') { replyRef.current.error = String(ev.error ?? 'Something went wrong.'); patchLast(m => ({ ...m, error: String(ev.error ?? 'Something went wrong.') })) }
           else if (ev.type === 'done' && ev.conversationId) setConvId(String(ev.conversationId))
         }
       }
     } catch {
       patchLast(m => ({ ...m, error: 'Lost the connection. Try again.' }))
+      replyRef.current.error = 'Lost the connection.'
     } finally {
       patchLast(m => ({ ...m, streaming: false, status: undefined }))
       setBusy(false)
-      setTimeout(() => taRef.current?.focus(), 50)
+      if (!voiceRef.current) setTimeout(() => taRef.current?.focus(), 50)
+      // Voice: read the answer out loud, then listen again.
+      const rr = replyRef.current
+      if (voiceRef.current || speakRepliesRef.current) {
+        const said = rr.error ? rr.error : spoken(rr.text) || (rr.pending ? 'I’ve got that ready.' : 'Done.')
+        speak(rr.pending ? `${said} Say confirm, or skip.` : said, () => { if (voiceRef.current) listen() })
+      }
     }
   }, [busy, convId, msgs])
+  useEffect(() => { sendRef.current = send }, [send])
 
   async function confirm(mi: number) {
-    const p = msgs[mi]?.pending
-    if (!p || p.state !== 'waiting') return
+    const p = msgsRef.current[mi]?.pending
+    if (!p || p.state !== 'waiting') return false
     setMsgs(ms => ms.map((m, i) => i === mi && m.pending ? { ...m, pending: { ...m.pending, state: 'running' } } : m))
     const r = await fetch('/api/assistant/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toolName: p.toolName, toolArgs: p.toolArgs }) }).catch(() => null)
     const d = r ? await r.json().catch(() => ({})) : {}
     const ok = !!r?.ok && d?.success !== false
     setMsgs(ms => ms.map((m, i) => i === mi && m.pending ? { ...m, pending: { ...m.pending, state: ok ? 'done' : 'failed', result: ok ? (d?.message || 'Done.') : (d?.error || 'That didn’t go through.'), revertPayload: ok ? d?.revertPayload ?? null : null }, did: ok ? [...m.did, { ok: true, summary: m.pending.summary, message: d?.message, revertPayload: d?.revertPayload ?? null, at: Date.now() }] : m.did } : m))
+    return ok ? true : String(d?.error || 'That didn’t go through.')
   }
   const skip = (mi: number) => setMsgs(ms => ms.map((m, i) => i === mi && m.pending ? { ...m, pending: { ...m.pending, state: 'skipped' } } : m))
 
   async function undo(mi: number, di: number) {
-    const d = msgs[mi]?.did[di]
-    if (!d?.revertPayload) return
+    const d = msgsRef.current[mi]?.did[di]
+    if (!d?.revertPayload) return false
     const r = await fetch('/api/assistant/revert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revertPayload: d.revertPayload }) }).catch(() => null)
     const ok = !!r?.ok
     setMsgs(ms => ms.map((m, i) => i === mi ? { ...m, did: m.did.map((x, j) => j === di ? { ...x, undone: ok, message: ok ? 'Undone.' : 'Couldn’t undo that.' } : x) } : m))
+    return ok
   }
+
+  // ── Voice helpers ───────────────────────────────────────────────────────────
+  // What to say: the reply without markdown, link text, or long lists; the cards stay on screen.
+  function spoken(md: string): string {
+    const plain = md.replace(/\*\*|__|`/g, '').replace(/^#+\s*/gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/^\s*[-*•]\s+/gm, '').replace(/\n{2,}/g, '. ').replace(/\n/g, ', ').replace(/\s+/g, ' ').replace(/([.!?:])\s*[.,]\s/g, '$1 ').trim()
+    if (plain.length <= 420) return plain
+    const cut = plain.slice(0, 420); const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '))
+    return `${end > 120 ? cut.slice(0, end + 1) : cut}… The rest is on screen.`
+  }
+  function pickVoice(): SpeechSynthesisVoice | null {
+    const vs = window.speechSynthesis.getVoices().filter(v => /^en(-|_)?US/i.test(v.lang) || /^en/i.test(v.lang))
+    return vs.find(v => /Samantha|Ava|Allison|Aria|Jenny|Google US English|Natural/i.test(v.name)) ?? vs.find(v => /^en-US/i.test(v.lang)) ?? vs[0] ?? null
+  }
+  function speak(text: string, after?: () => void) {
+    if (!canSpeak || !text) { after?.(); return }
+    try {
+      window.speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(text)
+      const v = pickVoice(); if (v) u.voice = v
+      u.rate = 1.05; u.pitch = 1
+      u.onend = () => { setVstate(s => (s === 'speaking' ? 'idle' : s)); after?.() }
+      u.onerror = () => { setVstate(s => (s === 'speaking' ? 'idle' : s)); after?.() }
+      setVstate('speaking')
+      window.speechSynthesis.speak(u)
+    } catch { after?.() }
+  }
+  function listen() {
+    if (!voiceRef.current) return
+    const W = window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec }
+    const Ctor = W.SpeechRecognition || W.webkitSpeechRecognition
+    if (!Ctor) { setVNote('This browser can’t listen. Try Chrome or Safari.'); stopVoice(); return }
+    const r = new Ctor()
+    r.lang = 'en-US'; r.interimResults = true; r.continuous = false
+    let finalText = ''
+    r.onresult = (e: SpeechEvt) => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; finalText = t; setVHeard(t) }
+    r.onend = () => {
+      recRef.current = null
+      if (!voiceRef.current) return
+      const t = finalText.trim()
+      if (!t) {
+        // Silence: try a couple more times, then pause so the mic isn't left open.
+        if (++quietRef.current >= 3) { setVNote('Voice paused — tap Talk to start again.'); stopVoice(); return }
+        listen(); return
+      }
+      quietRef.current = 0
+      void handleUtterance(t)
+    }
+    r.onerror = (ev?: { error?: string }) => {
+      if (ev?.error === 'not-allowed' || ev?.error === 'service-not-allowed') { setVNote('Microphone is blocked — allow it in the browser to talk to Lexi.'); stopVoice() }
+    }
+    recRef.current = r; setVHeard(''); setVstate('listening')
+    try { r.start() } catch { /* already started */ }
+  }
+  async function handleUtterance(t: string) {
+    const said = t.toLowerCase().replace(/[.!?,]/g, '').trim()
+    if (/^(stop|stop listening|that's all|that is all|goodbye|bye|never ?mind|exit)$/.test(said)) { stopVoice(); speak('Okay.'); return }
+    const ms = msgsRef.current
+    const mi = ms.length - 1
+    const waiting = mi >= 0 && ms[mi].pending?.state === 'waiting'
+    if (waiting && /^(confirm|yes|yeah|yep|do it|go ahead|ok|okay|sure)( please| it)?$/.test(said)) {
+      setVstate('thinking')
+      const r = await confirm(mi)
+      speak(r === true ? 'Done.' : `That didn’t go through. ${r || ''}`, () => listen()); return
+    }
+    if (waiting && /^(skip|no|nope|cancel|don't|do not)( it| that)?$/.test(said)) { skip(mi); speak('Skipped.', () => listen()); return }
+    if (/^undo( that)?$/.test(said)) {
+      for (let i = ms.length - 1; i >= 0; i--) {
+        const di = ms[i].did.map((d, j) => (d.revertPayload && !d.undone ? j : -1)).filter(j => j >= 0).pop()
+        if (di != null) { const ok = await undo(i, di); speak(ok ? 'Undone.' : 'I couldn’t undo that.', () => listen()); return }
+      }
+      speak('There’s nothing to undo.', () => listen()); return
+    }
+    await sendRef.current(t)
+  }
+  function startVoice() {
+    setVNote(null); quietRef.current = 0
+    voiceRef.current = true; setVoice(true)
+    // Speaking once inside the tap unlocks audio on iPhone.
+    speak(msgsRef.current.length ? 'I’m listening.' : `Hi${brief?.name ? ` ${brief.name}` : ''}, I’m listening.`, () => listen())
+  }
+  function stopVoice() {
+    voiceRef.current = false; setVoice(false); setVstate('idle'); setVHeard('')
+    try { recRef.current?.stop() } catch { /* ignore */ }
+    recRef.current = null
+  }
+  function interrupt() {
+    // Tap while Lexi talks: stop talking and listen.
+    try { window.speechSynthesis.cancel() } catch { /* ignore */ }
+    if (voiceRef.current) listen()
+  }
+  function toggleSpeakReplies() {
+    const v = !speakReplies; setSpeakReplies(v); speakRepliesRef.current = v
+    try { localStorage.setItem('lexi_speak', v ? '1' : '0') } catch { /* ignore */ }
+    if (!v) try { window.speechSynthesis.cancel() } catch { /* ignore */ }
+  }
+  useEffect(() => () => { voiceRef.current = false; try { recRef.current?.stop(); window.speechSynthesis?.cancel() } catch { /* ignore */ } }, [])
 
   function newChat() { setMsgs([]); setConvId(null); setInput(''); taRef.current?.focus() }
   async function openHistory() {
@@ -281,7 +423,7 @@ export function LexiSurface() {
     const d = r ? await r.json().catch(() => ({})) : {}
     if (!r?.ok) return
     setConvId(id)
-    setMsgs(((d.messages ?? []) as { role: 'user' | 'assistant'; content: string; cards?: { cards?: Card[] } | null }[]).map(m => ({ id: uid(), role: m.role, text: m.content, cards: m.cards?.cards ?? [], did: [], pending: null })))
+    setMsgs(((d.messages ?? []) as { role: 'user' | 'assistant'; content: string; cards?: { cards?: Card[]; charts?: LexiChartData[] } | null }[]).map(m => ({ id: uid(), role: m.role, text: m.content, cards: m.cards?.cards ?? [], charts: m.cards?.charts ?? [], did: [], pending: null })))
   }
   async function delConv(id: string) {
     const r = await fetch(`/api/lexi/conversations?id=${id}`, { method: 'DELETE' }).catch(() => null)
@@ -320,13 +462,14 @@ export function LexiSurface() {
     <style>{CSS}</style>
     <header className="lx-hd">
       <div className="lx-hi">
-        <div className={`lx-orb${busyNow ? ' busy' : ''}`} aria-hidden />
+        <div className={`lx-orb${vstate === 'listening' ? ' listen' : vstate === 'speaking' ? ' speak' : busyNow ? ' busy' : ''}`} aria-hidden />
         <div style={{ minWidth: 0 }}>
           <h1>{greet()}{brief?.name ? `, ${brief.name}` : ''}</h1>
           <div className="sub">I’m Lexi. Ask me anything about Gate Guard — or tell me what to do.</div>
         </div>
       </div>
       <div className="lx-acts">
+        {canDictate && canSpeak && <button type="button" className={`lx-btn ${voice ? 'pri' : 'dark'}`} onClick={() => (voice ? stopVoice() : startVoice())} aria-pressed={voice}>{voice ? 'Stop talking' : 'Talk'}</button>}
         <button type="button" className="lx-btn dark" onClick={() => setPanel('recording')}>Recording</button>
         <button type="button" className="lx-btn dark" onClick={() => setPanel('brain')}>Brain</button>
         <button type="button" className="lx-btn dark" onClick={openHistory}>History</button>
@@ -386,6 +529,7 @@ export function LexiSurface() {
                 const draft = m.text.split(/draft( reply)?:/i).pop()!.replace(/\*\*/g, '').trim()
                 navigator.clipboard?.writeText(draft).then(() => { setCopiedId(m.id); setTimeout(() => setCopiedId(c => (c === m.id ? null : c)), 1800) }).catch(() => {})
               }}>{copiedId === m.id ? 'Copied ✓' : 'Copy draft'}</button>}
+              {(m.charts ?? []).map((c, ci) => <LexiChart key={ci} chart={c} />)}
               {m.status && <div className="lx-status"><span className="lx-spin" />{m.status}…</div>}
               {m.cards.length > 0 && <div className="lx-cards">
                 {m.cards.map(c => <a key={`${c.kind}-${c.id}`} className="lx-card" href={c.href || '#'} target={c.href?.startsWith('http') ? '_blank' : undefined} rel="noreferrer" onClick={c.href ? undefined : e => e.preventDefault()}>
@@ -416,10 +560,22 @@ export function LexiSurface() {
         <div ref={endRef} className="lx-end" />
       </div>
       {msgs.length === 0 && <div className="lx-chips">{CHIPS.map(c => <button key={c} type="button" className="lx-chip" onClick={() => send(c)}>{c}</button>)}</div>}
+      {(voice || vNote) && <div className="lx-voice" role="status" aria-live="polite">
+        {voice && <button type="button" className={`lx-vorb ${vstate}`} onClick={interrupt} aria-label={vstate === 'speaking' ? 'Stop talking and listen' : 'Listen'} />}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {voice ? <><b>{vstate === 'listening' ? 'Listening…' : vstate === 'thinking' ? 'Thinking…' : vstate === 'speaking' ? 'Speaking — tap the circle to interrupt' : 'Ready'}</b>
+            <div className="h">{vHeard ? `“${vHeard}”` : 'Say what you need. “Confirm”, “skip”, “undo” and “stop” work too.'}</div></>
+            : <div className="h">{vNote}</div>}
+        </div>
+        {voice ? <button type="button" className="lx-btn line" onClick={stopVoice}>Stop</button> : <button type="button" className="lx-btn line" onClick={() => setVNote(null)}>OK</button>}
+      </div>}
       <form className="lx-comp" onSubmit={e => { e.preventDefault(); void send(input) }}>
         <textarea ref={taRef} rows={1} value={input} placeholder={rec ? 'Listening…' : 'Ask Lexi anything…'} aria-label="Message Lexi"
           onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(160, e.target.scrollHeight)}px` }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(input) } }} />
+        {canSpeak && <button type="button" className={`lx-ico${speakReplies ? ' on' : ''}`} onClick={toggleSpeakReplies} aria-pressed={speakReplies} aria-label={speakReplies ? 'Stop reading replies aloud' : 'Read replies aloud'} title={speakReplies ? 'Reading replies aloud' : 'Read replies aloud'}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><path d="M11 5 6 9H3v6h3l5 4V5z" />{speakReplies ? <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /> : <path d="m16 9 5 6M21 9l-5 6" />}</svg>
+        </button>}
         {canDictate && <button type="button" className={`lx-ico${rec ? ' rec' : ''}`} onClick={toggleMic} aria-label={rec ? 'Stop listening' : 'Speak'} title={rec ? 'Stop' : 'Speak'}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
         </button>}
@@ -453,6 +609,6 @@ export function LexiSurface() {
 
 // Minimal Web Speech types (not in the TS DOM lib everywhere).
 type SpeechEvt = { results: ArrayLike<ArrayLike<{ transcript: string }>> }
-type SpeechRec = { lang: string; interimResults: boolean; continuous: boolean; onresult: (e: SpeechEvt) => void; onend: () => void; onerror: () => void; start: () => void; stop: () => void }
+type SpeechRec = { lang: string; interimResults: boolean; continuous: boolean; onresult: (e: SpeechEvt) => void; onend: () => void; onerror: (e?: { error?: string }) => void; start: () => void; stop: () => void }
 
 export default LexiSurface

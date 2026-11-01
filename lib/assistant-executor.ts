@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import type { PortalUser } from '@/lib/current-user'
 import { isInScope, type OrgScope } from '@/lib/org-scope'
+import { getSiteBrivoToken, unlockBrivoDoor } from '@/lib/brivo'
+import { getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
+import { controlSiteShellyRelay } from '@/lib/shelly'
+import { canOperate } from '@/lib/system-access'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,12 +44,50 @@ export interface ExecuteResult {
 
 // ─── Main executor ───────────────────────────────────────────────────────────
 
+// Physical actions are always written to the site timeline (who did what, when).
+async function auditSystem(siteId: string, eventType: string, source: string, title: string, description: string, metadata: Record<string, unknown>) {
+  const { error } = await supabase.from('site_events').insert({ site_id: siteId, event_type: eventType, event_source: source, title, description, summary: title, metadata })
+  if (error) console.error('[assistant-executor] audit failed', eventType, error.message)
+}
+
 async function runTool(
   toolName: string,
   args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<ExecuteResult> {
   switch (toolName) {
+    // ── Live systems (physical) — corporate admins only, site must be in scope,
+    //    and the caller must be allowed to operate that system. Audited. ──
+    case 'open_gate': {
+      if (!(ctx.user.isCorporate && ctx.user.role === 'admin')) return { success: false, error: 'Only Gate Guard admins can open gates through Lexi.' }
+      const siteId = String(args.site_id ?? ''), doorId = String(args.door_id ?? '')
+      if (!siteId || !doorId) return { success: false, error: 'Which site and door?' }
+      const site = await getAllowedVaultBrivoSite(ctx.user, siteId)
+      if (!site) return { success: false, error: 'That site has no Brivo connection, or it’s outside your access.' }
+      if (!(await canOperate(ctx.user, siteId, 'doors'))) return { success: false, error: 'You don’t have door access for this site.' }
+      try {
+        const { token, apiKey } = await getSiteBrivoToken(siteId)
+        await unlockBrivoDoor(token, apiKey, doorId)
+      } catch (e) { return { success: false, error: e instanceof Error ? e.message : 'Brivo didn’t open the door.' } }
+      await auditSystem(siteId, 'door_unlock', 'brivo', `Door unlocked: ${args.door_name ?? 'Door'}`, `Unlocked by ${ctx.user.name} via Lexi`, { door_id: doorId, door_name: args.door_name ?? null, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
+      return { success: true, message: `${args.door_name ?? 'The gate'} is opening.` }
+    }
+    case 'relay_action': {
+      if (!(ctx.user.isCorporate && ctx.user.role === 'admin')) return { success: false, error: 'Only Gate Guard admins can control relays through Lexi.' }
+      const siteId = String(args.site_id ?? ''), deviceId = String(args.device_id ?? '')
+      const channel = Math.max(0, Math.round(Number(args.channel) || 0))
+      if (!siteId || !deviceId) return { success: false, error: 'Which site and relay?' }
+      if (!(await canOperate(ctx.user, siteId, 'relays'))) return { success: false, error: 'You don’t have relay access for this site.' }
+      const pulse = args.mode === 'pulse'
+      const secs = pulse ? Math.min(10, Math.max(1, Number(args.seconds) || 1)) : Math.min(120, Math.max(5, Number(args.seconds) || 10))
+      try {
+        // Shelly's own flip-back timer brings it back, so nothing waits here.
+        await controlSiteShellyRelay(siteId, deviceId, channel, !pulse, secs)
+      } catch (e) { return { success: false, error: e instanceof Error ? e.message : 'The relay didn’t respond.' } }
+      await auditSystem(siteId, pulse ? 'relay_pulse' : 'relay_power_cycle', 'shelly', `${pulse ? 'Relay pulsed' : 'Power-cycled'}: ${args.relay_name ?? 'relay'}`, `By ${ctx.user.name} via Lexi${pulse ? '' : ` (off ${secs}s)`}`, { device_id: deviceId, channel, seconds: secs, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
+      return { success: true, message: pulse ? `${args.relay_name ?? 'Relay'} pulsed.` : `${args.relay_name ?? 'Relay'} is off now and turns itself back on in ${secs} seconds.` }
+    }
+
 
     // ── Todos ──────────────────────────────────────────────────────────────
 
@@ -585,6 +627,7 @@ export const ALLOWED_TOOLS = new Set<string>([
   'create_lead', 'update_lead_stage', 'assign_lead',
   'create_opportunity', 'update_opportunity_stage', 'mark_opportunity_won', 'mark_opportunity_lost',
   'log_crm_activity', 'schedule_followup', 'create_quote',
+  'open_gate', 'relay_action',
 ])
 
 /** Is this row inside the caller's company scope? Corporate always yes. */

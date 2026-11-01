@@ -100,11 +100,13 @@ function readChannels(st: any): { channel: number; on: boolean | null }[] {
   return [{ channel: 0, on: null }]   // unknown / offline
 }
 
-/** Turn a relay on or off. Optional `timerSec` auto-flips it back after N seconds
- * — used for a momentary "gate pulse / reset" (turn on, Shelly turns it off). */
+/** Turn a relay on or off. Optional `timerSec` is Shelly's flip-back timer: the
+ * relay returns to its previous state after N seconds, on the device itself —
+ * on+timer = momentary "gate pulse"; off+timer = power-cycle (reboot) that comes
+ * back on even if our request has already ended. */
 export async function controlSiteShellyRelay(siteId: string, deviceId: string, channel: number, on: boolean, timerSec?: number): Promise<void> {
   const { authKey, server } = await creds(siteId)
   const params: Record<string, string> = { id: deviceId, channel: String(channel), turn: on ? 'on' : 'off', auth_key: authKey }
-  if (on && timerSec && timerSec > 0) params.timer = String(timerSec)
+  if (timerSec && timerSec > 0) params.timer = String(timerSec)
   await shellyPost(server, '/device/relay/control', params)
 }

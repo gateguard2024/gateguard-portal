@@ -7,6 +7,7 @@
  *   {type:'text', delta}                  reply text as it's written
  *   {type:'tool', name, label}            Lexi is looking something up
  *   {type:'cards', items}                 records found (deals, jobs, sites…) to show as cards
+ *   {type:'chart', chart}                 a report chart (run_report) to draw under the reply
  *   {type:'did', ok, summary, message, revertPayload}   a low-risk action it already did (undoable)
  *   {type:'pending', action}              a medium/high-risk action waiting for the user's OK
  *   {type:'done', conversationId} | {type:'error', error}
@@ -28,6 +29,7 @@ import { ACTION_TOOLS, TOOL_RISK_PROFILES, buildActionSummary } from '@/lib/assi
 import { READ_TOOLS, READ_TOOL_NAMES, TOOL_LABEL, lexiCtx, runReadTool, type LexiCard } from '@/lib/lexi/tools'
 import { NEXUS_MAP } from '@/lib/lexi/nexus-guide'
 import { BRAIN_TOOLS, BRAIN_TOOL_NAMES, brainPrompt, loadBrain, runBrainTool } from '@/lib/lexi/brain'
+import { REPORT_TOOL, runReport, type LexiChart } from '@/lib/lexi/reports'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -40,7 +42,7 @@ const FAST_MODEL = process.env.LEXI_FAST_MODEL || 'claude-haiku-4-5-20251001'
 const MAX_ROUNDS = 6
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function systemPrompt(name: string, role: string, brain: string) {
+function systemPrompt(name: string, role: string, brain: string, voice = false) {
   const now = new Date()
   return `You are Lexi, the AI assistant inside Nexus — Gate Guard's operating system for a gate, access-control and camera company that sells to apartment communities.
 You work for ${name} (${role}). Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}.
@@ -57,9 +59,12 @@ How you work:
 - Be brief and plain. Short paragraphs, a short list only when listing several things. No headings. End with the one most useful next step when there is one.
 - Money: say "$12,400". Dates: say "Tue Nov 3", not ISO.
 - Inbox: "who's waiting on me" → waiting_on_me. To reply, read the thread with get_thread, then write the draft in your answer under a line "Draft reply:" — short, in the user's own voice (match their style samples and any "voice" notes in the Brain). Offer to log it to the deal or set a follow-up.
-- You can't yet send emails, text customers, place calls or open gates. If asked, say that's coming soon and offer what you can do now (draft the text, create a task).
+- Live systems: for "is the gate working / which cameras are down" call live_systems. To open a gate (open_gate) or reboot/pulse a relay (relay_action), get the ids from live_systems first; these always wait for the user's Confirm and only Gate Guard admins can run them. If cameras or devices are offline, offer a work order.
+- Reports: for "show me / chart / report" questions about pipeline, wins, or jobs, call run_report; the chart appears on screen, so just point out what stands out.
+- You can't yet send emails, text customers or place calls. If asked, say that's coming soon and offer what you can do now (draft the text, create a task).
 - Memory: when the user states a lasting preference or fact, or says "remember…", save it with remember (one fact per call). Company-wide facts (pricing, policies, scripts) go to the shared Brain only when they clearly mean the whole team. When they correct a saved fact, forget the old one and remember the new one.
-- Only discuss Gate Guard work. Be warm and confident, never chatty.
+- Only discuss Gate Guard work. Be warm and confident, never chatty.${voice ? `
+- VOICE MODE: the user is talking to you hands-free and your reply is read out loud. Answer in 1–3 short spoken sentences. No lists, no markdown, no headings, no URLs or IDs. Say numbers and dates the way a person would ("about twelve thousand dollars", "this Tuesday"). The records you found are on their screen as cards — say "I put them on your screen" instead of reading them all. If you prepared an action that needs their OK, say in one sentence what it is; the app asks them to say confirm or skip.` : ''}
 
 ── The Brain ──
 ${brain}`
@@ -105,6 +110,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const message = typeof body?.message === 'string' ? body.message.trim().slice(0, 4000) : ''
+  const voice = body?.voice === true
   if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
 
   const [ctx, brain] = await Promise.all([lexiCtx(user), loadBrain(user)])
@@ -154,14 +160,15 @@ export async function POST(req: NextRequest) {
       let fullText = ''
       const cards: LexiCard[] = []
       const did: Record<string, unknown>[] = []
+      const charts: LexiChart[] = []
       let pending: Record<string, unknown> | null = null
       try {
         for (let round = 0; round < MAX_ROUNDS; round++) {
           const s = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1500,
-            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
-            tools: cachedTools([...READ_TOOLS, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)]),
+            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
+            tools: cachedTools([...READ_TOOLS, REPORT_TOOL, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)]),
             messages: cachedMessages(messages),
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })
@@ -181,6 +188,11 @@ export async function POST(req: NextRequest) {
                 cards.push(...fresh)
                 if (fresh.length) send({ type: 'cards', items: fresh })
               }
+              results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(out.data).slice(0, 14000) })
+            } else if (block.name === REPORT_TOOL.name) {
+              send({ type: 'tool', name: block.name, label: 'Building the report' })
+              const out = await runReport(args, ctx)
+              if (out.chart) { charts.push(out.chart); send({ type: 'chart', chart: out.chart }) }
               results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(out.data).slice(0, 14000) })
             } else if (BRAIN_TOOL_NAMES.has(block.name)) {
               send({ type: 'tool', name: block.name, label: block.name === 'remember' ? 'Saving to the Brain' : 'Updating the Brain' })
@@ -211,7 +223,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (conversationId) {
-          const { error } = await sb.from('lexi_messages').insert({ conversation_id: conversationId, role: 'assistant', content: fullText, cards: { cards, did, pending } })
+          const { error } = await sb.from('lexi_messages').insert({ conversation_id: conversationId, role: 'assistant', content: fullText, cards: { cards, did, pending, charts } })
           if (error) console.error('[lexi/chat] save reply failed:', error.message)
           const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
           if (isNew) patch.title = await makeTitle(message)

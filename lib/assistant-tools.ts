@@ -27,6 +27,8 @@ export const TOOL_RISK_PROFILES: Record<string, 'low' | 'medium' | 'high'> = {
   assign_technician: 'high',
   mark_opportunity_won: 'high',
   mark_opportunity_lost: 'high',
+  open_gate: 'high',
+  relay_action: 'high',
 }
 
 // ─── Action summary builder ─────────────────────────────────────────────────
@@ -49,6 +51,8 @@ export function buildActionSummary(toolName: string, args: Record<string, unknow
     case 'log_crm_activity':     return `Log ${args.type ?? 'activity'}: "${args.subject}"`
     case 'schedule_followup':    return `Schedule follow-up for ${args.due_date ?? 'open date'}`
     case 'create_quote':         return `Create quote: "${args.title}" for ${args.account_name}`
+    case 'open_gate':            return `Open "${args.door_name ?? 'gate'}" now`
+    case 'relay_action':         return args.mode === 'pulse' ? `Pulse relay "${args.relay_name ?? 'relay'}"` : `Power-cycle "${args.relay_name ?? 'relay'}" (off ${Number(args.seconds) || 10}s, then back on)`
     default:                     return toolName.replace(/_/g, ' ')
   }
 }
@@ -304,6 +308,37 @@ const BASE_TOOLS: Anthropic.Tool[] = [
         notes: { type: 'string', description: 'Initial notes (optional)' },
       },
       required: ['title', 'account_name'],
+    },
+  },
+  // ── Live systems (Lexi Systems co-pilot). Physical actions — HIGH RISK, always
+  //    confirmed, Gate Guard corporate admins only (checked in the executor). ──
+  {
+    name: 'open_gate',
+    description: 'Open (momentarily unlock) a gate or door at a site through Brivo. Get the site_id and door_id from live_systems first. HIGH RISK — physical action; the user must tap Confirm.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'string', description: 'Site id (from live_systems)' },
+        door_id: { type: 'string', description: 'Brivo door / access point id (from live_systems)' },
+        door_name: { type: 'string', description: 'Door or gate name, for the record' },
+      },
+      required: ['site_id', 'door_id', 'door_name'],
+    },
+  },
+  {
+    name: 'relay_action',
+    description: 'Control a Shelly relay at a site. mode "power_cycle" turns the relay OFF for `seconds` (default 10) and then back on — use to reboot a gate operator, controller or camera power. mode "pulse" turns it ON for `seconds` (default 1) — use for a gate trigger relay. Get site_id, device_id and channel from live_systems first. HIGH RISK — the user must tap Confirm.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'string' },
+        device_id: { type: 'string', description: 'Shelly device id (from live_systems)' },
+        channel: { type: 'number', description: 'Relay channel, usually 0' },
+        relay_name: { type: 'string' },
+        mode: { type: 'string', enum: ['power_cycle', 'pulse'] },
+        seconds: { type: 'number', description: 'power_cycle: off time (5–120, default 10). pulse: on time (1–10, default 1).' },
+      },
+      required: ['site_id', 'device_id', 'relay_name', 'mode'],
     },
   },
 ]

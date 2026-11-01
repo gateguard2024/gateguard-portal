@@ -16,6 +16,9 @@ import { applyOrgScope, type OrgScope } from '@/lib/org-scope'
 import { dealCtx, scopeDeals, STALLED_DAYS, type DealCtx } from '@/lib/sales-deals'
 import { searchKnowledge } from '@/lib/vectorize'
 import { searchGuide } from '@/lib/lexi/nexus-guide'
+import { getSiteBrivoToken, listBrivoDoors, listSiteBrivoEvents } from '@/lib/brivo'
+import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
+import { listSiteShellyRelays } from '@/lib/shelly'
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -86,6 +89,11 @@ export const READ_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: { site_id: { type: 'string' }, name: { type: 'string' } } },
   },
   {
+    name: 'live_systems',
+    description: 'LIVE status of a property\'s equipment right now, straight from the systems: Brivo doors/gates (with ids) and the latest access events, Eagle Eye cameras online/offline, Shelly relays (with device ids and on/off), and saved gate-reboot recipes. Use for "is the gate working", "which cameras are down at X", before opening a gate or power-cycling a relay, and to suggest a work order when something is offline. Give a site name or site_id.',
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, site_id: { type: 'string' } } },
+  },
+  {
     name: 'find_tasks',
     description: 'Search to-dos / tasks. scope: mine (default) or team. due: overdue, today, week, any. Optional text query.',
     input_schema: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['mine', 'team'] }, due: { type: 'string', enum: ['overdue', 'today', 'week', 'any'] }, limit: { type: 'number' } } },
@@ -142,7 +150,7 @@ export const READ_TOOL_NAMES = new Set(READ_TOOLS.map(t => t.name))
 export const TOOL_LABEL: Record<string, string> = {
   daily_brief: 'Pulling your day together', find_deals: 'Looking through deals', get_deal: 'Opening the deal',
   find_work_orders: 'Checking jobs', get_work_order: 'Opening the job', find_sites: 'Finding the property',
-  site_status: 'Checking the systems', find_tasks: 'Checking tasks', find_leads: 'Looking through leads',
+  site_status: 'Checking the systems', live_systems: 'Checking the live systems', find_tasks: 'Checking tasks', find_leads: 'Looking through leads',
   find_customers: 'Finding the customer', find_messages: 'Checking your inbox', waiting_on_me: 'Checking who’s waiting on you', find_products: 'Looking in the catalog', get_thread: 'Reading the email', my_calendar: 'Checking your calendar',
   search_manuals: 'Searching the manuals', nexus_help: 'Checking the Nexus guide',
 }
@@ -246,6 +254,37 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
         data: { site: site.name, devices: a.length, by_status: byStatus, offline, open_incidents: inc.data ?? [], open_work_orders: ((wos.data ?? []) as Row[]).map(woOut) },
         cards: [{ kind: 'site', id: site.id, title: site.name, sub: `${a.length} devices · ${offline.length} offline · ${(inc.data ?? []).length} open incidents`, href: `/sites/${site.id}`, tone: offline.length || (inc.data ?? []).length ? 'red' : 'green' }],
       }
+    }
+    case 'live_systems': {
+      let site: Row | null = null
+      if (has(input.site_id)) site = (await scoped('sites', 'id, name, city, state', ctx, 'site').eq('id', String(input.site_id)).maybeSingle()).data
+      else if (has(input.name)) site = ((await scoped('sites', 'id, name, city, state', ctx, 'site').ilike('name', like(input.name)).limit(1)).data ?? [])[0] ?? null
+      if (!site) return { data: { error: 'Site not found or not visible to you.' } }
+      const sid = String(site.id)
+      // Each system on its own, with a time limit — one slow vendor never blocks the answer.
+      const within = <T,>(p: Promise<T>, ms = 7000) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timed out')), ms))])
+      const tryIt = async <T,>(f: () => Promise<T>): Promise<{ ok: true; v: T } | { ok: false; err: string }> => { try { return { ok: true, v: await within(f()) } } catch (e) { return { ok: false, err: e instanceof Error ? e.message : 'unavailable' } } }
+      const [doors, events, cams, relays, reboots] = await Promise.all([
+        tryIt(async () => { const { token, apiKey } = await getSiteBrivoToken(sid); return listBrivoDoors(token, apiKey) }),
+        tryIt(() => listSiteBrivoEvents(sid, 8)),
+        tryIt(async () => { const { token, baseHost } = await getSiteEagleEyeAccess(sid); return listEagleEyeCameras(token, baseHost) }),
+        tryIt(() => listSiteShellyRelays(sid)),
+        tryIt(async () => { const { data, error } = await sb.from('gate_reboots').select('id, name, wait_seconds').eq('site_id', sid).limit(20); if (error) throw new Error(error.message); return data ?? [] }),
+      ])
+      const notSet = (r: { ok: boolean; err?: string }) => (!r.ok && /not (set|configured|connected)|no .*(creds|credentials|connection)|missing/i.test(r.err ?? '') ? 'not connected' : !r.ok ? `unavailable (${r.err})` : null)
+      const camList = cams.ok ? cams.v : []
+      const offlineCams = camList.filter(c => c.online === false).map(c => c.name)
+      const data = {
+        site: site.name, site_id: sid, checked_at: new Date().toISOString(),
+        doors: doors.ok ? doors.v : notSet(doors),
+        recent_access_events: events.ok ? events.v : notSet(events),
+        cameras: cams.ok ? { total: camList.length, online: camList.filter(c => c.online === true).length, offline: offlineCams } : notSet(cams),
+        relays: relays.ok ? relays.v.map(r => ({ device_id: r.id, name: r.name, channel: r.channel, on: r.on })) : notSet(relays),
+        gate_reboot_recipes: reboots.ok ? reboots.v : [],
+        suggestion: offlineCams.length ? `${offlineCams.length} camera(s) offline — offer to create a work order if there isn't an open one.` : null,
+      }
+      const problems = offlineCams.length + (relays.ok ? relays.v.filter(r => r.on === null).length : 0)
+      return { data, cards: [{ kind: 'site', id: sid, title: `${site.name} — live`, sub: [doors.ok ? `${doors.v.length} doors` : null, cams.ok ? `${camList.length - offlineCams.length}/${camList.length} cameras online` : null, relays.ok ? `${relays.v.length} relays` : null].filter(Boolean).join(' · ') || 'No systems connected', href: `/sites/${sid}`, tone: problems ? 'red' : 'green' }] }
     }
     case 'find_tasks': {
       let q = scoped('todos', 'id, title, status, priority, due_date, assigned_to, assigned_to_name, created_by, linked_label', ctx).not('status', 'in', '(done,completed,cancelled)')
