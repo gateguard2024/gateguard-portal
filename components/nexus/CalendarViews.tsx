@@ -25,6 +25,7 @@ const TYPE_TO_CAT: Record<string, CalCategory> = {
   todo: 'todos',
   tracker_task: 'todos',
   crm_activity: 'sales',
+  property_event: 'sales',
   gcal: 'google',
 };
 // --- Real API (GET ?year&month&scope → {events:[{id,type,title,date,time,...}]}) ---

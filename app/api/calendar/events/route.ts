@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
 export interface CalendarEvent {
   id: string
-  type: 'nexus_event' | 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task'
+  type: 'nexus_event' | 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task' | 'property_event'
   title: string
   date: string       // YYYY-MM-DD
   time?: string      // HH:MM if has time
@@ -293,6 +293,27 @@ export async function GET(req: NextRequest) {
         owner_name: (task as any).owner_name ?? undefined,
       })
     }
+
+    // ── Property events (lunch & learns, launch parties…) ────────────────────
+    try {
+      let peQ = supabase
+        .from('property_events')
+        .select('id, title, event_date, start_time, status, venue, property_name, org_id')
+        .not('event_date', 'is', null)
+        .gte('event_date', startDate)
+        .lte('event_date', endDate)
+        .neq('status', 'cancelled')
+      peQ = byOrg(peQ as any)
+      // Events with no company are Gate Guard's own — corporate sees them via orgIds = null.
+      const { data: peRows } = await peQ
+      for (const pe of peRows ?? []) {
+        events.push({
+          id: `pe-${pe.id}`, type: 'property_event', title: pe.title ?? 'Event',
+          date: pe.event_date, time: pe.start_time ? String(pe.start_time).slice(0, 5) : undefined,
+          status: pe.status ?? 'planning', color: '#eb6834', link: `/?tab=events&event=${pe.id}`,
+        })
+      }
+    } catch { /* table may not exist until migration 162 */ }
 
     // ── Google Calendar (personal — always the caller's own) ──────────────────
     const { data: settingsRow } = await supabase
