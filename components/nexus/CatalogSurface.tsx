@@ -1,1006 +1,381 @@
-'use client';
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Plus, Loader2, X, Upload, Trash2 } from 'lucide-react';
-// Vercel lucide cache quirk — load non-safe icons via require()
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Package, PenTool, Layers } = require('lucide-react') as any;
+'use client'
+/**
+ * CatalogSurface — the Catalog tab. One product list for quotes, jobs, drawings,
+ * inventory and the tech app (merges the old dark Catalog tab and /products).
+ *
+ *   • KPI tiles that filter: Active, Low stock, Needs a price, Low margin, No manual, Archived
+ *   • Search, category chips, brand, sort, list / grid
+ *   • Select rows → bulk: change category, raise/lower price %, archive / make active, export
+ *   • Import / export CSV (header-based), New product
+ *   • Tap a product → ProductPage (full screen, deep link /?tab=catalog&product=<id>)
+ *
+ * Data: /api/products (scoped catalog), /api/products/stats (stock),
+ * /api/kb/coverage (manuals), /api/admin/product-costs (corporate only).
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  TEXT, MUTED, BRAND, GREEN, ORANGE, RED, LINE, FONT, SHADOW, CATEGORIES,
+  type ProductRow, type ProductForm, fmt$, calcMargin, marginColor, catOf, emptyForm, ProductThumb,
+} from '@/components/nexus/catalog/shared'
+import { ProductEditor } from '@/components/nexus/catalog/ProductEditor'
+import { ProductPage } from '@/components/nexus/catalog/ProductPage'
 
-// ── Theme (dark glass — matches DesignExplorer) ──────────────────────────────
-const BG = '#141e29';
-const CARD = '#131B2E';
-const PANEL = '#1a2532';
-const BORDER = 'rgba(255,255,255,0.1)';
-const TEXT = '#F8FAFC';
-const MUTED = '#94A3B8';
-const BRAND = '#00A3FF';
-const CYAN = '#00A3FF';
+type Stock = Record<string, { onHand: number; onTruck: number; min: number; locations: number }>
+type Kpi = 'active' | 'low' | 'noprice' | 'lowmargin' | 'nomanual' | 'archived'
+type Sort = 'name' | 'price' | 'margin' | 'updated' | 'stock'
 
-// ── Catalog option sets (mirrors legacy ProductModal) ────────────────────────
-const CATEGORIES = [
-  'Camera', 'Access Control', 'Gate Operator', 'Callbox / Intercom',
-  'Network', 'Wire & Hardware', 'Labor',
-] as const;
-const DESIGN_ROLES = ['', 'camera', 'board', 'gateway', 'reader', 'switch', 'power', 'intercom', 'gate', 'sensor', 'lock', 'network', 'other'];
-const DESIGN_CABLES = ['', '110V 12/2', '240V 12/3', '16/2', '18/2', '18/6', '22/4', '22/2 shielded', 'CAT6', 'CAT5e'];
-const DESIGN_COLORS = ['#00A3FF', '#10B981', '#F59E0B', '#EF4444', '#00A3FF', '#EC4899', '#0891B2', '#64748B', '#111827'];
+const CSS = `
+.ct{color:${TEXT};font-family:${FONT};letter-spacing:-.01em;width:100%;max-width:1360px;margin:0 auto;padding:4px 4px calc(140px + env(safe-area-inset-bottom))}
+.ct *{box-sizing:border-box}
+.ct-hd{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:6px 0 18px}
+.ct-hd h1{margin:0;color:#fff;font-size:30px;font-weight:600;letter-spacing:-.025em}
+.ct-hd .sub{color:rgba(255,255,255,.72);font-size:14px;margin-top:4px}
+.ct-acts{display:flex;gap:8px;flex-wrap:wrap}
+.ct-b{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:0;font:600 13px ${FONT};cursor:pointer;white-space:nowrap}
+.ct-b.dark{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-weight:500}
+.ct-b.pri{background:${BRAND};color:#fff}
+.ct-b.line{background:#fff;border:1px solid rgba(0,0,0,.12);color:${TEXT};font-weight:500}
+.ct-b:disabled{opacity:.5;cursor:default}
+.ct-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.ct-kpi{text-align:left;background:#fff;border:0;border-radius:14px;padding:12px 14px;box-shadow:${SHADOW};cursor:pointer;font:inherit;color:inherit;outline-offset:2px}
+.ct-kpi[aria-pressed=true]{box-shadow:0 0 0 2px ${BRAND},${SHADOW}}
+.ct-kpi .l{display:flex;align-items:center;gap:6px;font-size:12px;color:${MUTED};font-weight:500}
+.ct-kpi .v{font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:2px}
+.ct-kpi .s{font-size:12px;color:${MUTED}}
+.ct-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.ct-card{background:#fff;border-radius:16px;box-shadow:${SHADOW};overflow:hidden}
+.ct-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-bottom:1px solid ${LINE}}
+.ct-in{height:36px;border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:0 12px;font:400 14px ${FONT};color:${TEXT};background:#fff}
+.ct-chips{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;border-bottom:1px solid ${LINE}}
+.ct-chip{flex:none;border:1px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:5px 12px;font:500 13px ${FONT};color:#3A3A3C;cursor:pointer;white-space:nowrap}
+.ct-chip[aria-pressed=true]{background:${TEXT};border-color:${TEXT};color:#fff}
+.ct-seg{display:flex;gap:2px;padding:3px;border-radius:10px;background:#EEF0F4}
+.ct-seg button{border:0;background:none;height:30px;padding:0 12px;border-radius:8px;font:500 13px ${FONT};color:#3A3A3C;cursor:pointer}
+.ct-seg button[aria-pressed=true]{background:#fff;color:${TEXT};font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.ct-bulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:#EEF4FF;border-bottom:1px solid #D6E4FF;font-size:13px}
+.ct-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.ct-tbl th{position:sticky;top:0;background:#FAFAFB;text-align:left;font-weight:500;color:${MUTED};font-size:12px;padding:8px 10px;border-bottom:1px solid ${LINE};white-space:nowrap}
+.ct-tbl td{padding:9px 10px;border-bottom:1px solid ${LINE};vertical-align:middle}
+.ct-tbl tbody tr{cursor:pointer}.ct-tbl tbody tr:hover{background:#F7F8FA}
+.ct-tbl .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ct-tbl input[type=checkbox]{width:16px;height:16px}
+.ct-nm{font-weight:600;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct-sm{font-size:12.5px;color:${MUTED};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px}
+.ct-tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:600}
+.ct-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;padding:14px}
+.ct-gc{position:relative;text-align:left;border:1px solid ${LINE};border-radius:14px;background:#fff;padding:12px;cursor:pointer;font:inherit;color:inherit;display:flex;flex-direction:column;gap:8px}
+.ct-gc:hover{box-shadow:${SHADOW}}
+.ct-empty{padding:40px 16px;text-align:center;color:${MUTED};font-size:14px}
+.ct-modal{position:fixed;inset:0;z-index:140;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:16px}
+.ct-modal .p{width:min(680px,100%);max-height:90vh;overflow-y:auto;background:#fff;border-radius:16px;padding:18px;font-family:${FONT}}
+@media (max-width:1100px){.ct-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.ct-hd h1{font-size:24px}.ct-acts{width:100%}.ct-acts .ct-b{flex:1}.ct-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ct-tbl .hide-sm{display:none}.ct-nm,.ct-sm{max-width:180px}}
+`
 
-const BRAND_COLORS: Record<string, string> = {
-  'Eagle Eye Networks': '#1B4F72', 'LTS Security': '#1A5276', 'Ubiquiti': '#0559C9',
-  'Brivo': '#0F4C81', 'Altronix': '#1F618D', 'Securitron (ASSA ABLOY)': '#117A65',
-  'DITEK': '#1E8449', 'Optex': '#6C3483', 'DoorKing': '#784212', 'FAAC': '#943126',
-  'Viking Electronics': '#7B241C', '2N': '#1A252F', 'Shelly': '#E67E22',
-  'Belden': '#1C2833', 'ADI Pro': '#17202A', 'GateGuard': '#00A3FF', 'Bosch': '#B03A2E',
-};
-
-// ── Types ────────────────────────────────────────────────────────────────────
-interface Terminal { name: string; dx: number; dy: number; lx?: number; ly?: number }
-interface DesignMeta {
-  role?: string;
-  abbr?: string;
-  color?: string;
-  isBoard?: boolean;
-  placementImageUrl?: string;
-  wiringImageUrl?: string;
-  terminals?: Terminal[];
-  defaultCable?: string;
-}
-
-// Raw DB row (snake_case, drift-tolerant).
-interface ProductRow {
-  id: string;
-  name: string;
-  sku?: string | null;
-  brand?: string | null;
-  category?: string | null;
-  subcategory?: string | null;
-  description?: string | null;
-  specs?: string | null;
-  msrp?: number | null;
-  dealer_cost?: number | null;
-  sell_price?: number | null;
-  adi_sku?: string | null;
-  image_url?: string | null;
-  active?: boolean | null;
-  field_service?: boolean | null;
-  tags?: string[] | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  design_meta?: any;
-}
-
-// Form shape used inside the editor (all coerced to non-null).
-interface ProductForm {
-  id?: string;
-  sku: string;
-  brand: string;
-  name: string;
-  category: string;
-  subcategory: string;
-  description: string;
-  specs: string;
-  msrp: number;
-  dealerCost: number;
-  sellPrice: number;
-  adiSku: string;
-  imageUrl: string;
-  active: boolean;
-  fieldService: boolean;
-  tags: string[];
-  designMeta: DesignMeta;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const brandInitials = (brand: string) =>
-  (brand || '?').split(/[\s/]+/).map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-const fmt$ = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : '—');
-const calcMargin = (cost: number, sell: number) =>
-  sell > 0 && cost > 0 ? Math.round(((sell - cost) / sell) * 100) : null;
-
-const rowToForm = (r: ProductRow): ProductForm => ({
-  id: r.id,
-  sku: r.sku ?? '',
-  brand: r.brand ?? '',
-  name: r.name ?? '',
-  category: r.category ?? 'Camera',
-  subcategory: r.subcategory ?? '',
-  description: r.description ?? '',
-  specs: r.specs ?? '',
-  msrp: Number(r.msrp) || 0,
-  dealerCost: Number(r.dealer_cost) || 0,
-  sellPrice: Number(r.sell_price) || 0,
-  adiSku: r.adi_sku ?? '',
-  imageUrl: r.image_url ?? '',
-  active: r.active ?? true,
-  fieldService: r.field_service ?? false,
-  tags: Array.isArray(r.tags) ? r.tags : [],
-  designMeta: (r.design_meta && typeof r.design_meta === 'object') ? r.design_meta : {},
-});
-
-const emptyForm = (): ProductForm => ({
-  sku: '', brand: 'GateGuard', name: '', category: 'Camera', subcategory: '',
-  description: '', specs: '', msrp: 0, dealerCost: 0, sellPrice: 0,
-  adiSku: '', imageUrl: '', active: true, fieldService: false, tags: [], designMeta: {},
-});
-
-// ── Product thumbnail (image w/ brand-initials fallback) ─────────────────────
-function ProductThumb({ url, brand, size = 40 }: { url?: string | null; brand: string; size?: number }) {
-  const [err, setErr] = useState(false);
-  const color = BRAND_COLORS[brand] ?? '#334155';
-  if (url && !err) {
-    return (
-      <img
-        src={url}
-        alt={brand}
-        onError={() => setErr(true)}
-        className="object-contain rounded-lg bg-white shrink-0"
-        style={{ width: size, height: size }}
-      />
-    );
+// ── CSV (header-based; handles quotes and commas inside quotes) ──────────────
+function parseCsv(text: string): string[][] {
+  const out: string[][] = []; let row: string[] = []; let cell = ''; let q = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++ } else q = false } else cell += c }
+    else if (c === '"') q = true
+    else if (c === ',') { row.push(cell); cell = '' }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); out.push(row); row = []; cell = '' }
+    else cell += c
   }
-  return (
-    <div
-      className="rounded-lg flex items-center justify-center shrink-0 font-bold text-white"
-      style={{ width: size, height: size, background: color, fontSize: size * 0.3 }}
-    >
-      {brandInitials(brand)}
-    </div>
-  );
+  if (cell || row.length) { row.push(cell); out.push(row) }
+  return out.filter(r => r.some(x => x.trim()))
+}
+const CSV_COLS = ['sku', 'name', 'brand', 'category', 'subcategory', 'description', 'specs', 'msrp', 'dealer_cost', 'sell_price', 'labor_hours', 'unit', 'warranty_months', 'adi_sku', 'image_url', 'active'] as const
+const HEADER_ALIASES: Record<string, string> = { model: 'sku', 'model #': 'sku', 'part #': 'sku', product: 'name', 'product name': 'name', manufacturer: 'brand', cost: 'dealer_cost', 'your cost': 'dealer_cost', price: 'sell_price', 'sell price': 'sell_price', labor: 'labor_hours', 'labor hours': 'labor_hours', warranty: 'warranty_months', image: 'image_url' }
+const NUM_COLS = new Set(['msrp', 'dealer_cost', 'sell_price', 'labor_hours', 'warranty_months'])
+const csvEsc = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+function toCsv(rows: ProductRow[]): string {
+  return [CSV_COLS.join(','), ...rows.map(r => CSV_COLS.map(c => csvEsc((r as unknown as Record<string, unknown>)[c] ?? (c === 'active' ? (r.active === false ? 'no' : 'yes') : ''))).join(','))].join('\n')
+}
+function download(name: string, text: string) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-// ── Small glass field wrapper ─────────────────────────────────────────────────
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-[11px] font-medium block" style={{ color: MUTED }}>
-        {label}{required && <span className="ml-0.5" style={{ color: '#F87171' }}>*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle: React.CSSProperties = { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT };
-const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none';
-
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-// ── Visual terminal/port mapper ───────────────────────────────────────────────
-// Tap the image to drop a port, drag it into place, tap a dot to rename/remove.
-// Positions are stored as dx/dy (canvas px offset from the device center) so the
-// drawing tool overlays them on the exact same spots.
-function TerminalMapper({
-  imageUrl, terminals, onChange,
-}: {
-  imageUrl?: string;
-  terminals: Terminal[];
-  onChange: (t: Terminal[]) => void;
-}) {
-  const CANVAS = 160; // detail-sheet symbol size the design tool renders at
-  const LBL_DY = -30; // default label offset (canvas px) — sits above the dot
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 240, h: 160 });
-  const [drag, setDrag] = useState<{ i: number; mode: 'dot' | 'label' } | null>(null);
-  const [selIdx, setSelIdx] = useState<number | null>(null);
-
-  const measure = () => {
-    const el = boxRef.current;
-    if (el) { const r = el.getBoundingClientRect(); if (r.width && r.height) setBox({ w: r.width, h: r.height }); }
-  };
-  useEffect(() => { measure(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [imageUrl]);
-
-  const scale = CANVAS / Math.max(box.w, box.h); // dx/dy per on-screen px
-  const toScreen = (dx: number, dy: number) => ({ x: box.w / 2 + dx / scale, y: box.h / 2 + dy / scale });
-  const fromScreen = (x: number, y: number) => ({ dx: Math.round((x - box.w / 2) * scale), dy: Math.round((y - box.h / 2) * scale) });
-  const lblOff = (t: Terminal) => ({ lx: t.lx ?? 0, ly: t.ly ?? LBL_DY });
-
-  const ptFromEvent = (e: { clientX: number; clientY: number }) => {
-    const r = boxRef.current!.getBoundingClientRect();
-    return { x: clamp(e.clientX - r.left, 0, r.width), y: clamp(e.clientY - r.top, 0, r.height) };
-  };
-
-  const onBgClick = (e: React.MouseEvent) => {
-    if (drag) return;
-    if ((e.target as HTMLElement).dataset.dot) return;
-    const { x, y } = ptFromEvent(e);
-    const { dx, dy } = fromScreen(x, y);
-    const next = [...terminals, { name: `P${terminals.length + 1}`, dx, dy }];
-    onChange(next);
-    setSelIdx(next.length - 1);
-  };
-
-  const onDown = (i: number, mode: 'dot' | 'label', e: React.PointerEvent) => {
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    setDrag({ i, mode }); setSelIdx(i);
-  };
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag) return;
-    const { x, y } = ptFromEvent(e);
-    const p = fromScreen(x, y);
-    onChange(terminals.map((t, idx) => {
-      if (idx !== drag.i) return t;
-      if (drag.mode === 'dot') return { ...t, dx: p.dx, dy: p.dy };
-      return { ...t, lx: p.dx - t.dx, ly: p.dy - t.dy }; // label offset from dot
-    }));
-  };
-  const endDrag = () => setDrag(null);
-
-  const rename = (name: string) => { if (selIdx === null) return; onChange(terminals.map((t, i) => (i === selIdx ? { ...t, name } : t))); };
-  const removeSel = () => { if (selIdx === null) return; onChange(terminals.filter((_, i) => i !== selIdx)); setSelIdx(null); };
-
-  return (
-    <div className="space-y-2">
-      <p className="text-[11px]" style={{ color: MUTED }}>
-        Tap the image to drop a port · drag the <span style={{ color: CYAN }}>ring</span> onto the jack · drag the label out of the way · tap either to rename/remove.
-      </p>
-      <div
-        ref={boxRef}
-        onClick={onBgClick}
-        onPointerMove={onMove}
-        onPointerUp={endDrag}
-        onPointerLeave={endDrag}
-        className="relative inline-block select-none rounded-lg overflow-hidden"
-        style={{ cursor: 'crosshair', border: `1px solid ${BORDER}`, backgroundColor: '#fff', touchAction: 'none', maxWidth: 260 }}
-      >
-        {imageUrl ? (
-          <img src={imageUrl} onLoad={measure} draggable={false} alt="terminal map" style={{ display: 'block', maxWidth: 260, maxHeight: 260 }} />
-        ) : (
-          <div className="flex items-center justify-center text-center text-[11px] px-4" style={{ width: 240, height: 160, backgroundColor: PANEL, color: MUTED }}>
-            No line drawing yet — tap to drop ports, or add a Line drawing above for exact placement.
-          </div>
-        )}
-        {/* connector lines from each dot to its label */}
-        <svg width={box.w} height={box.h} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
-          {terminals.map((t, i) => {
-            const { lx, ly } = lblOff(t);
-            const d = toScreen(t.dx, t.dy);
-            const l = toScreen(t.dx + lx, t.dy + ly);
-            return <line key={i} x1={d.x} y1={d.y} x2={l.x} y2={l.y} stroke="rgba(0,150,200,0.55)" strokeWidth="1" strokeDasharray="2 2" />;
-          })}
-        </svg>
-        {terminals.map((t, i) => {
-          const { lx, ly } = lblOff(t);
-          const d = toScreen(t.dx, t.dy);
-          const l = toScreen(t.dx + lx, t.dy + ly);
-          const sel = selIdx === i;
-          return (
-            <React.Fragment key={i}>
-              {/* connection point — the ring sits on the jack */}
-              <div
-                data-dot="1"
-                onPointerDown={(e) => onDown(i, 'dot', e)}
-                className="absolute"
-                style={{ left: d.x, top: d.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
-              >
-                <span
-                  data-dot="1"
-                  className="block rounded-full"
-                  style={{ width: 13, height: 13, background: 'transparent', border: `3px solid ${CYAN}`, boxShadow: sel ? `0 0 0 2px ${CYAN}` : '0 0 0 1px rgba(0,0,0,0.5)' }}
-                />
-              </div>
-              {/* label — drag it anywhere so it doesn't cover a jack */}
-              <div
-                data-dot="1"
-                onPointerDown={(e) => onDown(i, 'label', e)}
-                className="absolute"
-                style={{ left: l.x, top: l.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
-              >
-                <span
-                  data-dot="1"
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
-                  style={{ background: 'rgba(11,23,40,0.92)', color: '#fff', border: `1px solid ${sel ? CYAN : BORDER}` }}
-                >
-                  {t.name || '·'}
-                </span>
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      {/* Selected port — rename / remove */}
-      {selIdx !== null && terminals[selIdx] && (
-        <div className="flex items-center gap-2">
-          <input
-            autoFocus
-            value={terminals[selIdx].name}
-            onChange={(e) => rename(e.target.value)}
-            placeholder="Port name (e.g. WAN, LAN1, PWR)"
-            className="flex-1 px-2 py-1.5 text-xs rounded-lg outline-none"
-            style={inputStyle}
-          />
-          <button type="button" onClick={removeSel} className="p-1.5 rounded-lg" style={{ color: '#F87171', border: `1px solid ${BORDER}` }}>
-            <Trash2 size={13} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Editor modal ──────────────────────────────────────────────────────────────
-function ProductEditor({
-  initial, onClose, onSaved,
-}: {
-  initial: ProductForm;
-  onClose: () => void;
-  onSaved: (row: ProductRow) => void;
-}) {
-  const isEdit = !!initial.id;
-  const [form, setForm] = useState<ProductForm>(initial);
-  const [saving, setSaving] = useState(false);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
-
-  const set = <K extends keyof ProductForm>(k: K, v: ProductForm[K]) => setForm((p) => ({ ...p, [k]: v }));
-  const design = form.designMeta;
-  const setD = (k: keyof DesignMeta, v: string | boolean | Terminal[] | undefined) =>
-    set('designMeta', { ...form.designMeta, [k]: v });
-  const m = calcMargin(form.dealerCost, form.sellPrice);
-
-  const [showDesign, setShowDesign] = useState<boolean>(
-    !!(initial.designMeta && (initial.designMeta.role || initial.designMeta.isBoard || initial.designMeta.wiringImageUrl)),
-  );
-
-  // ── Image slots ────────────────────────────────────────────────────────────
-  type ImgKind = 'general' | 'placement' | 'wiring';
-  const IMG_LABEL: Record<ImgKind, string> = { general: 'Icon', placement: 'Placement symbol', wiring: 'Line drawing' };
-  const [imgBusy, setImgBusy] = useState<'' | ImgKind | `find-${ImgKind}`>('');
-  const [imgStatus, setImgStatus] = useState<string | null>(null);
-  const genRef = useRef<HTMLInputElement>(null);
-  const placeRef = useRef<HTMLInputElement>(null);
-  const wireRef = useRef<HTMLInputElement>(null);
-
-  const applyImg = (kind: ImgKind, url: string) => {
-    if (kind === 'general') set('imageUrl', url);
-    else if (kind === 'placement') setD('placementImageUrl', url);
-    else setD('wiringImageUrl', url);
-  };
-
-  const uploadImage = async (file: File, kind: ImgKind) => {
-    setImgBusy(kind);
-    setImgStatus(`Uploading ${IMG_LABEL[kind].toLowerCase()}…`);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('kind', kind);
-      if (form.id) fd.append('id', form.id);
-      fd.append('name', `${form.brand} ${form.name}`.trim());
-      const res = await fetch('/api/products/upload-image', { method: 'POST', body: fd });
-      const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-      if (!res.ok) throw new Error(d.error ?? 'Upload failed');
-      applyImg(kind, d.url as string);
-      setImgStatus(`✅ ${IMG_LABEL[kind]} uploaded`);
-    } catch (e) {
-      setImgStatus(`❌ ${e instanceof Error ? e.message : 'Upload failed'}`);
-    } finally {
-      setImgBusy('');
-    }
-  };
-
-  const findImage = async (kind: ImgKind) => {
-    setImgBusy(`find-${kind}`);
-    setImgStatus(`🔍 Searching for ${IMG_LABEL[kind].toLowerCase()}…`);
-    try {
-      const searchName =
-        kind === 'wiring' ? `${form.name} wiring diagram terminals`
-          : kind === 'placement' ? `${form.name} line drawing symbol`
-            : form.name;
-      const res = await fetch('/api/products/find-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: searchName,
-          brand: form.brand,
-          id: (kind === 'general' && form.id) ? form.id : undefined,
-        }),
-      });
-      const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-      if (!res.ok) throw new Error(d.error ?? 'Search failed');
-      applyImg(kind, d.url as string);
-      setImgStatus(`✅ Found ${IMG_LABEL[kind].toLowerCase()}`);
-    } catch (e) {
-      setImgStatus(`❌ ${e instanceof Error ? e.message : 'Search failed'}`);
-    } finally {
-      setImgBusy('');
-    }
-  };
-
-  // ── Terminal map ─────────────────────────────────────────────────────────────
-  const terminals = design.terminals ?? [];
-  const addTerminal = () =>
-    setD('terminals', [...terminals, { name: '', dx: -30, dy: terminals.length * 16 - terminals.length * 8 }]);
-  const setTerminal = (i: number, patch: Partial<Terminal>) =>
-    setD('terminals', terminals.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-  const removeTerminal = (i: number) =>
-    setD('terminals', terminals.filter((_, idx) => idx !== i));
-
-  // ── Save ─────────────────────────────────────────────────────────────────────
-  const save = async () => {
-    if (!form.name.trim()) { setSaveErr('Product name is required'); return; }
-    setSaving(true);
-    setSaveErr(null);
-    try {
-      const payload = {
-        name: form.name.trim(),
-        sku: form.sku.trim() || undefined,
-        brand: form.brand,
-        category: form.category,
-        subcategory: form.subcategory,
-        description: form.description,
-        specs: form.specs,
-        msrp: form.msrp,
-        dealer_cost: form.dealerCost,
-        sell_price: form.sellPrice,
-        adi_sku: form.adiSku,
-        image_url: form.imageUrl,
-        active: form.active,
-        field_service: form.fieldService,
-        tags: form.tags,
-        design_meta: form.designMeta,
-      };
-      const res = await fetch('/api/products', {
-        method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isEdit ? { id: form.id, ...payload } : payload),
-      });
-      const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-      if (!res.ok) throw new Error(d.error ?? 'Save failed');
-      onSaved(d.product as ProductRow);
-    } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const swatchCls = 'w-5 h-5 rounded-full border-2 transition-transform hover:scale-110';
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-center overflow-y-auto p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-      onClick={() => !saving && onClose()}
-    >
-      <div
-        className="w-full max-w-2xl rounded-2xl flex flex-col my-auto"
-        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, maxHeight: 'calc(100vh - 2rem)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: BORDER }}>
-          <h2 className="text-sm font-semibold" style={{ color: TEXT }}>
-            {isEdit ? 'Edit Product' : 'Add Product'}
-          </h2>
-          <button onClick={() => !saving && onClose()} style={{ color: MUTED }}><X size={18} /></button>
-        </div>
-
-        {/* Scrollable body — flex-1 + min-h-0 so the footer (Save) always stays
-            pinned & visible; modal-scroll containment (known app bug). */}
-        <div
-          className="px-6 py-5 space-y-4 flex-1"
-          style={{
-            minHeight: 0,
-            overflowY: 'auto',
-            overscrollBehavior: 'contain',
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          {/* Identity */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="SKU / Model #">
-              <input value={form.sku} onChange={(e) => set('sku', e.target.value)} placeholder="e.g. CMIP3CD42WI-28" className={inputCls} style={inputStyle} />
-            </Field>
-            <Field label="Brand">
-              <input value={form.brand} onChange={(e) => set('brand', e.target.value)} placeholder="e.g. LTS Security" className={inputCls} style={inputStyle} />
-            </Field>
-          </div>
-          <Field label="Product Name" required>
-            <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full product name" className={inputCls} style={inputStyle} />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Category">
-              <select value={form.category} onChange={(e) => set('category', e.target.value)} className={inputCls} style={inputStyle}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </Field>
-            <Field label="Subcategory">
-              <input value={form.subcategory} onChange={(e) => set('subcategory', e.target.value)} placeholder="e.g. IP Dome, Barrier, Switch" className={inputCls} style={inputStyle} />
-            </Field>
-          </div>
-          <Field label="Description">
-            <textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={2} className={`${inputCls} resize-none`} style={inputStyle} />
-          </Field>
-          <Field label="Key Specs">
-            <textarea value={form.specs} onChange={(e) => set('specs', e.target.value)} rows={2} className={`${inputCls} resize-none`} style={inputStyle} />
-          </Field>
-
-          {/* Pricing */}
-          <div className="grid grid-cols-4 gap-3">
-            <Field label="MSRP ($)">
-              <input type="number" value={form.msrp || ''} onChange={(e) => set('msrp', Number(e.target.value))} className={inputCls} style={inputStyle} />
-            </Field>
-            <Field label="Your Cost ($)">
-              <input type="number" value={form.dealerCost || ''} onChange={(e) => set('dealerCost', Number(e.target.value))} className={inputCls} style={{ ...inputStyle, borderColor: 'rgba(245,158,11,0.5)' }} />
-            </Field>
-            <Field label="Sell Price ($)">
-              <input type="number" value={form.sellPrice || ''} onChange={(e) => set('sellPrice', Number(e.target.value))} className={inputCls} style={{ ...inputStyle, borderColor: `${BRAND}88` }} />
-            </Field>
-            <Field label="Margin">
-              <div
-                className="px-3 py-2 rounded-lg text-sm font-bold text-center"
-                style={{
-                  border: `1px solid ${BORDER}`,
-                  backgroundColor: PANEL,
-                  color: m === null ? MUTED : m >= 40 ? '#34D399' : m >= 25 ? '#FBBF24' : '#F87171',
-                }}
-              >
-                {m !== null ? `${m}%` : '—'}
-              </div>
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="ADI SKU">
-              <input value={form.adiSku} onChange={(e) => set('adiSku', e.target.value)} placeholder="ADI part #" className={inputCls} style={inputStyle} />
-            </Field>
-            <Field label="Icon Image URL">
-              <input value={form.imageUrl} onChange={(e) => set('imageUrl', e.target.value)} placeholder="Paste image URL, or use the slots below" className={inputCls} style={inputStyle} />
-            </Field>
-          </div>
-
-          {/* Toggles */}
-          <div className="flex items-center gap-8 pt-1">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => set('active', !form.active)}
-                className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                style={{ backgroundColor: form.active ? BRAND : '#334155' }}
-              >
-                <span className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform" style={{ transform: form.active ? 'translateX(24px)' : 'translateX(4px)' }} />
-              </button>
-              <span className="text-sm font-medium" style={{ color: TEXT }}>{form.active ? 'Active' : 'Inactive'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => set('fieldService', !form.fieldService)}
-                className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                style={{ backgroundColor: form.fieldService ? '#10B981' : '#334155' }}
-              >
-                <span className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform" style={{ transform: form.fieldService ? 'translateX(24px)' : 'translateX(4px)' }} />
-              </button>
-              <span className="text-sm font-medium" style={{ color: TEXT }}>Field Service</span>
-              <span className="text-[10px]" style={{ color: MUTED }}>(shows in /tech tool)</span>
-            </div>
-          </div>
-
-          {/* ── Design & Wiring ─────────────────────────────────────────────── */}
-          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
-            <button
-              type="button"
-              onClick={() => setShowDesign((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 transition-colors hover:brightness-125"
-              style={{ backgroundColor: PANEL }}
-            >
-              <div className="flex items-center gap-2">
-                <Layers size={15} style={{ color: BRAND }} />
-                <span className="text-sm font-semibold" style={{ color: TEXT }}>Design &amp; Wiring</span>
-                <span className="text-[10px]" style={{ color: MUTED }}>— how this shows on system drawings</span>
-              </div>
-              <span className="text-xs" style={{ color: MUTED }}>{showDesign ? 'Hide' : 'Set up'}</span>
-            </button>
-
-            {showDesign && (
-              <div className="p-4 space-y-4" style={{ backgroundColor: CARD }}>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Drawing Role">
-                    <select value={design.role ?? ''} onChange={(e) => setD('role', e.target.value)} className={inputCls} style={inputStyle}>
-                      {DESIGN_ROLES.map((r) => <option key={r} value={r}>{r === '' ? '— none —' : r}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Badge / Abbreviation">
-                    <input value={design.abbr ?? ''} onChange={(e) => setD('abbr', e.target.value)} placeholder="e.g. SDC, CAM, GW" className={inputCls} style={inputStyle} />
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Marker Color">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={design.color ?? '#00A3FF'}
-                        onChange={(e) => setD('color', e.target.value)}
-                        className="h-9 w-10 rounded-lg cursor-pointer p-0.5"
-                        style={{ border: `1px solid ${BORDER}`, backgroundColor: PANEL }}
-                      />
-                      <div className="flex flex-wrap gap-1">
-                        {DESIGN_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setD('color', c)}
-                            className={swatchCls}
-                            style={{ background: c, borderColor: design.color === c ? TEXT : 'rgba(255,255,255,0.25)' }}
-                            title={c}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </Field>
-                  <Field label="Default Cable">
-                    <select value={design.defaultCable ?? ''} onChange={(e) => setD('defaultCable', e.target.value)} className={inputCls} style={inputStyle}>
-                      {DESIGN_CABLES.map((c) => <option key={c} value={c}>{c === '' ? '— none —' : c}</option>)}
-                    </select>
-                  </Field>
-                </div>
-
-                {/* Ports / terminals toggle → design_meta.isBoard */}
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setD('isBoard', !design.isBoard)}
-                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                    style={{ backgroundColor: design.isBoard ? BRAND : '#334155' }}
-                  >
-                    <span className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform" style={{ transform: design.isBoard ? 'translateX(24px)' : 'translateX(4px)' }} />
-                  </button>
-                  <span className="text-sm font-medium" style={{ color: TEXT }}>Has ports / terminals to map</span>
-                  <span className="text-[10px]" style={{ color: MUTED }}>(shows a terminal strip in detail drawings)</span>
-                </div>
-
-                {/* Three image slots */}
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { kind: 'general' as ImgKind, title: 'Icon', hint: 'catalog · invoice · proposal', ref: genRef, url: form.imageUrl },
-                    { kind: 'placement' as ImgKind, title: 'Placement symbol', hint: 'basic / overview drawings', ref: placeRef, url: design.placementImageUrl },
-                    { kind: 'wiring' as ImgKind, title: 'Line drawing', hint: 'device + terminals (detail)', ref: wireRef, url: design.wiringImageUrl },
-                  ]).map((slot) => (
-                    <div key={slot.kind} className="space-y-1.5">
-                      <label className="text-[11px] font-medium block leading-tight" style={{ color: TEXT }}>
-                        {slot.title}<br />
-                        <span className="text-[10px] font-normal" style={{ color: MUTED }}>{slot.hint}</span>
-                      </label>
-                      <div className="rounded-lg p-2 flex flex-col items-center gap-2" style={{ border: `1px solid ${BORDER}`, backgroundColor: PANEL }}>
-                        {slot.url
-                          ? <img src={slot.url} alt={slot.title} className="w-16 h-16 object-contain rounded bg-white" style={{ border: `1px solid ${BORDER}` }} />
-                          : <div className="w-16 h-16 rounded flex items-center justify-center text-[10px]" style={{ border: `1px dashed ${BORDER}`, color: MUTED }}>none</div>}
-                        <div className="flex gap-1 w-full">
-                          <input ref={slot.ref} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f, slot.kind); }} />
-                          <button
-                            type="button"
-                            onClick={() => slot.ref.current?.click()}
-                            disabled={imgBusy !== ''}
-                            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-semibold disabled:opacity-50"
-                            style={{ backgroundColor: BRAND, color: '#fff' }}
-                          >
-                            {imgBusy === slot.kind ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}Upload
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => findImage(slot.kind)}
-                            disabled={imgBusy !== '' || !form.name}
-                            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-semibold disabled:opacity-50"
-                            style={{ backgroundColor: '#00A3FF', color: TEXT }}
-                          >
-                            {imgBusy === `find-${slot.kind}` ? <Loader2 size={10} className="animate-spin" /> : <Search size={10} />}Find
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {imgStatus && (
-                  <p
-                    className="text-xs px-2 py-1 rounded-lg"
-                    style={{
-                      backgroundColor: imgStatus.startsWith('✅') ? 'rgba(16,185,129,0.12)' : imgStatus.startsWith('❌') ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
-                      color: imgStatus.startsWith('✅') ? '#34D399' : imgStatus.startsWith('❌') ? '#F87171' : '#FBBF24',
-                    }}
-                  >
-                    {imgStatus}
-                  </p>
-                )}
-
-                {/* Terminal map — only when ports toggle is ON */}
-                {design.isBoard && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-medium" style={{ color: TEXT }}>
-                        Terminal Map <span className="text-[10px]" style={{ color: MUTED }}>(screws wires land on)</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={addTerminal}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold"
-                        style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
-                      >
-                        <Plus size={11} />Add terminal
-                      </button>
-                    </div>
-
-                    {/* Visual mapper — drop & drag ports onto the drawing */}
-                    <TerminalMapper
-                      imageUrl={design.wiringImageUrl || design.placementImageUrl || form.imageUrl}
-                      terminals={terminals}
-                      onChange={(t) => setD('terminals', t)}
-                    />
-
-                    {terminals.length > 0 && (
-                      <details>
-                        <summary className="text-[10px] cursor-pointer" style={{ color: MUTED }}>Fine-tune positions (numbers)</summary>
-                        <div className="mt-2">
-                    {terminals.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="grid grid-cols-[1fr_64px_64px_28px] gap-2 px-1 text-[10px] font-medium" style={{ color: MUTED }}>
-                          <span>Name</span><span>X offset</span><span>Y offset</span><span />
-                        </div>
-                        {terminals.map((t, i) => (
-                          <div key={i} className="grid grid-cols-[1fr_64px_64px_28px] gap-2 items-center">
-                            <input value={t.name} onChange={(e) => setTerminal(i, { name: e.target.value })} placeholder="LOCK+" className="px-2 py-1 text-xs rounded-lg outline-none" style={inputStyle} />
-                            <input type="number" value={t.dx} onChange={(e) => setTerminal(i, { dx: Number(e.target.value) })} className="px-2 py-1 text-xs rounded-lg outline-none" style={inputStyle} />
-                            <input type="number" value={t.dy} onChange={(e) => setTerminal(i, { dy: Number(e.target.value) })} className="px-2 py-1 text-xs rounded-lg outline-none" style={inputStyle} />
-                            <button type="button" onClick={() => removeTerminal(i)} className="p-1 rounded-lg" style={{ color: '#F87171' }}><Trash2 size={13} /></button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {saveErr && (
-            <p className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#F87171' }}>{saveErr}</p>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0" style={{ borderColor: BORDER }}>
-          <button
-            onClick={() => !saving && onClose()}
-            className="px-4 py-2 rounded-xl text-sm transition-colors hover:brightness-125"
-            style={{ border: `1px solid ${BORDER}`, color: MUTED }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={!form.name.trim() || saving}
-            className="px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-2"
-            style={{ backgroundColor: BRAND, color: '#fff' }}
-          >
-            {saving && <Loader2 size={13} className="animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Add Product'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main surface ──────────────────────────────────────────────────────────────
 export default function CatalogSurface() {
-  const [products, setProducts] = useState<ProductRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState('');
-  const [catFilter, setCatFilter] = useState<string>('All');
-  const [editing, setEditing] = useState<ProductForm | null>(null);
-
-  const catOf = (p: ProductRow) => (p.category && p.category.trim()) ? p.category : 'Other';
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [stock, setStock] = useState<Stock>({})
+  const [coverage, setCoverage] = useState<Record<string, { chunks: number }>>({})
+  const [ggCosts, setGgCosts] = useState<Record<string, number>>({})
+  const [isCorporate, setIsCorporate] = useState(false)
+  const [query, setQuery] = useState('')
+  const [cat, setCat] = useState('All')
+  const [brand, setBrand] = useState('')
+  const [kpi, setKpi] = useState<Kpi>('active')
+  const [sort, setSort] = useState<Sort>('name')
+  const [view, setView] = useState<'list' | 'grid'>(() => { try { return (localStorage.getItem('gg_catalog_view') as 'list' | 'grid') || 'list' } catch { return 'list' } })
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<ProductForm | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [pct, setPct] = useState('')
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setLoadErr(null)
     try {
-      const res = await fetch('/api/products?limit=300', { cache: 'no-store' });
-      const json = res.ok ? await res.json() : { products: [] };
-      setProducts(Array.isArray(json.products) ? json.products : []);
-    } catch {
-      /* leave empty — never fake demo data */
+      const [p, s, c, g] = await Promise.all([
+        fetch('/api/products?limit=2000&active=false', { cache: 'no-store' }),
+        fetch('/api/products/stats', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/kb/coverage', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/admin/product-costs', { cache: 'no-store' }).catch(() => null),
+      ])
+      const pj = await p.json().catch(() => ({}))
+      if (!p.ok) setLoadErr(pj.error || 'Couldn’t load the catalog.')
+      setProducts(Array.isArray(pj.products) ? pj.products : [])
+      if (s?.ok) setStock((await s.json().catch(() => ({}))).stock ?? {})
+      if (c?.ok) setCoverage((await c.json().catch(() => ({}))).coverage ?? {})
+      if (g?.ok) { setIsCorporate(true); setGgCosts((await g.json().catch(() => ({}))).costs ?? {}) }
+    } catch { setLoadErr('Couldn’t load the catalog.') }
+    setLoading(false)
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  // Deep link: /?tab=catalog&product=<id> opens the product page; the URL follows the open product.
+  useEffect(() => { try { const id = new URLSearchParams(window.location.search).get('product'); if (id) setOpenId(id) } catch { /* ignore */ } }, [])
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href)
+      if (openId) u.searchParams.set('product', openId); else u.searchParams.delete('product')
+      window.history.replaceState({}, '', u.pathname + (u.search ? u.search : ''))
+    } catch { /* ignore */ }
+  }, [openId])
+  useEffect(() => { try { localStorage.setItem('gg_catalog_view', view) } catch { /* ignore */ } }, [view])
+
+  const hasManual = useCallback((p: ProductRow) => !!p.manual_url || (coverage[p.id]?.chunks ?? 0) > 0, [coverage])
+  const isLow = useCallback((p: ProductRow) => { const s = stock[p.id]; return !!s && s.min > 0 && s.onHand < s.min }, [stock])
+  const marginOf = (p: ProductRow) => calcMargin(Number(p.dealer_cost) || 0, Number(p.sell_price) || 0)
+
+  const counts = useMemo(() => {
+    const act = products.filter(p => p.active !== false)
+    return {
+      active: act.length,
+      low: act.filter(isLow).length,
+      noprice: act.filter(p => !(Number(p.sell_price) > 0) && catOf(p) !== 'Labor').length,
+      lowmargin: act.filter(p => { const m = marginOf(p); return m !== null && m < 25 }).length,
+      nomanual: act.filter(p => !hasManual(p) && !['Labor', 'Wire & Hardware'].includes(catOf(p))).length,
+      archived: products.length - act.length,
     }
-    setLoading(false);
-  }, []);
+  }, [products, isLow, hasManual])
 
-  useEffect(() => { load(); }, [load]);
+  const base = useMemo(() => products.filter(p => {
+    switch (kpi) {
+      case 'archived': return p.active === false
+      case 'low': return p.active !== false && isLow(p)
+      case 'noprice': return p.active !== false && !(Number(p.sell_price) > 0) && catOf(p) !== 'Labor'
+      case 'lowmargin': { const m = marginOf(p); return p.active !== false && m !== null && m < 25 }
+      case 'nomanual': return p.active !== false && !hasManual(p) && !['Labor', 'Wire & Hardware'].includes(catOf(p))
+      default: return p.active !== false
+    }
+  }), [products, kpi, isLow, hasManual])
 
-  // Category chips: known categories first (in a fixed order), then any extras
-  // actually present, each with a live count. "All" always leads.
-  const catChips = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of products) counts.set(catOf(p), (counts.get(catOf(p)) ?? 0) + 1);
-    const ordered: string[] = [];
-    for (const c of CATEGORIES) if (counts.has(c)) ordered.push(c);
-    for (const c of Array.from(counts.keys()).sort()) if (!ordered.includes(c)) ordered.push(c);
-    return [{ label: 'All', count: products.length }, ...ordered.map((c) => ({ label: c, count: counts.get(c) ?? 0 }))];
-  }, [products]);
+  const chips = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of base) m.set(catOf(p), (m.get(catOf(p)) ?? 0) + 1)
+    const order = [...CATEGORIES.filter(c => m.has(c)), ...Array.from(m.keys()).filter(c => !(CATEGORIES as readonly string[]).includes(c)).sort()]
+    return [{ label: 'All', count: base.length }, ...order.map(c => ({ label: c, count: m.get(c) ?? 0 }))]
+  }, [base])
+  const brands = useMemo(() => Array.from(new Set(products.map(p => p.brand).filter(Boolean) as string[])).sort(), [products])
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return products.filter((p) => {
-      if (catFilter !== 'All' && catOf(p) !== catFilter) return false;
-      if (!q) return true;
-      return (p.name ?? '').toLowerCase().includes(q) ||
-        (p.sku ?? '').toLowerCase().includes(q) ||
-        (p.brand ?? '').toLowerCase().includes(q) ||
-        (p.category ?? '').toLowerCase().includes(q);
-    });
-  }, [products, query, catFilter]);
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const xs = base.filter(p => (cat === 'All' || catOf(p) === cat) && (!brand || p.brand === brand) &&
+      (!q || `${p.name} ${p.sku ?? ''} ${p.brand ?? ''} ${p.category ?? ''} ${p.subcategory ?? ''} ${p.adi_sku ?? ''} ${(p.tags ?? []).join(' ')}`.toLowerCase().includes(q)))
+    const by: Record<Sort, (a: ProductRow, b: ProductRow) => number> = {
+      name: (a, b) => a.name.localeCompare(b.name),
+      price: (a, b) => (Number(b.sell_price) || 0) - (Number(a.sell_price) || 0),
+      margin: (a, b) => (marginOf(a) ?? 999) - (marginOf(b) ?? 999),
+      updated: (a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')),
+      stock: (a, b) => (stock[a.id]?.onHand ?? -1) - (stock[b.id]?.onHand ?? -1),
+    }
+    return xs.sort(by[sort])
+  }, [base, cat, brand, query, sort, stock])
 
-  // When browsing "All" with no search, group cards under category headers so a
-  // long catalog stays scannable. Otherwise show a flat grid of the filtered set.
-  const groups = useMemo(() => {
-    if (catFilter !== 'All' || query.trim()) return null;
-    const m = new Map<string, ProductRow[]>();
-    for (const p of filtered) { const c = catOf(p); if (!m.has(c)) m.set(c, []); m.get(c)!.push(p); }
-    const order = catChips.filter((c) => c.label !== 'All').map((c) => c.label);
-    return order.filter((c) => m.has(c)).map((c) => ({ cat: c, items: m.get(c)! }));
-  }, [filtered, catFilter, query, catChips]);
+  useEffect(() => { setSel(new Set()) }, [kpi, cat, brand, query])
 
-  // On save: replace or prepend the returned row, then close the editor.
-  const handleSaved = (row: ProductRow) => {
-    setProducts((prev) => {
-      const idx = prev.findIndex((p) => p.id === row.id);
-      if (idx >= 0) { const next = prev.slice(); next[idx] = row; return next; }
-      return [row, ...prev];
-    });
-    setEditing(null);
-  };
+  const upsertLocal = (row: ProductRow) => setProducts(prev => { const i = prev.findIndex(p => p.id === row.id); if (i >= 0) { const n = prev.slice(); n[i] = { ...prev[i], ...row }; return n } return [row, ...prev] })
 
-  const renderCard = (p: ProductRow) => {
-    const sell = Number(p.sell_price) || 0;
-    const cost = Number(p.dealer_cost) || 0;
-    const margin = calcMargin(cost, sell);
-    return (
-      <button
-        key={p.id}
-        onClick={() => setEditing(rowToForm(p))}
-        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-colors hover:brightness-125"
-        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, opacity: p.active === false ? 0.55 : 1 }}
-      >
-        <ProductThumb url={p.image_url} brand={p.brand ?? ''} size={48} />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate" style={{ color: TEXT }}>{p.name}</div>
-          <div className="text-[11px] truncate" style={{ color: MUTED }}>
-            {[p.brand, p.category].filter(Boolean).join(' · ') || '—'}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            {p.sku && (
-              <span className="text-[10px] font-mono truncate" style={{ color: MUTED }}>{p.sku}</span>
-            )}
-            {p.active === false && (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide" style={{ backgroundColor: 'rgba(148,163,184,0.16)', color: MUTED }}>Inactive</span>
-            )}
-          </div>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="text-sm font-semibold" style={{ color: sell > 0 ? CYAN : MUTED }}>{fmt$(sell)}</div>
-          {margin !== null && (
-            <div
-              className="text-[10px] font-medium mt-0.5"
-              style={{ color: margin >= 40 ? '#34D399' : margin >= 25 ? '#FBBF24' : '#F87171' }}
-            >
-              {margin}% margin
-            </div>
-          )}
-        </div>
-      </button>
-    );
-  };
+  // ── Bulk ────────────────────────────────────────────────────────────────────
+  async function bulkPatch(label: string, make: (p: ProductRow) => Record<string, unknown> | null) {
+    const targets = products.filter(p => sel.has(p.id))
+    if (!targets.length || busy) return
+    setBusy(true); setMsg(`${label}…`)
+    let ok = 0, denied = 0, failed = 0
+    for (const p of targets) {
+      const patch = make(p); if (!patch) continue
+      const r = await fetch('/api/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id, ...patch }) }).catch(() => null)
+      if (r?.ok) { ok++; const j = await r.json().catch(() => ({})); if (j.product) upsertLocal(j.product) } else if (r?.status === 403) denied++; else failed++
+    }
+    setBusy(false); setSel(new Set())
+    setMsg(`${label}: ${ok} updated${denied ? ` · ${denied} are Gate Guard catalog items you can’t change` : ''}${failed ? ` · ${failed} didn’t save` : ''}.`)
+  }
+  const adjustPrices = () => {
+    const n = Number(pct)
+    if (!isFinite(n) || n === 0 || n < -90 || n > 500) { setMsg('Enter a percent like 5 or -10.'); return }
+    void bulkPatch(`Prices ${n > 0 ? 'up' : 'down'} ${Math.abs(n)}%`, p => { const s = Number(p.sell_price) || 0; return s > 0 ? { sell_price: Math.round(s * (1 + n / 100) * 100) / 100 } : null })
+    setPct('')
+  }
 
-  return (
-    <div className="h-full flex flex-col" style={{ backgroundColor: BG, color: TEXT }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b shrink-0" style={{ borderColor: BORDER }}>
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: `linear-gradient(135deg, ${BRAND}, ${CYAN})` }}
-        >
-          <PenTool size={18} color="#0B1728" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight" style={{ color: TEXT }}>Catalog</h1>
-          <p className="text-xs" style={{ color: MUTED }}>
-            Products — one source for drawings, quotes, invoices &amp; BOM
-          </p>
-        </div>
-        <div className="relative hidden sm:block">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: MUTED }} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search products…"
-            className="pl-9 pr-3 py-2 rounded-xl text-sm outline-none w-56"
-            style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
-          />
-        </div>
-        <button
-          onClick={() => setEditing(emptyForm())}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shrink-0"
-          style={{ backgroundColor: BRAND, color: '#fff' }}
-        >
-          <Plus size={16} /> New Product
-        </button>
+  // ── Import ──────────────────────────────────────────────────────────────────
+  const [csvText, setCsvText] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const preview = useMemo(() => {
+    const grid = parseCsv(csvText)
+    if (grid.length < 2) return { rows: [] as Record<string, unknown>[], cols: [] as string[], error: csvText.trim() ? 'Add a header row and at least one product row.' : '' }
+    const cols = grid[0].map(h => { const k = h.trim().toLowerCase().replace(/[$()]/g, '').trim(); return HEADER_ALIASES[k] ?? k.replace(/\s+/g, '_') })
+    if (!cols.includes('name') && !cols.includes('sku')) return { rows: [], cols, error: 'The first row needs column names — at least “name” or “sku”.' }
+    const rows = grid.slice(1).map(r => {
+      const o: Record<string, unknown> = {}
+      cols.forEach((c, i) => { if (!(CSV_COLS as readonly string[]).includes(c)) return; const v = (r[i] ?? '').trim(); if (v === '') return; o[c] = c === 'active' ? !/^(n|no|false|0)$/i.test(v) : NUM_COLS.has(c) ? Number(v.replace(/[^0-9.]/g, '')) || 0 : v })
+      if (!o.name && o.sku) o.name = o.sku
+      if (o.sku) o.sku = String(o.sku).toUpperCase()
+      return o
+    }).filter(o => o.name)
+    return { rows, cols, error: rows.length ? '' : 'No product rows found.' }
+  }, [csvText])
+  async function doImport() {
+    if (!preview.rows.length || busy) return
+    setBusy(true)
+    const r = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upsert', rows: preview.rows }) }).catch(() => null)
+    const j = r ? await r.json().catch(() => ({})) : {}
+    setBusy(false)
+    if (!r?.ok) { setMsg(j.error || 'Import failed.'); return }
+    setImporting(false); setCsvText('')
+    setMsg(`Imported ${(j.products ?? []).length} products${j.skipped?.length ? ` · skipped ${j.skipped.length} that belong to the Gate Guard catalog` : ''}.`)
+    void load()
+  }
+
+  const allSel = shown.length > 0 && shown.every(p => sel.has(p.id))
+  const toggle = (id: string) => setSel(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const KPIS: { k: Kpi; l: string; s: string; dot: string }[] = [
+    { k: 'active', l: 'Products', s: 'active in the catalog', dot: BRAND },
+    { k: 'low', l: 'Low stock', s: 'below the minimum', dot: RED },
+    { k: 'noprice', l: 'Needs a price', s: 'no sell price set', dot: ORANGE },
+    { k: 'lowmargin', l: 'Low margin', s: 'under 25%', dot: ORANGE },
+    { k: 'nomanual', l: 'No manual', s: 'AI can’t help on jobs', dot: '#8E8E93' },
+    { k: 'archived', l: 'Archived', s: 'hidden from quotes', dot: '#8E8E93' },
+  ]
+
+  return <div className="ct">
+    <style>{CSS}</style>
+    <header className="ct-hd">
+      <div>
+        <h1>Catalog</h1>
+        <div className="sub">{counts.active} products — one list for quotes, jobs, drawings, stock and the tech app</div>
       </div>
-
-      {/* Category chips */}
-      {!loading && products.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto px-6 py-3 border-b shrink-0" style={{ borderColor: BORDER }}>
-          {catChips.map((c) => {
-            const active = catFilter === c.label;
-            return (
-              <button
-                key={c.label}
-                onClick={() => setCatFilter(c.label)}
-                className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors shrink-0"
-                style={active
-                  ? { background: `linear-gradient(135deg, ${BRAND}, rgba(0,163,255,0.2))`, border: `1px solid ${CYAN}88`, color: '#fff' }
-                  : { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
-              >
-                {c.label}
-                <span className="text-[10px] font-bold px-1.5 rounded-full" style={{ backgroundColor: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)', color: active ? '#fff' : MUTED }}>{c.count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        {loading ? (
-          <div className="flex items-center justify-center py-24" style={{ color: MUTED }}>
-            <Loader2 size={22} className="animate-spin mr-2" /> Loading catalog…
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
-              <Package size={24} style={{ color: MUTED }} />
-            </div>
-            <p className="text-sm font-medium" style={{ color: TEXT }}>
-              {query ? 'No products match your search' : 'No products yet'}
-            </p>
-            <p className="text-xs mt-1 mb-5" style={{ color: MUTED }}>
-              {query ? 'Try a different name, SKU, brand, or category.' : 'Add your first product to power drawings, quotes and invoices.'}
-            </p>
-            {!query && (
-              <button
-                onClick={() => setEditing(emptyForm())}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
-                style={{ backgroundColor: BRAND, color: '#fff' }}
-              >
-                <Plus size={16} /> New Product
-              </button>
-            )}
-          </div>
-        ) : groups ? (
-          <div className="max-w-7xl mx-auto space-y-8">
-            {groups.map((g) => (
-              <div key={g.cat}>
-                <div className="flex items-center gap-2 mb-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: TEXT }}>{g.cat}</h2>
-                  <span className="text-[11px]" style={{ color: MUTED }}>{g.items.length}</span>
-                  <div className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {g.items.map(renderCard)}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 max-w-7xl mx-auto">
-            {filtered.map(renderCard)}
-          </div>
-        )}
+      <div className="ct-acts">
+        <button type="button" className="ct-b dark" onClick={() => setImporting(true)}>Import CSV</button>
+        <button type="button" className="ct-b dark" onClick={() => download(`catalog-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(shown))} disabled={!shown.length}>Export</button>
+        <button type="button" className="ct-b pri" onClick={() => setEditing(emptyForm())}>+ New product</button>
       </div>
+    </header>
 
-      {editing && (
-        <ProductEditor
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSaved={handleSaved}
-        />
-      )}
+    <div className="ct-kpis">
+      {KPIS.map(x => <button key={x.k} type="button" className="ct-kpi" aria-pressed={kpi === x.k} onClick={() => { setKpi(x.k); setCat('All') }}>
+        <div className="l"><span className="ct-dot" style={{ background: x.dot }} />{x.l}</div>
+        <div className="v" style={{ color: x.k === 'low' && counts.low ? RED : TEXT }}>{loading ? '—' : counts[x.k]}</div>
+        <div className="s">{x.s}</div>
+      </button>)}
     </div>
-  );
+
+    {msg && <div role="status" style={{ background: /n’t|fail|Couldn|Enter/i.test(msg) ? '#FFECEC' : '#E8F6EC', color: /n’t|fail|Couldn|Enter/i.test(msg) ? RED : GREEN, borderRadius: 10, padding: '8px 12px', fontSize: 13, marginBottom: 12, display: 'flex', justifyContent: 'space-between', gap: 10 }}>{msg}<button type="button" onClick={() => setMsg(null)} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'inherit' }} aria-label="Dismiss">×</button></div>}
+
+    <section className="ct-card" aria-label="Products">
+      <div className="ct-bar">
+        <input className="ct-in" style={{ flex: '1 1 240px', minWidth: 0 }} placeholder="Search name, SKU, brand, tag…" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search products" />
+        <select className="ct-in" value={brand} onChange={e => setBrand(e.target.value)} aria-label="Brand"><option value="">All brands</option>{brands.map(b => <option key={b} value={b}>{b}</option>)}</select>
+        <select className="ct-in" value={sort} onChange={e => setSort(e.target.value as Sort)} aria-label="Sort">
+          <option value="name">Name A–Z</option><option value="price">Price high–low</option><option value="margin">Lowest margin first</option><option value="stock">Lowest stock first</option><option value="updated">Recently changed</option>
+        </select>
+        <div className="ct-seg" role="group" aria-label="View">
+          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+          <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>Grid</button>
+        </div>
+      </div>
+      <div className="ct-chips">{chips.map(c => <button key={c.label} type="button" className="ct-chip" aria-pressed={cat === c.label} onClick={() => setCat(c.label)}>{c.label} <span style={{ opacity: .6 }}>{c.count}</span></button>)}</div>
+
+      {sel.size > 0 && <div className="ct-bulk" role="region" aria-label="Bulk actions">
+        <b style={{ fontWeight: 600 }}>{sel.size} selected</b>
+        <select className="ct-in" style={{ height: 32 }} value="" aria-label="Change category" onChange={e => { const v = e.target.value; if (v) void bulkPatch(`Moved to ${v}`, () => ({ category: v })) }}>
+          <option value="">Change category…</option>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <input className="ct-in" style={{ height: 32, width: 84 }} placeholder="+5 %" inputMode="decimal" value={pct} onChange={e => setPct(e.target.value)} aria-label="Change prices by percent" />
+          <button type="button" className="ct-b line" style={{ height: 32 }} onClick={adjustPrices} disabled={busy}>Change prices</button>
+        </span>
+        {kpi === 'archived'
+          ? <button type="button" className="ct-b line" style={{ height: 32 }} disabled={busy} onClick={() => void bulkPatch('Made active', () => ({ active: true }))}>Make active</button>
+          : <button type="button" className="ct-b line" style={{ height: 32 }} disabled={busy} onClick={() => void bulkPatch('Archived', () => ({ active: false }))}>Archive</button>}
+        <button type="button" className="ct-b line" style={{ height: 32 }} onClick={() => download('catalog-selected.csv', toCsv(products.filter(p => sel.has(p.id))))}>Export</button>
+        <button type="button" className="ct-b line" style={{ height: 32, marginLeft: 'auto' }} onClick={() => setSel(new Set())}>Clear</button>
+      </div>}
+
+      {loading ? <div className="ct-empty">Loading the catalog…</div>
+        : loadErr ? <div className="ct-empty" style={{ color: RED }}>{loadErr} <button type="button" className="ct-b line" onClick={() => void load()}>Try again</button></div>
+        : shown.length === 0 ? <div className="ct-empty">{products.length === 0 ? 'No products yet. Add one, or import a CSV.' : 'Nothing matches. Try another search or filter.'}</div>
+        : view === 'list' ? <div style={{ overflowX: 'auto' }}><table className="ct-tbl">
+          <thead><tr>
+            <th style={{ width: 34 }}><input type="checkbox" aria-label="Select all" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(shown.map(p => p.id)))} /></th>
+            <th>Product</th><th className="hide-sm">Category</th><th className="n hide-sm">Cost</th><th className="n">Price</th><th className="n">Margin</th><th className="n hide-sm">Labor</th><th className="n hide-sm">Stock</th><th className="hide-sm">Manual</th>
+          </tr></thead>
+          <tbody>{shown.slice(0, 600).map(p => {
+            const m = marginOf(p), s = stock[p.id], low = isLow(p)
+            return <tr key={p.id} onClick={() => setOpenId(p.id)} style={{ opacity: p.active === false ? .6 : 1 }}>
+              <td onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.name}`} checked={sel.has(p.id)} onChange={() => toggle(p.id)} /></td>
+              <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><ProductThumb url={p.image_url} brand={p.brand ?? ''} size={36} /><div style={{ minWidth: 0 }}><div className="ct-nm">{p.name}</div><div className="ct-sm">{[p.brand, p.sku].filter(Boolean).join(' · ') || '—'}{p.org_id ? ' · yours' : ''}</div></div></div></td>
+              <td className="hide-sm" style={{ color: MUTED, whiteSpace: 'nowrap' }}>{catOf(p)}</td>
+              <td className="n hide-sm" style={{ color: MUTED }}>{fmt$(p.dealer_cost)}</td>
+              <td className="n" style={{ fontWeight: 600, color: Number(p.sell_price) > 0 ? TEXT : ORANGE }}>{Number(p.sell_price) > 0 ? fmt$(p.sell_price) : 'No price'}</td>
+              <td className="n" style={{ color: marginColor(m), fontWeight: 600 }}>{m != null ? `${m}%` : '—'}</td>
+              <td className="n hide-sm" style={{ color: MUTED }}>{p.labor_hours != null ? `${p.labor_hours} h` : '—'}</td>
+              <td className="n hide-sm" style={{ color: low ? RED : MUTED, fontWeight: low ? 600 : 400 }}>{s ? `${s.onHand}${low ? ' · low' : ''}` : '—'}</td>
+              <td className="hide-sm">{hasManual(p) ? <span className="ct-tag" style={{ background: '#E8F6EC', color: GREEN }}>AI ready</span> : <span className="ct-tag" style={{ background: '#F0F1F4', color: MUTED }}>None</span>}</td>
+            </tr>
+          })}</tbody>
+        </table>{shown.length > 600 && <div className="ct-empty">Showing the first 600 — search to narrow it down.</div>}</div>
+        : <div className="ct-grid">{shown.slice(0, 600).map(p => {
+          const m = marginOf(p), low = isLow(p)
+          return <div key={p.id} role="button" tabIndex={0} className="ct-gc" onClick={() => setOpenId(p.id)} onKeyDown={e => { if (e.key === 'Enter') setOpenId(p.id) }} style={{ opacity: p.active === false ? .6 : 1 }}>
+            <input type="checkbox" aria-label={`Select ${p.name}`} checked={sel.has(p.id)} onClick={e => e.stopPropagation()} onChange={() => toggle(p.id)} style={{ position: 'absolute', top: 10, right: 10, width: 16, height: 16 }} />
+            <ProductThumb url={p.image_url} brand={p.brand ?? ''} size={64} />
+            <div style={{ minWidth: 0 }}><div className="ct-nm" style={{ whiteSpace: 'normal' }}>{p.name}</div><div className="ct-sm">{[p.brand, p.sku].filter(Boolean).join(' · ')}</div></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 'auto' }}>
+              <span style={{ fontWeight: 600, fontSize: 16, color: Number(p.sell_price) > 0 ? TEXT : ORANGE }}>{Number(p.sell_price) > 0 ? fmt$(p.sell_price) : 'No price'}</span>
+              {m != null && <span style={{ color: marginColor(m), fontSize: 12.5, fontWeight: 600 }}>{m}%</span>}
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                {low && <span className="ct-tag" style={{ background: '#FFECEC', color: RED }}>Low</span>}
+                {hasManual(p) && <span className="ct-tag" style={{ background: '#E8F6EC', color: GREEN }}>AI</span>}
+              </span>
+            </div>
+          </div>
+        })}</div>}
+    </section>
+
+    {importing && <div className="ct-modal" onClick={() => !busy && setImporting(false)}>
+      <div className="p" role="dialog" aria-label="Import products" onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}><b style={{ fontSize: 17, fontWeight: 600 }}>Import products</b><button type="button" className="ct-b line" onClick={() => setImporting(false)}>Close</button></div>
+        <p style={{ margin: '0 0 10px', color: MUTED, fontSize: 13.5, lineHeight: 1.5 }}>Use a CSV with a header row. Recognized columns: {CSV_COLS.join(', ')}. Rows with a SKU that’s already in the catalog are updated. Tip: Export first to get a ready-made template.</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input ref={fileRef} type="file" accept=".csv,text/csv,.txt" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => setCsvText(String(ev.target?.result ?? '')); r.readAsText(f); e.target.value = '' }} />
+          <button type="button" className="ct-b line" onClick={() => fileRef.current?.click()}>Choose a CSV file</button>
+          <button type="button" className="ct-b line" onClick={() => download('catalog-template.csv', CSV_COLS.join(',') + '\nLM-CSW24UL,LiftMaster CSW24UL Slide Gate Operator,LiftMaster,Gate Operator,Slide,,,4200,2850,3600,6,each,24,,,yes')}>Download template</button>
+        </div>
+        <textarea rows={7} value={csvText} onChange={e => setCsvText(e.target.value)} placeholder="…or paste CSV here" aria-label="CSV text" style={{ width: '100%', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, border: '1px solid rgba(0,0,0,.12)', borderRadius: 10, padding: 10 }} />
+        {preview.error && <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>{preview.error}</div>}
+        {preview.rows.length > 0 && <div style={{ marginTop: 8, fontSize: 13, color: MUTED }}>Ready: <b style={{ color: TEXT }}>{preview.rows.length}</b> products — e.g. {preview.rows.slice(0, 3).map(r => String(r.name)).join(', ')}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}><button type="button" className="ct-b pri" disabled={busy || !preview.rows.length} onClick={doImport}>{busy ? 'Importing…' : `Import ${preview.rows.length || ''} products`}</button></div>
+      </div>
+    </div>}
+
+    {editing && <ProductEditor initial={editing} catalog={products} isCorporate={isCorporate} onClose={() => setEditing(null)} onSaved={row => { upsertLocal(row); setEditing(null); setOpenId(row.id) }} />}
+    {openId && <ProductPage id={openId} catalog={products} isCorporate={isCorporate} ggCosts={ggCosts} onClose={() => setOpenId(null)} onOpen={id => setOpenId(id)} onChanged={row => { if (row) upsertLocal(row); if (isCorporate) fetch('/api/admin/product-costs', { cache: 'no-store' }).then(r => r.json()).then(j => setGgCosts(j.costs ?? {})).catch(() => {}) }} />}
+  </div>
 }

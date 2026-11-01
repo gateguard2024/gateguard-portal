@@ -71,6 +71,11 @@ export const NEXUS_GUIDE: GuideSection[] = [
     text: `Systems shows each property's live equipment: Eagle Eye cameras, Brivo doors and gates (open a gate remotely if you have permission), UniFi network, and Shelly relays (power-cycle a gate). Faults and uptime log incidents. Device health on the Operations page comes from here. Credentials are set by Gate Guard corporate only.`,
   },
   {
+    id: 'catalog', title: 'Catalog (products and prices)', where: 'Catalog tab',
+    keywords: 'catalog products parts price pricing cost margin sku model import csv export stock inventory manual accessories kit labor hours warranty archive bulk',
+    text: `The Catalog is the one product list used by quotes, jobs, drawings, stock and the tech app. The tiles at the top filter it: Products, Low stock, Needs a price, Low margin (under 25%), No manual, Archived. Search by name, SKU, brand or tag; pick a category chip, a brand or a sort; switch List / Grid. Tick products to change their category, raise or lower prices by a percent, archive or export them. Import CSV adds or updates products by SKU (Download template shows the columns); Export saves what you're looking at. Tap a product for its page: key numbers (price, cost, margin, labor hours, stock, jobs, quotes, sites), and tabs for Overview (description, specs, details, "Goes with this item" kit parts), Stock (by location, on order), Where used (jobs, quotes, sites, purchase orders — each opens), Manuals & help, and Drawing setup. Edit changes price, cost, labor hours, unit, warranty, accessories, manuals (Upload PDF or Find it online) and drawing setup. Gate Guard catalog items can only be changed by Gate Guard; dealers tap Duplicate to make their own version. Copy link shares a product page.`,
+  },
+  {
     id: 'customers', title: 'Customers', where: 'Customers page',
     keywords: 'customer account company tasks emails contacts',
     text: `A customer page shows the account's details, contacts, emails and a Tasks card — add a task right there and it appears in Tasks; tasks linked to the customer from elsewhere show up there too.`,

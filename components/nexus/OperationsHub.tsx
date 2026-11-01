@@ -1593,7 +1593,7 @@ function Parts() {
         const state = ingestState[String(p.id)];
         return <Card key={p.id}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <b style={{ fontSize: 15 }}>{p.name || "Part"}</b>
+            <a href={`/?tab=catalog&product=${p.id}`} style={{ fontSize: 15, fontWeight: 700, color: "#1D1D1F", textDecoration: "none" }} title="Open the product page">{p.name || "Part"} <span style={{ color: "#0071E3", fontWeight: 500, fontSize: 12.5 }}>Product page →</span></a>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
               {low && <Badge tone="urgent">Low stock</Badge>}
               {aiReady && <Badge tone="good">AI ready{cov.figures > 0 ? ` · ${cov.figures} 🖼` : ""}</Badge>}
@@ -2589,7 +2589,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             </div>
           </Modal>}
           {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(0,0,0,0.08)" : "none" }}>
-            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "#8E8E93", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "#3A3A3C", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_id ? <a href={`/?tab=catalog&product=${a.product_id}`} style={{ color: "#1D1D1F", textDecoration: "underline", textDecorationColor: "rgba(0,0,0,0.2)" }}>{a.product_name || a.name || "Equipment"}</a> : (a.product_name || a.name || "Equipment")}{a.serial_number ? <span style={{ color: "#8E8E93", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "#3A3A3C", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
               {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#0071E3", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
@@ -2714,7 +2714,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
                 <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.name || "Part"}{p.sku ? <span style={{ color: "#8E8E93", fontWeight: 400 }}> · {p.sku}</span> : null}
+                      {p.product_id ? <a href={`/?tab=catalog&product=${p.product_id}`} style={{ color: "#1D1D1F", textDecoration: "underline", textDecorationColor: "rgba(0,0,0,0.2)" }}>{p.name || "Part"}</a> : (p.name || "Part")}{p.sku ? <span style={{ color: "#8E8E93", fontWeight: 400 }}> · {p.sku}</span> : null}
                     </div>
                     <div style={{ fontSize: 12, color: "#6E6E73" }}>
                       Qty {num(p.qty)}

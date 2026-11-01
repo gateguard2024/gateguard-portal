@@ -123,7 +123,7 @@ const CSS = `
 @media (max-width:640px){.lx-hd h1{font-size:24px}.lx-orb{width:44px;height:44px}.lx-acts{width:100%}.lx-acts .lx-btn{flex:1}.lx-u{max-width:90%}}
 `
 
-const KIND_LABEL: Record<string, string> = { deal: 'Deal', work_order: 'Job', site: 'Site', task: 'Task', lead: 'Lead', customer: 'Customer', thread: 'Email', event: 'Calendar', manual: 'Manual' }
+const KIND_LABEL: Record<string, string> = { product: 'Product', deal: 'Deal', work_order: 'Job', site: 'Site', task: 'Task', lead: 'Lead', customer: 'Customer', thread: 'Email', event: 'Calendar', manual: 'Manual' }
 const TONE: Record<string, string> = { red: '#FF3B30', orange: '#FF9F0A', green: '#34C759', blue: '#0071E3' }
 const CHIPS = ['Brief me on today', 'Who’s waiting on me in email?', 'What jobs are overdue?', 'Which deals are stalled?', 'Remember that I like short answers', 'How do I send a proposal?', 'Make me a task to call Marbella tomorrow']
 const uid = () => Math.random().toString(36).slice(2)

@@ -21,7 +21,7 @@ const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPAB
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
-export type LexiCard = { kind: 'deal' | 'work_order' | 'site' | 'task' | 'lead' | 'customer' | 'thread' | 'event' | 'manual'; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
+export type LexiCard = { kind: 'deal' | 'work_order' | 'site' | 'task' | 'lead' | 'customer' | 'thread' | 'event' | 'manual' | 'product'; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
 export type ToolOut = { data: unknown; cards?: LexiCard[] }
 export type LexiCtx = { user: PortalUser; scope: OrgScope; deals: DealCtx }
 
@@ -106,6 +106,11 @@ export const READ_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: { query: { type: 'string' }, unread: { type: 'boolean' }, limit: { type: 'number' } } },
   },
   {
+    name: 'find_products',
+    description: 'Search the product catalog (cameras, gate operators, access control, intercoms, network, wire, labor) by name, model/SKU, brand or category. Returns sell price, dealer cost, margin, install labor hours, unit, warranty and accessories count. Use for "how much is…", "what do we sell for…", "find a camera that…", pricing a quote.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' }, category: { type: 'string' }, limit: { type: 'number' } } },
+  },
+  {
     name: 'waiting_on_me',
     description: 'Who is waiting on the user: email threads in their synced inbox where the LAST message came from someone else (they owe a reply), oldest wait first, with the linked deal if any. Skips automated senders. Use for "who\'s waiting on me", "what emails do I owe", "inbox", "follow-ups".',
     input_schema: { type: 'object', properties: { days: { type: 'number', description: 'Look back this many days (default 14).' }, limit: { type: 'number' } } },
@@ -138,7 +143,7 @@ export const TOOL_LABEL: Record<string, string> = {
   daily_brief: 'Pulling your day together', find_deals: 'Looking through deals', get_deal: 'Opening the deal',
   find_work_orders: 'Checking jobs', get_work_order: 'Opening the job', find_sites: 'Finding the property',
   site_status: 'Checking the systems', find_tasks: 'Checking tasks', find_leads: 'Looking through leads',
-  find_customers: 'Finding the customer', find_messages: 'Checking your inbox', waiting_on_me: 'Checking who’s waiting on you', get_thread: 'Reading the email', my_calendar: 'Checking your calendar',
+  find_customers: 'Finding the customer', find_messages: 'Checking your inbox', waiting_on_me: 'Checking who’s waiting on you', find_products: 'Looking in the catalog', get_thread: 'Reading the email', my_calendar: 'Checking your calendar',
   search_manuals: 'Searching the manuals', nexus_help: 'Checking the Nexus guide',
 }
 
@@ -283,6 +288,22 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       if (error) return { data: { error: error.message } }
       const rows = (data ?? []) as Row[]
       return { data: rows, cards: rows.slice(0, 6).map(t => ({ kind: 'thread', id: t.id, title: t.subject || '(no subject)', sub: [Array.isArray(t.participants) ? t.participants.slice(0, 2).join(', ') : null, t.unread_count ? `${t.unread_count} unread` : null].filter(Boolean).join(' · '), href: '/?tab=my-day', tone: t.unread_count ? 'orange' : 'blue' })) }
+    }
+    case 'find_products': {
+      // Global catalog (org_id null) plus the caller's own companies' private items.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = sb.from('products').select('*').eq('active', true)
+      if (!ctx.scope.all) q = ctx.scope.ids.length ? q.or(`org_id.is.null,org_id.in.(${ctx.scope.ids.join(',')})`) : q.is('org_id', null)
+      if (has(input.query)) q = q.or(`name.ilike.${like(input.query)},sku.ilike.${like(input.query)},brand.ilike.${like(input.query)},subcategory.ilike.${like(input.query)}`)
+      if (has(input.category)) q = q.ilike('category', like(input.category))
+      const { data, error } = await q.order('name').limit(clamp(input.limit, 10))
+      if (error) return { data: { error: error.message } }
+      const rows = (data ?? []) as Row[]
+      const out = rows.map(p => {
+        const sell = Number(p.sell_price) || 0, cost = Number(p.dealer_cost) || 0
+        return { id: p.id, name: p.name, sku: p.sku, brand: p.brand, category: p.category, sell_price: money(sell), dealer_cost: money(cost), margin_pct: sell > 0 && cost > 0 ? Math.round(((sell - cost) / sell) * 100) : null, msrp: money(p.msrp), labor_hours: p.labor_hours ?? null, unit: p.unit ?? 'each', warranty_months: p.warranty_months ?? null, accessories: Array.isArray(p.accessories) ? p.accessories.length : 0, has_manual: !!p.manual_url }
+      })
+      return { data: out, cards: out.slice(0, 6).map(p => ({ kind: 'product', id: p.id, title: p.name, sub: [p.brand, p.sku, p.sell_price].filter(Boolean).join(' · '), href: `/?tab=catalog&product=${p.id}` })) }
     }
     case 'waiting_on_me': {
       const days = clamp(input.days, 14, 60)

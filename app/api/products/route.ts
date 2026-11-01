@@ -11,6 +11,9 @@
  * ON (migration 186) without breaking any of these callers.
  *
  * Auth: Clerk session required.
+ * Edit rights (PATCH / DELETE / bulk upsert): the global Gate Guard catalog
+ * (org_id null) is corporate-only; a dealer's private items are editable by that
+ * dealer's company (and corporate). Checked in canEdit() below.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,6 +31,28 @@ function serviceDb() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+// Global catalog rows (org_id null) are corporate-only; private rows belong to a company.
+type Scope = Awaited<ReturnType<typeof resolveOrgScope>>
+function canEdit(row: { org_id?: string | null } | null | undefined, scope: Scope): boolean {
+  if (!row) return false
+  if (scope.all) return true
+  return !!row.org_id && scope.ids.includes(row.org_id)
+}
+// Numbers + the new pro fields (migration 202), validated the same for create and update.
+function proFields(b: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (b.labor_hours === null || (typeof b.labor_hours === 'number' && b.labor_hours >= 0)) out.labor_hours = b.labor_hours
+  if (typeof b.unit === 'string' && /^(each|ft|box|roll|hour|set|pair)$/.test(b.unit)) out.unit = b.unit
+  if (b.warranty_months === null || (typeof b.warranty_months === 'number' && b.warranty_months >= 0)) out.warranty_months = b.warranty_months === null ? null : Math.round(b.warranty_months as number)
+  if (Array.isArray(b.accessories)) {
+    out.accessories = (b.accessories as Record<string, unknown>[])
+      .filter(a => a && typeof a.product_id === 'string' && /^[0-9a-f-]{36}$/i.test(a.product_id as string))
+      .slice(0, 50)
+      .map(a => ({ product_id: a.product_id, qty: Math.max(1, Number(a.qty) || 1), required: a.required === true }))
+  }
+  return out
 }
 
 export async function GET(req: NextRequest) {
@@ -90,6 +115,16 @@ export async function POST(req: NextRequest) {
     const org_id = scope.all ? ((body.org_id as string) ?? null) : (scope.own_id ?? null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: Record<string, any>[] = rowsIn.map(r => ({ ...r, org_id }))
+    // A dealer's import must never overwrite a global or another company's SKU.
+    const skipped: string[] = []
+    if (!scope.all) {
+      const skus = rows.map(r => String(r.sku ?? '').trim()).filter(Boolean)
+      const { data: existing, error: exErr } = skus.length ? await serviceDb().from('products').select('sku, org_id').in('sku', skus) : { data: [], error: null }
+      if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 })
+      const locked = new Set((existing ?? []).filter(e => !canEdit(e, scope)).map(e => String(e.sku)))
+      rows = rows.filter(r => { if (locked.has(String(r.sku ?? '').trim())) { skipped.push(String(r.sku)); return false } return true })
+      if (!rows.length) return NextResponse.json({ error: 'Those SKUs belong to the Gate Guard catalog (or another company) and can’t be changed by an import.', skipped }, { status: 403 })
+    }
     async function upsertRows(rs: Record<string, unknown>[]) {
       return serviceDb().from('products').upsert(rs, { onConflict: 'sku' }).select('*')
     }
@@ -107,7 +142,7 @@ export async function POST(req: NextRequest) {
       ;({ data, error } = await upsertRows(rows))
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ products: data ?? [] })
+    return NextResponse.json({ products: data ?? [], ...(skipped.length ? { skipped } : {}) })
   }
 
   // ── Single create (flat body — the contract every caller already uses) ───────
@@ -151,6 +186,7 @@ export async function POST(req: NextRequest) {
   if (field_service != null) row.field_service = field_service === true
   if (Array.isArray(tags)) row.tags = tags
   if (design_meta != null && typeof design_meta === 'object') row.design_meta = design_meta
+  Object.assign(row, proFields(body))
 
   async function insertRow(r: Record<string, unknown>): Promise<{ data: unknown; error: { code?: string; message: string } | null }> {
     return serviceDb().from('products').insert(r).select('*').single()
@@ -212,7 +248,14 @@ export async function PATCH(req: NextRequest) {
   if (typeof b.field_service === 'boolean') patch.field_service = b.field_service
   if (Array.isArray(b.tags)) patch.tags = b.tags
   if (b.design_meta != null && typeof b.design_meta === 'object') patch.design_meta = b.design_meta
+  Object.assign(patch, proFields(b))
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+
+  const scope = await resolveOrgScope(await getCurrentUser())
+  const { data: current, error: curErr } = await serviceDb().from('products').select('id, org_id').eq('id', id).maybeSingle()
+  if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 })
+  if (!current) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+  if (!canEdit(current, scope)) return NextResponse.json({ error: 'Only Gate Guard can change items in the main catalog. Add your own version instead.' }, { status: 403 })
 
   let { data, error } = await serviceDb().from('products').update(patch).eq('id', id).select('*').single()
   let guard = 0
@@ -240,6 +283,12 @@ export async function DELETE(req: NextRequest) {
   const raw = Array.isArray(b.ids) ? b.ids : (b.id != null ? [b.id] : [])
   const ids = raw.map(x => String(x)).filter(Boolean)
   if (ids.length === 0) return NextResponse.json({ error: 'No ids provided.' }, { status: 400 })
+  const scope = await resolveOrgScope(await getCurrentUser())
+  const { data: rows, error: rErr } = await serviceDb().from('products').select('id, org_id').in('id', ids)
+  if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
+  if ((rows ?? []).length !== ids.length || !(rows ?? []).every(r => canEdit(r, scope))) {
+    return NextResponse.json({ error: 'Only Gate Guard can delete items in the main catalog.' }, { status: 403 })
+  }
   const { error } = await serviceDb().from('products').delete().in('id', ids)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, deleted: ids.length })
