@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { type Any, BLUE, Dot, DOT, Field, MUTED, Note, getJson, send } from '@/components/nexus/systems/shared';
 
-type Vendor = 'brivo' | 'eagle_eye' | 'shelly' | 'unifi';
+type Vendor = 'brivo' | 'eagle_eye' | 'shelly' | 'unifi' | 'edge';
 type FieldDef = { key: string; label: string; secret?: boolean; placeholder?: string; advanced?: boolean };
 
 const VENDORS: { vendor: Vendor; label: string; what: string; fields: FieldDef[] }[] = [
@@ -26,6 +26,10 @@ const VENDORS: { vendor: Vendor; label: string; what: string; fields: FieldDef[]
     { key: 'cloud_api_key', label: 'Cloud API key (unifi.ui.com)', secret: true },
     { key: 'cloud_site_id', label: 'Cloud site ID', placeholder: 'or use “Find my UniFi sites”' },
     { key: 'cloud_host_id', label: 'Cloud host ID', advanced: true } ] },
+  { vendor: 'edge', label: 'Gate Guard Edge', what: 'Frigate cameras, AI events, fast live view', fields: [
+    { key: 'base_url', label: 'Device address', placeholder: 'https://gge-0001.edge.gateguard.co' },
+    { key: 'device_id', label: 'Device ID', placeholder: 'GGE-0001' },
+    { key: 'edge_secret', label: 'Device pass secret', secret: true, placeholder: 'the same secret that’s on the device' } ] },
 ];
 type Status = { vendor: Vendor; configured: boolean; status: string | null; last_verified_at: string | null; last_error: string | null };
 

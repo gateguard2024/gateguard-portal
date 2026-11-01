@@ -1,13 +1,13 @@
 'use client'
 /**
- * Systems → Live: every Eagle Eye camera at the property (refreshing every 5s,
- * paged 9 at a time), plus "watch & unlock" tiles for doors that have a camera
- * linked. Tap a camera for its recent recording.
+ * Systems → Live: the camera wall (Eagle Eye + Gate Guard Edge, with timeline,
+ * playback and event search — cameras/CamerasTab) plus "watch & unlock" tiles for
+ * doors that have a camera linked.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { CamerasTab } from './cameras/CamerasTab'
 import { type Any, Card, ClipSheet, Dot, DOT, LiveCam, MUTED, Note, NotConnected, previewUrl, send, getJson, fmtWhen, type SiteCtx } from './shared'
 
-const PAGE = 9
 
 export function LiveTab({ ctx, cams, camErr, doors, camMap, reloadDoors }: {
   ctx: SiteCtx
@@ -17,7 +17,6 @@ export function LiveTab({ ctx, cams, camErr, doors, camMap, reloadDoors }: {
 }) {
   const { siteId, isCorporate, notify, openSetup } = ctx
   const [tick, setTick] = useState(0)
-  const [page, setPage] = useState(0)
   const [clip, setClip] = useState<{ camId: string; name: string; ts: string } | null>(null)
   const [unlocks, setUnlocks] = useState<Any[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -44,48 +43,11 @@ export function LiveTab({ ctx, cams, camErr, doors, camMap, reloadDoors }: {
     notify(r.ok ? `${d.name} unlocked — logged.` : (r.data.error || 'Couldn’t unlock.'), r.ok)
   }
 
-  const list = cams ?? []
-  const pages = Math.max(1, Math.ceil(list.length / PAGE))
-  const shown = list.slice(page * PAGE, page * PAGE + PAGE)
   const camDoors = (doors ?? []).filter(d => camMap[String(d.id)]?.camera_id)
-  const offline = list.filter(c => c.online === false).length
 
   return (
     <div className="sy-stack">
-      <Card
-        title={`Cameras${list.length ? ` (${list.length})` : ''}`}
-        sub={list.length ? (offline ? `${offline} offline · tap a camera for its recording` : 'All online · tap a camera for its recording') : 'Eagle Eye'}
-        right={pages > 1 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" className="sy-b line sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} aria-label="Previous cameras">‹</button>
-            <span style={{ fontSize: 12, color: MUTED }}>{page + 1} of {pages}</span>
-            <button type="button" className="sy-b line sm" onClick={() => setPage(p => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1} aria-label="Next cameras">›</button>
-          </div>
-        ) : undefined}
-      >
-        {cams == null ? <div className="sy-empty">Loading cameras…</div>
-          : !list.length ? (camErr && !/not connected|client id|secret|connect eagle|no eagle/i.test(camErr)
-            ? <Note tone="orange">Eagle Eye is connected but the cameras didn’t load: {camErr}</Note>
-            : <NotConnected what="Eagle Eye (cameras)" isCorporate={isCorporate} onSetup={openSetup} />)
-          : (
-            <div className="sy-cams">
-              {shown.map((c, i) => {
-                const camId = String(c.id ?? c.esn ?? '')
-                const name = String(c.name ?? `Camera ${page * PAGE + i + 1}`)
-                const live = !!camId && c.online !== false && !noPreview.current.has(camId)
-                return (
-                  <button key={camId || i} type="button" className="sy-cam" aria-label={`${name} — open recording`} onClick={() => camId && setClip({ camId, name, ts: new Date(Date.now() - 120000).toISOString() })}>
-                    {live ? <LiveCam src={previewUrl(siteId, camId, tick)} alt={name} onError={() => markBad(camId)} />
-                      : <div className="off">{c.online === false ? 'Offline' : 'No live preview'}</div>}
-                    {live && <span className="lv"><Dot c={DOT.red} />Live</span>}
-                    {c.online === false && <span className="lv"><Dot c={DOT.orange} />Offline</span>}
-                    <span className="nm">{name}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-      </Card>
+      <CamerasTab ctx={ctx} fallbackCams={cams} fallbackErr={camErr} />
 
       <Card title="Doors with a camera" sub="Watch while you unlock. Link cameras to doors under Doors & gates.">
         {doors == null ? <div className="sy-empty">Loading doors…</div>

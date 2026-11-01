@@ -13,7 +13,7 @@ function db() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 }
 
-export const SITE_VENDORS = ['brivo', 'eagle_eye', 'shelly', 'unifi'] as const
+export const SITE_VENDORS = ['brivo', 'eagle_eye', 'shelly', 'unifi', 'edge'] as const
 export type SiteVendor = typeof SITE_VENDORS[number]
 
 export interface VendorField { key: string; label: string; secret?: boolean; placeholder?: string }
@@ -43,6 +43,13 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
     { key: 'cloud_api_key', label: 'Cloud API key (unifi.ui.com)', secret: true },
     { key: 'cloud_site_id', label: 'Cloud site ID', placeholder: 'use the picker' },
     { key: 'cloud_host_id', label: 'Cloud host ID (optional)' },
+  ] },
+  // Gate Guard Edge (Jetson + Frigate). Video goes browser ⇄ device directly using
+  // short-lived passes signed with edge_secret (lib/edge.ts, docs/edge/EDGE_API.md).
+  edge:      { label: 'Gate Guard Edge (Frigate)', fields: [
+    { key: 'base_url', label: 'Device address', placeholder: 'https://<device>.edge.gateguard.co' },
+    { key: 'device_id', label: 'Device ID', placeholder: 'printed on the unit, e.g. GGE-0001' },
+    { key: 'edge_secret', label: 'Device pass secret', secret: true },
   ] },
 }
 

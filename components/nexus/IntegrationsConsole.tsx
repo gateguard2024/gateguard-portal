@@ -10,7 +10,7 @@ type VStatus = { configured: boolean; status: string | null };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SiteRow = { id: string; name: string; city: string | null; state: string | null; vendors: Record<string, VStatus>; connected: number; total: number };
 
-const VENDOR_LABEL: Record<string, string> = { brivo: "Brivo", eagle_eye: "Eagle Eye", shelly: "Shelly", unifi: "UniFi" };
+const VENDOR_LABEL: Record<string, string> = { brivo: "Brivo", eagle_eye: "Eagle Eye", shelly: "Shelly", unifi: "UniFi", edge: "Edge" };
 
 function chipColor(v?: VStatus) {
   if (!v || !v.configured) return { bg: "rgba(100,116,139,0.15)", bd: "rgba(100,116,139,0.4)", fg: "#94a3b8", txt: "—" };

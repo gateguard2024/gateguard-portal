@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { credsKeyConfigured } from '@/lib/crypto-creds'
+import { getSiteEdge, edgeJson } from '@/lib/edge'
 import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, mergeSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest, getSiteVendorCreds } from '@/lib/site-integrations'
 import { getSiteBrivoToken } from '@/lib/brivo'
 
@@ -93,6 +94,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await markIntegrationTest(params.id, 'shelly', false, msg)
       return NextResponse.json({ ok: false, error: msg })
     }
+  }
+
+  // Gate Guard Edge: a signed call to the device (Frigate version through the agent).
+  if (vendor === 'edge') {
+    const conn = await getSiteEdge(params.id)
+    if (!conn) {
+      const msg = 'Enter the device address (https://…) and the device pass secret.'
+      await markIntegrationTest(params.id, 'edge', false, msg)
+      return NextResponse.json({ ok: false, error: msg })
+    }
+    const r = await edgeJson<unknown>(conn, params.id, '/api/version', 6000)
+    await markIntegrationTest(params.id, 'edge', r.ok, r.ok ? undefined : r.error)
+    return NextResponse.json(r.ok ? { ok: true, verified: true, version: r.data } : { ok: false, error: r.error })
   }
 
   // Eagle Eye + UniFi: credentials are stored; live test ports from GGSOC next.

@@ -211,11 +211,12 @@ export function eenEventLabel(type: string): string {
 
 /** Historical camera events (motion, LPR, tamper, line-cross, device status…) for a
  * property over the last `hours`. Time-range per EEN v3 events API. */
-export async function listEagleEyeEvents(token: string, baseHost: string, opts?: { hours?: number; cameraId?: string; types?: string[] }): Promise<EagleEyeEvent[]> {
+export async function listEagleEyeEvents(token: string, baseHost: string, opts?: { hours?: number; cameraId?: string; types?: string[]; start?: Date; end?: Date }): Promise<EagleEyeEvent[]> {
   const hours = Math.min(168, Math.max(1, opts?.hours ?? 24))
   const iso = (d: Date) => d.toISOString().replace('Z', '+00:00')
-  const end = new Date()
-  const start = new Date(Date.now() - hours * 36e5)
+  // Optional explicit window (camera search); otherwise the last `hours` as before.
+  const end = opts?.end ?? new Date()
+  const start = opts?.start ?? new Date(end.getTime() - hours * 36e5)
   const qs = new URLSearchParams({ startTimestamp__gte: iso(start), endTimestamp__lte: iso(end), pageSize: '100' })
   if (opts?.cameraId) qs.set('actor', `camera:${opts.cameraId}`)
   if (opts?.types?.length) qs.set('type__in', opts.types.join(','))
