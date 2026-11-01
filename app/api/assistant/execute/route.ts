@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { executeToolWithRevert } from '@/lib/assistant-executor'
+import { executeToolWithRevert, isSignedIn } from '@/lib/assistant-executor'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  try {
-    await getCurrentUser()
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // getCurrentUser() never throws (signed-out = anonymous user), so check it.
+  const user = await getCurrentUser()
+  if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = { user, scope: await resolveOrgScope(user) }
 
   let body: { toolName: string; toolArgs: Record<string, unknown> }
   try {
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await executeToolWithRevert(toolName, toolArgs)
+    const result = await executeToolWithRevert(toolName, toolArgs, ctx)
+    if (!result.success) return NextResponse.json(result, { status: 400 })
     return NextResponse.json(result)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unexpected error'

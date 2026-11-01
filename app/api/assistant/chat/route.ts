@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { executeToolWithRevert, type RevertPayload } from '@/lib/assistant-executor'
+import { executeToolWithRevert, isSignedIn, type RevertPayload } from '@/lib/assistant-executor'
+import { TOOL_RISK_PROFILES, buildActionSummary, ACTION_TOOLS } from '@/lib/assistant-tools'
+import { resolveOrgScope, applyOrgScope, type OrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,311 +16,6 @@ const supabase = createClient(
 )
 
 // ─── Risk profiles ──────────────────────────────────────────────────────────
-const TOOL_RISK_PROFILES: Record<string, 'low' | 'medium' | 'high'> = {
-  // Low — auto-execute, show undo toast
-  create_todo: 'low',
-  update_todo: 'low',
-  complete_todo: 'low',
-  log_crm_activity: 'low',
-  schedule_followup: 'low',
-  // Medium — show confirmation card
-  create_work_order: 'medium',
-  reschedule_work_order: 'medium',
-  update_work_order_status: 'medium',
-  create_lead: 'medium',
-  update_lead_stage: 'medium',
-  assign_lead: 'medium',
-  create_opportunity: 'medium',
-  update_opportunity_stage: 'medium',
-  create_quote: 'medium',
-  // High — confirmation card with red/amber warning
-  assign_technician: 'high',
-  mark_opportunity_won: 'high',
-  mark_opportunity_lost: 'high',
-}
-
-// ─── Action summary builder ─────────────────────────────────────────────────
-function buildActionSummary(toolName: string, args: Record<string, unknown>): string {
-  switch (toolName) {
-    case 'create_todo':          return `Create to-do: "${args.title}"`
-    case 'update_todo':          return `Update to-do`
-    case 'complete_todo':        return `Mark to-do as done`
-    case 'assign_technician':    return `Assign ${args.technician_name} to work order`
-    case 'reschedule_work_order':return `Reschedule work order to ${args.scheduled_date}`
-    case 'update_work_order_status': return `Set work order status → ${args.status}`
-    case 'create_work_order':    return `Create work order: "${args.title}"`
-    case 'create_lead':          return `Create lead: ${args.name}${args.company ? ` · ${args.company}` : ''}`
-    case 'update_lead_stage':    return `Move lead to "${args.stage}" stage`
-    case 'assign_lead':          return `Assign lead to ${args.assigned_to_name}`
-    case 'create_opportunity':   return `Create opportunity: "${args.name}"`
-    case 'update_opportunity_stage': return `Move opportunity to "${args.stage}" stage`
-    case 'mark_opportunity_won': return `Mark opportunity as WON 🎉`
-    case 'mark_opportunity_lost':return `Mark opportunity as LOST`
-    case 'log_crm_activity':     return `Log ${args.type ?? 'activity'}: "${args.subject}"`
-    case 'schedule_followup':    return `Schedule follow-up for ${args.due_date ?? 'open date'}`
-    case 'create_quote':         return `Create quote: "${args.title}" for ${args.account_name}`
-    default:                     return toolName.replace(/_/g, ' ')
-  }
-}
-
-// ─── Add reasoning param to every tool ─────────────────────────────────────
-function withReasoning(tool: Anthropic.Tool): Anthropic.Tool {
-  return {
-    ...tool,
-    input_schema: {
-      ...tool.input_schema,
-      properties: {
-        reasoning: {
-          type: 'string',
-          description: 'ONE sentence explaining exactly WHY you are calling this tool right now, referencing the user\'s specific request',
-        },
-        ...(tool.input_schema.properties as Record<string, unknown>),
-      },
-      required: ['reasoning', ...((tool.input_schema.required as string[]) ?? [])],
-    },
-  }
-}
-
-// ─── Action tools ───────────────────────────────────────────────────────────
-const BASE_TOOLS: Anthropic.Tool[] = [
-  // ── Todos ──────────────────────────────────────────────────────────────
-  {
-    name: 'create_todo',
-    description: 'Create a new to-do item.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Title of the to-do' },
-        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format' },
-        priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
-        notes: { type: 'string', description: 'Additional notes' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'update_todo',
-    description: 'Update a to-do item. Can change due_date, status, priority, or title.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The to-do ID' },
-        due_date: { type: 'string', description: 'New due date in YYYY-MM-DD format' },
-        status: { type: 'string', enum: ['open', 'in_progress', 'done'], description: 'New status' },
-        priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'New priority' },
-        title: { type: 'string', description: 'New title if renaming' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'complete_todo',
-    description: 'Mark a to-do as done.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The to-do ID' },
-      },
-      required: ['id'],
-    },
-  },
-  // ── Work Orders ────────────────────────────────────────────────────────
-  {
-    name: 'assign_technician',
-    description: 'Assign a technician to a work order. HIGH RISK — always show ConfirmationCard before executing.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        work_order_id:   { type: 'string', description: 'The work order ID' },
-        technician_id:   { type: 'string', description: 'The technician ID to assign' },
-        technician_name: { type: 'string', description: 'The technician name (for display)' },
-      },
-      required: ['work_order_id', 'technician_id', 'technician_name'],
-    },
-  },
-  {
-    name: 'create_work_order',
-    description: 'Create a new work order.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Title / description of the work order' },
-        priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'], description: 'Priority level' },
-        property_name: { type: 'string', description: 'Property or site name (optional)' },
-        scheduled_date: { type: 'string', description: 'Scheduled date in YYYY-MM-DD format (optional)' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'reschedule_work_order',
-    description: 'Change the scheduled date of a work order.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The work order ID' },
-        scheduled_date: { type: 'string', description: 'New scheduled date in YYYY-MM-DD format' },
-      },
-      required: ['id', 'scheduled_date'],
-    },
-  },
-  {
-    name: 'update_work_order_status',
-    description: 'Change the status of a work order.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The work order ID' },
-        status: { type: 'string', enum: ['open', 'assigned', 'in_progress', 'completed', 'cancelled'] },
-      },
-      required: ['id', 'status'],
-    },
-  },
-  // ── CRM Leads ──────────────────────────────────────────────────────────
-  {
-    name: 'create_lead',
-    description: 'Create a new CRM lead.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Contact name' },
-        company: { type: 'string', description: 'Company or property name' },
-        email: { type: 'string', description: 'Email address' },
-        phone: { type: 'string', description: 'Phone number' },
-        stage: { type: 'string', enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation'], description: 'Pipeline stage (default: new)' },
-        source: { type: 'string', description: 'Lead source (e.g. referral, website)' },
-        notes: { type: 'string', description: 'Initial notes' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'update_lead_stage',
-    description: 'Move a CRM lead to a different pipeline stage.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The lead ID' },
-        stage: { type: 'string', enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed_won', 'closed_lost'], description: 'New stage' },
-      },
-      required: ['id', 'stage'],
-    },
-  },
-  {
-    name: 'assign_lead',
-    description: 'Assign a CRM lead to a specific rep or team member.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The lead ID' },
-        assigned_to: { type: 'string', description: 'User ID of the rep' },
-        assigned_to_name: { type: 'string', description: 'Display name of the rep' },
-      },
-      required: ['id', 'assigned_to_name'],
-    },
-  },
-  // ── CRM Opportunities ──────────────────────────────────────────────────
-  {
-    name: 'create_opportunity',
-    description: 'Create a new CRM opportunity.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Opportunity name / title' },
-        account_name: { type: 'string', description: 'Account or property name' },
-        stage: { type: 'string', enum: ['prospect', 'qualified', 'proposal', 'negotiation', 'won', 'lost'], description: 'Pipeline stage (default: prospect)' },
-        value: { type: 'number', description: 'Estimated deal value' },
-        notes: { type: 'string', description: 'Initial notes' },
-      },
-      required: ['name', 'account_name'],
-    },
-  },
-  {
-    name: 'update_opportunity_stage',
-    description: 'Move a CRM opportunity to a different pipeline stage.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The opportunity ID' },
-        stage: { type: 'string', enum: ['prospect', 'qualified', 'proposal', 'negotiation', 'won', 'lost'], description: 'New stage' },
-      },
-      required: ['id', 'stage'],
-    },
-  },
-  {
-    name: 'mark_opportunity_won',
-    description: 'Mark an opportunity as Won and close it.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The opportunity ID' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'mark_opportunity_lost',
-    description: 'Mark an opportunity as Lost and close it.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'The opportunity ID' },
-        lost_reason: { type: 'string', description: 'Why the deal was lost (optional)' },
-      },
-      required: ['id'],
-    },
-  },
-  // ── CRM Activities ─────────────────────────────────────────────────────
-  {
-    name: 'log_crm_activity',
-    description: 'Log a call, email, meeting, or note on a lead or opportunity.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        subject: { type: 'string', description: 'Activity subject / summary' },
-        body: { type: 'string', description: 'Detailed notes from the activity' },
-        type: { type: 'string', enum: ['call', 'email', 'meeting', 'note', 'task'], description: 'Activity type' },
-        lead_id: { type: 'string', description: 'Lead ID if linked to a lead' },
-        opportunity_id: { type: 'string', description: 'Opportunity ID if linked to an opportunity' },
-        due_at: { type: 'string', description: 'ISO datetime if this is a scheduled task' },
-      },
-      required: ['subject'],
-    },
-  },
-  {
-    name: 'schedule_followup',
-    description: 'Schedule a follow-up task for a lead or opportunity.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        subject: { type: 'string', description: 'Follow-up subject (e.g. "Call back about proposal")' },
-        due_date: { type: 'string', description: 'Date for the follow-up in YYYY-MM-DD format' },
-        notes: { type: 'string', description: 'Context notes for the follow-up' },
-        lead_id: { type: 'string', description: 'Lead ID if linked to a lead' },
-        opportunity_id: { type: 'string', description: 'Opportunity ID if linked to an opportunity' },
-      },
-      required: ['due_date'],
-    },
-  },
-  // ── Quotes ─────────────────────────────────────────────────────────────
-  {
-    name: 'create_quote',
-    description: 'Create a new draft quote for an account.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Quote title / project description' },
-        account_name: { type: 'string', description: 'Account or property name' },
-        notes: { type: 'string', description: 'Initial notes (optional)' },
-      },
-      required: ['title', 'account_name'],
-    },
-  },
-]
-
-const ACTION_TOOLS: Anthropic.Tool[] = BASE_TOOLS.map(withReasoning)
-
-// ─── Portal navigation map ──────────────────────────────────────────────────
 const PORTAL_NAV = `
 PORTAL ROUTES (always use these exact paths for deep links):
 /                    Dashboard — KPIs, accounts, EOS heartbeat
@@ -349,86 +46,61 @@ PORTAL ROUTES (always use these exact paths for deep links):
 `.trim()
 
 // ─── Data tool ──────────────────────────────────────────────────────────────
-async function fetchPortalData(dataType: string, orgId: string | null) {
+// Every read is limited to the caller's company scope (corporate sees all).
+// This used to take an orgId and ignore it — a dealer could read every
+// company's to-dos, quotes, jobs, leads and deals through the assistant.
+const SCOPE_COL: Record<string, string> = { todos: 'org_id', quotes: 'org_id', work_orders: 'org_id', leads: 'org_id', opportunities: 'dealer_org_id' }
+async function fetchPortalData(dataType: string, scope: OrgScope) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sel = (table: string, cols: string): any => applyOrgScope(supabase.from(table).select(cols), scope, SCOPE_COL[table] ?? 'org_id')
+  if (!scope.all && scope.ids.length === 0) return dataType === 'daily_briefing' ? { overdue_todos: [], open_wos: [], expiring_quotes: [] } : []
   try {
     switch (dataType) {
       case 'todos_overdue': {
         const today = new Date().toISOString().split('T')[0]
-        const { data } = await supabase
-          .from('todos')
-          .select('id, title, priority, due_date, status')
-          .in('status', ['open', 'in_progress'])
-          .lte('due_date', today)
-          .order('priority', { ascending: true })
-          .limit(10)
+        const { data } = await sel('todos', 'id, title, priority, due_date, status')
+          .in('status', ['open', 'in_progress']).lte('due_date', today).order('priority', { ascending: true }).limit(10)
         return data ?? []
       }
       case 'todos_today': {
         const today = new Date().toISOString().split('T')[0]
-        const { data } = await supabase
-          .from('todos')
-          .select('id, title, priority, due_date, status')
-          .in('status', ['open', 'in_progress'])
-          .eq('due_date', today)
-          .order('priority', { ascending: true })
-          .limit(10)
+        const { data } = await sel('todos', 'id, title, priority, due_date, status')
+          .in('status', ['open', 'in_progress']).eq('due_date', today).order('priority', { ascending: true }).limit(10)
         return data ?? []
       }
       case 'quotes_expiring': {
-        const soon = new Date()
-        soon.setDate(soon.getDate() + 7)
-        const { data } = await supabase
-          .from('quotes')
-          .select('id, quote_number, title, valid_until, total_one_time, total_mrr, status')
-          .in('status', ['sent', 'draft'])
-          .lte('valid_until', soon.toISOString().split('T')[0])
-          .order('valid_until', { ascending: true })
-          .limit(10)
+        const soon = new Date(); soon.setDate(soon.getDate() + 7)
+        const { data } = await sel('quotes', 'id, quote_number, title, valid_until, total_one_time, total_mrr, status')
+          .in('status', ['sent', 'draft']).lte('valid_until', soon.toISOString().split('T')[0]).order('valid_until', { ascending: true }).limit(10)
         return data ?? []
       }
       case 'work_orders_open': {
-        const { data } = await supabase
-          .from('work_orders')
-          .select('id, title, status, priority, scheduled_date, property_name')
-          .in('status', ['open', 'in_progress', 'scheduled'])
-          .order('scheduled_date', { ascending: true })
-          .limit(10)
+        const { data } = await sel('work_orders', 'id, title, status, priority, scheduled_date, property_name')
+          .in('status', ['open', 'in_progress', 'scheduled']).order('scheduled_date', { ascending: true }).limit(10)
         return data ?? []
       }
       case 'quotes_recent': {
-        const { data } = await supabase
-          .from('quotes')
-          .select('id, quote_number, title, status, total_one_time, total_mrr, created_at')
-          .order('created_at', { ascending: false })
-          .limit(8)
+        const { data } = await sel('quotes', 'id, quote_number, title, status, total_one_time, total_mrr, created_at')
+          .order('created_at', { ascending: false }).limit(8)
         return data ?? []
       }
       case 'leads_open': {
-        const { data } = await supabase
-          .from('leads')
-          .select('id, name:contact_name, company:company_name, stage, source, created_at')
-          .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
-          .not('stage', 'eq', 'lost')
-          .order('created_at', { ascending: false })
-          .limit(10)
+        const { data } = await sel('leads', 'id, name:contact_name, company:company_name, stage, source, created_at')
+          .is('deleted_at', null).not('stage', 'eq', 'lost').order('created_at', { ascending: false }).limit(10)
         return data ?? []
       }
       case 'opportunities_open': {
-        const { data } = await supabase
-          .from('opportunities')
-          .select('id, name, account_name, stage, value:amount, updated_at')
-          .not('stage', 'in', '("won","lost")')
-          .order('updated_at', { ascending: false })
-          .limit(10)
+        const { data } = await sel('opportunities', 'id, name, account_name, stage, value:amount, updated_at')
+          .not('stage', 'in', '("won","lost")').order('updated_at', { ascending: false }).limit(10)
         return data ?? []
       }
       case 'daily_briefing': {
         const today = new Date().toISOString().split('T')[0]
         const soon = new Date(); soon.setDate(soon.getDate() + 7)
         const [todosRes, wosRes, quotesRes] = await Promise.all([
-          supabase.from('todos').select('id, title, priority, due_date').in('status', ['open', 'in_progress']).lte('due_date', today).limit(5),
-          supabase.from('work_orders').select('id, title, status, priority').in('status', ['open', 'in_progress']).limit(5),
-          supabase.from('quotes').select('id, quote_number, valid_until, status').in('status', ['sent']).lte('valid_until', soon.toISOString().split('T')[0]).limit(5),
+          sel('todos', 'id, title, priority, due_date').in('status', ['open', 'in_progress']).lte('due_date', today).limit(5),
+          sel('work_orders', 'id, title, status, priority').in('status', ['open', 'in_progress']).limit(5),
+          sel('quotes', 'id, quote_number, valid_until, status').in('status', ['sent']).lte('valid_until', soon.toISOString().split('T')[0]).limit(5),
         ])
         return {
           overdue_todos: todosRes.data ?? [],
@@ -610,7 +282,7 @@ function timeAgoShort(iso?: string): string {
 async function buildActionCardsResponse(
   intent: OperationalIntent,
   rawMsg: string,
-  orgId: string | null,
+  orgId: OrgScope,
 ): Promise<ActionCardsResponse | null> {
 
   switch (intent) {
@@ -861,12 +533,12 @@ interface LastLowRiskAction {
 
 // ─── Main route ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  let user
-  try {
-    user = await getCurrentUser()
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // getCurrentUser() never throws — it returns an anonymous user when signed
+  // out, so the old try/catch let anyone through. Check explicitly.
+  const user = await getCurrentUser()
+  if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const scope = await resolveOrgScope(user)
+  const toolCtx = { user, scope }
 
   const { messages, currentPage, userName } = await req.json()
 
@@ -882,31 +554,31 @@ export async function POST(req: NextRequest) {
   let dataContext = ''
 
   if (lowerMsg.includes('todo') || lowerMsg.includes('task') || lowerMsg.includes('overdue') || lowerMsg.includes('due today')) {
-    const data = await fetchPortalData('todos_overdue', user?.org_id ?? null)
-    const today = await fetchPortalData('todos_today', user?.org_id ?? null)
+    const data = await fetchPortalData('todos_overdue', scope)
+    const today = await fetchPortalData('todos_today', scope)
     liveData = { overdue: data, due_today: today }
     dataContext = `\nLIVE DATA — To-Dos:\nOverdue: ${JSON.stringify(data)}\nDue today: ${JSON.stringify(today)}`
   } else if (lowerMsg.includes('opportunit')) {
-    const data = await fetchPortalData('opportunities_open', user?.org_id ?? null)
+    const data = await fetchPortalData('opportunities_open', scope)
     liveData = { opportunities: data }
     dataContext = `\nLIVE DATA — Open Opportunities:\n${JSON.stringify(data)}`
   } else if (lowerMsg.includes('lead') || lowerMsg.includes('pipeline') || lowerMsg.includes('crm')) {
     const [leads, opps] = await Promise.all([
-      fetchPortalData('leads_open', user?.org_id ?? null),
-      fetchPortalData('opportunities_open', user?.org_id ?? null),
+      fetchPortalData('leads_open', scope),
+      fetchPortalData('opportunities_open', scope),
     ])
     liveData = { leads, opportunities: opps }
     dataContext = `\nLIVE DATA — Leads:\n${JSON.stringify(leads)}\nOpportunities:\n${JSON.stringify(opps)}`
   } else if (lowerMsg.includes('quote')) {
-    const data = await fetchPortalData('quotes_recent', user?.org_id ?? null)
+    const data = await fetchPortalData('quotes_recent', scope)
     liveData = { quotes: data }
     dataContext = `\nLIVE DATA — Recent Quotes:\n${JSON.stringify(data)}`
   } else if (lowerMsg.includes('work order') || lowerMsg.includes('job') || lowerMsg.includes('wo')) {
-    const data = await fetchPortalData('work_orders_open', user?.org_id ?? null)
+    const data = await fetchPortalData('work_orders_open', scope)
     liveData = { work_orders: data }
     dataContext = `\nLIVE DATA — Open Work Orders:\n${JSON.stringify(data)}`
   } else if (lowerMsg.includes('briefing') || lowerMsg.includes('morning') || lowerMsg.includes('today') || lowerMsg.includes('day')) {
-    const data = await fetchPortalData('daily_briefing', user?.org_id ?? null)
+    const data = await fetchPortalData('daily_briefing', scope)
     liveData = data as Record<string, unknown>
     dataContext = `\nLIVE DATA — Daily Briefing:\n${JSON.stringify(data)}`
   }
@@ -925,7 +597,7 @@ export async function POST(req: NextRequest) {
   // structured ActionCards so the frontend renders glass UI, not a text bubble.
   const operationalIntent = detectOperationalIntent(lowerMsg)
   if (operationalIntent) {
-    const actionCardsResult = await buildActionCardsResponse(operationalIntent, lastMsg, user?.org_id ?? null)
+    const actionCardsResult = await buildActionCardsResponse(operationalIntent, lastMsg, scope)
     if (actionCardsResult) return NextResponse.json(actionCardsResult)
   }
 
@@ -1032,7 +704,7 @@ RESPONSE RULES:
 
         // Low risk — execute inline via shared executor
         actionsExecuted.push(toolUseBlock.name)
-        const toolResult = await executeToolWithRevert(toolUseBlock.name, toolArgs)
+        const toolResult = await executeToolWithRevert(toolUseBlock.name, toolArgs, toolCtx)
 
         if (toolResult.success && toolResult.revertPayload) {
           lastLowRiskAction = {

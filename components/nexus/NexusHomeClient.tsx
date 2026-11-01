@@ -16,6 +16,7 @@ import { InternalSurface } from '@/components/nexus/InternalSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
 import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
+import { LexiSurface } from '@/components/nexus/lexi/LexiSurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 import { HowToWindow } from '@/components/nexus/HowToWindow'
 import { EventsSurface } from '@/components/nexus/EventsSurface'
@@ -32,17 +33,26 @@ type ChatMessage = {
 // Signature brand gradient (matches the customer-portal look).
 const BRAND = 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)'
 
-const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
+// Bottom bar: three tabs, the Lexi logo in the center, three tabs.
+// Design is hidden from the bar (still reachable at ?tab=design).
+const NAV_LEFT: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
   { label: 'Sales', id: 'opps' },
   { label: 'Operations', id: 'jobs' },
-  { label: 'Design', id: 'design' },
+]
+const NAV_RIGHT: { label: string; id: NexusTabId }[] = [
   { label: 'Catalog', id: 'catalog' },
   { label: 'Systems', id: 'systems' },
   { label: 'Events', id: 'events' },
 ]
+// Every tab ?tab= may open (bar tabs + hidden ones).
+const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
+  ...NAV_LEFT, ...NAV_RIGHT,
+  { label: 'Lexi', id: 'lexi' },
+  { label: 'Design', id: 'design' },
+]
 
-const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs']
+const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs', 'lexi']
 
 const NEXUS_VERSION = 'v2.4.0'
 // Pages converted to the new light look show the new version.
@@ -74,6 +84,7 @@ async function postAssistant(messages: ChatMessage[]) {
 export default function NexusHomeClient() {
   const { user } = useUser()
   const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
+  const isCorporate = meta.org_tier === 'corporate'
   const isAdmin =
     meta.org_tier === 'corporate' ||
     meta.org_tier === 'master_dealer' ||
@@ -178,13 +189,26 @@ export default function NexusHomeClient() {
         )}
 
         <div key={`${activeTab}-${navNonce}`} className="w-full flex justify-center">
-          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'catalog' ? <CatalogSurface /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : activeTab === 'events' ? <EventsSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'lexi' ? <LexiSurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'catalog' ? <CatalogSurface /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : activeTab === 'events' ? <EventsSurface /> : <ActionFlowSurface activeTab={activeTab} />}
         </div>
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <div className="flex items-center gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(107,126,255,0.24)', boxShadow: '0 0 44px rgba(74,140,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
-          {NAV_ITEMS.map(({ label, id }) => {
+          {NAV_LEFT.map(({ label, id }) => {
+            const active = activeTab === id
+            return <button key={id} type="button" onClick={() => goTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: '#FFFFFF', border: '1px solid #FFFFFF', color: '#1D1D1F', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.2)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.82)' }}>{label}</button>
+          })}
+          {/* Lexi — the Nexus logo, center of the bar (Phase 1: corporate only). */}
+          {isCorporate && <button type="button" onClick={() => goTab('lexi')} aria-label="Lexi — Nexus AI" title="Lexi — Nexus AI" aria-current={activeTab === 'lexi' ? 'page' : undefined}
+            className="mx-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105"
+            style={{ background: activeTab === 'lexi' ? 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)' : 'rgba(255,255,255,0.08)', border: activeTab === 'lexi' ? '1px solid rgba(255,255,255,0.7)' : '1px solid rgba(107,126,255,0.45)', boxShadow: activeTab === 'lexi' ? '0 0 22px rgba(74,140,255,0.55)' : '0 0 14px rgba(74,140,255,0.25)' }}>
+            <svg width="24" height="24" viewBox="0 0 68 68" fill="none" aria-hidden="true">
+              <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="#fff" strokeWidth="4" fill={activeTab === 'lexi' ? 'rgba(255,255,255,0.18)' : 'rgba(0,113,227,0.25)'} />
+              <circle cx="34" cy="34" r="7" fill={activeTab === 'lexi' ? '#fff' : '#4AA3FF'} />
+            </svg>
+          </button>}
+          {NAV_RIGHT.map(({ label, id }) => {
             const active = activeTab === id
             return <button key={id} type="button" onClick={() => goTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: '#FFFFFF', border: '1px solid #FFFFFF', color: '#1D1D1F', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.2)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.82)' }}>{label}</button>
           })}

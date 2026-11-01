@@ -1,0 +1,111 @@
+/**
+ * Lexi's built-in guide to Nexus — how the software works, in plain words.
+ *
+ * Lexi's `nexus_help` tool searches these sections plus the Help tab's
+ * articles (kb_articles, category "Platform How-To"), so it can answer
+ * "how do I…", "where is…" and walk people through the app.
+ *
+ * KEEP THIS CURRENT: when a screen or feature ships or changes, update its
+ * section here in the same commit. This is what makes Lexi the authority on
+ * Nexus. Write it the way you'd explain it to a new hire.
+ */
+export type GuideSection = { id: string; title: string; where: string; keywords: string; text: string }
+
+export const NEXUS_MAP = `Nexus layout (bottom bar, left to right): My Day · Sales · Operations · [Lexi — the Nexus logo in the center] · Catalog · Systems · Events · Help · Admin (managers only). Design is hidden for now.
+Separate apps: the field tool at /tech (techs sign in with their app code), the property-manager portal at /portal/<property> (PIN), and client proposal links.`
+
+export const NEXUS_GUIDE: GuideSection[] = [
+  {
+    id: 'getting-around', title: 'Getting around Nexus', where: 'Bottom bar',
+    keywords: 'navigate tabs bottom bar menu where find home',
+    text: `Everything lives in the bottom bar: My Day (your tasks, calendar and inbox), Sales (deals and proposals), Operations (jobs, work orders, dispatch, sites, parts), Lexi in the center, Catalog (products), Systems (live gates, cameras, doors, network), Events (access activity), Help, and Admin for managers. Tap a tab to switch. Pages that were redesigned use the light look: a navy band at the top with white cards below.`,
+  },
+  {
+    id: 'my-day', title: 'My Day', where: 'My Day tab',
+    keywords: 'my day today tasks calendar inbox messages schedule summary overdue',
+    text: `My Day is your home base: your tasks (overdue first), today's calendar, and your email inbox synced from Gmail. Tap a task to open it. The calendar shows jobs, maintenance visits, to-dos and Google Calendar events; switch Month / Week / Day / List at the top, and use Add Event to create one. Connect Google Calendar from the calendar's Sync button.`,
+  },
+  {
+    id: 'tasks', title: 'Tasks (to-dos)', where: 'My Day → Tasks, or any deal / customer / work order',
+    keywords: 'task todo to-do create assign due date checklist comment link deal customer complete overdue reschedule',
+    text: `Create a task with + New task: give it a title, an assignee (defaults to you), a due date and notes. Tasks can be linked to a deal, customer, site, lead or work order — linked tasks show on that record's page too (both ways). Open a task to add a checklist, comments, time, or more links. Tick it to complete. Share a task with the link /?task=<id>. Lexi can create, update and complete tasks for you, with undo.`,
+  },
+  {
+    id: 'sales-board', title: 'Sales board and deals', where: 'Sales tab → Open board',
+    keywords: 'sales deal opportunity pipeline board stage move drag stalled mine team rep company forecast won lost',
+    text: `Sales shows your pipeline. The board has six stages: Meet, Survey, Proposal, Negotiate, Contract, Deposit. Drag a card to move it — Nexus asks what happened and the next step. A red edge means the deal is stalled (no update in 15 days). Mine shows deals where you are the rep; Team (managers) groups deals by company, then rep. Switch Board / List / Forecast. Won and Lost tabs hold closed deals; won deals get a Create job button, lost deals can be reopened. Tap a card for the side panel (fields, qualification, contacts, next steps, history, Fill from ARIA); tap ⤢ for the full deal page.`,
+  },
+  {
+    id: 'proposals', title: 'Proposals', where: 'A deal → New proposal',
+    keywords: 'proposal quote partnership letter send client pdf agreement review approve resident fee units roi',
+    text: `Gate Guard sends proposals, not plain quotes. On a deal tap New proposal: it fills in the property, contact and units and opens the Property Partnership editor — form on the left, the live client letter on the right. Count openings as Working or Needs repair, set pricing, add-ons, billing (resident-funded or property monthly) and term. The resident fee auto-calculates from units and openings, so put the real unit count in. Save & review sends it for approval (Gate Guard corporate approves dealer proposals). Once approved you can Download PDF, open the Client view, and Send proposal to client (the service agreement attaches and matches the terms). The ROI box shows PASS/FAIL (needs 30%+ margin and payback in 4 months or less).`,
+  },
+  {
+    id: 'leads', title: 'Leads and ARIA', where: 'Sales → New lead; ARIA',
+    keywords: 'lead new lead aria research property intel prospect convert',
+    text: `Add a lead with New lead on the Sales page. ARIA researches a property (owner, management company, units, internet and access-control vendors, decision makers) and can fill a deal's fields with Fill from ARIA. Turn a lead into a deal from the lead's page.`,
+  },
+  {
+    id: 'operations', title: 'Operations page', where: 'Operations tab',
+    keywords: 'operations jobs work orders system health requests maintenance crew performance coming soon',
+    text: `Operations shows open work orders, today's schedule, service performance (average response and resolve time), system health (devices online / needing attention / offline), open requests, preventive maintenance and crew performance. Buttons at the top: New work order, Operations Hub and Sync systems. The Coming soon card lists what's being built next (service agreements, response-time promises, proposal-to-install, truck stock, timecards, repair quotes from the field, auto-tickets, customer updates, smarter maintenance, one job / many visits).`,
+  },
+  {
+    id: 'ops-hub', title: 'Operations Hub', where: 'Operations → Operations Hub',
+    keywords: 'operations hub dashboard work orders schedule analytics requests locations techs parts procurement pm playbooks bulk csv export filter overdue unassigned urgent stuck board',
+    text: `The Hub has 11 tabs. Dashboard: tap Need a tech, Overdue, Urgent or Stuck (or any status) to jump to those work orders; assign techs from "Needs a tech"; drag cards on the Jobs board to change status. Work Orders: search, filter (Open, Unassigned, Urgent, Overdue, Done, All), sort, tick several to assign a tech or change status at once, and Export CSV. Late jobs show in red. Schedule: the team calendar. Analytics: first-time fix, callbacks, hours, utilization by tech. Requests: incoming service requests → Convert to work order. Locations: sites. Techs: add techs and set their app code. Parts: products and manuals. Procurement: purchase orders. PM: recurring maintenance (overdue in red). Playbooks: reusable step lists you assign to jobs.`,
+  },
+  {
+    id: 'work-order', title: 'Working a job (work order)', where: 'Open any work order',
+    keywords: 'work order job create assign tech schedule status complete checklist photos crew visits text customer on my way arrived review print invoice parts labor',
+    text: `Create one with New work order: pick the site, say what needs doing, set priority, tech and date (tick "Email the assigned tech"). Inside a job: Overview has status, tech, schedule date, Text the customer (On my way with ETA, Arrived, Job done, Ask for review), crew and extra visits. Scope has the work to perform, the site's past work and equipment. Execution has AI Tech Support, money on the job (parts, labor, margin, Create invoice), steps / checklist (assign a playbook, group into phases), and parts. Activity has team chat, photos and notes. Complete Work Order unlocks when all steps are done and a photo is added. Print makes a paper work order.`,
+  },
+  {
+    id: 'sites', title: 'Sites (properties)', where: 'Operations Hub → Locations, or Customers',
+    keywords: 'site property location add edit details request form link qr systems keys',
+    text: `Add a site in Locations (+ Add a site). Open a site to edit details (address, units, contacts, property manager), create a work order, and copy the public request form link (/request/<site>) to give the property manager or print as a QR code. The site's Systems section shows live cameras, doors, network and relays. Setup & keys (vendor logins) is Gate Guard corporate only.`,
+  },
+  {
+    id: 'systems', title: 'Systems (live equipment)', where: 'Systems tab, or a site',
+    keywords: 'systems live camera gate door open unlock relay reboot network unifi brivo eagle eye shelly offline incident',
+    text: `Systems shows each property's live equipment: Eagle Eye cameras, Brivo doors and gates (open a gate remotely if you have permission), UniFi network, and Shelly relays (power-cycle a gate). Faults and uptime log incidents. Device health on the Operations page comes from here. Credentials are set by Gate Guard corporate only.`,
+  },
+  {
+    id: 'customers', title: 'Customers', where: 'Customers page',
+    keywords: 'customer account company tasks emails contacts',
+    text: `A customer page shows the account's details, contacts, emails and a Tasks card — add a task right there and it appears in Tasks; tasks linked to the customer from elsewhere show up there too.`,
+  },
+  {
+    id: 'field-tool', title: 'Field tool for techs (/tech)', where: '/tech on a phone',
+    keywords: 'tech field app mobile code login technician photos checklist signature offline',
+    text: `Techs open /tech on their phone and sign in with their personal app code (set in Operations Hub → Techs). They see their jobs, work the checklist, take before/after photos, capture a signature, log parts and hours, get AI troubleshooting and wiring guides, and scan equipment nameplates. It keeps working with a weak signal and syncs later.`,
+  },
+  {
+    id: 'pm-portal', title: 'Property manager portal', where: '/portal/<property>',
+    keywords: 'property manager portal customer pin dashboard cameras events billing',
+    text: `Each property can have a portal at /portal/<name>, opened with a PIN. Property managers see security status, cameras, gate and door activity, packages, network and billing. Gate Guard sets portals up in Admin → Customer Portals.`,
+  },
+  {
+    id: 'admin', title: 'Admin', where: 'Admin tab (managers)',
+    keywords: 'admin users invite role permissions features dealers onboarding',
+    text: `Admin is for managers: invite and manage users and roles, turn features on or off per company or user, onboard dealers (NDA and agreement e-sign), and set up customer portals. What each person can see follows their company and role.`,
+  },
+  {
+    id: 'lexi', title: 'Lexi (this assistant)', where: 'Center tab (Nexus logo)',
+    keywords: 'lexi ai assistant what can you do help undo confirm',
+    text: `Lexi reads deals, jobs, sites, tasks, leads, customers, your inbox and calendar, equipment manuals and this guide, and does work for you: tasks, notes and follow-ups happen right away with Undo; work orders, deals, leads, proposals, assigning techs and won/lost wait for you to tap Confirm. Coming soon: sending email, texting customers, calls, and opening gates.`,
+  },
+]
+
+/** Best-matching guide sections for a question (simple keyword scoring). */
+export function searchGuide(question: string, limit = 3): GuideSection[] {
+  const words = question.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2)
+  const scored = NEXUS_GUIDE.map(s => {
+    const hay = `${s.title} ${s.keywords} ${s.where}`.toLowerCase()
+    const body = s.text.toLowerCase()
+    let score = 0
+    for (const w of words) { if (hay.includes(w)) score += 3; else if (body.includes(w)) score += 1 }
+    return { s, score }
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score)
+  return (scored.length ? scored : [{ s: NEXUS_GUIDE[0], score: 0 }]).slice(0, limit).map(x => x.s)
+}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, isInScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +27,7 @@ export async function POST(
   const { data: quote, error } = await supabase
     .from('quotes')
     .select(`
-      id, quote_number, property_name, units, client_name, client_email,
+      id, org_id, quote_number, property_name, units, client_name, client_email,
       property_address, cover_message, created_by_name,
       total_one_time, total_mrr, deposit_percent, discount_percent,
       payment_plan, ramp_up_start_pct, ramp_up_full_month,
@@ -37,6 +39,10 @@ export async function POST(
     .single()
 
   if (error || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+  // Only draft from a quote in the caller's company scope (corporate sees all).
+  const user = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  if (!isInScope(scope, (quote as { org_id?: string | null }).org_id)) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
 
   // Build a compact summary of the quote for Claude
   const lineItems = (quote.quote_line_items ?? []) as Array<{
