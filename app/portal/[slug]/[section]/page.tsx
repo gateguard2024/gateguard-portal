@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { loadPortalPage } from '@/lib/portal-page'
 import { PinGate } from '@/components/portal/PinGate'
-import { OpsShell, C } from '@/components/portal/ops/OpsShell'
+import { OpsShell } from '@/components/portal/ops/OpsShell'
+import { ComingSoon } from '@/components/portal/ops/ComingSoon'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,16 +27,7 @@ export default async function Page({ params }: { params: { slug: string; section
 
   return (
     <OpsShell slug={params.slug} displayName={g.portal.displayName} active={params.section}>
-      <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>{s.title}</h1>
-      <section style={{ marginTop: 20, maxWidth: 640, background: C.card, borderRadius: 12, padding: 24, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px -12px rgba(0,0,0,.18)' }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Coming to this tab</div>
-        <p style={{ margin: '6px 0 0', color: C.ink3, fontSize: 14 }}>{s.body}</p>
-        {s.today && (
-          <Link href={`/portal/${params.slug}/${s.today.path}`} style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, marginTop: 8, color: C.blue, fontWeight: 600, textDecoration: 'none' }}>
-            {s.today.label} →
-          </Link>
-        )}
-      </section>
+      <ComingSoon title={s.title} body={s.body} link={s.today ? { label: s.today.label, href: `/portal/${params.slug}/${s.today.path}` } : undefined} />
     </OpsShell>
   )
 }
