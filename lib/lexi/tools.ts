@@ -375,7 +375,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       return {
         data: {
           date: t,
-          my_tasks_due_or_overdue: T.map(x => ({ title: x.title, due: x.due_date, linked: x.linked_label })),
+          my_tasks_due_or_overdue: T.map(x => ({ id: x.id, title: x.title, due: x.due_date, linked: x.linked_label })),
           jobs_scheduled_today: TJ.map(woOut),
           jobs_needing_a_tech: U.map(woOut),
           jobs_overdue: O.map(woOut),

@@ -19,8 +19,9 @@ import { syncMailboxes } from '@/inngest/functions/sync-mailboxes'
 import { syncCalendars } from '@/inngest/functions/sync-calendars'
 import { ingestManual } from '@/inngest/functions/ingest-manual'
 import { fleetHealth } from '@/inngest/functions/fleet-health'
+import { lexiMorningBrief } from '@/inngest/functions/lexi-morning-brief'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth],
+  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief],
 })

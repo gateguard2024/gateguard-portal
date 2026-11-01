@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server";
+import { clerkClient, currentUser } from "@clerk/nextjs/server";
 
 // ─── Org tiers that match the org_tier enum in Supabase ───────────────────────
 export type OrgTier =
@@ -91,7 +91,31 @@ export async function getCurrentUser(): Promise<PortalUser> {
   try {
     const user = await currentUser()
     if (!user) return FALLBACK_USER
+    return toPortalUser(user)
+  } catch {
+    return FALLBACK_USER
+  }
+}
 
+/**
+ * Load a user by Clerk id when there is no request (scheduled jobs, e.g. Lexi's
+ * morning brief). Same permission mapping as getCurrentUser(). Returns null if
+ * the user can't be found — callers must then do nothing for that user.
+ */
+export async function getUserById(clerkUserId: string): Promise<PortalUser | null> {
+  try {
+    const clerk = await clerkClient()
+    const user = await clerk.users.getUser(clerkUserId)
+    return user ? toPortalUser(user) : null
+  } catch {
+    return null
+  }
+}
+
+type ClerkUserLike = { id: string; firstName: string | null; lastName: string | null; emailAddresses: { emailAddress: string }[]; publicMetadata?: Record<string, unknown> | null }
+
+function toPortalUser(user: ClerkUserLike): PortalUser {
+  {
     const meta      = user.publicMetadata ?? {}
     const id        = user.id
     const name      = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Unknown'
@@ -157,7 +181,5 @@ export async function getCurrentUser(): Promise<PortalUser> {
       canViewNetwork, canViewDispatch,
       canViewSensitive, canViewFinancials,
     }
-  } catch {
-    return FALLBACK_USER
   }
 }

@@ -12,6 +12,8 @@
  *   • Mic: browser dictation where supported.
  *   • Phase 2: Brain panel (what Lexi remembers) and Recording panel (meeting →
  *     notes, to-dos, deal note, follow-up email). Drafted replies get a Copy button.
+ *   • Phase 3: "I noticed…" list (/api/lexi/nudges) with Ask / Open / Later, and the
+ *     weekday morning-brief email switch + "Send me one now" (/api/lexi/brief).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { T, FONT } from '@/components/nexus/tasks/shared'
@@ -23,7 +25,8 @@ type Did = { ok: boolean; summary: string; message?: string; revertPayload?: Rev
 type Pending = { toolName: string; toolArgs: Record<string, unknown>; summary: string; reasoning?: string; riskLevel: 'medium' | 'high'; state?: 'waiting' | 'running' | 'done' | 'skipped' | 'failed'; result?: string; revertPayload?: RevertPayload | null }
 type Msg = { id: string; role: 'user' | 'assistant'; text: string; cards: Card[]; did: Did[]; pending: Pending | null; status?: string; error?: string; streaming?: boolean }
 type Conv = { id: string; title: string | null; updated_at: string }
-type Brief = { name?: string; tasks: number; today: number; unassigned: number; overdue: number; stalled: number; incidents: number; expiring: number; error?: string }
+type Brief = { name?: string; email?: string; emailBrief?: boolean; settingsError?: string; tasks: number; today: number; unassigned: number; overdue: number; stalled: number; incidents: number; expiring: number; error?: string }
+type Nudge = { key: string; tone: 'red' | 'orange' | 'blue'; kind: string; title: string; detail: string; ask: string; href?: string }
 
 const CSS = `
 .lx{color:${T.ink};font-family:${FONT};letter-spacing:-.01em;width:100%;max-width:1100px;margin:0 auto;padding:0 4px calc(170px + env(safe-area-inset-bottom))}
@@ -102,6 +105,21 @@ const CSS = `
 .lx-hist .row .d{font-size:12px;color:${T.ink3}}
 .lx-hist .row button{border:0;background:none;color:${T.ink3};cursor:pointer;font-size:16px;padding:2px 6px}
 .lx-note{font-size:12px;color:${T.ink3};text-align:center;padding:6px 0 0}
+.lx-notice{background:#fff;border-radius:16px;box-shadow:0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08);margin-bottom:16px;overflow:hidden}
+.lx-notice .hd2{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:14px 18px 10px}
+.lx-notice .hd2 b{font-size:16px;font-weight:600}
+.lx-nrow{display:flex;align-items:center;gap:12px;padding:11px 18px;border-top:1px solid ${T.line}}
+.lx-nrow .k{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.lx-nrow .t{font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lx-nrow .s{font-size:12.5px;color:${T.ink3};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lx-nrow .a{display:flex;gap:6px;flex:none}
+.lx-nrow .a .lx-btn{height:32px;padding:0 11px;font-size:12.5px}
+.lx-more{border:0;background:none;color:${T.blue};font:600 13px ${FONT};cursor:pointer;padding:10px 18px;border-top:1px solid ${T.line};width:100%;text-align:left}
+.lx-mail{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid ${T.line};background:#FAFAFB;font-size:13px;color:${T.ink2}}
+.lx-sw{position:relative;width:40px;height:24px;border-radius:12px;border:0;cursor:pointer;flex:none;transition:background .15s}
+.lx-sw i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.lx-sw[aria-checked=true] i{transform:translateX(16px)}
+@media (max-width:640px){.lx-nrow{flex-wrap:wrap}.lx-nrow .a{width:100%}.lx-nrow .a .lx-btn{flex:1}}
 @media (max-width:640px){.lx-hd h1{font-size:24px}.lx-orb{width:44px;height:44px}.lx-acts{width:100%}.lx-acts .lx-btn{flex:1}.lx-u{max-width:90%}}
 `
 
@@ -135,6 +153,10 @@ export function LexiSurface() {
   const [rec, setRec] = useState(false)
   const [panel, setPanel] = useState<'brain' | 'recording' | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [nudges, setNudges] = useState<Nudge[] | null>(null)
+  const [showAllNudges, setShowAllNudges] = useState(false)
+  const [mailMsg, setMailMsg] = useState<string | null>(null)
+  const [mailBusy, setMailBusy] = useState(false)
   const recRef = useRef<{ stop: () => void } | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const taRef = useRef<HTMLTextAreaElement | null>(null)
@@ -149,6 +171,32 @@ export function LexiSurface() {
       setBrief(d)
     }).catch(() => setBrief({ tasks: 0, today: 0, unassigned: 0, overdue: 0, stalled: 0, incidents: 0, expiring: 0, error: 'Couldn’t load your brief.' }))
   }, [])
+  useEffect(() => {
+    fetch('/api/lexi/nudges').then(r => (r.ok ? r.json() : { nudges: [] })).then(d => setNudges(Array.isArray(d?.nudges) ? d.nudges : [])).catch(() => setNudges([]))
+  }, [])
+  async function snooze(n: Nudge, days: number) {
+    setNudges(ns => (ns ?? []).filter(x => x.key !== n.key))
+    const r = await fetch('/api/lexi/nudges', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: n.key, days }) }).catch(() => null)
+    if (!r?.ok) { setNudges(ns => [n, ...(ns ?? [])]); setMailMsg('Couldn’t hide that one. Try again.') }
+  }
+  async function toggleBriefEmail() {
+    if (!brief || mailBusy) return
+    const on = !brief.emailBrief
+    setMailBusy(true); setMailMsg(null); setBrief(b => (b ? { ...b, emailBrief: on } : b))
+    const r = await fetch('/api/lexi/brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emailBrief: on }) }).catch(() => null)
+    const d = r ? await r.json().catch(() => ({})) : {}
+    if (!r?.ok) { setBrief(b => (b ? { ...b, emailBrief: !on } : b)); setMailMsg(d?.error || 'That didn’t save. Try again.') }
+    else setMailMsg(on ? `You’ll get it at ${brief.email || 'your email'} every weekday at 6:30am.` : 'Morning email turned off.')
+    setMailBusy(false)
+  }
+  async function sendBriefNow() {
+    if (mailBusy) return
+    setMailBusy(true); setMailMsg('Sending…')
+    const r = await fetch('/api/lexi/brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send' }) }).catch(() => null)
+    const d = r ? await r.json().catch(() => ({})) : {}
+    setMailMsg(r?.ok ? `Sent to ${d?.sentTo || 'your email'}.` : d?.error || 'It didn’t send. Try again.')
+    setMailBusy(false)
+  }
   // Undo windows count down.
   useEffect(() => { const t = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(t) }, [])
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
@@ -295,6 +343,35 @@ export function LexiSurface() {
         <div className="s">{s.s}</div>
       </button>)}
     </div>}
+
+    {msgs.length === 0 && brief && !brief.error && <section className="lx-notice" aria-label="I noticed">
+      <div className="hd2">
+        <b>I noticed{nudges && nudges.length ? ` · ${nudges.length}` : ''}</b>
+        <span style={{ fontSize: 12.5, color: T.ink3 }}>Things that need you, most urgent first</span>
+      </div>
+      {nudges === null ? <div className="lx-nrow"><span className="lx-status"><span className="lx-spin" />Looking…</span></div>
+        : nudges.length === 0 ? <div className="lx-nrow" style={{ color: T.ink3, fontSize: 14 }}>Nothing needs you right now. Nice.</div>
+        : (showAllNudges ? nudges : nudges.slice(0, 5)).map(n => <div key={n.key} className="lx-nrow">
+          <span className="lx-dot" style={{ background: TONE[n.tone] }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="k" style={{ color: n.tone === 'red' ? T.red : n.tone === 'orange' ? T.orange : T.blue }}>{n.kind}</div>
+            <div className="t">{n.title}</div>
+            <div className="s">{n.detail}</div>
+          </div>
+          <div className="a">
+            <button type="button" className="lx-btn pri" onClick={() => send(n.ask)} disabled={busy}>Ask Lexi</button>
+            {n.href && <a className="lx-btn line" href={n.href} style={{ textDecoration: 'none' }}>Open</a>}
+            <button type="button" className="lx-btn line" onClick={() => void snooze(n, 1)} title="Hide until tomorrow">Later</button>
+          </div>
+        </div>)}
+      {nudges && nudges.length > 5 && <button type="button" className="lx-more" onClick={() => setShowAllNudges(v => !v)}>{showAllNudges ? 'Show fewer' : `Show all ${nudges.length}`}</button>}
+      <div className="lx-mail">
+        <button type="button" role="switch" aria-checked={!!brief.emailBrief} aria-label="Email me this brief every weekday at 6:30am" className="lx-sw" onClick={toggleBriefEmail} disabled={mailBusy || !!brief.settingsError} style={{ background: brief.emailBrief ? '#34C759' : '#D1D1D6' }}><i /></button>
+        <span style={{ flex: 1, minWidth: 180 }}>Email me this brief every weekday at 6:30am</span>
+        <button type="button" className="lx-btn line" style={{ height: 32 }} onClick={sendBriefNow} disabled={mailBusy}>Send me one now</button>
+        {(mailMsg || brief.settingsError) && <span role="status" style={{ width: '100%', fontSize: 12.5, color: /n’t|not|Couldn|didn/i.test(mailMsg ?? brief.settingsError ?? '') ? T.red : T.green }}>{mailMsg || brief.settingsError}</span>}
+      </div>
+    </section>}
 
     <section className="lx-chat" aria-label="Chat with Lexi">
       <div className="lx-thread" aria-live="polite">

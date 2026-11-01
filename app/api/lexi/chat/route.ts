@@ -67,6 +67,24 @@ ${brain}`
 
 type Msg = Anthropic.MessageParam
 
+// ── Prompt caching ───────────────────────────────────────────────────────────
+// The tool list + instructions (~6.5k tokens) are identical on every round, and
+// each round re-sends the whole conversation. Marking them cacheable makes the
+// repeats ~10x cheaper (cache reads cost 10% of normal input). Max 4 marks per
+// call: last tool, the instructions, and the newest message.
+const EPHEMERAL = { type: 'ephemeral' } as const
+function cachedTools(tools: Anthropic.Tool[]): Anthropic.Tool[] {
+  return tools.map((t, i) => (i === tools.length - 1 ? ({ ...t, cache_control: EPHEMERAL } as Anthropic.Tool) : t))
+}
+function cachedMessages(msgs: Msg[]): Msg[] {
+  if (!msgs.length) return msgs
+  const last = msgs[msgs.length - 1]
+  const blocks = typeof last.content === 'string' ? [{ type: 'text' as const, text: last.content }] : [...last.content]
+  if (!blocks.length) return msgs
+  blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: EPHEMERAL } as unknown as (typeof blocks)[number]
+  return [...msgs.slice(0, -1), { ...last, content: blocks } as Msg]
+}
+
 async function makeTitle(text: string): Promise<string> {
   const fallback = text.replace(/\s+/g, ' ').trim().slice(0, 60)
   try {
@@ -142,9 +160,9 @@ export async function POST(req: NextRequest) {
           const s = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1500,
-            system: systemPrompt(user.name, user.role, brainText),
-            tools: [...READ_TOOLS, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)],
-            messages,
+            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
+            tools: cachedTools([...READ_TOOLS, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)]),
+            messages: cachedMessages(messages),
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })
           const final = await s.finalMessage()
