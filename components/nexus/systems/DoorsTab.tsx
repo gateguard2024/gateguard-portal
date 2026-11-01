@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react'
 import { GateReboots } from '@/components/nexus/GateReboots'
+import { GateWatch } from './GateWatch'
 import { type Any, BLUE, Card, Dot, DOT, Field, GREEN, MUTED, NotConnected, Note, Sheet, send, type SiteCtx } from './shared'
 
 export function DoorsTab({ ctx, doors, doorErr, camMap, cams, relays, relayErr, reloadDoors, reloadRelays, setRelayState }: {
@@ -91,6 +92,8 @@ export function DoorsTab({ ctx, doors, doorErr, camMap, cams, relays, relayErr, 
             )
           })}
       </Card>
+
+      <GateWatch ctx={ctx} doors={doors} />
 
       <Card title={`Relays & power${relays?.length ? ` (${relays.length})` : ''}`} sub="Shelly smart relays. Pulse opens or resets a gate; on/off switches power. All logged.">
         {relays == null ? <div className="sy-empty">Loading relays…</div>

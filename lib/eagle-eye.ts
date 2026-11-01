@@ -145,6 +145,23 @@ export async function eagleEyePreviewFrame(token: string, baseHost: string, devi
   } catch { return null }
 }
 
+/** Best-quality current still for AI checks: the main (full-resolution) stream
+ * first, then the preview stream. Gate Watch crops the gate out of this, so
+ * resolution matters for far or odd-angle gates. */
+export async function eagleEyeFullFrame(token: string, baseHost: string, deviceId: string): Promise<Buffer | null> {
+  for (const type of ['main', 'preview']) {
+    try {
+      const res = await fetch(`https://${baseHost}/api/v3.0/media/liveImage.jpeg?deviceId=${encodeURIComponent(deviceId)}&type=${type}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'image/jpeg' }, signal: AbortSignal.timeout(type === 'main' ? 9000 : 12000),
+      })
+      if (!res.ok) continue
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length > 1000 && buf[0] === 0xff && buf[1] === 0xd8) return buf
+    } catch { /* try the next stream */ }
+  }
+  return null
+}
+
 /** Resolve a recorded-video MP4 URL for a camera around a timestamp. */
 export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, deviceId: string, sinceISO: string): Promise<string | null> {
   try {

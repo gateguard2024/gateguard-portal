@@ -41,6 +41,7 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "resend": "^6.12.3",
+    "sharp": "^0.33.5",
     "stripe": "^22.1.1",
     "svix": "^1.93.0",
     "tailwind-merge": "^2.2.0",

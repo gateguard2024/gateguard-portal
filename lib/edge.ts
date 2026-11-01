@@ -79,3 +79,14 @@ export async function listEdgeCameras(conn: EdgeConn, siteId: string): Promise<{
     })),
   }
 }
+
+/** Server → device: one full-resolution still from a camera (Gate Watch). Null on any failure. */
+export async function edgeImage(conn: EdgeConn, siteId: string, camera: string, timeoutMs = 9000): Promise<Buffer | null> {
+  const { pass } = mintEdgePass(conn, { siteId, userId: 'nexus', scopes: ['api', 'snapshot'], cameras: [camera], ttlSec: 60 })
+  try {
+    const res = await fetch(`${conn.baseUrl}/api/${encodeURIComponent(camera)}/latest.jpg`, { headers: { Authorization: `Bearer ${pass}`, Accept: 'image/jpeg' }, signal: AbortSignal.timeout(timeoutMs), cache: 'no-store' })
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return buf.length > 1000 ? buf : null
+  } catch { return null }
+}
