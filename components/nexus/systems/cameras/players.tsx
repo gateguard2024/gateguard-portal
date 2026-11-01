@@ -126,7 +126,7 @@ function loadHls(): Promise<unknown> {
 }
 
 /** Recorded playback. `url` = the m3u8 WITHOUT the pass; `pass` goes in a header (or ?gg= for native). */
-export const HlsVideo = React.forwardRef<HTMLVideoElement, { url: string; pass: string; rate: number; onError: (m: string) => void; onTime?: (t: number) => void }>(function HlsVideo({ url, pass, rate, onError, onTime }, ref) {
+export const HlsVideo = React.forwardRef<HTMLVideoElement, { url: string; pass: string; rate: number; controls?: boolean; onError: (m: string) => void; onTime?: (t: number) => void }>(function HlsVideo({ url, pass, rate, controls = true, onError, onTime }, ref) {
   const inner = useRef<HTMLVideoElement>(null)
   // The pass renews every ~10 min; segments read the latest one without reloading.
   const passRef = useRef(pass)
@@ -160,5 +160,5 @@ export const HlsVideo = React.forwardRef<HTMLVideoElement, { url: string; pass: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url])
   useEffect(() => { if (inner.current) inner.current.playbackRate = rate }, [rate])
-  return <video ref={inner} controls playsInline onTimeUpdate={e => onTime?.((e.target as HTMLVideoElement).currentTime)} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+  return <video ref={inner} controls={controls} playsInline onTimeUpdate={e => onTime?.((e.target as HTMLVideoElement).currentTime)} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
 })

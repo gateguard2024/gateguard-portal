@@ -194,8 +194,11 @@ export default function NexusHomeClient() {
         <NexusBackdropLayers variant="hero" />
       </>)}
 
-      {/* Rails removed — center content is full width now. */}
-      <main className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-4 pb-40 pt-5 sm:px-6" style={isLight
+      {/* Rails removed — center content is full width now.
+          No z-index on <main>: a z-index here traps every window/page that opens
+          inside it UNDER the bottom bar (z-20). Without it, windows (z 110–150)
+          sit above the bar, and normal pages still scroll past it (pb-40). */}
+      <main className="relative flex flex-1 flex-col items-center overflow-y-auto px-4 pb-40 pt-5 sm:px-6" style={isLight
         // New look: navy at the top fading into the light canvas; scrolls with the page.
         ? { backgroundColor: '#EEF2F7', backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: 'no-repeat', backgroundAttachment: 'local' }
         : undefined}>

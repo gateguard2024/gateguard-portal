@@ -147,8 +147,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const a = await een(siteId)
       if (!a) error = 'Eagle Eye isn’t connected for this property.'
       else {
-        const rows = await eagleEyeListRecordedSegments(a.token, a.baseHost, camera.slice(4), new Date(start).toISOString(), new Date(end).toISOString())
-        segments = rows.slice().reverse().map((r, i, arr) => ({ start: r.start, end: r.end ?? arr[i + 1]?.start ?? new Date(Math.min(now, Date.parse(r.start) + 60_000)).toISOString() }))
+        try {
+          const rows = await eagleEyeListRecordedSegments(a.token, a.baseHost, camera.slice(4), new Date(start).toISOString(), new Date(end).toISOString(), { withUrls: false })
+          segments = rows.slice().reverse().map((r, i, arr) => ({ start: r.start, end: r.end ?? arr[i + 1]?.start ?? new Date(Math.min(now, Date.parse(r.start) + 60_000)).toISOString() }))
+        } catch (e) { error = e instanceof Error ? e.message : 'Eagle Eye recordings unavailable.' }
       }
     } else if (!edge) error = 'No Edge device at this property.'
     else {

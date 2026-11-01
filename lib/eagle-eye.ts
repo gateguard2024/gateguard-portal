@@ -148,7 +148,7 @@ export async function eagleEyePreviewFrame(token: string, baseHost: string, devi
 /** Resolve a recorded-video MP4 URL for a camera around a timestamp. */
 export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, deviceId: string, sinceISO: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://${baseHost}/api/v3.0/media?deviceId=${encodeURIComponent(deviceId)}&type=main&mediaType=video&startTimestamp__gte=${encodeURIComponent(sinceISO)}&include=mp4Url&pageSize=1`, {
+    const res = await fetch(`https://${baseHost}/api/v3.0/media?deviceId=${encodeURIComponent(deviceId)}&type=main&mediaType=video&startTimestamp__gte=${encodeURIComponent(eenTime(sinceISO))}&include=mp4Url&pageSize=1`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(9000),
     })
     if (!res.ok) return null
@@ -161,26 +161,52 @@ export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, de
 
 export interface EagleEyeSegment { start: string; end: string | null; mp4Url: string | null }
 
-/** List recorded video segments for a camera within a time window (for an archive
- * browser). EEN v3 /media returns rows with startTimestamp; include=mp4Url adds a
- * playable URL per row. Newest first. */
+/** EEN v3 wants ISO 8601 with milliseconds and a numeric offset ("…T17:47:01.146+00:00").
+ * A plain "…Z" is refused (that refusal used to be swallowed → "No recordings"). */
+export function eenTime(v: string | number | Date): string {
+  return new Date(v).toISOString().replace('Z', '+00:00')
+}
+
+/** List recorded video segments for a camera within a time window (timeline +
+ * archive browser). Pages through EEN v3 /media (nextPageToken) and tries the
+ * main stream first, then the preview stream (some cameras only record preview
+ * to the cloud). Newest first. Throws with EEN's message on an API error so the
+ * caller can show it instead of an empty timeline. */
 export async function eagleEyeListRecordedSegments(
-  token: string, baseHost: string, deviceId: string, startISO: string, endISO: string
+  token: string, baseHost: string, deviceId: string, startISO: string, endISO: string, opts?: { withUrls?: boolean }
 ): Promise<EagleEyeSegment[]> {
-  try {
-    const res = await fetch(
-      `https://${baseHost}/api/v3.0/media?deviceId=${encodeURIComponent(deviceId)}&type=main&mediaType=video&startTimestamp__gte=${encodeURIComponent(startISO)}&startTimestamp__lte=${encodeURIComponent(endISO)}&include=mp4Url&pageSize=200`,
-      { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
-    )
-    if (!res.ok) return []
-    const j = await res.json()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = (j.results ?? j.data ?? []) as any[]
-    return rows
-      .map(r => ({ start: r.startTimestamp ?? r.start ?? null, end: r.endTimestamp ?? r.end ?? null, mp4Url: r.mp4Url ?? null }))
-      .filter(r => r.start)
-      .sort((a, b) => (a.start < b.start ? 1 : -1))
-  } catch { return [] }
+  const endMs = Date.parse(endISO)
+  const pull = async (type: 'main' | 'preview') => {
+    const out: EagleEyeSegment[] = []
+    let pageToken = ''
+    for (let page = 0; page < 15; page++) {
+      // Start 10 min early: a segment that began just before the window still covers it.
+      const qs = new URLSearchParams({ deviceId, type, mediaType: 'video', startTimestamp__gte: eenTime(Date.parse(startISO) - 10 * 60_000), pageSize: '200' })
+      if (opts?.withUrls !== false && type === 'main') qs.set('include', 'mp4Url')
+      if (pageToken) qs.set('pageToken', pageToken)
+      const res = await fetch(`https://${baseHost}/api/v3.0/media?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(12000) })
+      if (!res.ok) {
+        const body = (await res.text().catch(() => '')).slice(0, 200)
+        throw new Error(`Eagle Eye recordings (${res.status})${body ? `: ${body}` : ''}`)
+      }
+      const j = await res.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (j.results ?? j.data ?? []) as any[]
+      for (const r of rows) {
+        const st = r.startTimestamp ?? r.start ?? null
+        if (!st || Date.parse(st) > endMs) continue
+        out.push({ start: st, end: r.endTimestamp ?? r.end ?? null, mp4Url: r.mp4Url ?? null })
+      }
+      pageToken = j.nextPageToken || ''
+      // Rows come oldest-first from startTimestamp__gte; stop once we're past the window.
+      const last = rows[rows.length - 1]?.startTimestamp
+      if (!pageToken || !rows.length || (last && Date.parse(last) > endMs)) break
+    }
+    return out
+  }
+  let rows = await pull('main')
+  if (!rows.length) rows = await pull('preview').catch(() => [])
+  return rows.filter(r => !r.end || Date.parse(r.end) >= Date.parse(startISO)).sort((a, b) => (a.start < b.start ? 1 : -1))
 }
 
 /** Fetch the bytes of a recorded MP4 url (token auth) for proxying to <video>. */

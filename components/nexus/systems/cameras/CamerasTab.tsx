@@ -127,7 +127,7 @@ export function CamerasTab({ ctx, fallbackCams, fallbackErr }: { ctx: SiteCtx; f
             </>
         ) : <EventSearch siteId={siteId} cams={list} edge={edge} onOpen={(cam, at) => setOpen({ cam, at })} />}
       </Card>
-      {open && <Viewer siteId={siteId} cam={open.cam} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} />}
+      {open && <Viewer siteId={siteId} cam={open.cam} cams={list} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} />}
     </>
   )
 }

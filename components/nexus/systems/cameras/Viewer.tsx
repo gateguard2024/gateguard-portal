@@ -1,80 +1,126 @@
 'use client'
 /**
- * One camera, full screen: Live ⇄ Playback, a scrubbable timeline (recordings +
- * event markers), skip / speed, download a clip, save a frame, and this camera's
- * events for the window. Works for Eagle Eye and Gate Guard Edge cameras.
+ * One camera, laid out like Frigate's recording view:
+ *   left  — the big player (live ⇄ playback) with a control bar under it and a
+ *           strip of the property's other cameras (switching keeps your time).
+ *   right — a vertical timeline, newest at the top: recorded spans shaded,
+ *           events marked, the playhead. Click or drag it to play from that
+ *           moment; zoom 24 h / 6 h / 1 h; any past day. Flip to "Events" for
+ *           the list with thumbnails. Alerts / Detections / Motion filter both.
+ * Works for Eagle Eye (existing preview + clip routes) and Gate Guard Edge
+ * (straight from the device with a pass).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Any, BLUE, Dot, DOT, LiveCam, MUTED, Note, getJson, previewUrl } from '../shared'
+import { DOT, LiveCam, getJson, previewUrl } from '../shared'
 import { EdgeLive, EdgeSnap, HlsVideo, camPath, edgeUrl, type EdgePass } from './players'
 
 export type Cam = { key: string; provider: 'een' | 'edge'; id: string; name: string; online: boolean | null }
 export type VEvent = { key: string; provider: 'een' | 'edge'; cameraKey: string; cameraName: string; label: string; kind: string; start: string; end: string | null; plate: string | null; score: number | null; edgeId: string | null; hasClip: boolean }
 
 export const KIND_DOT: Record<string, string> = { person: DOT.blue, vehicle: DOT.green, plate: DOT.green, animal: DOT.gray, motion: DOT.gray, alert: DOT.red, system: DOT.gray, other: DOT.gray }
-const HOUR = 36e5
-const fmtT = (ms: number, withDay = false) => new Date(ms).toLocaleString(undefined, { ...(withDay ? { month: 'short', day: 'numeric' } : {}), hour: 'numeric', minute: '2-digit', second: withDay ? undefined : '2-digit' })
+
+// Frigate's three review groups.
+type Group = 'alert' | 'detection' | 'motion'
+export const groupOf = (kind: string): Group => kind === 'alert' || kind === 'plate' ? 'alert' : kind === 'motion' || kind === 'system' ? 'motion' : 'detection'
+const GROUPS: [Group, string, string][] = [['alert', 'Alerts', '#FF453A'], ['detection', 'Detections', '#FF9F0A'], ['motion', 'Motion', '#8E8E93']]
+const GROUP_COLOR: Record<Group, string> = { alert: '#FF453A', detection: '#FF9F0A', motion: '#8E8E93' }
+
+const MIN = 60e3, HOUR = 36e5, PAD = 18
+const ZOOMS = [
+  { label: '24 h', ppm: 0.6, major: 3 * HOUR, minor: HOUR },
+  { label: '6 h', ppm: 2, major: HOUR, minor: 15 * MIN },
+  { label: '1 h', ppm: 8, major: 15 * MIN, minor: 5 * MIN },
+] as const
+const SPEEDS = [0.5, 1, 2, 4, 8]
+
+const fmtT = (ms: number, withDay = false, sec = true) => new Date(ms).toLocaleString(undefined, { ...(withDay ? { month: 'short', day: 'numeric' } : {}), hour: 'numeric', minute: '2-digit', ...(sec ? { second: '2-digit' } : {}) })
 const localDayStart = (ymd: string) => new Date(`${ymd}T00:00:00`).getTime()
 const ymdOf = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
-export function Viewer({ siteId, cam, edge, startAt, onClose }: { siteId: string; cam: Cam; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
+export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: { siteId: string; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
+  const [cam, setCam] = useState<Cam>(firstCam)
   const isEdge = cam.provider === 'edge'
   const [mode, setMode] = useState<'live' | 'play'>(startAt ? 'play' : 'live')
-  const [playAt, setPlayAt] = useState<number>(startAt ?? Date.now() - 5 * 60e3)
-  const [offset, setOffset] = useState(0)            // seconds played since playAt
+  const [playAt, setPlayAt] = useState<number>(startAt ?? Date.now() - 5 * MIN)
+  const [offset, setOffset] = useState(0)             // seconds played since playAt
+  const [paused, setPaused] = useState(false)
   const [rate, setRate] = useState(1)
   const [err, setErr] = useState<string | null>(null)
   const [liveFail, setLiveFail] = useState<string | null>(null)
-  const [span, setSpan] = useState<1 | 6 | 24>(24)
-  const [day, setDay] = useState<string | null>(null) // a past day, or null = "up to now"
+  const [day, setDay] = useState<string | null>(startAt && startAt < Date.now() - 23 * HOUR ? ymdOf(startAt) : null)
+  const [zoom, setZoom] = useState<0 | 1 | 2>(1)
+  const [panel, setPanel] = useState<'timeline' | 'events'>('timeline')
+  const [show, setShow] = useState<Record<Group, boolean>>({ alert: true, detection: true, motion: true })
   const [segs, setSegs] = useState<{ start: string; end: string }[] | null>(null)
   const [events, setEvents] = useState<VEvent[] | null>(null)
   const [tlErr, setTlErr] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const vref = useRef<HTMLVideoElement>(null)
+  const stage = useRef<HTMLDivElement>(null)
 
-  const now = Date.now()
-  const win = useMemo(() => {
-    if (day) { const s = localDayStart(day); return { start: s, end: Math.min(s + 24 * HOUR, Date.now()) } }
-    const end = Date.now()
-    return { start: end - span * HOUR, end }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [span, day, mode === 'live' ? Math.floor(now / 60000) : 0])
+  // The clock moves the "now" edge; the data refetches every 5 minutes (or on a new day/camera).
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t) }, [])
+  const refresh = day ?? String(Math.floor(now / (5 * MIN)))
+  const win = useMemo(() => day ? { start: localDayStart(day), end: Math.min(localDayStart(day) + 24 * HOUR, now) } : { start: now - 24 * HOUR, end: now }, [day, now])
 
   useEffect(() => {
     let alive = true
-    setSegs(null); setEvents(null); setTlErr(null)
-    const q = `start=${encodeURIComponent(new Date(win.start).toISOString())}&end=${encodeURIComponent(new Date(win.end).toISOString())}&camera=${encodeURIComponent(cam.key)}`
-    void Promise.all([getJson(`/api/sites/${siteId}/video?view=timeline&${q}`), getJson(`/api/sites/${siteId}/video?view=events&${q}`)]).then(([t, e]) => {
+    setTlErr(null)
+    const s = day ? localDayStart(day) : Date.now() - 24 * HOUR
+    const e = day ? Math.min(s + 24 * HOUR, Date.now()) : Date.now()
+    const q = `start=${encodeURIComponent(new Date(s).toISOString())}&end=${encodeURIComponent(new Date(e).toISOString())}&camera=${encodeURIComponent(cam.key)}`
+    void Promise.all([getJson(`/api/sites/${siteId}/video?view=timeline&${q}`), getJson(`/api/sites/${siteId}/video?view=events&${q}`)]).then(([t, ev]) => {
       if (!alive) return
       setSegs(Array.isArray(t.data.segments) ? t.data.segments : [])
-      setTlErr(t.data.error || (!t.ok ? (t.data.error || 'Timeline unavailable') : null))
-      setEvents(Array.isArray(e.data.events) ? e.data.events : [])
+      setTlErr(t.data.error || (!t.ok ? 'Timeline unavailable.' : null))
+      setEvents(Array.isArray(ev.data.events) ? ev.data.events : [])
     })
     return () => { alive = false }
-  }, [siteId, cam.key, win.start, win.end])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, cam.key, refresh])
+  useEffect(() => { setSegs(null); setEvents(null) }, [cam.key, day])
 
-  const pos = mode === 'live' ? Date.now() : playAt + offset * 1000
+  const pos = mode === 'live' ? now : playAt + offset * 1000
   const playFrom = useCallback((ms: number) => {
     const t = Math.min(Date.now() - 2000, Math.max(0, ms))
-    setErr(null); setMode('play'); setOffset(0); setPlayAt(t)
+    setErr(null); setMode('play'); setOffset(0); setPaused(false); setPlayAt(t)
   }, [])
+  const goLive = () => { setMode('live'); setErr(null); setLiveFail(null); if (day) setDay(null) }
   const skip = (sec: number) => {
-    if (mode === 'live') { playFrom(Date.now() + sec * 1000 - 2000); return }
+    if (mode === 'live') { if (sec < 0) playFrom(Date.now() + sec * 1000 - 2000); return }
     const v = vref.current
-    if (isEdge && v && v.duration && isFinite(v.duration) && v.currentTime + sec >= 0 && v.currentTime + sec <= v.duration) { v.currentTime += sec; return }
+    if (v && v.duration && isFinite(v.duration) && v.currentTime + sec >= 0 && v.currentTime + sec <= v.duration) { v.currentTime += sec; return }
     playFrom(pos + sec * 1000)
   }
+  const togglePlay = () => {
+    if (mode === 'live') { playFrom(Date.now() - 10_000); return }
+    const v = vref.current; if (!v) return
+    if (v.paused) { void v.play(); setPaused(false) } else { v.pause(); setPaused(true) }
+  }
+  const switchCam = (c: Cam) => {
+    if (c.key === cam.key) return
+    const at = pos
+    setCam(c); setLiveFail(null); setErr(null)
+    if (mode === 'play') { setOffset(0); setPlayAt(at) }
+  }
+  const fullscreen = () => { const el = stage.current; if (!el) return; if (document.fullscreenElement) void document.exitFullscreen(); else void el.requestFullscreen?.() }
+
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return
-      if (e.key === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -60 : -10) }
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT') return
+      if (e.key === 'Escape') { if (!document.fullscreenElement) onClose() }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -60 : -10) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? 60 : 10) }
-      else if (e.key === 'l' || e.key === 'L') setMode('live')
-      else if (e.key === ' ' && vref.current) { e.preventDefault(); if (vref.current.paused) void vref.current.play(); else vref.current.pause() }
+      else if (e.key === 'l' || e.key === 'L') goLive()
+      else if (e.key === 'f' || e.key === 'F') fullscreen()
+      else if (e.key === ' ') { e.preventDefault(); togglePlay() }
     }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   })
+  // Lock the page behind the viewer.
+  useEffect(() => { const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o } }, [])
 
   const s = Math.floor(playAt / 1000)
   const vodUrl = edge && isEdge ? `${edge.base}/vod/${camPath(cam.id)}/start/${s}/end/${Math.min(Math.floor(Date.now() / 1000), s + 3600)}/index.m3u8` : ''
@@ -96,104 +142,212 @@ export function Viewer({ siteId, cam, edge, startAt, onClose }: { siteId: string
     window.open(isEdge && edge ? edgeUrl(edge, `/api/${camPath(cam.id)}/latest.jpg`) : previewUrl(siteId, cam.id, Date.now()), '_blank', 'noopener')
   }
 
-  // Timeline geometry
-  const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - win.start) / (win.end - win.start)) * 100))
-  const bar = useRef<HTMLDivElement>(null)
-  const [hover, setHover] = useState<number | null>(null)
-  const msAt = (clientX: number) => { const r = bar.current!.getBoundingClientRect(); return win.start + ((clientX - r.left) / r.width) * (win.end - win.start) }
-  const ticks = useMemo(() => {
-    const step = span === 1 && !day ? 10 * 60e3 : span === 6 && !day ? HOUR : 3 * HOUR
-    const out: number[] = []
-    for (let t = Math.ceil(win.start / step) * step; t <= win.end; t += step) out.push(t)
-    return out
-  }, [win.start, win.end, span, day])
+  const shownEvents = useMemo(() => (events ?? []).filter(e => show[groupOf(e.kind)]), [events, show])
+  const counts = useMemo(() => { const c: Record<Group, number> = { alert: 0, detection: 0, motion: 0 }; for (const e of events ?? []) c[groupOf(e.kind)]++; return c }, [events])
+  const others = cams ?? []
 
   return (
-    <div className="sy-sheet-bg" style={{ padding: 0, background: 'rgba(0,0,0,.6)' }} onClick={onClose}>
-      <div className="cv" role="dialog" aria-modal="true" aria-label={cam.name} onClick={e => e.stopPropagation()}>
-        <div className="cv-hd">
-          <div style={{ minWidth: 0 }}>
-            <div className="cv-t">{cam.name}</div>
-            <div className="cv-s"><Dot c={cam.online === false ? DOT.orange : DOT.green} />{isEdge ? 'Gate Guard Edge' : 'Eagle Eye'} · {mode === 'live' ? 'Live' : `Playback · ${fmtT(pos, true)}`}</div>
-          </div>
-          <div className="sy-acts">
-            {mode === 'play' && <button type="button" className="sy-b pri sm" onClick={() => setMode('live')}>Go live</button>}
-            <button type="button" className="sy-b line sm" onClick={onClose}>Done</button>
-          </div>
+    <div className="cv" role="dialog" aria-modal="true" aria-label={cam.name}>
+      <div className="cv-hd">
+        <button type="button" className="cv-btn" onClick={onClose} aria-label="Back to cameras">‹ Done</button>
+        <div className="cv-title">
+          <div className="cv-t">{cam.name}</div>
+          <div className="cv-s"><span className="dot" style={{ background: cam.online === false ? DOT.orange : DOT.green }} />{isEdge ? 'Gate Guard Edge' : 'Eagle Eye'} · {mode === 'live' ? 'Live' : `Playback · ${fmtT(pos, true)}`}</div>
         </div>
-
-        <div className="cv-stage">
-          {mode === 'live' ? (
-            isEdge && edge ? (liveFail ? <><EdgeSnap edge={edge} cam={cam.id} everyMs={1000} height={720} alt={cam.name} /><span className="cv-tag">Snapshots · {liveFail}</span></>
-              : <EdgeLive edge={edge} cam={cam.id} onFail={setLiveFail} />)
-              : isEdge ? <div className="off">The Edge device isn’t reachable right now.</div>
-              : <LiveCamRefresh siteId={siteId} camId={cam.id} name={cam.name} />
-          ) : isEdge && edge ? (
-            <HlsVideo key={vodUrl} ref={vref} url={vodUrl} pass={edge.pass} rate={rate} onError={setErr} onTime={t => setOffset(t)} />
-          ) : (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <video key={playAt} ref={vref} controls autoPlay playsInline src={`/api/eagle-eye/clip?site_id=${siteId}&camera_id=${encodeURIComponent(cam.id)}&ts=${encodeURIComponent(new Date(playAt).toISOString())}`}
-              onTimeUpdate={e => setOffset((e.target as HTMLVideoElement).currentTime)} onError={() => setErr('No recording for that time.')}
-              onLoadedMetadata={e => { (e.target as HTMLVideoElement).playbackRate = rate }}
-              style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
-          )}
-          {mode === 'live' && <span className="cv-live"><Dot c={DOT.red} />Live</span>}
-          {err && <div className="cv-err">{err}</div>}
-        </div>
-
-        <div className="cv-ctl">
-          <div className="sy-acts">
-            <button type="button" className="sy-b line sm" onClick={() => skip(-60)} aria-label="Back 1 minute">−1m</button>
-            <button type="button" className="sy-b line sm" onClick={() => skip(-10)} aria-label="Back 10 seconds">−10s</button>
-            <button type="button" className="sy-b line sm" onClick={() => skip(10)} aria-label="Forward 10 seconds" disabled={mode === 'live'}>+10s</button>
-            <button type="button" className="sy-b line sm" onClick={() => skip(60)} aria-label="Forward 1 minute" disabled={mode === 'live'}>+1m</button>
+        <div className="cv-hacts">
+          <div className="cv-seg" role="group" aria-label="Day">
+            <button type="button" aria-pressed={!day} onClick={() => setDay(null)}>Last 24 h</button>
+            <input type="date" aria-label="Pick a day" max={ymdOf(Date.now())} value={day ?? ''} onChange={e => { const v = e.target.value || null; setDay(v); if (v) playFrom(localDayStart(v) + 12 * HOUR > Date.now() ? Date.now() - HOUR : localDayStart(v) + 8 * HOUR) }} />
           </div>
-          <div className="sy-acts">
-            <div className="ct-seg" role="group" aria-label="Speed" style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 8, background: '#EEF0F4' }}>
-              {[1, 2, 4].map(r => <button key={r} type="button" aria-pressed={rate === r} onClick={() => { setRate(r); if (vref.current) vref.current.playbackRate = r }} disabled={mode === 'live'} className="cv-seg">{r}×</button>)}
+          <button type="button" className={`cv-btn ${mode === 'live' ? 'on' : ''}`} onClick={goLive} aria-pressed={mode === 'live'}>{mode === 'live' ? '● Live' : 'Go live'}</button>
+        </div>
+      </div>
+
+      <div className="cv-body">
+        <div className="cv-main">
+          <div className="cv-stage" ref={stage}>
+            {mode === 'live' ? (
+              isEdge && edge ? (liveFail ? <><EdgeSnap edge={edge} cam={cam.id} everyMs={1000} height={720} alt={cam.name} /><span className="cv-tag">Snapshots · {liveFail}</span></>
+                : <EdgeLive key={cam.key} edge={edge} cam={cam.id} onFail={setLiveFail} />)
+                : isEdge ? <div className="off">The Edge device isn’t reachable right now.</div>
+                : <LiveCamRefresh key={cam.key} siteId={siteId} camId={cam.id} name={cam.name} />
+            ) : isEdge && edge ? (
+              <HlsVideo key={vodUrl} ref={vref} url={vodUrl} pass={edge.pass} rate={rate} controls={false} onError={setErr} onTime={t => setOffset(t)} />
+            ) : (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video key={`${cam.key}-${playAt}`} ref={vref} autoPlay playsInline src={`/api/eagle-eye/clip?site_id=${siteId}&camera_id=${encodeURIComponent(cam.id)}&ts=${encodeURIComponent(new Date(playAt).toISOString())}`}
+                onTimeUpdate={e => setOffset((e.target as HTMLVideoElement).currentTime)} onError={() => setErr('No recording for that time.')}
+                onLoadedMetadata={e => { (e.target as HTMLVideoElement).playbackRate = rate }}
+                onEnded={() => playFrom(pos + 1000)}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+            )}
+            {mode === 'live' && <span className="cv-live"><span className="dot" style={{ background: DOT.red }} />Live</span>}
+            <span className="cv-clock">{fmtT(pos, true)}</span>
+            {err && <div className="cv-err">{err}</div>}
+          </div>
+
+          <div className="cv-ctl">
+            <div className="grp">
+              <button type="button" className="cv-ib" onClick={togglePlay} aria-label={mode === 'play' && !paused ? 'Pause' : 'Play'}>{mode === 'play' && !paused ? '❚❚' : '▶'}</button>
+              <button type="button" className="cv-ib" onClick={() => skip(-60)} aria-label="Back 1 minute">−1m</button>
+              <button type="button" className="cv-ib" onClick={() => skip(-10)} aria-label="Back 10 seconds">−10s</button>
+              <button type="button" className="cv-ib" onClick={() => skip(10)} aria-label="Forward 10 seconds" disabled={mode === 'live'}>+10s</button>
+              <button type="button" className="cv-ib" onClick={() => skip(60)} aria-label="Forward 1 minute" disabled={mode === 'live'}>+1m</button>
+              <select className="cv-sel" aria-label="Speed" value={rate} disabled={mode === 'live'} onChange={e => { const r = Number(e.target.value); setRate(r); if (vref.current) vref.current.playbackRate = r }}>
+                {SPEEDS.map(r => <option key={r} value={r}>{r}×</option>)}
+              </select>
             </div>
-            <a className="sy-b line sm" href={downloadUrl} target="_blank" rel="noopener noreferrer" download>Download 1-min clip</a>
-            <button type="button" className="sy-b line sm" onClick={saveFrame}>Save frame</button>
-          </div>
-        </div>
-
-        <div className="cv-tl">
-          <div className="cv-tlh">
-            <div className="sy-chips" role="group" aria-label="Timeline range">
-              {([1, 6, 24] as const).map(h => <button key={h} type="button" className="sy-chip" aria-pressed={!day && span === h} onClick={() => { setDay(null); setSpan(h) }}>Last {h === 1 ? 'hour' : `${h} h`}</button>)}
-              <input type="date" className="sy-in" aria-label="Pick a day" style={{ width: 150, height: 32 }} max={ymdOf(Date.now())} value={day ?? ''} onChange={e => setDay(e.target.value || null)} />
+            <div className="grp">
+              <a className="cv-btn" href={downloadUrl} target="_blank" rel="noopener noreferrer" download>Download 1-min clip</a>
+              <button type="button" className="cv-btn" onClick={saveFrame}>Save frame</button>
+              <button type="button" className="cv-ib" onClick={fullscreen} aria-label="Full screen">⛶</button>
             </div>
-            <div style={{ fontSize: 12, color: MUTED }}>{hover != null ? fmtT(hover, true) : 'Tap the bar to play from that moment · ← → skip'}</div>
           </div>
-          <div ref={bar} className="cv-bar" role="slider" aria-label="Timeline" aria-valuemin={win.start} aria-valuemax={win.end} aria-valuenow={Math.round(pos)} tabIndex={0}
-            onMouseMove={e => setHover(msAt(e.clientX))} onMouseLeave={() => setHover(null)} onClick={e => playFrom(msAt(e.clientX))}>
-            {(segs ?? []).map((g, i) => <span key={i} className="cv-rec" style={{ left: `${pct(Date.parse(g.start))}%`, width: `${Math.max(0.15, pct(Date.parse(g.end)) - pct(Date.parse(g.start)))}%` }} />)}
-            {(events ?? []).map(e => <span key={e.key} className="cv-ev" title={`${e.label} · ${fmtT(Date.parse(e.start), true)}`} style={{ left: `${pct(Date.parse(e.start))}%`, background: KIND_DOT[e.kind] ?? DOT.gray }} />)}
-            {pos >= win.start && pos <= win.end && <span className="cv-head" style={{ left: `${pct(pos)}%` }} />}
-            {hover != null && <span className="cv-hov" style={{ left: `${pct(hover)}%` }} />}
-          </div>
-          <div className="cv-ticks">{ticks.map(t => <span key={t} style={{ left: `${pct(t)}%` }}>{new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', ...(span === 1 && !day ? { minute: '2-digit' } : {}) })}</span>)}</div>
-          {segs && !segs.length && !tlErr && <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>No recordings in this range.</div>}
-          {tlErr && <div style={{ marginTop: 6 }}><Note tone="orange">{tlErr}</Note></div>}
-        </div>
 
-        <div className="cv-evs">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Events in this range {events ? `(${events.length})` : ''}</div>
-          {events == null ? <div className="sy-empty">Loading…</div> : !events.length ? <div className="sy-empty">No events.</div> : (
-            <div className="cv-evgrid">
-              {events.slice(0, 60).map(e => (
-                <button key={e.key} type="button" className="cv-evc" onClick={() => playFrom(Date.parse(e.start) - 5000)}>
-                  {e.provider === 'edge' && e.edgeId && edge ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img alt="" loading="lazy" src={edgeUrl(edge, `/api/events/${encodeURIComponent(e.edgeId)}/thumbnail.webp`)} />
-                  ) : <span className="ph"><Dot c={KIND_DOT[e.kind] ?? DOT.gray} /></span>}
-                  <span className="tx"><b>{e.plate ? `Plate ${e.plate}` : e.label}</b><span>{fmtT(Date.parse(e.start), true)}{e.score ? ` · ${Math.round(e.score * 100)}%` : ''}</span></span>
+          {others.length > 1 && (
+            <div className="cv-strip" role="group" aria-label="Other cameras">
+              {others.slice(0, 24).map(c => (
+                <button key={c.key} type="button" className={`cv-thumb ${c.key === cam.key ? 'on' : ''}`} onClick={() => switchCam(c)} aria-label={`Switch to ${c.name}`} aria-current={c.key === cam.key}>
+                  {c.online === false ? <div className="off">Offline</div>
+                    : c.provider === 'edge' ? (edge ? <EdgeSnap edge={edge} cam={c.id} everyMs={10_000} height={180} alt={c.name} /> : <div className="off">—</div>)
+                    : <StripSnap siteId={siteId} camId={c.id} name={c.name} />}
+                  <span className="nm">{c.name}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
+
+        <aside className="cv-side">
+          <div className="cv-sideh">
+            <div className="cv-seg" role="tablist" aria-label="Side panel">
+              <button type="button" role="tab" aria-selected={panel === 'timeline'} aria-pressed={panel === 'timeline'} onClick={() => setPanel('timeline')}>Timeline</button>
+              <button type="button" role="tab" aria-selected={panel === 'events'} aria-pressed={panel === 'events'} onClick={() => setPanel('events')}>Events{events ? ` ${shownEvents.length}` : ''}</button>
+            </div>
+            <div className="cv-groups" role="group" aria-label="Show">
+              {GROUPS.map(([g, l, c]) => (
+                <button key={g} type="button" className="cv-gchip" aria-pressed={show[g]} onClick={() => setShow(v => ({ ...v, [g]: !v[g] }))}>
+                  <span className="dot" style={{ background: c }} />{l}{events ? ` ${counts[g]}` : ''}
+                </button>
+              ))}
+            </div>
+            {panel === 'timeline' && (
+              <div className="cv-zoom">
+                <span>Zoom</span>
+                <div className="cv-seg sm" role="group" aria-label="Zoom">
+                  {ZOOMS.map((z, i) => <button key={z.label} type="button" aria-pressed={zoom === i} onClick={() => setZoom(i as 0 | 1 | 2)}>{z.label}</button>)}
+                </div>
+              </div>
+            )}
+          </div>
+          {tlErr && <div className="cv-note">{tlErr}</div>}
+          {panel === 'timeline'
+            ? <Timeline win={win} zoom={zoom} segs={segs} events={shownEvents} pos={pos} live={mode === 'live'} onSeek={playFrom} />
+            : <EventList events={events == null ? null : shownEvents} edge={edge} pos={pos} onPlay={e => playFrom(Date.parse(e.start) - 5000)} />}
+        </aside>
       </div>
+    </div>
+  )
+}
+
+/** Frigate-style vertical timeline: newest at the top, drag or click to play. */
+function Timeline({ win, zoom, segs, events, pos, live, onSeek }: { win: { start: number; end: number }; zoom: 0 | 1 | 2; segs: { start: string; end: string }[] | null; events: VEvent[]; pos: number; live: boolean; onSeek: (ms: number) => void }) {
+  const z = ZOOMS[zoom]
+  const H = ((win.end - win.start) / MIN) * z.ppm
+  const yOf = (ms: number) => PAD + ((win.end - ms) / MIN) * z.ppm
+  const scroller = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState<number | null>(null)
+  const drag = useRef(false)
+  const userAt = useRef(0)
+  const msAt = (clientY: number) => {
+    const r = inner.current!.getBoundingClientRect()
+    return Math.max(win.start, Math.min(win.end, win.end - ((clientY - r.top - PAD) / z.ppm) * MIN))
+  }
+
+  // Ticks aligned to local time.
+  const ticks = useMemo(() => {
+    const off = new Date(win.end).getTimezoneOffset() * MIN
+    const out: { t: number; major: boolean }[] = []
+    for (let t = Math.floor((win.end - off) / z.minor) * z.minor + off; t >= win.start; t -= z.minor) out.push({ t, major: (t - off) % z.major === 0 })
+    return out
+  }, [win.start, win.end, z])
+
+  // Labels only where there's room for them.
+  const labelled = useMemo(() => {
+    const keep = new Set<string>(); let last = -1e9
+    for (const e of events.slice().sort((a, b) => Date.parse(b.start) - Date.parse(a.start))) {
+      if (groupOf(e.kind) === 'motion') continue
+      const y = yOf(Date.parse(e.start)); if (y - last >= 18) { keep.add(e.key); last = y }
+    }
+    return keep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, zoom, win.end])
+
+  // Keep the playhead in view (unless the person is scrolling the timeline themselves).
+  const posY = yOf(pos)
+  useEffect(() => {
+    const el = scroller.current; if (!el || drag.current || Date.now() - userAt.current < 4000) return
+    if (posY < el.scrollTop + 40 || posY > el.scrollTop + el.clientHeight - 40) el.scrollTop = Math.max(0, posY - el.clientHeight / 3)
+  }, [posY])
+  useEffect(() => { const el = scroller.current; if (el) el.scrollTop = Math.max(0, posY - el.clientHeight / 3) }, [zoom]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="cv-tlscroll" ref={scroller} onWheel={() => { userAt.current = Date.now() }} onTouchMove={() => { userAt.current = Date.now() }}>
+      <div ref={inner} className="cv-bar" style={{ height: H + PAD * 2 }} role="slider" tabIndex={0} aria-label="Timeline — click or drag to play from a moment" aria-orientation="vertical" aria-valuemin={win.start} aria-valuemax={win.end} aria-valuenow={Math.round(pos)} aria-valuetext={fmtT(pos, true)}
+        onPointerDown={e => { drag.current = true; (e.target as Element).setPointerCapture?.(e.pointerId); setHover(msAt(e.clientY)) }}
+        onPointerMove={e => setHover(msAt(e.clientY))}
+        onPointerUp={e => { if (drag.current) { drag.current = false; onSeek(msAt(e.clientY)) } }}
+        onPointerLeave={() => { if (!drag.current) setHover(null) }}
+        onKeyDown={e => { if (e.key === 'ArrowUp') { e.preventDefault(); onSeek(pos + 60_000) } else if (e.key === 'ArrowDown') { e.preventDefault(); onSeek(pos - 60_000) } }}>
+        {ticks.map(({ t, major }) => (
+          <div key={t} className={`cv-tick ${major ? 'mj' : ''}`} style={{ top: yOf(t) }}>
+            {major && <span>{new Date(t).getHours() === 0 && new Date(t).getMinutes() === 0 ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', ...(z.major < HOUR ? { minute: '2-digit' } : {}) })}</span>}
+          </div>
+        ))}
+        <div className="cv-track" />
+        {(segs ?? []).map((g, i) => { const a = yOf(Date.parse(g.end)), b = yOf(Date.parse(g.start)); return <span key={i} className="cv-rec" style={{ top: a, height: Math.max(1, b - a) }} /> })}
+        {events.map(e => {
+          const g = groupOf(e.kind); const a = yOf(Date.parse(e.end ?? e.start)), b = yOf(Date.parse(e.start))
+          return (
+            <button key={e.key} type="button" className={`cv-ev ${g}`} title={`${e.plate ? `Plate ${e.plate}` : e.label} · ${fmtT(Date.parse(e.start), true)}`}
+              style={{ top: a, height: Math.max(g === 'motion' ? 2 : 6, b - a), background: GROUP_COLOR[g] }}
+              onPointerDown={ev => ev.stopPropagation()} onClick={ev => { ev.stopPropagation(); onSeek(Date.parse(e.start) - 5000) }}>
+              {labelled.has(e.key) && <span className="lb">{e.plate ?? e.label}</span>}
+            </button>
+          )
+        })}
+        {segs && !segs.length && <div className="cv-none" style={{ top: PAD + 40 }}>No recordings in this range</div>}
+        {segs == null && <div className="cv-none" style={{ top: PAD + 40 }}>Loading…</div>}
+        {pos >= win.start && pos <= win.end && <div className="cv-head" style={{ top: posY }}><span>{live ? 'Live' : fmtT(pos)}</span></div>}
+        {hover != null && <div className="cv-hov" style={{ top: yOf(hover) }}><span>{fmtT(hover, false)}</span></div>}
+      </div>
+    </div>
+  )
+}
+
+function EventList({ events, edge, pos, onPlay }: { events: VEvent[] | null; edge: EdgePass | null; pos: number; onPlay: (e: VEvent) => void }) {
+  if (events == null) return <div className="cv-empty">Loading…</div>
+  if (!events.length) return <div className="cv-empty">No events.</div>
+  return (
+    <div className="cv-evs">
+      {events.slice(0, 200).map(e => {
+        const at = Date.parse(e.start), end = e.end ? Date.parse(e.end) : at + 10_000
+        const g = groupOf(e.kind)
+        return (
+          <button key={e.key} type="button" className={`cv-evc ${pos >= at - 5000 && pos <= end ? 'on' : ''}`} onClick={() => onPlay(e)}>
+            {e.provider === 'edge' && e.edgeId && edge
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img alt="" loading="lazy" src={edgeUrl(edge, `/api/events/${encodeURIComponent(e.edgeId)}/thumbnail.webp`)} />
+              : <span className="ph"><span className="dot" style={{ background: GROUP_COLOR[g] }} /></span>}
+            <span className="tx">
+              <b>{e.plate ? `Plate ${e.plate}` : e.label}</b>
+              <span>{fmtT(at, true, false)}{e.end ? ` · ${Math.max(1, Math.round((Date.parse(e.end) - at) / 1000))}s` : ''}{e.score ? ` · ${Math.round(e.score * 100)}%` : ''}</span>
+            </span>
+            <span className="tag" style={{ color: GROUP_COLOR[g] }}>{g === 'alert' ? 'Alert' : g === 'motion' ? 'Motion' : 'Detection'}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -206,38 +360,94 @@ function LiveCamRefresh({ siteId, camId, name }: { siteId: string; camId: string
   if (bad) return <div className="off">No live preview for this camera.</div>
   return <LiveCam src={previewUrl(siteId, camId, tick)} alt={name} onError={() => setBad(true)} />
 }
+// Camera strip tiles refresh slowly (every 10 s) to keep the viewer light.
+function StripSnap({ siteId, camId, name }: { siteId: string; camId: string; name: string }) {
+  const [tick, setTick] = useState(0)
+  const [bad, setBad] = useState(false)
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) setTick(n => n + 1) }, 10_000); return () => clearInterval(t) }, [])
+  if (bad) return <div className="off">No preview</div>
+  return <LiveCam src={previewUrl(siteId, camId, tick)} alt={name} onError={() => setBad(true)} />
+}
 
+const BG = '#0D1117', PANEL = '#161B22', LINE2 = 'rgba(255,255,255,.08)', INK = '#E6EDF3', SUB = '#8B949E', ACC = '#0A84FF'
 export const VIEWER_CSS = `
-.cv{background:#fff;width:min(1180px,100vw);height:min(100dvh,980px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.4);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;color:#1D1D1F}
-.cv-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.08)}
-.cv-t{font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cv-s{display:flex;align-items:center;gap:6px;font-size:12px;color:#6E6E73;margin-top:2px}
-.cv-stage{position:relative;background:#000;flex:1 1 auto;min-height:220px;display:flex;align-items:center;justify-content:center}
-.cv-stage img{width:100%;height:100%;object-fit:contain}
-.cv-stage .off{color:rgba(255,255,255,.7);font-size:13px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px}
+.cv{position:fixed;inset:0;z-index:140;background:${BG};color:${INK};display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;letter-spacing:-.01em}
+.cv .dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
+.cv-hd{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid ${LINE2};background:${PANEL}}
+.cv-title{min-width:0;flex:1}
+.cv-t{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv-s{display:flex;align-items:center;gap:6px;font-size:12px;color:${SUB};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv-hacts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.cv-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:500;font-size:13px;font-family:inherit;cursor:pointer;text-decoration:none;white-space:nowrap}
+.cv-btn:hover{background:rgba(255,255,255,.1)}
+.cv-btn.on{background:rgba(255,69,58,.16);border-color:rgba(255,69,58,.4);color:#FF6961;font-weight:600}
+.cv-seg{display:flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid ${LINE2}}
+.cv-seg button{border:0;background:none;color:${SUB};height:28px;padding:0 10px;border-radius:6px;font-weight:500;font-size:12.5px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.cv-seg button[aria-pressed=true]{background:rgba(255,255,255,.14);color:${INK};font-weight:600}
+.cv-seg.sm button{height:24px;padding:0 8px;font-size:12px}
+.cv-seg input[type=date]{height:28px;border:0;background:transparent;color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 6px;color-scheme:dark}
+.cv-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 320px}
+.cv-main{min-width:0;min-height:0;display:flex;flex-direction:column}
+.cv-stage{position:relative;background:#000;flex:1 1 auto;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cv-stage img,.cv-stage video{width:100%;height:100%;object-fit:contain}
+.cv-stage .off,.cv-thumb .off{color:rgba(255,255,255,.65);font-size:13px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px}
 .cv-live{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:5px;font:600 11px -apple-system,system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px}
+.cv-clock{position:absolute;top:10px;right:10px;font:500 11.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px}
 .cv-tag{position:absolute;bottom:10px;left:10px;font-size:11px;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:3px 8px}
-.cv-err{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(215,0,21,.92);color:#fff;font-size:13px;border-radius:8px;padding:6px 12px}
-.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid rgba(0,0,0,.08)}
-.cv-seg{border:0;background:none;height:26px;padding:0 10px;border-radius:6px;font:500 12px -apple-system,system-ui,sans-serif;color:#3A3A3C;cursor:pointer}
-.cv-seg[aria-pressed=true]{background:#fff;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.1)}
-.cv-seg:disabled{opacity:.45;cursor:default}
-.cv-tl{padding:10px 16px 6px}
-.cv-tlh{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.cv-bar{position:relative;height:34px;background:#F2F2F7;border-radius:8px;cursor:pointer;overflow:hidden;outline-offset:2px}
-.cv-rec{position:absolute;top:0;bottom:0;background:rgba(0,113,227,.28)}
-.cv-ev{position:absolute;top:6px;width:6px;height:6px;margin-left:-3px;border-radius:50%}
-.cv-head{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:${BLUE}}
-.cv-hov{position:absolute;top:0;bottom:0;width:1px;background:rgba(0,0,0,.35)}
-.cv-ticks{position:relative;height:16px;font-size:10px;color:#86868B}
-.cv-ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
-.cv-evs{padding:8px 16px 14px;overflow-y:auto;max-height:30%;border-top:1px solid rgba(0,0,0,.06)}
-.cv-evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
-.cv-evc{display:flex;gap:8px;align-items:center;text-align:left;border:1px solid rgba(0,0,0,.08);background:#fff;border-radius:10px;padding:6px;cursor:pointer;font:inherit;color:inherit}
-.cv-evc:hover{border-color:rgba(0,113,227,.4)}
-.cv-evc img,.cv-evc .ph{width:64px;height:40px;border-radius:6px;object-fit:cover;background:#F2F2F7;flex:none;display:flex;align-items:center;justify-content:center}
-.cv-evc .tx{display:flex;flex-direction:column;min-width:0;font-size:12px}
+.cv-err{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(215,0,21,.92);color:#fff;font-size:13px;border-radius:8px;padding:6px 12px;max-width:90%}
+.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid ${LINE2};background:${PANEL}}
+.cv-ctl .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cv-ib{min-width:36px;height:32px;padding:0 8px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
+.cv-ib:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.cv-ib:disabled,.cv-sel:disabled{opacity:.4;cursor:default}
+.cv-sel{height:32px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 8px;color-scheme:dark}
+.cv-strip{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;border-top:1px solid ${LINE2};background:${BG};flex:none}
+.cv-thumb{position:relative;flex:none;width:156px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:2px solid transparent;background:#000;padding:0;cursor:pointer}
+.cv-thumb.on{border-color:${ACC}}
+.cv-thumb img{width:100%;height:100%;object-fit:cover}
+.cv-thumb .nm{position:absolute;left:0;right:0;bottom:0;padding:10px 6px 4px;font:600 11px -apple-system,system-ui,sans-serif;color:#fff;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.7));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cv-side{min-height:0;display:flex;flex-direction:column;border-left:1px solid ${LINE2};background:${PANEL}}
+.cv-sideh{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid ${LINE2}}
+.cv-sideh>.cv-seg{justify-self:start}
+.cv-groups{display:flex;gap:6px;flex-wrap:wrap}
+.cv-gchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;border:1px solid ${LINE2};background:transparent;color:${SUB};font-weight:500;font-size:12px;font-family:inherit;cursor:pointer}
+.cv-gchip[aria-pressed=true]{background:rgba(255,255,255,.1);color:${INK}}
+.cv-zoom{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:${SUB}}
+.cv-note{margin:8px 12px 0;font-size:12px;color:#FFB340;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);border-radius:8px;padding:6px 8px}
+.cv-tlscroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;position:relative}
+.cv-bar{position:relative;cursor:ns-resize;touch-action:none;user-select:none;outline:none}
+.cv-tick{position:absolute;left:0;right:0;height:0;border-top:1px solid rgba(255,255,255,.05)}
+.cv-tick.mj{border-top-color:rgba(255,255,255,.14)}
+.cv-tick span{position:absolute;left:10px;top:-8px;font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:${SUB};white-space:nowrap}
+.cv-track{position:absolute;top:${PAD}px;bottom:${PAD}px;left:76px;width:10px;border-radius:5px;background:rgba(255,255,255,.04)}
+.cv-rec{position:absolute;left:76px;width:10px;border-radius:2px;background:rgba(10,132,255,.55)}
+.cv-ev{position:absolute;left:94px;width:6px;border-radius:3px;border:0;padding:0;cursor:pointer;opacity:.9}
+.cv-ev.motion{width:4px;left:95px;opacity:.55}
+.cv-ev:hover{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.cv-ev .lb{position:absolute;left:12px;top:-2px;font:500 11px -apple-system,system-ui,sans-serif;color:${INK};white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.cv-none{position:absolute;left:104px;right:10px;font-size:12px;color:${SUB}}
+.cv-head{position:absolute;left:0;right:0;height:0;border-top:2px solid ${ACC};pointer-events:none;z-index:2}
+.cv-head span{position:absolute;right:8px;top:-11px;font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:${ACC};border-radius:6px;padding:2px 6px}
+.cv-hov{position:absolute;left:0;right:0;height:0;border-top:1px dashed rgba(255,255,255,.45);pointer-events:none;z-index:1}
+.cv-hov span{position:absolute;left:8px;top:-10px;font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#0D1117;background:#E6EDF3;border-radius:5px;padding:1px 5px}
+.cv-evs{flex:1;min-height:0;overflow-y:auto;padding:8px;display:grid;gap:6px;align-content:start}
+.cv-evc{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid ${LINE2};background:rgba(255,255,255,.03);border-radius:10px;padding:6px;cursor:pointer;font:inherit;color:inherit}
+.cv-evc:hover{border-color:rgba(10,132,255,.5)}
+.cv-evc.on{border-color:${ACC};background:rgba(10,132,255,.12)}
+.cv-evc img,.cv-evc .ph{width:72px;height:44px;border-radius:6px;object-fit:cover;background:rgba(255,255,255,.06);flex:none;display:flex;align-items:center;justify-content:center}
+.cv-evc .tx{display:flex;flex-direction:column;min-width:0;flex:1;font-size:12px}
 .cv-evc .tx b{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cv-evc .tx span{color:#6E6E73}
-@media (max-width:760px){.cv{height:100dvh;border-radius:0}.cv-evs{max-height:34%}}
+.cv-evc .tx span{color:${SUB}}
+.cv-evc .tag{font-size:11px;font-weight:600;flex:none}
+.cv-empty{padding:20px 12px;font-size:13px;color:${SUB}}
+@media (max-width:860px){
+  .cv-body{display:flex;flex-direction:column;overflow-y:auto}
+  .cv-main{flex:none}
+  .cv-stage{flex:none;aspect-ratio:16/9;min-height:0}
+  .cv-side{border-left:0;border-top:1px solid ${LINE2};flex:none;height:62dvh}
+  .cv-hd{flex-wrap:wrap}
+  .cv-hacts{width:100%;justify-content:space-between}
+  .cv-hacts .cv-seg input[type=date]{width:118px}
+  .cv-ctl .cv-btn{padding:0 9px;font-size:12px}
+}
 `
