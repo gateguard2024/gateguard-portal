@@ -1,21 +1,19 @@
 'use client';
-// /cmms — the Operations Hub as a standalone glass page (also embedded in the
-// Jobs tab). Same component, one source of truth.
+// /cmms — the Operations Hub as a standalone page (also opened inline from the
+// Operations tab). Same component, one source of truth.
 //
-// This page used to paint its own navy + no grid, which is why the Ops Hub and
-// the Work Orders tab inside it had no grid background: OperationsHub itself
-// paints nothing (it's a plain grid container and inherits), so the wrapper was
-// the whole problem. Now it uses the shared Nexus backdrop like everything else.
+// Light look: the same navy-to-light fade as the Operations, Sales and My Day
+// pages. The Hub draws its own header (title + back link), so this page only
+// paints the background.
 import { OperationsHub } from "@/components/nexus/OperationsHub";
-import { NexusBackdrop } from "@/components/nexus/NexusBackdrop";
+import { PAGE_BG_GRADIENT } from "@/components/nexus/tasks/shared";
 
 export default function CmmsPage() {
   return (
-    <NexusBackdrop variant="page">
-      <div style={{ color: "white", fontFamily: "Inter, system-ui, Arial, sans-serif", padding: 24 }}>
-        <a href="/?tab=jobs" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 999, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.82)", textDecoration: "none", marginBottom: 20, fontSize: 14 }}>← Back to Nexus</a>
-        <OperationsHub />
+    <div style={{ minHeight: "100vh", backgroundColor: "#EEF2F7", backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: "no-repeat", padding: "24px 16px" }}>
+      <div style={{ maxWidth: 1360, margin: "0 auto" }}>
+        <OperationsHub onBack={() => { window.location.href = "/?tab=jobs"; }} />
       </div>
-    </NexusBackdrop>
+    </div>
   );
 }

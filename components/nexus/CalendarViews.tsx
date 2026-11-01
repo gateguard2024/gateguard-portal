@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Calendar, X, Clock, MapPin, Pencil, Trash2 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ChevronDown } = require('lucide-react') as any;
-import { NEXUS_BG } from '@/components/nexus/NexusBackdrop';
 // --- Data Contracts & Types ---
 type CalCategory = 'jobs' | 'sales' | 'todos' | 'google';
 type CalEvent = {
@@ -130,12 +129,12 @@ const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): 
   };
 };
 // --- Theme & Styles ---
-const textPrimary = { color: 'rgba(255,255,255,0.9)' };
-const textSecondary = { color: 'rgba(255,255,255,0.5)' };
-const glassBg = { backgroundColor: '#1E293B', border: '1px solid rgba(150,180,210,0.2)' };
+const textPrimary = { color: '#1D1D1F' };
+const textSecondary = { color: '#6E6E73' };
+const glassBg = { backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' };
 const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
   jobs: { label: 'Jobs', color: '#34D399' },
-  sales: { label: 'Sales', color: '#00A3FF' },
+  sales: { label: 'Sales', color: '#0071E3' },
   todos: { label: 'To-Dos', color: '#94a3b8' },
   google: { label: 'Google', color: '#FBBF24' }
 };
@@ -278,12 +277,12 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(year, month, i));
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-black/20 bg-[#151D2A]/50 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-300">
+        <div className="mb-2 grid grid-cols-7 gap-2 rounded-lg border border-black/20 bg-[#F5F5F7] py-2 text-center text-[10px] font-bold uppercase tracking-widest text-[#3A3A3C]">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
         <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-2">
           {cells.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-black/15 bg-[#151D2A]/30" />;
+            if (!date) return <div key={`empty-${idx}`} className="rounded-2xl border border-black/15 bg-[#FAFAFB]" />;
             const isToday = new Date().toDateString() === date.toDateString();
             const isSelected = selectedDate.toDateString() === date.toDateString();
             const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === date.toDateString());
@@ -294,23 +293,23 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                 onClick={() => setSelectedDate(date)}
                 className={`relative flex min-h-[84px] flex-col rounded-2xl border p-2 text-left transition-all ${
                   isSelected
-                    ? 'border-[#00A3FF] bg-[#00A3FF]/20 shadow-[0_0_18px_rgba(0,163,255,0.3)]'
+                    ? 'border-[#0071E3] bg-[#EEF4FF]'
                     : isToday
-                    ? 'border-[#00A3FF]/60 bg-white/10'
-                    : 'border-black/30 bg-[#151D2A] hover:border-[#00A3FF]/45 hover:bg-[#1E293B]'
+                    ? 'border-[#0071E3]/50 bg-[#EEF4FF]'
+                    : 'border-black/30 bg-white hover:border-[#0071E3]/40 hover:bg-[#F0F1F4]'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-[#00A3FF] px-1.5 py-0.5 font-extrabold text-slate-950' : 'text-slate-200'}`}>{date.getDate()}</span>
-                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-[#00A3FF]">Today</span>}
-                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#00A3FF', boxShadow: '0 0 6px rgba(0,163,255,0.6)' }} />}
+                  <span className={`text-xs font-bold ${isToday ? 'rounded-md bg-[#0071E3] px-1.5 py-0.5 font-semibold text-white' : 'text-[#1D1D1F]'}`}>{date.getDate()}</span>
+                  {isToday && <span className="text-[8px] font-bold uppercase tracking-wider text-[#0071E3]">Today</span>}
+                  {!isToday && dayEvents.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#0071E3', boxShadow: '0 0 6px rgba(0,163,255,0.6)' }} />}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.slice(0, 2).map(e => {
                     const color = CATEGORIES[e.category].color;
                     return <div key={e.id} className="truncate rounded border px-1.5 py-0.5 text-[9px] font-medium" style={{ background: `${color}1f`, color, borderColor: `${color}4d` }}>{e.title}</div>;
                   })}
-                  {dayEvents.length > 2 && <div className="rounded border border-rose-500/30 bg-rose-950/60 px-1.5 py-0.5 text-center text-[9px] font-bold text-rose-300">+{dayEvents.length - 2} more</div>}
+                  {dayEvents.length > 2 && <div className="rounded border border-rose-500/30 bg-[#FFECEC] px-1.5 py-0.5 text-center text-[9px] font-bold text-[#D70015]">+{dayEvents.length - 2} more</div>}
                 </div>
               </button>
             );
@@ -329,17 +328,17 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     const startOfWeek = new Date(year, month, date - dayOfWeek);
     const weekDays = Array.from({ length: 7 }).map((_, i) => new Date(year, month, startOfWeek.getDate() + i));
     return (
-      <div className="flex flex-1 border border-[#1E293B] rounded-2xl overflow-hidden mt-4 bg-[#0B111E]">
+      <div className="flex flex-1 border border-black/10 rounded-2xl overflow-hidden mt-4 bg-white">
         {weekDays.map((day, idx) => {
           const isToday = new Date().toDateString() === day.toDateString();
           const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === day.toDateString());
           return (
-            <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-white/5">
-              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-[#151D2A]">
+            <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-black/5">
+              <div className="p-3 border-b border-black/5 flex flex-col items-center bg-white">
                 <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
                 </span>
-                <span className={`text-sm w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#3f7fb8] text-white font-bold' : ''}`} style={!isToday ? textPrimary : {}}>
+                <span className={`text-sm w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#0071E3] text-white font-bold' : ''}`} style={!isToday ? textPrimary : {}}>
                   {day.getDate()}
                 </span>
               </div>
@@ -348,8 +347,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                   <button
                     key={e.id}
                     onClick={() => setSelectedEvent(e)}
-                    className="text-left p-2 rounded-xl flex flex-col gap-1 transition-colors hover:bg-white/10"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+                    className="text-left p-2 rounded-xl flex flex-col gap-1 transition-colors hover:bg-[#F0F1F4]"
+                    style={{ backgroundColor: '#FAFAFB' }}
                   >
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORIES[e.category].color }} />
@@ -382,7 +381,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
               <button
                 key={e.id}
                 onClick={() => setSelectedEvent(e)}
-                className="w-full text-left p-4 rounded-2xl flex items-center gap-4 transition-colors hover:bg-white/5"
+                className="w-full text-left p-4 rounded-2xl flex items-center gap-4 transition-colors hover:bg-[#F7F8FA]"
                 style={glassBg}
               >
                 <div className="w-24 text-sm font-medium flex-shrink-0" style={textSecondary}>
@@ -420,7 +419,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
           return (
             <div key={dateStr} className="mb-8">
               <div className="text-sm font-semibold mb-3 flex items-center gap-2" style={textPrimary}>
-                {isToday && <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-[#3f7fb8] text-white">Today</span>}
+                {isToday && <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-[#0071E3] text-white">Today</span>}
                 {d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
               </div>
               <div className="flex flex-col gap-2">
@@ -428,8 +427,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
                   <button
                     key={e.id}
                     onClick={() => setSelectedEvent(e)}
-                    className="w-full text-left p-3 rounded-2xl flex items-center gap-4 transition-colors hover:bg-white/5"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+                    className="w-full text-left p-3 rounded-2xl flex items-center gap-4 transition-colors hover:bg-[#F7F8FA]"
+                    style={{ backgroundColor: '#FAFAFB', border: '1px solid rgba(0,0,0,0.08)' }}
                   >
                     <div className="w-16 text-xs font-medium text-right flex-shrink-0" style={textSecondary}>
                       {formatTime(e.start, e.all_day)}
@@ -468,29 +467,29 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     };
     const close = () => { setSelectedEvent(null); setInlineEdit(false); };
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={close}>
-        <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#151D2A', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(15,23,42,0.42)] backdrop-blur-sm" onClick={close}>
+        <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.12)' }}>
           <div className="p-5 flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex justify-between items-start">
               <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>{cat.label}</div>
               <div className="flex items-center gap-1">
-                {editable && !inlineEdit && (<button onClick={startEdit} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Edit event"><Pencil size={16} /></button>)}
-                {editable && (<button onClick={async () => { const ev = selectedEvent; close(); await deleteEvent(ev); onChange?.(); }} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Delete event"><Trash2 size={16} /></button>)}
-                <button onClick={close} className="rounded-full p-1.5 hover:bg-white/10" style={textSecondary} aria-label="Close"><X size={18} /></button>
+                {editable && !inlineEdit && (<button onClick={startEdit} className="rounded-full p-1.5 hover:bg-[#F0F1F4]" style={textSecondary} aria-label="Edit event"><Pencil size={16} /></button>)}
+                {editable && (<button onClick={async () => { const ev = selectedEvent; close(); await deleteEvent(ev); onChange?.(); }} className="rounded-full p-1.5 hover:bg-[#F0F1F4]" style={textSecondary} aria-label="Delete event"><Trash2 size={16} /></button>)}
+                <button onClick={close} className="rounded-full p-1.5 hover:bg-[#F0F1F4]" style={textSecondary} aria-label="Close"><X size={18} /></button>
               </div>
             </div>
 
             {inlineEdit ? (
               <div className="flex flex-col gap-3">
-                <input value={ef.title} onChange={e => setEf(f => ({ ...f, title: e.target.value }))} placeholder="Event title" className="w-full bg-transparent border-b border-white/15 outline-none px-1 py-1.5 text-xl font-semibold placeholder:text-white/30" style={textPrimary} />
+                <input value={ef.title} onChange={e => setEf(f => ({ ...f, title: e.target.value }))} placeholder="Event title" className="w-full bg-transparent border-b border-black/10 outline-none px-1 py-1.5 text-xl font-semibold placeholder:text-[#8E8E93]" style={textPrimary} />
                 <div className="grid grid-cols-2 gap-3">
                   <input type="date" value={ef.date} onChange={e => setEf(f => ({ ...f, date: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
                   <input type="time" value={ef.time} onChange={e => setEf(f => ({ ...f, time: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
                 </div>
                 <input value={ef.location} onChange={e => setEf(f => ({ ...f, location: e.target.value }))} placeholder="Add location" className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
                 <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={() => setInlineEdit(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
-                  <button onClick={saveInline} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: '#3f7fb8', color: 'white' }}>Save</button>
+                  <button onClick={() => setInlineEdit(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#F7F8FA]" style={textSecondary}>Cancel</button>
+                  <button onClick={saveInline} className="px-5 py-2 rounded-xl text-sm font-semibold" style={{ background: '#3f7fb8', color: '#1D1D1F' }}>Save</button>
                 </div>
               </div>
             ) : (
@@ -513,8 +512,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
           </div>
 
           {!inlineEdit && selectedEvent.href && (
-            <div className="p-4 border-t flex gap-3" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-              <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>Open</a>
+            <div className="p-4 border-t flex gap-3" style={{ borderColor: 'rgba(0,0,0,0.08)', backgroundColor: '#FFFFFF' }}>
+              <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#0071E3', color: '#FFFFFF' }}>Open</a>
             </div>
           )}
         </div>
@@ -548,25 +547,25 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       onChange?.();
     };
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#151D2A', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(15,23,42,0.42)] backdrop-blur-sm">
+        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.12)' }}>
+          <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
             <h3 className="text-lg font-medium" style={textPrimary}>{editingEvent ? 'Edit Event' : 'Add Event'}</h3>
-            <button onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
+            <button onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="p-1 rounded-full hover:bg-[#F0F1F4]" style={textSecondary}><X size={18} /></button>
           </div>
 
           <form onSubmit={handleSave} className="p-5 flex flex-col gap-4 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div>
-              <input name="titleStr" type="text" placeholder="Event title" defaultValue={editingEvent?.title ?? ''} required className="w-full bg-transparent border-b border-white/10 outline-none px-2 py-2 text-lg placeholder:text-white/30" style={textPrimary} />
+              <input name="titleStr" type="text" placeholder="Event title" defaultValue={editingEvent?.title ?? ''} required className="w-full bg-transparent border-b border-black/10 outline-none px-2 py-2 text-lg placeholder:text-[#8E8E93]" style={textPrimary} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <input name="dateStr" type="date" defaultValue={editingEvent ? String(editingEvent.start).split('T')[0] : ''} required className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
-              <input name="timeStr" type="time" defaultValue={editingEvent && !editingEvent.all_day ? (String(editingEvent.start).split('T')[1]?.slice(0,5) ?? '') : ''} className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
+              <input name="dateStr" type="date" defaultValue={editingEvent ? String(editingEvent.start).split('T')[0] : ''} required className="w-full bg-[#F5F5F7] border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(0,0,0,0.12)' }} />
+              <input name="timeStr" type="time" defaultValue={editingEvent && !editingEvent.all_day ? (String(editingEvent.start).split('T')[1]?.slice(0,5) ?? '') : ''} className="w-full bg-[#F5F5F7] border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(0,0,0,0.12)' }} />
             </div>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => (
-                <label key={cat} className="flex items-center gap-2 text-sm p-2 rounded-xl cursor-pointer hover:bg-white/5 border border-transparent has-[:checked]:border-white/20">
+                <label key={cat} className="flex items-center gap-2 text-sm p-2 rounded-xl cursor-pointer hover:bg-[#F7F8FA] border border-transparent has-[:checked]:border-black/10">
                   <input type="radio" name="category" value={cat} defaultChecked={cat === (editingEvent?.category ?? 'jobs')} className="hidden" />
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CATEGORIES[cat].color }} />
                   <span style={textPrimary}>{CATEGORIES[cat].label}</span>
@@ -574,8 +573,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
               ))}
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <button type="button" onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
-              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#3f7fb8', color: 'white' }}>{editingEvent ? 'Save changes' : 'Save Event'}</button>
+              <button type="button" onClick={() => { setIsAddModalOpen(false); setEditingEvent(null); }} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#F7F8FA]" style={textSecondary}>Cancel</button>
+              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#0071E3', color: '#FFFFFF' }}>{editingEvent ? 'Save changes' : 'Save Event'}</button>
             </div>
           </form>
         </div>
@@ -588,31 +587,31 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
     const dLabel = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     return (
-      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-white/10 p-4 lg:flex" style={{ background: '#151D2A' }}>
+      <div className="hidden w-80 shrink-0 flex-col rounded-2xl border border-black/10 p-4 lg:flex" style={{ background: '#F5F5F7' }}>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#00A3FF]">Day Inspector</span>
-          <span className="rounded-full border border-white/5 bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">{dayEvents.length} items</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#0071E3]">Day Inspector</span>
+          <span className="rounded-full border border-black/5 bg-[#F5F5F7] px-2 py-0.5 text-[10px] font-semibold text-[#3A3A3C]">{dayEvents.length} items</span>
         </div>
-        <h3 className="mb-3 text-lg font-extrabold text-white">{dLabel}</h3>
-        <hr className="mb-3 border-white/10" />
+        <h3 className="mb-3 text-lg font-semibold text-[#1D1D1F]">{dLabel}</h3>
+        <hr className="mb-3 border-black/10" />
         <div className="flex max-h-[440px] min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
           {dayEvents.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#0B111E] py-14 text-center text-xs text-slate-300">No events scheduled for this day.</div>
+            <div className="rounded-2xl border border-black/5 bg-white py-14 text-center text-xs text-[#3A3A3C]">No events scheduled for this day.</div>
           ) : dayEvents.map(e => {
             const color = CATEGORIES[e.category].color;
             return (
-              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-[#151D2A] p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-200">{formatTime(e.start, e.all_day)}{e.end ? ` - ${formatTime(e.end)}` : ''}</span>
-                <h4 className="mt-0.5 text-sm font-bold text-white">{e.title}</h4>
+              <button key={e.id} onClick={() => setSelectedEvent(e)} className="rounded-2xl border bg-white p-3.5 text-left transition-all hover:scale-[1.02]" style={{ borderColor: `${color}55` }}>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[#1D1D1F]">{formatTime(e.start, e.all_day)}{e.end ? ` - ${formatTime(e.end)}` : ''}</span>
+                <h4 className="mt-0.5 text-sm font-bold text-[#1D1D1F]">{e.title}</h4>
                 <div className="mt-2 flex items-center gap-2">
                   <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold" style={{ background: `${color}1a`, color, borderColor: `${color}4d` }}>{CATEGORIES[e.category].label}</span>
-                  {e.location && <span className="truncate text-[10px] text-slate-200">{e.location}</span>}
+                  {e.location && <span className="truncate text-[10px] text-[#1D1D1F]">{e.location}</span>}
                 </div>
               </button>
             );
           })}
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#00A3FF]/45 bg-[#00A3FF]/25 py-2.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,163,255,0.2)] transition-all hover:bg-[#00A3FF]/40">
+        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-[#0071E3]/40 bg-[#EEF4FF] py-2.5 text-xs font-bold text-[#0071E3] shadow-[0_0_15px_rgba(0,163,255,0.2)] transition-all hover:bg-[#DCE8F8]">
           <Plus size={14} /> Add to {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </button>
       </div>
@@ -622,23 +621,23 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
   const monthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <div className="relative flex w-full flex-1 flex-col rounded-3xl p-3 font-sans" style={{ background: NEXUS_BG }}>
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' }}>
+    <div className="relative flex w-full flex-1 flex-col rounded-[14px] p-1 font-sans" style={{ background: '#FFFFFF', boxShadow: '0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)', color: '#1D1D1F' }}>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] p-4" style={{ background: 'transparent' }}>
 
       <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] p-1 text-xs font-medium text-slate-200">
+        <div className="flex items-center gap-1 rounded-xl border border-black/10 bg-white p-1 text-xs font-medium text-[#1D1D1F]">
           {(['Month', 'Week', 'Day', 'List'] as const).map(mode => (
-            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#00A3FF]/45 bg-[#00A3FF]/30 font-bold text-[#bfe6ff]' : 'hover:text-slate-200'}`}>{mode}</button>
+            <button key={mode} onClick={() => setView(mode)} className={`rounded-lg px-3 py-1 transition-all ${view === mode ? 'border border-[#0071E3]/40 bg-[#EEF4FF] font-bold text-[#0071E3]' : 'hover:text-[#1D1D1F]'}`}>{mode}</button>
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#0e1e38] px-1 py-1 text-slate-300">
-            <button onClick={handlePrev} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronLeft size={16} /></button>
-            <button onClick={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }} className="rounded-lg px-2.5 py-1 text-xs font-semibold hover:bg-white/10">Today</button>
-            <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-white/10"><ChevronRight size={16} /></button>
+          <div className="flex items-center gap-1 rounded-xl border border-black/10 bg-white px-1 py-1 text-[#3A3A3C]">
+            <button onClick={handlePrev} className="rounded-lg p-1.5 hover:bg-[#F0F1F4]"><ChevronLeft size={16} /></button>
+            <button onClick={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }} className="rounded-lg px-2.5 py-1 text-xs font-semibold hover:bg-[#F0F1F4]">Today</button>
+            <button onClick={handleNext} className="rounded-lg p-1.5 hover:bg-[#F0F1F4]"><ChevronRight size={16} /></button>
           </div>
-          <span className="min-w-[128px] text-center text-lg font-bold text-slate-100">{monthLabel}</span>
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#00A3FF]/45 bg-[#00A3FF]/30 px-3.5 py-1.5 text-xs font-bold text-[#bfe6ff] shadow-[0_0_15px_rgba(0,163,255,0.25)] transition-all hover:bg-[#00A3FF]/40"><Plus size={14} /> Add Event</button>
+          <span className="min-w-[128px] text-center text-lg font-bold text-[#1D1D1F]">{monthLabel}</span>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#0071E3]/40 bg-[#EEF4FF] px-3.5 py-1.5 text-xs font-bold text-[#0071E3] shadow-[0_0_15px_rgba(0,163,255,0.25)] transition-all hover:bg-[#DCE8F8]"><Plus size={14} /> Add Event</button>
         </div>
       </div>
 
@@ -647,16 +646,16 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
           {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => {
             const isActive = activeFilters.has(cat); const color = CATEGORIES[cat].color;
             return (
-              <button key={cat} onClick={() => toggleFilter(cat)} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${isActive ? 'bg-slate-800 text-white' : 'border-white/5 bg-slate-900/60 text-slate-200 hover:border-white/20'}`} style={isActive ? { borderColor: `${color}66` } : undefined}>
+              <button key={cat} onClick={() => toggleFilter(cat)} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${isActive ? 'bg-[#F5F5F7] text-[#1D1D1F]' : 'border-black/5 bg-white text-[#1D1D1F] hover:border-black/10'}`} style={isActive ? { borderColor: `${color}66` } : undefined}>
                 <span className="h-2 w-2 rounded-full" style={{ background: color }} />
                 {CATEGORIES[cat].label}
               </button>
             );
           })}
-          {isLoading && <span className="ml-1 animate-pulse text-[10px] text-slate-300">Updating...</span>}
+          {isLoading && <span className="ml-1 animate-pulse text-[10px] text-[#3A3A3C]">Updating...</span>}
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative flex items-center gap-1.5 rounded-full border border-white/5 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-200">
+          <div className="relative flex items-center gap-1.5 rounded-full border border-black/5 bg-white px-2.5 py-1 text-xs text-[#1D1D1F]">
             <Calendar size={12} />
             <select value={scope} onChange={e => setScope(e.target.value as 'me' | 'team')} className="cursor-pointer appearance-none bg-transparent pr-4 outline-none">
               <option value="me" className="bg-neutral-900">My Calendar</option>
@@ -664,11 +663,11 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
             </select>
             <ChevronDown size={12} className="pointer-events-none absolute right-2" />
           </div>
-          <button onClick={handleSyncCalendar} disabled={syncing} className="rounded-full border border-white/5 bg-slate-900/60 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-white/20 disabled:opacity-50">{syncing ? 'Syncing...' : 'Sync'}</button>
+          <button onClick={handleSyncCalendar} disabled={syncing} className="rounded-full border border-black/5 bg-white px-3 py-1 text-xs font-medium text-[#1D1D1F] transition-colors hover:border-black/10 disabled:opacity-50">{syncing ? 'Syncing...' : 'Sync'}</button>
         </div>
       </div>
 
-      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(0,163,255,0.10)', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{syncMsg}</div>)}
+      {syncMsg && (<div className="relative z-10 mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: '#EEF4FF', border: '1px solid rgba(0,163,255,0.28)', color: '#0071E3' }}>{syncMsg}</div>)}
 
       <div className="relative z-10 flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col">

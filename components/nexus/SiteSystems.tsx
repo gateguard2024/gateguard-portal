@@ -20,9 +20,11 @@ export function SiteSystems({ siteId, isCorporate, initialTab, headerTheme = "da
   const [showSetup, setShowSetup] = useState(initialTab === "setup");
 
   const light = headerTheme === "light";
-  const titleColor = light ? "#152535" : "rgba(255,255,255,0.95)";
-  const subColor = light ? "#37485c" : "rgba(255,255,255,0.5)";
-  const gear = { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: "7px 14px", cursor: "pointer", background: "#22303f", border: "1px solid rgba(0,163,255,0.28)", color: "#00A3FF" } as const;
+  const titleColor = light ? "#1D1D1F" : "rgba(255,255,255,0.95)";
+  const subColor = light ? "#6E6E73" : "rgba(255,255,255,0.5)";
+  const gear = light
+    ? { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, borderRadius: 10, padding: "7px 14px", cursor: "pointer", background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F" } as const
+    : { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: "7px 14px", cursor: "pointer", background: "#22303f", border: "1px solid rgba(0,163,255,0.28)", color: "#00A3FF" } as const;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>

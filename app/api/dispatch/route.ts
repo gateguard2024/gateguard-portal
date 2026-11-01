@@ -39,9 +39,12 @@ export async function GET() {
   let jobQuery = supabase
     .from('work_orders')
     .select('id, wo_number, title, customer_name, job_type, assignee_id, assignee_name, priority, status, scheduled_date, due_date, site_id, created_at')
-    .in('status', ['open', 'in_progress', 'scheduled', 'completed'])
+    // Every live status — procurement and stuck jobs used to be left out, so a
+    // job dragged to those columns vanished from the Operations Hub. Cancelled
+    // jobs stay out. 300 so older open jobs aren't pushed off by completed ones.
+    .not('status', 'in', '(cancelled,canceled,deleted)')
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(300)
 
   jobQuery = applyOrgScope(jobQuery, scope, 'org_id')
 
@@ -75,6 +78,12 @@ export async function GET() {
     woNumber:       j.wo_number,
     title:          j.title,
     site_id:        j.site_id,
+    // Raw values for screens that need the real status/priority (Operations
+    // Hub columns + filters). The mapped fields above stay as they were.
+    rawStatus:      j.status,
+    rawPriority:    j.priority,
+    createdAt:      j.created_at,
+    dueDate:        j.due_date,
   }))
 
   const techs = (techsRes.data ?? []).map(t => ({

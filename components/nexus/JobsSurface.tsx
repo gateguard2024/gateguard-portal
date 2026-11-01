@@ -7,7 +7,7 @@ import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { OperationsHub } from '@/components/nexus/OperationsHub'
 import { OperationsLanding } from '@/components/nexus/OperationsLanding'
-import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
+import { PAGE_BG_GRADIENT } from '@/components/nexus/tasks/shared'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
 type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
@@ -361,11 +361,10 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
           which is why Ops Hub / Work Orders had no grid background. It now
           carries the shared backdrop, grid included. */}
       {showOps && (
-        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: NEXUS_BG, overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-          <NexusBackdropLayers variant="page" />
-          <div className="relative mx-auto w-full max-w-6xl">
-            <NexusGlassBackButton label="Back to Jobs" onClick={() => setShowOps(false)} />
-            <div className="mt-4"><OperationsHub embedded initialTab={opsTab} /></div>
+        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:px-6 sm:py-6" style={{ backgroundColor: '#EEF2F7', backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: 'no-repeat', backgroundAttachment: 'local', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          {/* Light look — same navy-to-light fade as the Operations page behind it. */}
+          <div className="relative mx-auto w-full" style={{ maxWidth: 1360 }}>
+            <OperationsHub embedded initialTab={opsTab} onBack={() => setShowOps(false)} />
           </div>
         </div>
       )}

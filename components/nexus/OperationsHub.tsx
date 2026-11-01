@@ -26,14 +26,14 @@ import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
 import CalendarViews from "@/components/nexus/CalendarViews";
 
-type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
+type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
 
 const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string }[] = [
   { key: "New",         label: "New",         from: ["Pending", "open", "New", "Approved"],                          accent: "#64748b" },
-  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#00A3FF" },
+  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#0071E3" },
   { key: "Scheduled",   label: "Scheduled",   from: ["Assigned", "scheduled", "Scheduled"],                          accent: "#3b82f6" },
-  { key: "In Progress", label: "In-Progress", from: ["In Progress", "in_progress", "On Site", "En Route"],           accent: "#f59e0b" },
+  { key: "In Progress", label: "In-Progress", from: ["In Progress", "in_progress", "On Site", "En Route"],           accent: "#B25000" },
   { key: "Stuck",       label: "Stuck",       from: ["stuck", "Stuck", "blocked", "Blocked", "On Hold"],             accent: "#ef4444" },
   { key: "Done",        label: "Complete",    from: ["Done", "completed", "Complete"],                               accent: "#10b981" },
 ];
@@ -48,16 +48,22 @@ const PRESET_PHASES = ["Wiring", "Trim", "Headend", "Program"];
 // Bucket key for steps with phase_id = null — they still show, never disappear.
 const PHASE_OTHER = "__other";
 
-const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18, boxShadow: "0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12)" } as const;
-const btn = { background: "#00A3FF", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
-const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(0,163,255,.28)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
-const sel = { background: "rgba(0,0,0,.34)", border: "1px solid rgba(0,163,255,.28)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
-const Small = ({ children }: { children: React.ReactNode }) => <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{children}</div>;
-const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 30, fontWeight: 800, color: color ?? "#00A3FF", margin: "6px 0" }}>{children}</div>;
+// ── Light look tokens — same as the Operations / Sales pages (white cards on
+// the navy-to-light fade, one blue accent, Apple system fonts).
+const INK = "#1D1D1F", INK2 = "#3A3A3C", INK3 = "#6E6E73", LINE = "rgba(0,0,0,0.08)", BLUE = "#0071E3";
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif';
+const card = { background: "#FFFFFF", borderRadius: 14, padding: 18, boxShadow: "0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)" } as const;
+const btn = { background: BLUE, color: "white", border: 0, borderRadius: 10, padding: "9px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" } as const;
+// Secondary button (white with a hairline) — for every non-primary action.
+const btn2 = { ...btn, background: "#FFFFFF", color: INK, border: "1px solid rgba(0,0,0,0.12)" } as const;
+const input = { width: "100%", boxSizing: "border-box" as const, background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.14)", color: INK, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontFamily: "inherit" };
+const sel = { background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.14)", color: INK, borderRadius: 8, padding: "6px 8px", fontSize: 12.5, fontFamily: "inherit" } as const;
+const Small = ({ children }: { children: React.ReactNode }) => <div style={{ color: INK3, fontSize: 13 }}>{children}</div>;
+const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", color: color ?? INK, margin: "4px 0 0" }}>{children}</div>;
 const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => <div style={{ ...card, ...style }}>{children}</div>;
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) {
-  const bg = tone === "urgent" ? "rgba(255,80,80,.18)" : tone === "high" ? "rgba(255,170,0,.18)" : tone === "good" ? "rgba(0,230,153,.18)" : "rgba(255,255,255,.08)";
-  return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
+  const t = tone === "urgent" ? { background: "#FFECEC", color: "#D70015" } : tone === "high" ? { background: "#FFF4E5", color: "#B25000" } : tone === "good" ? { background: "#E8F6EC", color: "#1A7F37" } : { background: "#F5F5F7", color: INK2 };
+  return <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", ...t }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
 
@@ -75,12 +81,12 @@ const SUPPLY_LABEL: Record<string, string> = {
 };
 // Red = nobody has ordered it. Amber = ordered, but not here yet. Green = here.
 const SUPPLY_COLOR: Record<string, string> = {
-  not_ordered: "#f87171",
-  ordered:     "#fbbf24",
-  shipped:     "#fbbf24",
-  at_office:   "#00E699",
-  on_truck:    "#00E699",
-  installed:   "#00E699",
+  not_ordered: "#D70015",
+  ordered:     "#B25000",
+  shipped:     "#B25000",
+  at_office:   "#248A3D",
+  on_truck:    "#248A3D",
+  installed:   "#248A3D",
 };
 // Plain phrases for the summary line ("2 not ordered yet, 1 shipped").
 const SUPPLY_PENDING_PHRASE: Record<string, string> = {
@@ -152,11 +158,11 @@ function printWorkOrder(wo: any, equip: any[]) {
 // Simple centered popup for data entry — keeps forms out of the page flow so
 // each task is a clear, focused step (easy enough for a 5th grader).
 function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid #1E293B", borderRadius: 18, padding: 18, paddingBottom: "calc(96px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.42)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "#FFFFFF", borderRadius: 16, padding: 20, paddingBottom: "calc(96px + env(safe-area-inset-bottom))", color: INK, fontFamily: FONT, letterSpacing: "-0.01em", boxShadow: "0 24px 60px rgba(0,0,0,0.28)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 17, margin: 0 }}>{title}</h2>
-        <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "white", borderRadius: 9, width: 30, height: 30, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+        <h2 style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em", margin: 0 }}>{title}</h2>
+        <button onClick={onClose} aria-label="Close" style={{ background: "#F5F5F7", border: 0, color: INK3, borderRadius: 999, width: 32, height: 32, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
       </div>
       {children}
     </div>
@@ -178,17 +184,142 @@ const TAB_HINT: Record<Tab, string> = {
   Playbooks: "Step-by-step templates to assign",
 };
 
-export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; initialTab?: string } = {}) {
+/* ── Status / priority helpers on the raw DB values ───────────────────────
+ * /api/dispatch maps status + priority into old display words (and used to
+ * squash "high" and "critical" into "urgent", so the Urgent filter never
+ * matched). The hub reads the raw values when they're there. */
+const stOf = (w: { status?: string; rawStatus?: string | null }) => String(w.rawStatus ?? w.status ?? "");
+const prOf = (w: RealWO) => String(w.rawPriority ?? w.priority ?? "").toLowerCase();
+const PRI_RANK: Record<string, number> = { critical: 0, urgent: 0, high: 1, medium: 2, normal: 2, scheduled: 3, low: 3 };
+const prRank = (w: RealWO) => PRI_RANK[prOf(w)] ?? 2;
+const isUrgent = (w: RealWO) => prRank(w) <= 1;
+const prLabel = (w: RealWO) => { const p = prOf(w) || "normal"; return p === "scheduled" ? "Normal" : p[0].toUpperCase() + p.slice(1); };
+const prDot = (w: RealWO) => prRank(w) === 0 ? "#FF3B30" : prRank(w) === 1 ? "#FF9F0A" : prRank(w) === 2 ? BLUE : "#8E8E93";
+const isOpenWO = (w: RealWO) => bucketOf(stOf(w)) !== "Done";
+const schedOf = (w: RealWO) => (w.eta && w.eta !== "TBD" ? String(w.eta).slice(0, 10) : null);
+const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const isOverdue = (w: RealWO) => { const s = schedOf(w); return isOpenWO(w) && !!s && s < todayKey(); };
+const ageDays = (w: RealWO) => (w.createdAt ? Math.max(0, Math.floor((Date.now() - new Date(w.createdAt).getTime()) / 86400000)) : null);
+const ageLabel = (n: number | null) => (n == null ? "—" : n === 0 ? "Today" : `${n}d`);
+const woName = (w: RealWO) => w.woNumber || w.title || "Work order";
+
+// Work-order list filters. "b:<column>" filters to one board column
+// (set by tapping a count on the Dashboard).
+const WO_FILTERS = [
+  { key: "open", label: "Open" },
+  { key: "unassigned", label: "Unassigned" },
+  { key: "urgent", label: "Urgent" },
+  { key: "overdue", label: "Overdue" },
+  { key: "done", label: "Done" },
+  { key: "all", label: "All" },
+];
+const woMatches = (w: RealWO, f: string) => {
+  if (f.startsWith("b:")) return bucketOf(stOf(w)) === f.slice(2);
+  if (f === "open") return isOpenWO(w);
+  if (f === "unassigned") return isOpenWO(w) && !w.assignedTechId;
+  if (f === "urgent") return isOpenWO(w) && isUrgent(w);
+  if (f === "overdue") return isOverdue(w);
+  if (f === "done") return !isOpenWO(w);
+  return true;
+};
+
+const OH_CSS = `
+.oh *{box-sizing:border-box}
+.oh h2{font-weight:600;letter-spacing:-.01em}
+.oh button,.oh select,.oh input,.oh textarea{font-family:inherit}
+.oh-hd{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin:2px 0 16px}
+.oh-back{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 2px;margin-bottom:2px;border:0;background:none;color:#8EC1FF;font:500 14px ${FONT};cursor:pointer}
+.oh-hd h1{margin:0;color:#fff;font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15}
+.oh-hd .sub{margin-top:4px;color:rgba(255,255,255,.66);font-size:14px}.oh-hd .sub b{color:#fff;font-weight:600}
+.oh-acts{display:flex;gap:8px}
+.oh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;padding:0 16px;border-radius:10px;border:0;font:600 14px ${FONT};cursor:pointer;white-space:nowrap}
+.oh-btn.pri{background:${BLUE};color:#fff}.oh-btn.pri:hover{background:#0058B0}
+.oh-btn.dark{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-weight:500}
+.oh-btn.sm{height:32px;padding:0 12px;font-size:13px}
+.oh-btn.line{background:#fff;border:1px solid rgba(0,0,0,.12);color:${INK}}
+.oh-tabs{display:flex;gap:2px;padding:3px;border-radius:12px;background:rgba(255,255,255,.12);overflow-x:auto;scrollbar-width:none;width:max-content;max-width:100%}
+.oh-tabs::-webkit-scrollbar{display:none}
+.oh-tabs button{flex:none;min-height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:9px;border:0;background:none;font:500 13px ${FONT};color:#C9D2E0;cursor:pointer;white-space:nowrap}
+.oh-tabs button:hover{color:#fff}
+.oh-tabs button[aria-selected=true]{background:#fff;color:${INK};font-weight:600}
+.oh-tabs b{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.18);color:#fff;font-size:11px;font-weight:600}
+.oh-tabs button[aria-selected=true] b{background:#EEF4FF;color:#0058B0}
+.oh-tabs b.red,.oh-tabs button[aria-selected=true] b.red{background:#FF3B30;color:#fff}
+.oh-hint{margin:10px 2px 16px;color:rgba(255,255,255,.66);font-size:13px}
+.oh-toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:10px 14px;border-radius:10px;background:#1D1D1F;color:#fff;font:500 13px ${FONT};box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.oh-toast button{border:0;background:none;color:#4AA3FF;font:600 13px ${FONT};cursor:pointer}
+.oh-sec{font-size:15px;font-weight:600;margin:0}
+.oh-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.oh-stat{display:block;width:100%;text-align:left;border:0;cursor:pointer;font:inherit;color:inherit}
+.oh-stat:hover{transform:translateY(-1px)}
+.oh-stat .l{font-size:12px;font-weight:500;color:${INK3};display:flex;align-items:center;gap:6px}
+.oh-stat .v{font-size:26px;font-weight:600;letter-spacing:-.02em;margin-top:2px;line-height:1.15}
+.oh-stat .s{font-size:12px;color:${INK3};margin-top:1px}
+.oh-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.oh-chips{display:flex;flex-wrap:wrap;gap:6px}
+.oh-chip{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#fff;font:500 13px ${FONT};color:${INK2};cursor:pointer}
+.oh-chip[aria-pressed=true]{background:${INK};border-color:${INK};color:#fff}
+.oh-chip b{font-weight:600}
+.oh-search{flex:1;min-width:200px;height:36px;padding:0 12px;border:1px solid rgba(0,0,0,.14);border-radius:10px;font:400 14px ${FONT};color:${INK};background:#fff}
+.oh-search:focus,.oh select:focus,.oh input:focus{outline:2px solid ${BLUE};outline-offset:-1px;border-color:transparent}
+.oh-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:#EEF4FF;color:#0058B0;font-size:13px;font-weight:500}
+.oh-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.oh-tbl th{position:sticky;top:0;background:#fff;z-index:1;font-size:12px;font-weight:500;color:${INK3};text-align:left;padding:8px 10px;border-bottom:1px solid ${LINE};white-space:nowrap}
+.oh-tbl th button{border:0;background:none;font:inherit;color:inherit;cursor:pointer;padding:0}
+.oh-tbl th button[aria-pressed=true]{color:${INK};font-weight:600}
+.oh-tbl td{padding:8px 10px;border-bottom:1px solid ${LINE};vertical-align:middle}
+.oh-tbl tbody tr{cursor:pointer}
+.oh-tbl tbody tr:hover td{background:#F7F8FA}
+.oh-tbl tbody tr.sel td{background:#EEF4FF}
+.oh-tbl td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.oh-tbl .t{font-weight:500}.oh-tbl .m{font-size:12.5px;color:${INK3}}
+.oh-late{color:#D70015;font-weight:600}
+.oh-cards{display:none}
+@media (max-width:820px){.oh-tblwrap{display:none}.oh-cards{display:grid;gap:8px}}
+.oh-card{padding:12px;border-radius:12px;background:#F5F5F7}
+.oh-col{background:#EEF1F5;border-radius:12px;padding:8px;min-width:0;min-height:96px;transition:background .12s}
+.oh-col.over{background:#DCE8F8;outline:2px dashed ${BLUE};outline-offset:-2px}
+.oh-colh{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px 8px;font-size:13px;font-weight:600}
+.oh-colh span{color:${INK3};font-weight:500}
+.oh-bcard{display:block;width:100%;text-align:left;background:#fff;border:1px solid rgba(0,0,0,.04);border-radius:10px;padding:10px 11px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.06);font:inherit;color:inherit}
+.oh-bcard:hover{box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 16px -8px rgba(0,0,0,.25)}
+.oh-bcard .t{font-size:13.5px;font-weight:600}.oh-bcard .m{font-size:12px;color:${INK3};margin-top:2px}
+.oh-board{display:grid;grid-template-columns:repeat(5,minmax(200px,1fr));gap:10px;overflow-x:auto;padding-bottom:4px}
+@media (max-width:640px){.oh-hd h1{font-size:24px}.oh-acts{width:100%}.oh-acts .oh-btn{flex:1;padding:0 8px}}
+`;
+
+export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boolean; initialTab?: string; onBack?: () => void } = {}) {
+  void embedded;
   const [page, setPage] = useState<Tab>(initialTab && (TABS as readonly string[]).includes(initialTab) ? initialTab as Tab : "Dashboard");
   const [jobs, setJobs] = useState<RealWO[]>([]);
   const [techs, setTechs] = useState<RealTech[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [woFilter, setWoFilter] = useState("open");
+  const [newOpen, setNewOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [reqCount, setReqCount] = useState(0);
+  const [pmOverdue, setPmOverdue] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const loadOps = React.useCallback(() => {
     setLoading(true);
-    fetch("/api/dispatch").then(r => r.json()).then(d => { setJobs(d.jobs ?? []); setTechs(d.techs ?? []); }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/dispatch").then(async r => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setLoadError(d?.error || `Couldn’t load work orders (${r.status}).`); return; }
+      setLoadError(null); setJobs(d.jobs ?? []); setTechs(d.techs ?? []);
+    }).catch(() => setLoadError("Couldn’t load work orders — check your connection.")).finally(() => setLoading(false));
   }, []);
-  useEffect(() => { loadOps(); }, [loadOps]);
+  // Tab badges: open requests + overdue maintenance (reads only).
+  const loadCounts = React.useCallback(() => {
+    fetch("/api/requests").then(r => r.ok ? r.json() : null).then(d => setReqCount((d?.requests ?? []).length)).catch(() => {});
+    fetch("/api/pm-schedules").then(r => r.ok ? r.json() : null).then(d => {
+      const t = todayKey();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setPmOverdue((d?.pm_schedules ?? []).filter((s: any) => s.next_due_at && String(s.next_due_at).slice(0, 10) < t).length);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { loadOps(); loadCounts(); }, [loadOps, loadCounts]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
   // Creating a work order must never fail silently. This used to be
   // `.catch(() => {})`, so a rejected insert looked EXACTLY like a successful
   // one — nothing appeared, nothing was said. Return the error so the caller
@@ -213,30 +344,65 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
       return false;
     }
   };
-  const updateWO = async (id: string, patch: Record<string, unknown>) => { await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {}); loadOps(); };
+  // One PATCH; says so if it fails (this used to swallow errors, so a change
+  // that didn't save just snapped back on refresh with no explanation).
+  const patchOne = async (id: string, patch: Record<string, unknown>): Promise<boolean> => {
+    try {
+      const r = await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      return r.ok;
+    } catch { return false; }
+  };
+  const updateWO = async (id: string, patch: Record<string, unknown>) => {
+    const ok = await patchOne(id, patch);
+    if (!ok) setToast("That change didn’t save. Try again.");
+    loadOps();
+  };
+  const bulkUpdate = async (ids: string[], patch: Record<string, unknown>) => {
+    const results = await Promise.all(ids.map(id => patchOne(id, patch)));
+    const failed = results.filter(r => !r).length;
+    setToast(failed ? `${ids.length - failed} updated, ${failed} didn’t save.` : `${ids.length} work order${ids.length === 1 ? "" : "s"} updated.`);
+    loadOps();
+  };
+  const refreshAll = () => { loadOps(); loadCounts(); };
+  const goWO = (filter: string) => { setWoFilter(filter); setPage("Work Orders"); };
 
-  return <div style={{ color: "white", paddingBottom: 120 }}>
-    {!embedded && <>
-      <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(0,163,255,0.8)" }}>Nexus</div>
-      <h1 style={{ margin: "4px 0 2px", fontSize: 26, fontWeight: 700 }}>Operations Hub</h1>
-      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, marginBottom: 16 }}>Jobs, work orders, dispatch, sites, and parts — in one place.</p>
-    </>}
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-      {TABS.map(p => {
-        const on = page === p;
-        return <button key={p} onClick={() => setPage(p)} style={{ padding: "9px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          background: on ? "linear-gradient(135deg, rgba(47,127,184,0.42), rgba(0,163,255,0.16))" : "rgba(255,255,255,0.02)",
-          border: on ? "1px solid rgba(0,163,255,0.42)" : "0.5px solid rgba(255,255,255,0.07)", color: on ? "white" : "rgba(255,255,255,0.5)" }}>{p}</button>;
-      })}
-      <button onClick={loadOps} title="Refresh" aria-label="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)", display: "inline-flex", alignItems: "center" }}><RefreshCw size={15} /></button>
-    </div>
-    <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
+  const openN = jobs.filter(isOpenWO).length;
+  const unassignedN = jobs.filter(w => isOpenWO(w) && !w.assignedTechId).length;
+  const overdueN = jobs.filter(isOverdue).length;
+  const badge = (p: Tab): { n: number; red?: boolean } | null =>
+    p === "Work Orders" ? (openN ? { n: openN } : null)
+    : p === "Requests" ? (reqCount ? { n: reqCount, red: true } : null)
+    : p === "PM" ? (pmOverdue ? { n: pmOverdue, red: true } : null)
+    : null;
 
-    {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
-    {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} createError={woError} />}
+  return <div className="oh" style={{ color: INK, fontFamily: FONT, letterSpacing: "-0.01em", paddingBottom: 120 }}>
+    <style>{OH_CSS}</style>
+    <header className="oh-hd">
+      <div style={{ minWidth: 0 }}>
+        {onBack && <button type="button" className="oh-back" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><path d="M15 18l-6-6 6-6" /></svg> Operations
+        </button>}
+        <h1>Operations Hub</h1>
+        <div className="sub">{loading && !jobs.length ? "Loading…" : <><b>{openN}</b> open · <b>{unassignedN}</b> need a tech · <b>{overdueN}</b> overdue</>}</div>
+      </div>
+      <div className="oh-acts">
+        <button type="button" className="oh-btn pri" onClick={() => { setPage("Work Orders"); setNewOpen(true); }}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 5v14M5 12h14" /></svg> New work order
+        </button>
+        <button type="button" className="oh-btn dark" onClick={refreshAll} aria-label="Refresh"><RefreshCw size={15} /> Refresh</button>
+      </div>
+    </header>
+    <nav className="oh-tabs" role="tablist" aria-label="Operations Hub sections">
+      {TABS.map(p => { const b = badge(p); return <button key={p} type="button" role="tab" aria-selected={page === p} onClick={() => setPage(p)}>{p}{b && <b className={b.red ? "red" : undefined}>{b.n}</b>}</button>; })}
+    </nav>
+    <p className="oh-hint">{TAB_HINT[page]}</p>
+    {loadError && <div style={{ ...card, padding: "12px 16px", marginBottom: 14, color: "#D70015", fontSize: 13 }}>{loadError} <button type="button" onClick={loadOps} style={{ ...btn2, padding: "4px 10px", marginLeft: 8 }}>Try again</button></div>}
+
+    {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} onFilter={goWO} />}
+    {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onBulk={bulkUpdate} onOpen={setOpenId} createError={woError} filter={woFilter} setFilter={setWoFilter} newOpen={newOpen} setNewOpen={setNewOpen} />}
     {page === "Schedule" && <CalendarViews />}
     {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
-    {page === "Requests" && <Requests onConverted={loadOps} />}
+    {page === "Requests" && <Requests onConverted={() => { loadOps(); loadCounts(); }} />}
     {page === "Locations" && <Locations />}
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
@@ -244,33 +410,58 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
     {page === "PM" && <PM />}
     {page === "Playbooks" && <Playbooks />}
     {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
+    {toast && <div className="oh-toast" role="status">{toast}<button type="button" onClick={() => setToast(null)}>OK</button></div>}
   </div>;
 }
 
-/* ── Dashboard: counts + dispatch strip + jobs board ─────────────────────── */
-function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
-  const unassigned = jobs.filter(j => !j.assignedTechId && bucketOf(j.status) !== "Done");
+/* ── Dashboard: tap any count to see those work orders ───────────────────── */
+function Dashboard({ jobs, techs, loading, onOpen, onUpdate, onFilter }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onFilter: (f: string) => void }) {
+  const unassigned = jobs.filter(j => isOpenWO(j) && !j.assignedTechId).sort((a, b) => prRank(a) - prRank(b));
+  const n = (f: (w: RealWO) => boolean) => (loading && !jobs.length ? "—" : String(jobs.filter(f).length));
+  const attention = [
+    { l: "Need a tech", v: n(w => isOpenWO(w) && !w.assignedTechId), s: "Open, nobody assigned", f: "unassigned", dot: "#FF9F0A" },
+    { l: "Overdue", v: n(isOverdue), s: "Scheduled date has passed", f: "overdue", dot: "#FF3B30" },
+    { l: "Urgent", v: n(w => isOpenWO(w) && isUrgent(w)), s: "High or critical, still open", f: "urgent", dot: "#FF3B30" },
+    { l: "Stuck", v: n(w => bucketOf(stOf(w)) === "Stuck"), s: "Blocked or on hold", f: "b:Stuck", dot: "#8E8E93" },
+  ];
   return <div style={{ display: "grid", gap: 16 }}>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14 }}>
-      {JOB_COLUMNS.map(col => <Card key={col.key}><Small>{col.label}</Small><Big color={col.accent === "#10b981" ? "#00E699" : undefined}>{loading ? "…" : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>)}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))", gap: 12 }}>
+      {attention.map(a => <button key={a.l} type="button" className="oh-stat" style={card} onClick={() => onFilter(a.f)} title={`Show ${a.l.toLowerCase()} work orders`}>
+        <div className="l"><span className="oh-dot" style={{ background: a.dot }} />{a.l}</div>
+        <div className="v">{a.v}</div>
+        <div className="s">{a.s}</div>
+      </button>)}
     </div>
 
-    {/* Dispatch strip — folds dispatch in without a crowded separate page */}
-    <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <h2 style={{ fontSize: 16 }}>Needs a tech</h2>
-        <Small>{techs.length} {techs.length === 1 ? "tech" : "techs"} available</Small>
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div className="oh-row" style={{ padding: "14px 18px", borderBottom: `1px solid ${LINE}` }}>
+        <h2 className="oh-sec">By status</h2><Small>Tap a status to see its jobs</Small>
       </div>
-      {loading ? <Small>Loading…</Small> : unassigned.length === 0 ? <Small>Everything's assigned. 🎉</Small> : <div style={{ display: "grid", gap: 8 }}>
-        {unassigned.map(w => <div key={w.id} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", padding: 10, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)" }}>
-          <div onClick={() => onOpen(w.id)} style={{ cursor: "pointer", minWidth: 0 }}>
-            <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>{w.property || "—"}</div>
-          </div>
-          <select defaultValue="" onChange={e => { const t = techs.find(x => x.id === e.target.value); if (e.target.value) onUpdate(w.id, { assignee_id: e.target.value, assignee_name: t?.name ?? null, status: "scheduled" }); }} style={sel}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px,1fr))" }}>
+        {JOB_COLUMNS.map((col, i) => <button key={col.key} type="button" className="oh-stat" onClick={() => onFilter(col.key === "Done" ? "done" : `b:${col.key}`)} style={{ background: "transparent", padding: "14px 18px", borderLeft: i ? `1px solid ${LINE}` : 0 }}>
+          <div className="l"><span className="oh-dot" style={{ background: col.accent }} />{col.label}</div>
+          <div className="v">{loading && !jobs.length ? "—" : jobs.filter(j => bucketOf(stOf(j)) === col.key).length}</div>
+        </button>)}
+      </div>
+    </Card>
+
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div className="oh-row" style={{ padding: "14px 18px", borderBottom: `1px solid ${LINE}` }}>
+        <h2 className="oh-sec">Needs a tech</h2>
+        <Small>{techs.length} {techs.length === 1 ? "tech" : "techs"} on the team</Small>
+      </div>
+      {loading && !jobs.length ? <div style={{ padding: 18 }}><Small>Loading…</Small></div> : unassigned.length === 0 ? <div style={{ padding: 18 }}><Small>Everything’s assigned.</Small></div> : <div>
+        {unassigned.slice(0, 8).map((w, i) => <div key={w.id} className="oh-row" style={{ padding: "10px 18px", borderTop: i ? `1px solid ${LINE}` : 0, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => onOpen(w.id)} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1, border: 0, background: "none", padding: 0, cursor: "pointer", textAlign: "left", fontSize: 14, color: "inherit" }}>
+            <span className="oh-dot" style={{ background: prDot(w) }} aria-label={`${prLabel(w)} priority`} />
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ fontWeight: 500 }}>{woName(w)}</b>{w.title && w.woNumber ? <span style={{ color: INK3 }}> · {w.title}</span> : null}<span style={{ color: INK3 }}> · {w.property || "—"}</span></span>
+            <span style={{ color: INK3, fontSize: 12, flex: "none" }}>{ageLabel(ageDays(w))}</span>
+          </button>
+          <select defaultValue="" aria-label={`Assign ${woName(w)}`} onChange={e => { const t = techs.find(x => x.id === e.target.value); if (e.target.value) onUpdate(w.id, { assignee_id: e.target.value, assignee_name: t?.name ?? null, status: "scheduled" }); }} style={sel}>
             <option value="">Assign tech…</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>)}
+        {unassigned.length > 8 && <button type="button" onClick={() => onFilter("unassigned")} style={{ ...btn2, border: 0, borderTop: `1px solid ${LINE}`, borderRadius: 0, width: "100%", color: BLUE }}>See all {unassigned.length}</button>}
       </div>}
     </Card>
 
@@ -278,20 +469,16 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[];
   </div>;
 }
 
-/* ── Work Orders: create + search/filter + list + board ──────────────────── */
-const WO_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "open", label: "Open" },
-  { key: "unassigned", label: "Unassigned" },
-  { key: "urgent", label: "Urgent" },
-  { key: "done", label: "Done" },
-];
-function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createError }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => Promise<boolean>; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void; createError?: string | null }) {
-  const [showNew, setShowNew] = useState(false);
+/* ── Work Orders: search, filter, sort, bulk actions, CSV, table + board ─── */
+type SortKey = "newest" | "oldest" | "priority" | "scheduled";
+function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onBulk, onOpen, createError, filter, setFilter, newOpen, setNewOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => Promise<boolean>; onUpdate: (id: string, patch: Record<string, unknown>) => void; onBulk: (ids: string[], patch: Record<string, unknown>) => Promise<void>; onOpen: (id: string) => void; createError?: string | null; filter: string; setFilter: (f: string) => void; newOpen: boolean; setNewOpen: (v: boolean) => void }) {
+  const showNew = newOpen, setShowNew = (v: boolean | ((s: boolean) => boolean)) => setNewOpen(typeof v === "function" ? v(newOpen) : v);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false });
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("open");
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   // Site picker for the New WO popup.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sites, setSites] = useState<any[]>([]);
@@ -331,31 +518,85 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
   }
   const canSubmit = form.isTask ? !!form.title.trim() : !!form.customer_name.trim();
   const shown = jobs.filter(w => {
-    if (filter === "unassigned" && w.assignedTechId) return false;
-    if (filter === "urgent" && !["Urgent", "High"].includes(w.priority)) return false;
-    if (filter === "done" && bucketOf(w.status) !== "Done") return false;
-    if (filter === "open" && bucketOf(w.status) === "Done") return false;
+    if (!woMatches(w, filter)) return false;
     if (q && !`${w.woNumber ?? ""} ${w.title ?? ""} ${w.property ?? ""} ${w.assignedTech ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
+  }).sort((a, b) => {
+    if (sort === "priority") return prRank(a) - prRank(b) || String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
+    if (sort === "scheduled") return (schedOf(a) ?? "9999").localeCompare(schedOf(b) ?? "9999");
+    if (sort === "oldest") return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
+    return String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
   });
+  // Selection only ever covers what's on screen.
+  const pickedShown = shown.filter(w => picked.has(w.id)).map(w => w.id);
+  const allPicked = shown.length > 0 && pickedShown.length === shown.length;
+  const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = () => setPicked(allPicked ? new Set() : new Set(shown.map(w => w.id)));
+  async function bulk(patch: Record<string, unknown>) {
+    if (!pickedShown.length) return;
+    setBulkBusy(true);
+    try { await onBulk(pickedShown, patch); setPicked(new Set()); } finally { setBulkBusy(false); }
+  }
+  function exportCsv() {
+    const cell = (v: unknown) => { const t = String(v ?? ""); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const head = ["WO #", "Job", "Site", "Priority", "Status", "Tech", "Scheduled", "Created", "Days open"];
+    const rows = shown.map(w => [w.woNumber, w.title, w.property, prLabel(w), JOB_COLUMNS.find(c => c.key === bucketOf(stOf(w)))?.label, w.assignedTech || "Unassigned", schedOf(w), String(w.createdAt ?? "").slice(0, 10), ageDays(w)]);
+    const csv = [head, ...rows].map(r => r.map(cell).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `work-orders-${todayKey()}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  const count = (f: string) => jobs.filter(w => woMatches(w, f)).length;
+  const bucketChip = filter.startsWith("b:") ? JOB_COLUMNS.find(c => c.key === filter.slice(2)) : null;
+  const statusSel = (w: RealWO) => <select value={bucketOf(stOf(w))} onClick={e => e.stopPropagation()} onChange={e => onUpdate(w.id, { status: COL_TO_DB[e.target.value] })} style={sel} aria-label={`Status of ${woName(w)}`}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>;
+  const techSel = (w: RealWO) => <select value={w.assignedTechId ?? ""} onClick={e => e.stopPropagation()} onChange={e => { const t = techs.find(x => x.id === e.target.value); onUpdate(w.id, { assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={sel} aria-label={`Tech for ${woName(w)}`}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>;
+
   return <div style={{ display: "grid", gap: 16 }}>
-    <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <h2 style={{ fontSize: 16 }}>Work Orders</h2>
-        <button onClick={() => setShowNew(s => !s)} style={btn}>+ New</button>
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${LINE}`, display: "grid", gap: 10 }}>
+        <div className="oh-row" style={{ flexWrap: "wrap" }}>
+          <h2 className="oh-sec">Work orders <span style={{ color: INK3, fontWeight: 500 }}>{shown.length}</span></h2>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <select value={sort} onChange={e => setSort(e.target.value as SortKey)} style={{ ...sel, height: 32 }} aria-label="Sort work orders">
+              <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="priority">Priority</option><option value="scheduled">Scheduled date</option>
+            </select>
+            <button type="button" className="oh-btn sm line" onClick={exportCsv} disabled={!shown.length}>Export CSV</button>
+            <button type="button" className="oh-btn sm pri" onClick={() => setShowNew(true)}>+ New</button>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input className="oh-search" placeholder="Search WO #, job, site, tech…" value={q} onChange={e => setQ(e.target.value)} aria-label="Search work orders" />
+          <div className="oh-chips">
+            {bucketChip && <button type="button" className="oh-chip" aria-pressed onClick={() => setFilter("open")} title="Clear this filter">{bucketChip.label} <b>{count(filter)}</b> ✕</button>}
+            {WO_FILTERS.map(f => <button key={f.key} type="button" className="oh-chip" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label} <b>{count(f.key)}</b></button>)}
+          </div>
+        </div>
+        {pickedShown.length > 0 && <div className="oh-bulk">
+          <span>{pickedShown.length} selected</span>
+          <select defaultValue="" disabled={bulkBusy} onChange={e => { const v = e.target.value; e.target.value = ""; if (!v) return; const t = techs.find(x => x.id === v); void bulk(v === "__none" ? { assignee_id: null, assignee_name: null } : { assignee_id: v, assignee_name: t?.name ?? null }); }} style={sel} aria-label="Assign selected">
+            <option value="">Assign to…</option><option value="__none">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <select defaultValue="" disabled={bulkBusy} onChange={e => { const v = e.target.value; e.target.value = ""; if (v) void bulk({ status: COL_TO_DB[v] }); }} style={sel} aria-label="Set status of selected">
+            <option value="">Set status…</option>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </select>
+          {bulkBusy && <span>Saving…</span>}
+          <button type="button" className="oh-btn sm line" onClick={() => setPicked(new Set())} style={{ marginLeft: "auto" }}>Clear</button>
+        </div>}
       </div>
       {showNew && <Modal title="New work order" onClose={() => { resetForm(); setShowNew(false); }}>
         <div style={{ display: "grid", gap: 10 }}>
           {/* Task vs site-based work order */}
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: "2px 0" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#3A3A3C", cursor: "pointer", padding: "2px 0" }}>
             <input type="checkbox" checked={form.isTask} onChange={e => setForm({ ...form, isTask: e.target.checked })} style={{ width: 16, height: 16 }} />
             General task — not tied to a site
           </label>
           {/* Step 1: pick the site (site work orders only) */}
           {!form.isTask && <div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
+            <div style={{ color: "#6E6E73", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
             {form.site_id
-              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(0,163,255,0.12)", border: "1px solid rgba(0,163,255,0.4)" }}>
+              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.4)" }}>
                   <span style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={13} /> {form.customer_name}</span>
                   <button onClick={() => setForm({ ...form, site_id: "", customer_name: "" })} style={{ ...sel, cursor: "pointer" }}>Change</button>
                 </div>
@@ -365,33 +606,33 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
                     {sitesLoading ? <Small>Loading sites…</Small>
                       : sites.length === 0 ? <Small>No sites found. Add one in the Locations tab first.</Small>
                       : siteMatches.length === 0 ? <Small>No sites match “{siteQ}”.</Small>
-                      : siteMatches.map(s => <button key={s.id} onClick={() => setForm({ ...form, site_id: s.id, customer_name: s.name || "" })} style={{ textAlign: "left", cursor: "pointer", padding: "8px 10px", borderRadius: 10, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
+                      : siteMatches.map(s => <button key={s.id} onClick={() => setForm({ ...form, site_id: s.id, customer_name: s.name || "" })} style={{ textAlign: "left", cursor: "pointer", padding: "8px 10px", borderRadius: 10, background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F" }}>
                           <div style={{ fontSize: 13.5 }}>{s.name || "Unnamed site"}</div>
-                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
+                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "#3A3A3C" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
                         </button>)}
                   </div>
                 </>}
           </div>}
           {/* Step 2: what + who + when */}
           <div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{form.isTask ? "What is the task?" : "2. What needs doing?"}</div>
+            <div style={{ color: "#6E6E73", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{form.isTask ? "What is the task?" : "2. What needs doing?"}</div>
             <input placeholder="e.g. Gate motor won't open" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...sel, flex: 1, padding: 10 }}>{["low", "medium", "high", "critical"].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)} priority</option>)}</select>
             <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1, padding: 10 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
           </div>
-          <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: "4px 0" }}>
+          <div><div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#3A3A3C", cursor: "pointer", padding: "4px 0" }}>
             <input type="checkbox" checked={form.notify} onChange={e => setForm({ ...form, notify: e.target.checked })} style={{ width: 16, height: 16 }} />
             <Mail size={14} /> Email the assigned tech about this job
           </label>
           {/* If the save failed, SAY SO. Silence here is what made this look
               like "work orders can't be created" instead of a fixable error. */}
           {createError && (
-            <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.35)", color: "#fda4af", fontSize: 12 }}>
+            <div style={{ padding: "8px 10px", borderRadius: 8, background: "#FFECEC", border: "1px solid rgba(244,63,94,0.35)", color: "#D70015", fontSize: 12 }}>
               Couldn’t create the work order — nothing was saved.
-              <div style={{ color: "#fecdd3", opacity: 0.75, fontSize: 11, marginTop: 4 }}>{createError}</div>
+              <div style={{ color: "#8A1209", opacity: 0.75, fontSize: 11, marginTop: 4 }}>{createError}</div>
             </div>
           )}
           <button onClick={submit} disabled={!canSubmit || submitting} style={{ ...btn, opacity: (canSubmit && !submitting) ? 1 : 0.5 }}>
@@ -399,29 +640,56 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen, createEr
           </button>
         </div>
       </Modal>}
-      {/* search + filter chips */}
-      <input placeholder="Search WO#, site, tech…" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, padding: 10, marginBottom: 8 }} />
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        {WO_FILTERS.map(f => { const on = filter === f.key; const n = f.key === "all" ? jobs.length : jobs.filter(w => f.key === "unassigned" ? !w.assignedTechId : f.key === "urgent" ? ["Urgent", "High"].includes(w.priority) : f.key === "done" ? bucketOf(w.status) === "Done" : bucketOf(w.status) !== "Done").length;
-          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(0,163,255,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(0,163,255,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.82)" }}>{n}</span></button>; })}
-      </div>
-      {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : shown.length === 0 ? <Small>No work orders match.</Small> : shown.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
+      {loading && !jobs.length ? <div style={{ padding: 18 }}><Small>Loading…</Small></div>
+        : jobs.length === 0 ? <div style={{ padding: 18 }}><Small>No work orders yet. Tap “+ New”.</Small></div>
+        : shown.length === 0 ? <div style={{ padding: 18 }}><Small>No work orders match.</Small></div>
+        : <>
+          <div className="oh-tblwrap" style={{ maxHeight: 560, overflowY: "auto" }}>
+            <table className="oh-tbl">
+              <thead><tr>
+                <th style={{ width: 36 }}><input type="checkbox" checked={allPicked} onChange={toggleAll} aria-label="Select all shown" /></th>
+                <th>WO #</th><th>Job</th>
+                <th><button type="button" aria-pressed={sort === "priority"} onClick={() => setSort("priority")}>Priority</button></th>
+                <th>Status</th><th>Tech</th>
+                <th><button type="button" aria-pressed={sort === "scheduled"} onClick={() => setSort("scheduled")}>Scheduled</button></th>
+                <th><button type="button" aria-pressed={sort === "newest" || sort === "oldest"} onClick={() => setSort(sort === "oldest" ? "newest" : "oldest")} title="Days since it was created">Age{sort === "oldest" ? " ↓" : ""}</button></th>
+              </tr></thead>
+              <tbody>
+                {shown.map(w => { const s = schedOf(w); const late = isOverdue(w); return <tr key={w.id} className={picked.has(w.id) ? "sel" : undefined} onClick={() => onOpen(w.id)}>
+                  <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={picked.has(w.id)} onChange={() => toggle(w.id)} aria-label={`Select ${woName(w)}`} /></td>
+                  <td className="num m">{w.woNumber || "—"}</td>
+                  <td style={{ maxWidth: 340 }}><div className="t" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.title || w.property || "Work order"}</div><div className="m" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.property || "—"}</div></td>
+                  <td><span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><span className="oh-dot" style={{ background: prDot(w) }} />{prLabel(w)}</span></td>
+                  <td onClick={e => e.stopPropagation()}>{statusSel(w)}</td>
+                  <td onClick={e => e.stopPropagation()}>{techSel(w)}</td>
+                  <td className={`num${late ? " oh-late" : ""}`}>{s ? dayLabel(s) : <span style={{ color: INK3 }}>Not set</span>}{late && " · late"}</td>
+                  <td className="num m">{ageLabel(ageDays(w))}</td>
+                </tr>; })}
+              </tbody>
+            </table>
+          </div>
+          <div className="oh-cards" style={{ padding: 12 }}>
+            {shown.map(w => <WORow key={w.id} wo={w} picked={picked.has(w.id)} onPick={() => toggle(w.id)} statusSel={statusSel(w)} techSel={techSel(w)} onOpen={onOpen} />)}
+          </div>
+        </>}
     </Card>
     <Board jobs={jobs} onOpen={onOpen} onUpdate={onUpdate} />
   </div>;
 }
 
-function WORow({ wo, techs, onUpdate, onOpen }: { wo: RealWO; techs: RealTech[]; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
-  const sched = wo.eta && wo.eta !== "TBD" ? String(wo.eta).slice(0, 10) : null;
-  return <div style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 8 }}>
-    <div onClick={() => onOpen(wo.id)} style={{ cursor: "pointer" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><b>{wo.woNumber || wo.title || "Work Order"}</b><Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge></div>
-      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"}{sched ? ` · ${sched}` : ""} <span style={{ color: "rgba(255,255,255,0.3)" }}>· tap for detail</span></p>
+// Phone layout for one work order (the table hides under 820px).
+function WORow({ wo, picked, onPick, statusSel, techSel, onOpen }: { wo: RealWO; picked: boolean; onPick: () => void; statusSel: React.ReactNode; techSel: React.ReactNode; onOpen: (id: string) => void }) {
+  const s = schedOf(wo); const late = isOverdue(wo);
+  return <div className="oh-card" style={picked ? { background: "#EEF4FF" } : undefined}>
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <input type="checkbox" checked={picked} onChange={onPick} aria-label={`Select ${woName(wo)}`} style={{ marginTop: 3 }} />
+      <button type="button" onClick={() => onOpen(wo.id)} style={{ flex: 1, minWidth: 0, border: 0, background: "none", padding: 0, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}>
+        <div className="oh-row"><b style={{ fontWeight: 600, fontSize: 14 }}>{woName(wo)}</b><span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: INK3 }}><span className="oh-dot" style={{ background: prDot(wo) }} />{prLabel(wo)}</span></div>
+        {wo.title && wo.woNumber && <div style={{ fontSize: 13.5, marginTop: 2 }}>{wo.title}</div>}
+        <div style={{ fontSize: 12.5, color: INK3, marginTop: 2 }}>{wo.property || "—"} · <span className={late ? "oh-late" : undefined}>{s ? dayLabel(s) : "No date"}{late ? " (late)" : ""}</span> · {ageLabel(ageDays(wo))} old</div>
+      </button>
     </div>
-    <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <select value={bucketOf(wo.status)} onChange={e => onUpdate(wo.id, { status: COL_TO_DB[e.target.value] })} style={sel}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
-      <select value={wo.assignedTechId ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); onUpdate(wo.id, { assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={sel}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-    </div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, paddingLeft: 26 }}>{statusSel}{techSel}</div>
   </div>;
 }
 
@@ -430,52 +698,56 @@ function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
   const activeCols = JOB_COLUMNS.filter(c => c.key !== "Done");
-  const doneItems = jobs.filter(w => bucketOf(w.status) === "Done");
+  const doneItems = jobs.filter(w => bucketOf(stOf(w)) === "Done");
   // Drag a card to another column → change its status.
   const dropTo = (colKey: string) => {
     const id = dragId; setDragId(null); setOverCol(null);
     if (!id || !onUpdate) return;
     const wo = jobs.find(w => w.id === id);
-    if (!wo || bucketOf(wo.status) === colKey) return;
+    if (!wo || bucketOf(stOf(wo)) === colKey) return;
     onUpdate(id, { status: COL_TO_DB[colKey] });
   };
-  return <Card><h2 style={{ fontSize: 16, marginBottom: 4 }}>Jobs board</h2>
-    {onUpdate && <p style={{ fontSize: 11.5, color: "rgba(255,255,255,0.4)", margin: "0 0 12px" }}>Tip: drag a card to another column to change its status.</p>}
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${activeCols.length}, minmax(0,1fr))`, gap: 12 }}>
+  return <Card>
+    <div className="oh-row" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+      <h2 className="oh-sec">Jobs board</h2>
+      {onUpdate && <Small>Drag a card to another column to change its status.</Small>}
+    </div>
+    <div className="oh-board">
       {activeCols.map(col => {
-        const items = jobs.filter(w => bucketOf(w.status) === col.key);
+        const items = jobs.filter(w => bucketOf(stOf(w)) === col.key).sort((a, b) => prRank(a) - prRank(b));
         const isOver = overCol === col.key;
-        return <div key={col.key}
+        return <section key={col.key} aria-label={col.label} className={`oh-col${isOver ? " over" : ""}`}
           onDragOver={onUpdate ? (e => { e.preventDefault(); if (overCol !== col.key) setOverCol(col.key); }) : undefined}
           onDragLeave={onUpdate ? (() => setOverCol(c => c === col.key ? null : c)) : undefined}
-          onDrop={onUpdate ? (e => { e.preventDefault(); dropTo(col.key); }) : undefined}
-          style={{ borderRadius: 12, outline: isOver ? `2px dashed ${col.accent}` : "none", outlineOffset: 3, transition: "outline 0.1s" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, background: `${col.accent}22`, border: `1px solid ${col.accent}55`, marginBottom: 10 }}><span style={{ fontWeight: 700, fontSize: 13 }}>{col.label}</span><span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{items.length}</span></div>
-          {items.map(w => <div key={w.id} draggable={!!onUpdate} onDragStart={onUpdate ? (e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }) : undefined} onDragEnd={() => { setDragId(null); setOverCol(null); }} onClick={() => onOpen(w.id)} style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 10, cursor: onUpdate ? "grab" : "pointer", opacity: dragId === w.id ? 0.4 : 1 }}>
-            <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
-            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, margin: "4px 0" }}>{w.property || "—"}{w.assignedTech ? ` · ${w.assignedTech}` : " · Unassigned"}</p>
-          </div>)}
-          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
-        </div>;
+          onDrop={onUpdate ? (e => { e.preventDefault(); dropTo(col.key); }) : undefined}>
+          <div className="oh-colh"><span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: INK, fontWeight: 600 }}><span className="oh-dot" style={{ background: col.accent }} />{col.label}</span><span>{items.length}</span></div>
+          {items.map(w => <button type="button" key={w.id} className="oh-bcard" draggable={!!onUpdate} onDragStart={onUpdate ? (e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }) : undefined} onDragEnd={() => { setDragId(null); setOverCol(null); }} onClick={() => onOpen(w.id)} style={{ cursor: onUpdate ? "grab" : "pointer", opacity: dragId === w.id ? 0.4 : 1, boxShadow: isOverdue(w) ? "inset 3px 0 0 #FF3B30, 0 1px 2px rgba(0,0,0,.06)" : undefined }}>
+            <div className="oh-row"><span className="t" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{woName(w)}</span><span className="oh-dot" style={{ background: prDot(w) }} aria-label={`${prLabel(w)} priority`} /></div>
+            {w.title && w.woNumber && <div style={{ fontSize: 12.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.title}</div>}
+            <div className="m">{w.property || "—"}{w.assignedTech ? ` · ${w.assignedTech}` : " · Unassigned"}</div>
+            {isOverdue(w) && <div className="m" style={{ color: "#D70015", fontWeight: 600 }}>Late · was due {dayLabel(schedOf(w))}</div>}
+          </button>)}
+          {items.length === 0 && <p style={{ color: INK3, fontSize: 12, textAlign: "center", padding: "10px 0", margin: 0 }}>{isOver ? "Drop here" : "Nothing here"}</p>}
+        </section>;
       })}
     </div>
     {/* Completed jobs stay one click away, but don't take board real estate. */}
-    <div style={{ marginTop: 14 }}>
-      <button onClick={() => setShowDone(s => !s)} style={{ width: "100%", textAlign: "left", cursor: "pointer", padding: "9px 12px", borderRadius: 12, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.34)", color: "#a7f3d0", fontSize: 13, fontWeight: 700 }}>
-        {showDone ? "▾" : "▸"} Complete <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>({doneItems.length})</span>
+    <div style={{ marginTop: 12 }}>
+      <button type="button" onClick={() => setShowDone(s => !s)} aria-expanded={showDone} style={{ width: "100%", textAlign: "left", cursor: "pointer", padding: "9px 12px", borderRadius: 10, background: "#E8F6EC", border: 0, color: "#1A7F37", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
+        {showDone ? "▾" : "▸"} Complete <span style={{ color: INK3, fontWeight: 500 }}>({doneItems.length})</span>
       </button>
       {showDone && <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-        {doneItems.length === 0 ? <Small>No completed jobs yet.</Small> : doneItems.map(w => <div key={w.id} onClick={() => onOpen(w.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", cursor: "pointer" }}>
-          <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.82)" }}>{w.property || "—"}</span>
-        </div>)}
+        {doneItems.length === 0 ? <Small>No completed jobs yet.</Small> : doneItems.map(w => <button type="button" key={w.id} onClick={() => onOpen(w.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 10, background: "#F5F5F7", border: 0, cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: 13 }}>{woName(w)}{w.title && w.woNumber ? ` · ${w.title}` : ""}</span>
+          <span style={{ fontSize: 12, color: INK3 }}>{w.property || "—"}</span>
+        </button>)}
       </div>}
     </div>
   </Card>;
 }
 
 /* ── Calendar: month / week / day, filter by tech (real /api/calendar/events) */
-const EVENT_COLOR: Record<string, string> = { work_order: "#00E699", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#00A3FF", crm_activity: "#00A3FF", tracker_task: "#00A3FF", nexus_event: "#94a3b8", gcal: "#00A3FF" };
+const EVENT_COLOR: Record<string, string> = { work_order: "#248A3D", work_order_phase: "#B25000", pm_schedule: "#0071E3", todo: "#0071E3", crm_activity: "#0071E3", tracker_task: "#0071E3", nexus_event: "#94a3b8", gcal: "#0071E3" };
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const evTime = (e: any) => (e.time ? String(e.time).slice(0, 5) : "");
@@ -527,39 +799,39 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     : view === "week" ? `${range.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${range.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
     : anchor.toLocaleString("en-US", { month: "long", year: "numeric" });
 
-  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.82)" }}> · {e.owner_name}</span>}</div>;
+  const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "#3A3A3C" }}> · {e.owner_name}</span>}</div>;
 
   // Assigned/created jobs that have no date yet never land on a calendar grid —
   // surface them here so a job is never invisible. Respects the tech show/hide chips.
-  const unscheduled = jobs.filter(w => (!w.eta || w.eta === "TBD") && bucketOf(w.status) !== "Done" && !hidden.has(w.assignedTech || "Unassigned"));
+  const unscheduled = jobs.filter(w => (!w.eta || w.eta === "TBD") && bucketOf(stOf(w)) !== "Done" && !hidden.has(w.assignedTech || "Unassigned"));
 
   return <Card>
-    {unscheduled.length > 0 && <div style={{ marginBottom: 12, padding: 10, borderRadius: 12, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#fcd34d", marginBottom: 6 }}>⏳ Needs a date ({unscheduled.length}) — these jobs won't show on the calendar until scheduled</div>
+    {unscheduled.length > 0 && <div style={{ marginBottom: 12, padding: 10, borderRadius: 12, background: "#FFF4E5", border: "1px solid rgba(245,158,11,0.3)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#B25000", marginBottom: 6 }}>⏳ Needs a date ({unscheduled.length}) — these jobs won't show on the calendar until scheduled</div>
       <div style={{ display: "grid", gap: 5 }}>
-        {unscheduled.slice(0, 8).map(w => <button key={w.id} onClick={() => onOpenWO(w.id)} style={{ textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 10px", borderRadius: 9, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
+        {unscheduled.slice(0, 8).map(w => <button key={w.id} onClick={() => onOpenWO(w.id)} style={{ textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 10px", borderRadius: 9, background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F" }}>
           <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
-          <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.5)" }}>{w.assignedTech || "Unassigned"} · tap to schedule</span>
+          <span style={{ fontSize: 11.5, color: "#6E6E73" }}>{w.assignedTech || "Unassigned"} · tap to schedule</span>
         </button>)}
       </div>
     </div>}
     {/* Toolbar */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6 }}>
-        {(["month", "week", "day"] as const).map(v => <button key={v} onClick={() => setView(v)} style={{ ...sel, padding: "6px 12px", cursor: "pointer", background: view === v ? "rgba(0,163,255,0.18)" : "rgba(255,255,255,.06)", border: view === v ? "1px solid rgba(0,163,255,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white", textTransform: "capitalize" }}>{v}</button>)}
+        {(["month", "week", "day"] as const).map(v => <button key={v} onClick={() => setView(v)} style={{ ...sel, padding: "6px 12px", cursor: "pointer", background: view === v ? "#EEF4FF" : "#F5F5F7", border: view === v ? "1px solid rgba(0,163,255,0.42)" : "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F", textTransform: "capitalize" }}>{v}</button>)}
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={() => shift(-1)} style={{ ...btn, background: "rgba(255,255,255,0.06)", padding: "8px 12px" }}>‹</button>
-        <button onClick={() => setAnchor(new Date(today.getFullYear(), today.getMonth(), today.getDate()))} style={{ ...btn, background: "rgba(255,255,255,0.06)", padding: "8px 12px" }}>Today</button>
-        <button onClick={() => shift(1)} style={{ ...btn, background: "rgba(255,255,255,0.06)", padding: "8px 12px" }}>›</button>
+        <button onClick={() => shift(-1)} style={{ ...btn2, padding: "8px 12px" }}>‹</button>
+        <button onClick={() => setAnchor(new Date(today.getFullYear(), today.getMonth(), today.getDate()))} style={{ ...btn2, padding: "8px 12px" }}>Today</button>
+        <button onClick={() => shift(1)} style={{ ...btn2, padding: "8px 12px" }}>›</button>
       </div>
     </div>
     <h2 style={{ fontSize: 16, textAlign: "center", marginBottom: 12 }}>{loading ? "Loading…" : label}</h2>
 
     {/* Tech filter */}
     {techList.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", alignSelf: "center" }}>Show techs:</span>
-      {techList.map(t => { const off = hidden.has(t); return <button key={t} onClick={() => toggleTech(t)} style={{ ...sel, cursor: "pointer", padding: "4px 10px", opacity: off ? 0.4 : 1, background: off ? "rgba(255,255,255,.04)" : "rgba(0,230,153,.14)", border: off ? "1px solid rgba(255,255,255,.12)" : "1px solid rgba(0,230,153,.34)", color: "white" }}>{off ? "○" : "●"} {t}</button>; })}
+      <span style={{ fontSize: 11, color: "#8E8E93", alignSelf: "center" }}>Show techs:</span>
+      {techList.map(t => { const off = hidden.has(t); return <button key={t} onClick={() => toggleTech(t)} style={{ ...sel, cursor: "pointer", padding: "4px 10px", opacity: off ? 0.4 : 1, background: off ? "#F5F5F7" : "#E8F6EC", border: off ? "1px solid rgba(0,0,0,0.12)" : "1px solid rgba(0,230,153,.34)", color: "#1D1D1F" }}>{off ? "○" : "●"} {t}</button>; })}
     </div>}
 
     {/* Month grid */}
@@ -568,15 +840,15 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
       const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
       const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
       return <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 5, width: "100%" }}>
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => <div key={i} style={{ minWidth: 0, textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.4)", padding: "2px 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d}</div>)}
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => <div key={i} style={{ minWidth: 0, textAlign: "center", fontSize: 10, color: "#8E8E93", padding: "2px 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d}</div>)}
         {cells.map((day, i) => {
           if (day === null) return <div key={`x${i}`} style={{ minWidth: 0 }} />;
           const key = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const evs = dayEvents(key); const isToday = key === todayKey;
-          return <div key={day} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 72, padding: 5, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(0,163,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,163,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3 }}>{day}</div>
+          return <div key={day} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 72, padding: 5, borderRadius: 10, overflow: "hidden", background: isToday ? "#EEF4FF" : "#FAFAFB", border: isToday ? "1px solid rgba(0,163,255,0.4)" : "1px solid rgba(0,0,0,0.08)" }}>
+            <div style={{ fontSize: 11, color: "#6E6E73", marginBottom: 3 }}>{day}</div>
             {evs.slice(0, 3).map((e, j) => <Chip key={e.id || j} e={e} mini />)}
-            {evs.length > 3 && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>+{evs.length - 3} more</div>}
+            {evs.length > 3 && <div style={{ fontSize: 9, color: "#8E8E93" }}>+{evs.length - 3} more</div>}
           </div>;
         })}
       </div>;
@@ -586,10 +858,10 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
     {view === "week" && <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 6, width: "100%" }}>
       {Array.from({ length: 7 }, (_, i) => { const d = new Date(range.start); d.setDate(range.start.getDate() + i); return d; }).map(d => {
         const key = ymd(d); const evs = dayEvents(key); const isToday = key === todayKey;
-        return <div key={key} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 200, padding: 7, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(0,163,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,163,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.82)" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
+        return <div key={key} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 200, padding: 7, borderRadius: 10, overflow: "hidden", background: isToday ? "#EEF4FF" : "#FAFAFB", border: isToday ? "1px solid rgba(0,163,255,0.4)" : "1px solid rgba(0,0,0,0.08)" }}>
+          <div style={{ fontSize: 10, color: "#3A3A3C" }}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{d.getDate()}</div>
-          {evs.length === 0 ? <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>—</div> : evs.map((e, j) => <Chip key={e.id || j} e={e} mini />)}
+          {evs.length === 0 ? <div style={{ fontSize: 10, color: "#8E8E93" }}>—</div> : evs.map((e, j) => <Chip key={e.id || j} e={e} mini />)}
         </div>;
       })}
     </div>}
@@ -602,11 +874,11 @@ function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void;
       </div>;
     })()}
 
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-      <span><span style={{ color: "#00E699" }}>■</span> Work order</span>
-      <span><span style={{ color: "#f59e0b" }}>■</span> Job phase</span>
-      <span><span style={{ color: "#0ea5e9" }}>■</span> PM</span>
-      <span><span style={{ color: "#00A3FF" }}>■</span> To-do</span>
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 11, color: "#6E6E73" }}>
+      <span><span style={{ color: "#248A3D" }}>■</span> Work order</span>
+      <span><span style={{ color: "#B25000" }}>■</span> Job phase</span>
+      <span><span style={{ color: "#0071E3" }}>■</span> PM</span>
+      <span><span style={{ color: "#0071E3" }}>■</span> To-do</span>
     </div>
   </Card>;
 }
@@ -674,7 +946,7 @@ function Techs() {
         <h2 style={{ fontSize: 16 }}>Technicians</h2>
         <button onClick={() => setShowNew(s => !s)} style={btn}>+ Add tech</button>
       </div>
-      <Small>Tap a tech to edit their details. Each logs into the field tool at <b style={{ color: "rgba(255,255,255,0.7)" }}>/tech</b> using their personal code.</Small>
+      <Small>Tap a tech to edit their details. Each logs into the field tool at <b style={{ color: "#6E6E73" }}>/tech</b> using their personal code.</Small>
       {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Full name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
         <div style={{ display: "flex", gap: 8 }}>
@@ -696,7 +968,7 @@ function Techs() {
             </div>
           </div>
           {(t.phone || t.email) && <Small>{[t.phone, t.email].filter(Boolean).join(" · ")}</Small>}
-          {Array.isArray(t.skills) && t.skills.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{t.skills.map((s: string, i: number) => <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.3)" }}>{s}</span>)}</div>}
+          {Array.isArray(t.skills) && t.skills.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{t.skills.map((s: string, i: number) => <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#EEEEFF", border: "1px solid rgba(99,102,241,0.3)" }}>{s}</span>)}</div>}
 
           {editId === t.id && <div style={{ ...card, marginTop: 10, display: "grid", gap: 8 }}>
             <input placeholder="Full name" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
@@ -705,52 +977,52 @@ function Techs() {
               <input placeholder="Email" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ flex: 1 }}><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Level</div><select value={edit.level} onChange={e => setEdit({ ...edit, level: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}><option value="">—</option>{TECH_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
-              <div style={{ flex: 1 }}><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Status</div><select value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}>{TECH_STATUS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+              <div style={{ flex: 1 }}><div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 3 }}>Level</div><select value={edit.level} onChange={e => setEdit({ ...edit, level: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}><option value="">—</option>{TECH_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
+              <div style={{ flex: 1 }}><div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 3 }}>Status</div><select value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}>{TECH_STATUS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             </div>
             <input placeholder="Role / title (e.g. Install Tech)" value={edit.role} onChange={e => setEdit({ ...edit, role: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Skills / certifications (comma-separated)</div><input placeholder="Brivo, fiber splicing, OSHA-10" value={edit.skills} onChange={e => setEdit({ ...edit, skills: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} /></div>
+            <div><div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 3 }}>Skills / certifications (comma-separated)</div><input placeholder="Brivo, fiber splicing, OSHA-10" value={edit.skills} onChange={e => setEdit({ ...edit, skills: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} /></div>
 
             {/* Working days + hours */}
-            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 5 }}>Working days</div>
+            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+              <div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 5 }}>Working days</div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                {WEEK_DAYS.map(d => { const on = sched.days.includes(d); return <button key={d} onClick={() => setSched(s => ({ ...s, days: on ? s.days.filter(x => x !== d) : [...s.days, d] }))} style={{ ...sel, cursor: "pointer", padding: "4px 9px", background: on ? "rgba(0,163,255,0.18)" : "rgba(255,255,255,.05)", border: on ? "1px solid rgba(0,163,255,0.42)" : "1px solid rgba(255,255,255,.12)", color: "white" }}>{d}</button>; })}
+                {WEEK_DAYS.map(d => { const on = sched.days.includes(d); return <button key={d} onClick={() => setSched(s => ({ ...s, days: on ? s.days.filter(x => x !== d) : [...s.days, d] }))} style={{ ...sel, cursor: "pointer", padding: "4px 9px", background: on ? "#EEF4FF" : "#F5F5F7", border: on ? "1px solid rgba(0,163,255,0.42)" : "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F" }}>{d}</button>; })}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Hours</span>
+                <span style={{ color: "#6E6E73", fontSize: 11 }}>Hours</span>
                 <input type="time" value={sched.start} onChange={e => setSched(s => ({ ...s, start: e.target.value }))} style={{ ...sel, padding: 8 }} />
-                <span style={{ color: "rgba(255,255,255,0.4)" }}>to</span>
+                <span style={{ color: "#8E8E93" }}>to</span>
                 <input type="time" value={sched.end} onChange={e => setSched(s => ({ ...s, end: e.target.value }))} style={{ ...sel, padding: 8 }} />
               </div>
             </div>
 
             {/* Time off / unavailable */}
-            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Time off / unavailable (vacation, PTO)</span>
-                <button onClick={() => setSched(s => ({ ...s, timeOff: [...s.timeOff, { start: "", end: "", reason: "" }] }))} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "4px 10px", fontSize: 12 }}>+ Add</button>
+                <span style={{ color: "#6E6E73", fontSize: 11 }}>Time off / unavailable (vacation, PTO)</span>
+                <button onClick={() => setSched(s => ({ ...s, timeOff: [...s.timeOff, { start: "", end: "", reason: "" }] }))} style={{ ...btn2, padding: "4px 10px", fontSize: 12 }}>+ Add</button>
               </div>
               {sched.timeOff.length === 0 ? <Small>None — tech is available on working days.</Small> : sched.timeOff.map((o, i) => <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                 <input type="date" value={o.start} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...sel, padding: 7 }} />
                 <input type="date" value={o.end} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...sel, padding: 7 }} />
                 <input placeholder="Reason" value={o.reason} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, reason: e.target.value } : x) }))} style={{ ...input, padding: 7, fontSize: 12, flex: 1, minWidth: 80 }} />
-                <button onClick={() => setSched(s => ({ ...s, timeOff: s.timeOff.filter((_, j) => j !== i) }))} style={{ ...btn, background: "rgba(255,80,80,0.14)", padding: "0 10px" }}>×</button>
+                <button onClick={() => setSched(s => ({ ...s, timeOff: s.timeOff.filter((_, j) => j !== i) }))} style={{ ...btn2, color: "#D70015", padding: "0 10px" }}>×</button>
               </div>)}
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => saveEdit(t.id)} disabled={savingId === t.id} style={{ ...btn, flex: 1, opacity: savingId === t.id ? 0.6 : 1 }}>{savingId === t.id ? "Saving…" : "Save"}</button>
-              <button onClick={() => setEditId(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+              <button onClick={() => setEditId(null)} style={{ ...btn2 }}>Cancel</button>
             </div>
           </div>}
 
           <div style={{ marginTop: 12 }}>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 4 }}>App code (their password for /tech)</div>
+            <div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 4 }}>App code (their password for /tech)</div>
             {t.tech_code ? <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <code style={{ fontFamily: "monospace", fontSize: 14, background: "rgba(0,163,255,0.12)", border: "1px solid rgba(0,163,255,0.3)", borderRadius: 8, padding: "5px 10px" }}>{t.tech_code}</code>
-              <button onClick={() => copy(t.tech_code)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>{copied === t.tech_code ? "Copied!" : "Copy"}</button>
-              <button onClick={() => setCode(t)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>Regen</button>
+              <code style={{ fontFamily: "monospace", fontSize: 14, background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.3)", borderRadius: 8, padding: "5px 10px" }}>{t.tech_code}</code>
+              <button onClick={() => copy(t.tech_code)} style={{ ...btn2, padding: "6px 10px" }}>{copied === t.tech_code ? "Copied!" : "Copy"}</button>
+              <button onClick={() => setCode(t)} style={{ ...btn2, padding: "6px 10px" }}>Regen</button>
             </div> : <button onClick={() => setCode(t)} style={btn}>Generate code</button>}
           </div>
         </Card>)}
@@ -783,10 +1055,10 @@ function Locations() {
     if (newId) { setForm({ name: "", address: "", city: "", state: "", units: "" }); setShowNew(false); load(); setOpenToSetup(true); setOpenSite(newId); }
     else setMsg((r && r.error) || "Couldn't create the site.");
   }
-  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
+  const input = { background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
   const addBar = <Card style={{ marginBottom: 14 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <div><b style={{ fontSize: 15 }}>Add a site</b><div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Name it, create it, then add its own gate/camera logins.</div></div>
+      <div><b style={{ fontSize: 15 }}>Add a site</b><div style={{ fontSize: 12, color: "#6E6E73" }}>Name it, create it, then add its own gate/camera logins.</div></div>
       <button onClick={() => { setShowNew(s => !s); setMsg(null); }} style={btn}>{showNew ? "Cancel" : "+ Add a site"}</button>
     </div>
     {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
@@ -798,7 +1070,7 @@ function Locations() {
         <input placeholder="Units" value={form.units} onChange={e => setForm({ ...form, units: e.target.value.replace(/[^0-9]/g, "") })} style={{ ...input, flex: 1 }} />
       </div>
       <button onClick={createSite} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : "Create site → add its keys"}</button>
-      {msg && <p style={{ fontSize: 12, color: "#FF4D4D", margin: 0 }}>{msg}</p>}
+      {msg && <p style={{ fontSize: 12, color: "#D70015", margin: 0 }}>{msg}</p>}
     </div>}
   </Card>;
   if (loading) return <>{addBar}<Card><Small>Loading sites…</Small></Card></>;
@@ -814,11 +1086,11 @@ function Locations() {
           </div>
           <Small>{[s.city, s.state].filter(Boolean).join(", ") || "—"}</Small>
           <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Units</div><b>{num(s.units) || "—"}</b></div>
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
+            <div><div style={{ color: "#6E6E73", fontSize: 11 }}>Units</div><b>{num(s.units) || "—"}</b></div>
+            <div><div style={{ color: "#6E6E73", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
+            <div><div style={{ color: "#6E6E73", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
           </div>
-          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
+          <p style={{ color: "#3A3A3C", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
         </div>
       </Card>)}
     </div>
@@ -851,21 +1123,21 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
   const perTech: any[] = data?.perTech ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callbacks: any[] = data?.callbackList ?? [];
-  const utilColor = (p: number) => p >= 80 ? "#00E699" : p >= 50 ? "#fbbf24" : "#f87171";
+  const utilColor = (p: number) => p >= 80 ? "#248A3D" : p >= 50 ? "#B25000" : "#D70015";
   const kpi = (label: string, val: string | number, accent: string) => (
-    <Card><Small>{label}</Small><div style={{ fontSize: 26, fontWeight: 800, color: accent, marginTop: 4 }}>{val}</div></Card>
+    <Card><Small>{label}</Small><div style={{ fontSize: 26, fontWeight: 600, color: accent, marginTop: 4 }}>{val}</div></Card>
   );
-  const rangeBtn = (d: number) => <button key={d} onClick={() => setDays(d)} style={{ ...btn, padding: "5px 12px", background: days === d ? "rgba(0,163,255,0.18)" : "rgba(255,255,255,0.06)", border: days === d ? "1px solid rgba(0,163,255,0.45)" : "1px solid rgba(255,255,255,0.1)", color: days === d ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{d}d</button>;
+  const rangeBtn = (d: number) => <button key={d} onClick={() => setDays(d)} style={{ ...btn, padding: "5px 12px", background: days === d ? "#EEF4FF" : "#F5F5F7", border: days === d ? "1px solid rgba(0,163,255,0.45)" : "1px solid rgba(0,0,0,0.12)", color: days === d ? "#0071E3" : "#6E6E73" }}>{d}d</button>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "flex", gap: 6 }}>{[7, 30, 90].map(rangeBtn)}</div>
       {loading ? <Card><Small>Crunching numbers…</Small></Card> : <>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 10 }}>
-          {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "rgba(255,255,255,0.6)" : t.ftfPct >= 90 ? "#00E699" : t.ftfPct >= 75 ? "#fbbf24" : "#f87171")}
-          {kpi("Callbacks / re-work", t.callbacks ?? 0, (t.callbacks ?? 0) === 0 ? "#00E699" : "#f87171")}
-          {kpi("Completed", t.completed ?? 0, "#7DE5FF")}
-          {kpi("Hours logged", t.hours ?? 0, "#7DE5FF")}
+          {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "#6E6E73" : t.ftfPct >= 90 ? "#248A3D" : t.ftfPct >= 75 ? "#B25000" : "#D70015")}
+          {kpi("Callbacks / re-work", t.callbacks ?? 0, (t.callbacks ?? 0) === 0 ? "#248A3D" : "#D70015")}
+          {kpi("Completed", t.completed ?? 0, "#0071E3")}
+          {kpi("Hours logged", t.hours ?? 0, "#0071E3")}
           {kpi("Avg utilization", `${t.avgUtilizationPct ?? 0}%`, utilColor(t.avgUtilizationPct ?? 0))}
         </div>
 
@@ -874,12 +1146,12 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
           {perTech.length === 0 ? <Small>No technicians yet.</Small> : <div style={{ display: "grid", gap: 8 }}>
             {perTech.map(tech => (
               <div key={tech.id} style={{ display: "grid", gridTemplateColumns: "150px 1fr 70px", gap: 10, alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tech.name}</span>
+                <span style={{ fontSize: 13, color: "#3A3A3C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tech.name}</span>
                 <div>
-                  <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                  <div style={{ height: 8, borderRadius: 5, background: "#F5F5F7", overflow: "hidden" }}>
                     <div style={{ width: `${Math.min(tech.utilizationPct, 100)}%`, height: "100%", background: utilColor(tech.utilizationPct) }} />
                   </div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.82)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
+                  <div style={{ fontSize: 10.5, color: "#3A3A3C", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
                 </div>
                 <span style={{ fontSize: 15, fontWeight: 700, textAlign: "right", color: utilColor(tech.utilizationPct) }}>{tech.utilizationPct}%</span>
               </div>
@@ -893,9 +1165,9 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
             <h2 style={{ fontSize: 15, marginBottom: 8 }}>Callbacks / re-work ({callbacks.length})</h2>
             <div style={{ display: "grid", gap: 5 }}>
               {callbacks.map(c => (
-                <div key={c.id} onClick={() => onOpen(c.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "7px 10px", background: "rgba(255,77,77,0.08)", border: "1px solid rgba(255,77,77,0.22)", borderRadius: 9, cursor: "pointer" }}>
-                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {c.customer_name || ""}</span></span>
-                  <span style={{ color: "rgba(255,255,255,0.82)" }}>{c.assignee_name || "Unassigned"}</span>
+                <div key={c.id} onClick={() => onOpen(c.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "7px 10px", background: "#FFECEC", border: "1px solid rgba(255,77,77,0.22)", borderRadius: 9, cursor: "pointer" }}>
+                  <span style={{ color: "#3A3A3C" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "#3A3A3C" }}>· {c.customer_name || ""}</span></span>
+                  <span style={{ color: "#3A3A3C" }}>{c.assignee_name || "Unassigned"}</span>
                 </div>
               ))}
             </div>
@@ -916,8 +1188,8 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
   const jobDate = (w: RealWO) => (w.eta && /^\d{4}-\d{2}-\d{2}/.test(w.eta)) ? w.eta.slice(0, 10) : null;
   const rows: RealTech[] = [{ id: "", name: "Unassigned" }, ...techs];
-  const unscheduled = jobs.filter(w => !jobDate(w) && bucketOf(w.status) !== "Done");
-  const navBtn = { ...btn, padding: "6px 12px", background: "rgba(255,255,255,0.06)" } as const;
+  const unscheduled = jobs.filter(w => !jobDate(w) && bucketOf(stOf(w)) !== "Done");
+  const navBtn = { ...btn2, padding: "6px 12px" } as const;
 
   const drop = (techId: string, dayIso: string) => {
     const id = dragId; setDragId(null); setOverCell(null);
@@ -928,9 +1200,9 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
 
   const card = (w: RealWO) => (
     <div key={w.id} draggable onDragStart={e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(null); setOverCell(null); }} onClick={() => onOpen(w.id)}
-      style={{ padding: "6px 8px", borderRadius: 8, background: "rgba(0,163,255,0.1)", border: "1px solid rgba(0,163,255,0.28)", marginBottom: 5, cursor: "grab", fontSize: 11.5, opacity: dragId === w.id ? 0.4 : 1 }}>
-      <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.title || w.woNumber || "WO"}</div>
-      {w.property && <div style={{ color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.property}</div>}
+      style={{ padding: "6px 8px", borderRadius: 8, background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.28)", marginBottom: 5, cursor: "grab", fontSize: 11.5, opacity: dragId === w.id ? 0.4 : 1 }}>
+      <div style={{ fontWeight: 600, color: "#3A3A3C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.title || w.woNumber || "WO"}</div>
+      {w.property && <div style={{ color: "#6E6E73", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.property}</div>}
     </div>
   );
 
@@ -941,11 +1213,11 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
         <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d); }} style={navBtn}>‹</button>
         <button onClick={() => { const d = new Date(); d.setHours(0, 0, 0, 0); setWeekStart(d); }} style={navBtn}>Today</button>
         <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d); }} style={navBtn}>›</button>
-        <span style={{ marginLeft: 8, fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{days[0].toLocaleDateString([], { month: "short", day: "numeric" })} – {days[6].toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+        <span style={{ marginLeft: 8, fontSize: 13, color: "#6E6E73" }}>{days[0].toLocaleDateString([], { month: "short", day: "numeric" })} – {days[6].toLocaleDateString([], { month: "short", day: "numeric" })}</span>
       </div>
 
       {unscheduled.length > 0 && (
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.15)", borderRadius: 12, padding: 10 }}>
+        <div style={{ background: "#FAFAFB", border: "1px dashed rgba(0,0,0,0.12)", borderRadius: 12, padding: 10 }}>
           <Small>Unscheduled ({unscheduled.length}) — drag onto a tech &amp; day</Small>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>{unscheduled.map(w => <div key={w.id} style={{ width: 150 }}>{card(w)}</div>)}</div>
         </div>
@@ -954,16 +1226,16 @@ function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealW
       <div style={{ overflowX: "auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "140px repeat(7, minmax(120px,1fr))", gap: 6, minWidth: 900 }}>
           <div />
-          {days.map(d => <div key={iso(d)} style={{ textAlign: "center", fontSize: 11.5, fontWeight: 600, color: "rgba(255,255,255,0.6)", padding: "4px 0" }}>{d.toLocaleDateString([], { weekday: "short" })}<div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{d.toLocaleDateString([], { month: "short", day: "numeric" })}</div></div>)}
+          {days.map(d => <div key={iso(d)} style={{ textAlign: "center", fontSize: 11.5, fontWeight: 600, color: "#6E6E73", padding: "4px 0" }}>{d.toLocaleDateString([], { weekday: "short" })}<div style={{ fontSize: 10, color: "#8E8E93" }}>{d.toLocaleDateString([], { month: "short", day: "numeric" })}</div></div>)}
           {rows.map(row => (
             <React.Fragment key={row.id || "unassigned"}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,0.8)", padding: "8px 6px", display: "flex", alignItems: "center" }}>{row.name}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#3A3A3C", padding: "8px 6px", display: "flex", alignItems: "center" }}>{row.name}</div>
               {days.map(d => {
                 const key = `${row.id}|${iso(d)}`;
                 const cell = jobs.filter(w => (w.assignedTechId || "") === row.id && jobDate(w) === iso(d));
                 return (
                   <div key={key} onDragOver={e => { e.preventDefault(); if (overCell !== key) setOverCell(key); }} onDragLeave={() => setOverCell(c => c === key ? null : c)} onDrop={e => { e.preventDefault(); drop(row.id, iso(d)); }}
-                    style={{ minHeight: 60, background: overCell === key ? "rgba(0,163,255,0.12)" : "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 5 }}>
+                    style={{ minHeight: 60, background: overCell === key ? "#EEF4FF" : "#FAFAFB", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: 5 }}>
                     {cell.map(card)}
                   </div>
                 );
@@ -1063,12 +1335,12 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
     setSaving(false);
     if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
   }
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid #1E293B", borderRadius: 18, padding: 20, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
-      <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(15,23,42,0.42)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 18, padding: 20, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "#1D1D1F", boxShadow: "0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)" }}>
+      <button onClick={onClose} style={{ ...btn2, border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
-          <div style={{ fontSize: 11, color: "rgba(0,163,255,0.8)", letterSpacing: "0.1em" }}>SITE</div>
+          <div style={{ fontSize: 11, color: "#0071E3", letterSpacing: "0.1em" }}>SITE</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{site.name || "Site"}</h2>
           <Small>{[site.city, site.state].filter(Boolean).join(", ") || "—"}</Small>
           {/* Lifecycle status (#60): Active only when contract signed AND deposit paid */}
@@ -1076,7 +1348,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             const a = siteActivation(site);
             return <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${SITE_STATUS_COLORS[a.status]}22`, border: `1px solid ${SITE_STATUS_COLORS[a.status]}66`, color: SITE_STATUS_COLORS[a.status] }}>{SITE_STATUS_LABELS[a.status]}</span>
-              {!a.active && a.blockers.length > 0 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>To activate: {a.blockers.join(" · ")}</span>}
+              {!a.active && a.blockers.length > 0 && <span style={{ fontSize: 11, color: "#6E6E73" }}>To activate: {a.blockers.join(" · ")}</span>}
             </div>;
           })()}
         </div>
@@ -1091,13 +1363,13 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             <input placeholder="What needs doing? (e.g. Gate won't open)" value={woTitle} onChange={e => setWoTitle(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createWorkOrder(); }} style={{ ...input, padding: 9 }} />
             <button onClick={createWorkOrder} disabled={!woTitle.trim() || busy} style={{ ...btn, opacity: woTitle.trim() && !busy ? 1 : 0.5 }}>Create</button>
           </div>}
-          {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#00E699" : "#FF4D4D", marginTop: 8 }}>{woMsg}</p>}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 6 }}>Public request form — give this link (or a QR of it) to the property manager so they can report issues:</div>
+          {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{woMsg}</p>}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+            <div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 6 }}>Public request form — give this link (or a QR of it) to the property manager so they can report issues:</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <code style={{ fontSize: 11, background: "rgba(0,163,255,0.1)", border: "1px solid rgba(0,163,255,0.25)", borderRadius: 8, padding: "5px 9px", wordBreak: "break-all" }}>{`/request/${id}`}</code>
-              <button onClick={() => { const url = `${typeof window !== "undefined" ? window.location.origin : ""}/request/${id}`; navigator.clipboard?.writeText(url).then(() => setWoMsg("Request link copied ✓")).catch(() => {}); }} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12 }}>Copy link</button>
-              <a href={`/request/${id}`} target="_blank" rel="noreferrer" style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12, textDecoration: "none" }}>Open</a>
+              <code style={{ fontSize: 11, background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.25)", borderRadius: 8, padding: "5px 9px", wordBreak: "break-all" }}>{`/request/${id}`}</code>
+              <button onClick={() => { const url = `${typeof window !== "undefined" ? window.location.origin : ""}/request/${id}`; navigator.clipboard?.writeText(url).then(() => setWoMsg("Request link copied ✓")).catch(() => {}); }} style={{ ...btn2, padding: "5px 12px", fontSize: 12 }}>Copy link</button>
+              <a href={`/request/${id}`} target="_blank" rel="noreferrer" style={{ ...btn2, padding: "5px 12px", fontSize: 12, textDecoration: "none" }}>Open</a>
             </div>
           </div>
         </Card>
@@ -1106,11 +1378,11 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
           <h2 style={{ fontSize: 15, marginBottom: 10 }}>Details</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {SITE_FIELDS.map(f => <div key={f.key} style={{ gridColumn: f.full ? "1 / -1" : undefined }}>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>{f.label}</div>
+              <div style={{ color: "#6E6E73", fontSize: 11, marginBottom: 3 }}>{f.label}</div>
               <input value={val(f.key)} onChange={e => setEdit(p => ({ ...p, [f.key]: e.target.value }))} style={{ ...input, padding: 9, fontSize: 13 }} />
             </div>)}
           </div>
-          <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#10b981" : "#00A3FF" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
+          <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#248A3D" : "#0071E3" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
         </Card>
 
         {/* Equipment on site */}
@@ -1130,8 +1402,8 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
               <button onClick={addEquipment} disabled={!eq.product_name.trim() || busy} style={{ ...btn, opacity: eq.product_name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Adding…" : "Add equipment"}</button>
             </div>
           </div>}
-          {assets.length === 0 ? <Small>No equipment logged at this site yet.</Small> : assets.map((a, i) => <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: i < assets.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+          {assets.length === 0 ? <Small>No equipment logged at this site yet.</Small> : assets.map((a, i) => <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: i < assets.length - 1 ? "1px solid rgba(0,0,0,0.08)" : "none" }}>
+            <div style={{ fontSize: 14 }}>{a.product_name || a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "#8E8E93", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "#3A3A3C", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
           </div>)}
         </Card>
@@ -1144,13 +1416,13 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
               <input type="file" accept="image/*,application/pdf,.pdf,.dwg,.png,.jpg,.jpeg,.webp" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
             </label>
           </div>
-          {uploadErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#FCA5A5", background: "rgba(255,77,77,0.1)", border: "1px solid rgba(255,77,77,0.3)", borderRadius: 8, padding: "8px 10px" }}>Upload failed: {uploadErr}</div>}
+          {uploadErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#D70015", background: "#FFECEC", border: "1px solid rgba(255,77,77,0.3)", borderRadius: 8, padding: "8px 10px" }}>Upload failed: {uploadErr}</div>}
           {photos.length === 0 ? <Small>No drawings or photos yet. Upload an as-built or site photo (image or PDF).</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px,1fr))", gap: 8 }}>
             {photos.map((p, i) => { const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(String(p.description || "")); return (
-              <a key={p.id || i} href={p.description} target="_blank" rel="noreferrer" title={p.title} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <a key={p.id || i} href={p.description} target="_blank" rel="noreferrer" title={p.title} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(0,0,0,0.12)" }}>
                 {isImg
                   ? <img src={p.description} alt={p.title || "Site photo"} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
-                  : <div style={{ width: "100%", height: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.7)", fontSize: 11, padding: 6, textAlign: "center" }}><span style={{ fontSize: 20 }}>📄</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{p.title || "Document"}</span></div>}
+                  : <div style={{ width: "100%", height: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, background: "#F5F5F7", color: "#6E6E73", fontSize: 11, padding: 6, textAlign: "center" }}><span style={{ fontSize: 20 }}>📄</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{p.title || "Document"}</span></div>}
               </a>
             ); })}
           </div>}
@@ -1160,15 +1432,15 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 8 }}>Planned service</h2>
           {pm.length === 0 && upcomingWos.length === 0 ? <Small>Nothing scheduled. Set up recurring service in the PM tab.</Small> : <>
-            {pm.map((s, i) => <p key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 6, margin: "5px 0", fontSize: 14 }}><RotateCcw size={13} style={{ flexShrink: 0, opacity: 0.7 }} /> {s.title} <span style={{ color: "rgba(255,255,255,0.5)" }}>· every {s.interval_days}d{s.next_due_at ? ` · next ${String(s.next_due_at).slice(0, 10)}` : ""}</span></p>)}
-            {upcomingWos.map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}
+            {pm.map((s, i) => <p key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 6, margin: "5px 0", fontSize: 14 }}><RotateCcw size={13} style={{ flexShrink: 0, opacity: 0.7 }} /> {s.title} <span style={{ color: "#6E6E73" }}>· every {s.interval_days}d{s.next_due_at ? ` · next ${String(s.next_due_at).slice(0, 10)}` : ""}</span></p>)}
+            {upcomingWos.map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "#6E6E73" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}
           </>}
         </Card>
 
         {/* Service history — past work orders */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 8 }}>Service history ({pastWos.length})</h2>
-          {pastWos.length === 0 ? <Small>No completed work orders yet.</Small> : pastWos.slice(0, 12).map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.completed_at ? String(w.completed_at).slice(0, 10) : w.status}</span></p>)}
+          {pastWos.length === 0 ? <Small>No completed work orders yet.</Small> : pastWos.slice(0, 12).map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "#6E6E73" }}>· {w.completed_at ? String(w.completed_at).slice(0, 10) : w.status}</span></p>)}
         </Card>
 
         {/* Site notes & history (events) */}
@@ -1178,14 +1450,14 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
             <input placeholder="Add a note about this site…" value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addNote(); }} style={{ ...input, padding: 9, fontSize: 13 }} />
             <button onClick={addNote} disabled={!note.trim() || busy} style={{ ...btn, opacity: note.trim() && !busy ? 1 : 0.5 }}>Add</button>
           </div>
-          {noteEvents.length === 0 ? <Small>No notes or activity yet.</Small> : noteEvents.slice(0, 20).map((e, i) => <div key={e.id || i} style={{ padding: "6px 0", borderBottom: i < Math.min(noteEvents.length, 20) - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+          {noteEvents.length === 0 ? <Small>No notes or activity yet.</Small> : noteEvents.slice(0, 20).map((e, i) => <div key={e.id || i} style={{ padding: "6px 0", borderBottom: i < Math.min(noteEvents.length, 20) - 1 ? "1px solid rgba(0,0,0,0.08)" : "none" }}>
             <div style={{ fontSize: 13 }}>{e.description || e.summary || e.title || e.event_type}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{e.event_type}{e.created_at ? ` · ${String(e.created_at).slice(0, 10)}` : ""}</div>
+            <div style={{ fontSize: 11, color: "#8E8E93" }}>{e.event_type}{e.created_at ? ` · ${String(e.created_at).slice(0, 10)}` : ""}</div>
           </div>)}
         </Card>
 
         {/* One tabbed panel: Security · Doors · Relays · Network · (Setup, corporate) */}
-        <SiteSystems siteId={id} isCorporate={isCorporate} initialTab={systemsTab} />
+        <SiteSystems siteId={id} isCorporate={isCorporate} initialTab={systemsTab} headerTheme="light" />
 
         {/* Unified activity timeline (#59) */}
         <ActivityTimeline entity="site" id={id} title="Site activity" />
@@ -1289,7 +1561,7 @@ function Parts() {
           <input placeholder="e.g. LiftMaster CSL24UL  or  https://…/manual.pdf" value={findQ} onChange={e => setFindQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") findProduct(); }} style={{ ...input, flex: 1 }} />
           <button onClick={findProduct} disabled={!findQ.trim() || finding} style={{ ...btn, opacity: findQ.trim() && !finding ? 1 : 0.5 }}>{finding ? "Looking…" : "Look it up"}</button>
         </div>
-        {findMsg && <p style={{ fontSize: 12, color: findMsg.startsWith("Found") ? "#00E699" : "#fbbf24", margin: 0 }}>{findMsg}</p>}
+        {findMsg && <p style={{ fontSize: 12, color: findMsg.startsWith("Found") ? "#248A3D" : "#B25000", margin: 0 }}>{findMsg}</p>}
       </div>
       {showNew ? <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Product name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
@@ -1302,14 +1574,14 @@ function Parts() {
           <input placeholder="Sell price $" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} style={{ ...input, flex: 1 }} />
         </div>
         <input placeholder="Manual PDF URL (or upload below)" value={form.manual_url} onChange={e => setForm({ ...form, manual_url: e.target.value })} style={input} />
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,163,255,0.08)", border: "1px dashed rgba(0,163,255,0.4)", borderRadius: 10, padding: "8px 12px" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#0071E3", cursor: "pointer", background: "#EEF4FF", border: "1px dashed rgba(0,163,255,0.4)", borderRadius: 10, padding: "8px 12px" }}>
           {mUploading === "new" ? "Uploading…" : form.manual_url ? "📎 Manual attached ✓ — replace?" : "📎 Upload a manual PDF from your computer"}
           <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === "new"} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setMUploading("new"); const url = await uploadManual(`intake-${Date.now()}`, f); setMUploading(null); if (url) { setForm(s => ({ ...s, manual_url: url })); setMsg("Manual uploaded ✓ — it'll vectorize after you Add."); } else setMsg("Upload failed — try a smaller PDF or paste a URL."); }} />
         </label>
         <input placeholder="Image URL (optional)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={input} />
         <button onClick={create} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Adding…" : "Add to catalog"}</button>
       </div> : <Small>Name is all you need. Add a manual PDF link and it powers the field tool's AI diagnostics, wiring help, and step images.</Small>}
-      {msg && <p style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#FF4D4D", marginTop: 8 }}>{msg}</p>}
+      {msg && <p style={{ fontSize: 12, color: msg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{msg}</p>}
     </Card>
     <input placeholder="Search parts by name or SKU" value={q} onChange={e => setQ(e.target.value)} style={input} />
     {shown.length === 0 ? <Card><Small>No parts found.</Small></Card> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
@@ -1329,21 +1601,21 @@ function Parts() {
           </div>
           {p.sku && <Small>{p.sku}</Small>}
           <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Cost</div><b>{cost(p) ? money(cost(p)) : "—"}</b></div>
-            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Price</div><b>{price(p) ? money(price(p)) : "—"}</b></div>
-            {oh != null && <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>On hand</div><b>{num(oh)}</b></div>}
+            <div><div style={{ color: "#6E6E73", fontSize: 11 }}>Cost</div><b>{cost(p) ? money(cost(p)) : "—"}</b></div>
+            <div><div style={{ color: "#6E6E73", fontSize: 11 }}>Price</div><b>{price(p) ? money(price(p)) : "—"}</b></div>
+            {oh != null && <div><div style={{ color: "#6E6E73", fontSize: 11 }}>On hand</div><b>{num(oh)}</b></div>}
           </div>
           {/* AI manual intake: vectorize on demand so the field tool gets diagnostics + diagrams */}
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
             {!p.manual_url ? (
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,163,255,0.08)", border: "1px dashed rgba(0,163,255,0.4)", borderRadius: 9, padding: "5px 11px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#0071E3", cursor: "pointer", background: "#EEF4FF", border: "1px dashed rgba(0,163,255,0.4)", borderRadius: 9, padding: "5px 11px" }}>
                 {mUploading === p.id ? "Uploading…" : "📎 Add manual PDF"}
                 <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === p.id} onChange={e => { const f = e.target.files?.[0]; if (f) attachManualToProduct(p, f); }} />
               </label>
             ) : state === "queued" ? (
               <Small>Vectorizing manual… this runs in the background. Refresh in a minute.</Small>
             ) : state === "error" ? (
-              <span style={{ fontSize: 12, color: "#FF4D4D" }}>Couldn&apos;t queue — <button onClick={() => vectorize(p)} style={{ ...btn, padding: "2px 8px", fontSize: 12 }}>Retry</button></span>
+              <span style={{ fontSize: 12, color: "#D70015" }}>Couldn&apos;t queue — <button onClick={() => vectorize(p)} style={{ ...btn, padding: "2px 8px", fontSize: 12 }}>Retry</button></span>
             ) : (
               <button onClick={() => vectorize(p)} style={{ ...btn, padding: "5px 12px", fontSize: 12 }}>{aiReady ? "Re-vectorize manual" : "Vectorize manual now"}</button>
             )}
@@ -1363,14 +1635,18 @@ function PM() {
   useEffect(() => { fetch("/api/pm-schedules").then(r => r.json()).then(d => setItems(d.pm_schedules ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   if (loading) return <Card><Small>Loading schedules…</Small></Card>;
   if (items.length === 0) return <Card><Small>No preventive-maintenance schedules yet.</Small></Card>;
+  // Soonest (and overdue) first.
+  const sorted = [...items].sort((a, b) => String(a.next_due_at ?? "9999").localeCompare(String(b.next_due_at ?? "9999")));
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
-    {items.map(s => <Card key={s.id}>
+    {sorted.map(s => <Card key={s.id}>
       <b style={{ fontSize: 15 }}>{s.title || "Schedule"}</b>
-      <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+      <div style={{ marginTop: 8, fontSize: 13, color: "#6E6E73" }}>
         {s.interval_days ? `Every ${s.interval_days} days` : "—"}
-        {s.next_due_at && <div style={{ color: "rgba(255,255,255,0.5)" }}>Next due: {String(s.next_due_at).slice(0, 10)}</div>}
+        {s.next_due_at && (String(s.next_due_at).slice(0, 10) < todayKey()
+          ? <div style={{ color: "#D70015", fontWeight: 600 }}>Overdue — was due {dayLabel(s.next_due_at)}</div>
+          : <div style={{ color: "#6E6E73" }}>Next due: {dayLabel(s.next_due_at)}</div>)}
       </div>
-      {s.description && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
+      {s.description && <p style={{ color: "#3A3A3C", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
     </Card>)}
   </div>;
 }
@@ -1403,8 +1679,8 @@ function Requests({ onConverted }: { onConverted: () => void }) {
         <Badge tone={["urgent", "high"].includes(String(r.priority_requested)) ? "urgent" : "default"}>{r.priority_requested || "normal"}</Badge>
       </div>
       <Small>{r.site_name || "—"}{r.site_city ? ` · ${r.site_city}, ${r.site_state}` : ""}{r.area ? ` · ${r.area}` : ""}</Small>
-      {r.description && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
-      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
+      {r.description && <p style={{ color: "#6E6E73", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
+      {(r.contact_name || r.contact_phone) && <p style={{ color: "#3A3A3C", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
       <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, marginTop: 12, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to work order →"}</button>
     </Card>)}
   </div>;
@@ -1440,14 +1716,14 @@ function Procurement() {
       {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Supplier *" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} style={input} />
         <input placeholder="PO number (optional)" value={form.po_number} onChange={e => setForm({ ...form, po_number: e.target.value })} style={input} />
-        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Line items</div>
+        <div style={{ color: "#6E6E73", fontSize: 11 }}>Line items</div>
         {lines.map((l, i) => <div key={i} style={{ display: "flex", gap: 6 }}>
           <input placeholder="Item" value={l.name} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, flex: 2 }} />
           <input type="number" placeholder="Qty" value={l.qty} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 64 }} />
           <input type="number" placeholder="$ ea" value={l.unit_cost} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, unit_cost: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 80 }} />
-          {lines.length > 1 && <button onClick={() => setLines(ls => ls.filter((_, j) => j !== i))} style={{ ...btn, background: "rgba(255,80,80,0.14)", padding: "0 10px" }}>×</button>}
+          {lines.length > 1 && <button onClick={() => setLines(ls => ls.filter((_, j) => j !== i))} style={{ ...btn2, color: "#D70015", padding: "0 10px" }}>×</button>}
         </div>)}
-        <button onClick={() => setLines(ls => [...ls, { name: "", qty: "1", unit_cost: "" }])} style={{ ...btn, background: "rgba(255,255,255,0.06)", justifySelf: "start", padding: "6px 12px" }}>+ Add line</button>
+        <button onClick={() => setLines(ls => [...ls, { name: "", qty: "1", unit_cost: "" }])} style={{ ...btn2, justifySelf: "start", padding: "6px 12px" }}>+ Add line</button>
         <input placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={input} />
         <button onClick={create} disabled={!form.supplier.trim() || busy} style={{ ...btn, opacity: form.supplier.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : `Create PO · ${money(linesTotal)}`}</button>
       </div>}
@@ -1460,13 +1736,13 @@ function Procurement() {
             <Badge tone={poTone(p.status)}>{p.status}</Badge>
           </div>
           <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#00A3FF", margin: "8px 0 0" }}>{money(num(p.total))}</div>
-          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
-          {p.notes && <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
+          <div style={{ fontSize: 22, fontWeight: 600, color: "#0071E3", margin: "8px 0 0" }}>{money(num(p.total))}</div>
+          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "#6E6E73" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
+          {p.notes && <p style={{ color: "#3A3A3C", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
             {p.status === "draft" && <button onClick={() => setStatus(p.id, "ordered")} style={{ ...btn, padding: "6px 12px" }}>Mark ordered</button>}
-            {p.status === "ordered" && <button onClick={() => setStatus(p.id, "received")} style={{ ...btn, padding: "6px 12px", background: "#10b981" }}>Mark received ✓</button>}
-            {p.status !== "received" && p.status !== "cancelled" && <button onClick={() => setStatus(p.id, "cancelled")} style={{ ...btn, padding: "6px 12px", background: "rgba(255,255,255,0.06)" }}>Cancel</button>}
+            {p.status === "ordered" && <button onClick={() => setStatus(p.id, "received")} style={{ ...btn, padding: "6px 12px", background: "#248A3D" }}>Mark received ✓</button>}
+            {p.status !== "received" && p.status !== "cancelled" && <button onClick={() => setStatus(p.id, "cancelled")} style={{ ...btn2, padding: "6px 12px", color: "#D70015" }}>Cancel</button>}
           </div>
         </Card>)}
       </div>}
@@ -1530,15 +1806,15 @@ function Playbooks() {
             <textarea value={eForm.stepsText} onChange={e => setEForm({ ...eForm, stepsText: e.target.value })} rows={6} style={{ ...input, padding: 9, fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => saveEdit(p.id)} disabled={busy} style={{ ...btn, flex: 1, opacity: busy ? 0.6 : 1 }}>{busy ? "Saving…" : "Save"}</button>
-              <button onClick={() => setEditId(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+              <button onClick={() => setEditId(null)} style={{ ...btn2 }}>Cancel</button>
             </div>
           </div> : <>
-            <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, color: "rgba(255,255,255,0.8)" }}>
+            <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, color: "#3A3A3C" }}>
               {(p.steps ?? []).slice(0, 8).map((s: unknown, i: number) => <li key={i} style={{ margin: "3px 0" }}>{typeof s === "string" ? s : (s as { title?: string })?.title}</li>)}
             </ol>
             {p.org_id && <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              <button onClick={() => startEdit(p)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12 }}>Edit</button>
-              <button onClick={() => remove(p.id)} style={{ ...btn, background: "rgba(255,80,80,0.14)", border: "1px solid rgba(255,80,80,0.3)", padding: "5px 10px", fontSize: 12 }}>Delete</button>
+              <button onClick={() => startEdit(p)} style={{ ...btn2, padding: "5px 12px", fontSize: 12 }}>Edit</button>
+              <button onClick={() => remove(p.id)} style={{ ...btn2, color: "#D70015", border: "1px solid rgba(255,80,80,0.3)", padding: "5px 10px", fontSize: 12 }}>Delete</button>
             </div>}
           </>}
         </Card>)}
@@ -1893,9 +2169,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   function renderStepGroup(gid: string, phaseId: string | null, name: string, phaseIndex: number) {
     const group = stepsIn(phaseId);
     const gDone = group.filter(c => c.is_complete || c.completed || c.done).length;
-    const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.82)", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
+    const arrow = { background: "none", border: "none", color: "#3A3A3C", cursor: "pointer", fontSize: 11, lineHeight: 1.05, padding: "0 2px" } as const;
     const isPhase = phaseId !== null;
-    return <div key={gid} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
+    return <div key={gid} style={{ background: "#FAFAFB", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 14, fontWeight: 700, flex: 1, minWidth: 110 }}>{name}</span>
         <Small>{gDone} of {group.length} done</Small>
@@ -1904,7 +2180,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <button onClick={() => movePhase(phaseIndex, -1)} disabled={phaseIndex === 0} title="Move phase up" style={{ ...arrow, opacity: phaseIndex === 0 ? 0.25 : 1 }}>▲</button>
             <button onClick={() => movePhase(phaseIndex, 1)} disabled={phaseIndex === phases.length - 1} title="Move phase down" style={{ ...arrow, opacity: phaseIndex === phases.length - 1 ? 0.25 : 1 }}>▼</button>
           </div>
-          <button onClick={() => deletePhase(phases[phaseIndex])} style={{ ...sel, cursor: "pointer", color: "#FF4D4D", border: "1px solid rgba(255,77,77,0.35)", padding: "4px 9px", flexShrink: 0 }}>Delete</button>
+          <button onClick={() => deletePhase(phases[phaseIndex])} style={{ ...sel, cursor: "pointer", color: "#D70015", border: "1px solid rgba(255,77,77,0.35)", padding: "4px 9px", flexShrink: 0 }}>Delete</button>
         </>}
       </div>
       <div style={{ display: "grid", gap: 2, marginTop: 8, paddingLeft: 10, borderLeft: "2px solid rgba(0,163,255,0.22)" }}>
@@ -1915,15 +2191,15 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start", flex: 1, cursor: "pointer", minWidth: 0 }}>
               <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} style={{ marginTop: 3, flexShrink: 0 }} />
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
-                {c.notes && <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.82)", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
+                <span style={{ display: "block", textDecoration: done ? "line-through" : "none", color: done ? "#6E6E73" : "#1D1D1F", fontSize: 14 }}>{c.title || c.label}</span>
+                {c.notes && <span style={{ display: "block", fontSize: 12, color: "#3A3A3C", marginTop: 1, lineHeight: 1.4 }}>{c.notes}</span>}
               </span>
             </label>
             <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
               <button onClick={() => moveStep(group, i, -1)} disabled={i === 0} title="Move up" style={{ ...arrow, opacity: i === 0 ? 0.25 : 1 }}>▲</button>
               <button onClick={() => moveStep(group, i, 1)} disabled={i === group.length - 1} title="Move down" style={{ ...arrow, opacity: i === group.length - 1 ? 0.25 : 1 }}>▼</button>
             </div>
-            <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "rgba(252,165,165,0.7)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
+            <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "#D70015", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
           </div>;
         })}
       </div>
@@ -1932,44 +2208,44 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         <input placeholder="Detail (optional) — e.g. pull CAT6 from the pool gate" value={stepForm.detail} onChange={e => setStepForm(f => ({ ...f, detail: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") addStep(phaseId); }} style={{ ...input, padding: 9, fontSize: 13 }} />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => addStep(phaseId)} disabled={!stepForm.title.trim() || stepBusy} style={{ ...btn, opacity: stepForm.title.trim() && !stepBusy ? 1 : 0.5 }}>{stepBusy ? "Adding…" : "Add step"}</button>
-          <button onClick={() => { setAddOpen(null); setStepForm({ title: "", detail: "" }); }} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+          <button onClick={() => { setAddOpen(null); setStepForm({ title: "", detail: "" }); }} style={{ ...btn2 }}>Cancel</button>
         </div>
       </div> : <button onClick={() => { setAddOpen(gid); setStepForm({ title: "", detail: "" }); }} style={{ ...sel, cursor: "pointer", marginTop: 8, padding: "6px 10px" }}>+ Add step</button>}
     </div>;
   }
 
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#22303f 0%, #16232f 100%)", border: "1px solid #1E293B", borderRadius: 18, padding: 24, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(15,23,42,0.42)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 18, padding: 24, paddingBottom: "calc(120px + env(safe-area-inset-bottom))", color: "#1D1D1F", boxShadow: "0 1px 2px rgba(10,20,40,0.06), 0 8px 24px rgba(10,20,40,0.08)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
-        <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
-        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
+        <button onClick={onClose} style={{ ...btn2, border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
+        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn2, border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
       </div>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 18 }}>
         <div>
-          <div style={{ fontSize: 11, color: "rgba(0,163,255,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
+          <div style={{ fontSize: 11, color: "#0071E3", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{wo.title || "Work order"}</h2>
           <Small>{wo.customer_name || wo.site_address || "—"}{wo.scheduled_date ? ` · ${String(wo.scheduled_date).slice(0, 10)}` : ""}</Small>
         </div>
 
         {/* Tabs — keep every feature one click away in a clean console */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "linear-gradient(180deg,#22303f,#22303fee)", paddingBottom: 4 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "#FFFFFF", paddingBottom: 4 }}>
           {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => (
-            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(0,163,255,0.5)" : "1px solid rgba(255,255,255,0.1)", background: tab === tb ? "rgba(0,163,255,0.16)" : "rgba(255,255,255,0.04)", color: tab === tb ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{tb}</button>
+            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(0,163,255,0.5)" : "1px solid rgba(0,0,0,0.12)", background: tab === tb ? "#EEF4FF" : "#F5F5F7", color: tab === tb ? "#0071E3" : "#6E6E73" }}>{tb}</button>
           ))}
         </div>
 
         {tab === "Overview" && (<>
         <Card>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(wo.status)} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(stOf(wo))} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6E6E73", cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
             <Mail size={14} style={{ flexShrink: 0 }} /> Email the tech &amp; customer when I change this job
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6E6E73", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={!!wo.is_callback} onChange={e => patchField({ is_callback: e.target.checked })} style={{ width: 15, height: 15 }} />
             <RotateCcw size={14} style={{ flexShrink: 0 }} /> This is a callback / re-work (counts against first-time-fix)
           </label>
@@ -1986,12 +2262,12 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <Small>Text the customer</Small>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
             <input placeholder="ETA e.g. 2:30 PM" value={eta} onChange={e => setEta(e.target.value)} style={{ ...sel, width: 130 }} />
-            <button onClick={() => notifyCustomer("in_route")} disabled={smsBusy} style={{ ...btn, background: "rgba(0,163,255,0.16)", border: "1px solid rgba(0,163,255,0.4)", color: "#7DE5FF", display: "inline-flex", alignItems: "center", gap: 6 }}><Truck size={14} /> On my way</button>
+            <button onClick={() => notifyCustomer("in_route")} disabled={smsBusy} style={{ ...btn2, color: BLUE, border: "1px solid rgba(0,163,255,0.4)", display: "inline-flex", alignItems: "center", gap: 6 }}><Truck size={14} /> On my way</button>
             <button onClick={() => notifyCustomer("on_site")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> Arrived</button>
             <button onClick={() => notifyCustomer("completed")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} /> Job done</button>
             <button onClick={() => notifyCustomer("review_request")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><Star size={14} /> Ask for review</button>
           </div>
-          {smsMsg && !smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#00E699" : "#FF4D4D", marginTop: 8 }}>{smsMsg}</div>}
+          {smsMsg && !smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 
         {/* Crew — multiple techs/resources on one job (lead = primary assignee). */}
@@ -2004,11 +2280,11 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </select>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(0,163,255,0.14)", border: "1px solid rgba(0,163,255,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}><Star size={12} /> {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
+            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.4)", color: "#0071E3", borderRadius: 20, padding: "5px 12px" }}><Star size={12} /> {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
             {crew.map(c => (
-              <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", borderRadius: 20, padding: "5px 10px" }}>
+              <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.12)", color: "#3A3A3C", borderRadius: 20, padding: "5px 10px" }}>
                 {c.technician?.name || "Tech"}<span style={{ opacity: 0.55 }}>· {c.role}</span>
-                <button onClick={() => removeCrew(c.id)} aria-label="Remove crew member" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 0, display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
+                <button onClick={() => removeCrew(c.id)} aria-label="Remove crew member" style={{ background: "none", border: "none", color: "#6E6E73", cursor: "pointer", padding: 0, display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
               </span>
             ))}
             {!wo.assignee_name && crew.length === 0 && <Small>No one assigned yet — set the lead above, add crew here.</Small>}
@@ -2021,20 +2297,20 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
             {phases.length === 0 && <Small>Single visit so far. Add visits for multi-day jobs or return trips.</Small>}
             {phases.map(p => (
-              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px" }}>
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "8px 10px" }}>
                 <span style={{ flex: 1, minWidth: 120, fontSize: 13 }}>{p.name}</span>
                 <input type="date" value={p.scheduled_date ? String(p.scheduled_date).slice(0, 10) : ""} onChange={e => patchPhase(p.id, { scheduled_date: e.target.value || null })} style={{ ...sel, width: 150 }} />
                 <select value={p.status} onChange={e => patchPhase(p.id, { status: e.target.value })} style={{ ...sel, width: 140 }}>
                   {["pending", "in_progress", "complete", "skipped"].map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                 </select>
-                <button onClick={() => removePhase(p.id)} aria-label="Remove visit" style={{ ...btn, background: "rgba(255,77,77,0.14)", border: "1px solid rgba(255,77,77,0.4)", color: "#FF4D4D", display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
+                <button onClick={() => removePhase(p.id)} aria-label="Remove visit" style={{ ...btn2, color: "#D70015", border: "1px solid rgba(255,77,77,0.4)", display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
               </div>
             ))}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <input placeholder="New visit (e.g. Day 2 – Commissioning)" value={phaseForm.name} onChange={e => setPhaseForm(f => ({ ...f, name: e.target.value }))} style={{ ...sel, flex: 1, minWidth: 160 }} />
             <input type="date" value={phaseForm.scheduled_date} onChange={e => setPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))} style={{ ...sel, width: 150 }} />
-            <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#7DE5FF", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
+            <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn2, color: BLUE, border: "1px solid rgba(0,163,255,0.45)", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
           </div>
         </Card>
         </>)}
@@ -2063,8 +2339,8 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             {(wo.site_contact_name || wo.site_contact_phone) && <div><Small>On-site contact</Small><div style={{ fontSize: 13 }}>{wo.site_contact_name || "—"}{wo.site_contact_phone ? ` · ${wo.site_contact_phone}` : ""}</div></div>}
             {(wo.site_pm_name || wo.site_pm_phone) && <div><Small>Property manager</Small><div style={{ fontSize: 13 }}>{wo.site_pm_name || "—"}{wo.site_pm_phone ? ` · ${wo.site_pm_phone}` : ""}</div></div>}
           </div>
-          {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Key size={12} /> Access / gate notes</span></Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
-          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.82)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
+          {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#FFF4E5", border: "1px solid rgba(245,158,11,0.28)" }}><Small><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Key size={12} /> Access / gate notes</span></Small><div style={{ fontSize: 13, color: "#3A3A3C", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
+          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "#3A3A3C" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
         </Card>
 
         {/* Equipment on site + manuals */}
@@ -2076,17 +2352,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           {!siteId && <Small>Link this work order to a site to track its equipment.</Small>}
           {showAddEq && <Modal title="Add equipment to this site" onClose={() => setShowAddEq(false)}>
             <div style={{ display: "grid", gap: 10 }}>
-              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>What is it? *</div><input placeholder="e.g. LiftMaster gate operator" value={eqForm.product_name} onChange={e => setEqForm({ ...eqForm, product_name: e.target.value })} style={input} /></div>
-              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Serial number (optional)</div><input placeholder="Serial / model #" value={eqForm.serial_number} onChange={e => setEqForm({ ...eqForm, serial_number: e.target.value })} style={input} /></div>
-              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Where is it? (optional)</div><input placeholder="e.g. Front gate, Pool entrance" value={eqForm.location_note} onChange={e => setEqForm({ ...eqForm, location_note: e.target.value })} style={input} /></div>
+              <div><div style={{ color: "#6E6E73", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>What is it? *</div><input placeholder="e.g. LiftMaster gate operator" value={eqForm.product_name} onChange={e => setEqForm({ ...eqForm, product_name: e.target.value })} style={input} /></div>
+              <div><div style={{ color: "#6E6E73", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Serial number (optional)</div><input placeholder="Serial / model #" value={eqForm.serial_number} onChange={e => setEqForm({ ...eqForm, serial_number: e.target.value })} style={input} /></div>
+              <div><div style={{ color: "#6E6E73", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Where is it? (optional)</div><input placeholder="e.g. Front gate, Pool entrance" value={eqForm.location_note} onChange={e => setEqForm({ ...eqForm, location_note: e.target.value })} style={input} /></div>
               <button onClick={addEquipment} disabled={!eqForm.product_name.trim() || eqBusy} style={{ ...btn, opacity: eqForm.product_name.trim() && !eqBusy ? 1 : 0.5 }}>{eqBusy ? "Adding…" : "Add equipment"}</button>
             </div>
           </Modal>}
-          {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+          {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(0,0,0,0.08)" : "none" }}>
+            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "#8E8E93", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "#3A3A3C", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
-              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#00A3FF", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
+              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#0071E3", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
             </div>
           </div>; })}
         </Card>
@@ -2094,19 +2370,19 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
 
         {tab === "Execution" && (<>
         {/* AI Tech Support */}
-        <Card style={{ background: "rgba(0,163,255,0.06)", border: "1px solid rgba(0,163,255,0.22)" }}>
+        <Card style={{ background: "#EEF4FF", border: "1px solid rgba(0,163,255,0.22)" }}>
           <h2 style={{ fontSize: 15, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Bot size={16} /> AI Tech Support</h2>
           <Small>Describe the symptom — get guided, manual-backed steps.</Small>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input placeholder="e.g. Gate won't open, motor hums" value={aiQ} onChange={e => setAiQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") askAI(); }} style={{ ...input, padding: 9 }} />
             <button onClick={askAI} disabled={aiBusy || !aiQ.trim()} style={{ ...btn, opacity: aiBusy || !aiQ.trim() ? 0.5 : 1 }}>{aiBusy ? "Thinking…" : "Ask"}</button>
           </div>
-          {aiStep && <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ fontSize: 11, color: "#00A3FF", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
+          {aiStep && <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.12)" }}>
+            <div style={{ fontSize: 11, color: "#0071E3", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
             <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0" }}>{aiStep.text}</div>
-            {aiStep.detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{aiStep.detail}</div>}
-            {aiStep.expected && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
-            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#00A3FF" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
+            {aiStep.detail && <div style={{ fontSize: 13, color: "#6E6E73" }}>{aiStep.detail}</div>}
+            {aiStep.expected && <div style={{ fontSize: 12, color: "#6E6E73", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
+            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#0071E3" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
           </div>}
         </Card>
 
@@ -2116,7 +2392,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <h2 style={{ fontSize: 15 }}>Money on this job</h2>
             {partsRev > 0 && <Badge tone="good">{marginPct}% margin</Badge>}
           </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: "#00A3FF", margin: "6px 0" }}>{money(margin)} <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>margin</span></div>
+          <div style={{ fontSize: 30, fontWeight: 600, color: "#0071E3", margin: "6px 0" }}>{money(margin)} <span style={{ fontSize: 14, color: "#6E6E73", fontWeight: 600 }}>margin</span></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
             <div><Small>Parts cost</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsCost)}</div></div>
             <div><Small>Parts price</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsRev)}</div></div>
@@ -2135,8 +2411,8 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
             <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>
           </div>
-          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
-          {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#00E699" : "#FF4D4D", marginTop: 8 }}>{smsMsg}</div>}
+          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "#E8F6EC", border: "1px solid rgba(0,230,153,0.4)", color: "#248A3D", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
+          {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 
         {/* Checklist / Playbook steps (was Procedures) */}
@@ -2152,7 +2428,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </select>
           </div>}
           {/* Phase controls — one tap for the phases we actually run, or type your own. */}
-          <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <div style={{ background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             {phases.length === 0 && <div style={{ marginBottom: 8 }}><Small>Group your steps into phases (Wiring, Trim, Headend, Program).</Small></div>}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {PRESET_PHASES.map(name => {
@@ -2167,9 +2443,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </div>
           </div>
 
-          {stepErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(255,77,77,0.12)", border: "1px solid rgba(255,77,77,0.35)" }}>
-            <div style={{ fontSize: 13, color: "#FF4D4D" }}>{stepErr.msg} Nothing was saved — please try again.</div>
-            {stepErr.detail && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Details: {stepErr.detail}</div>}
+          {stepErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "#FFECEC", border: "1px solid rgba(255,77,77,0.35)" }}>
+            <div style={{ fontSize: 13, color: "#D70015" }}>{stepErr.msg} Nothing was saved — please try again.</div>
+            {stepErr.detail && <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 2 }}>Details: {stepErr.detail}</div>}
           </div>}
 
           {/* Each phase, in order, then anything not in a phase — so no step is ever lost. */}
@@ -2185,10 +2461,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <h2 style={{ fontSize: 15 }}>Parts &amp; procurement</h2>
             <button onClick={() => setShowAddPart(s => !s)} style={{ ...btn, padding: "6px 12px" }}>+ Add</button>
           </div>
-          {parts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: partsHere === parts.length ? "#00E699" : "rgba(255,255,255,0.8)", marginBottom: 10 }}>{partsSummary}</div>}
-          {partErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(255,77,77,0.12)", border: "1px solid rgba(255,77,77,0.35)" }}>
-            <div style={{ fontSize: 13, color: "#FF4D4D" }}>{partErr.msg} Please try again.</div>
-            {partErr.detail && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Details: {partErr.detail}</div>}
+          {parts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: partsHere === parts.length ? "#248A3D" : "#3A3A3C", marginBottom: 10 }}>{partsSummary}</div>}
+          {partErr && <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "#FFECEC", border: "1px solid rgba(255,77,77,0.35)" }}>
+            <div style={{ fontSize: 13, color: "#D70015" }}>{partErr.msg} Please try again.</div>
+            {partErr.detail && <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 2 }}>Details: {partErr.detail}</div>}
           </div>}
           {showAddPart && <div style={{ ...card, marginBottom: 10, display: "grid", gap: 8 }}>
             <input placeholder="Part name *" value={pForm.name} onChange={e => setPForm({ ...pForm, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
@@ -2204,34 +2480,34 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               const s = supplyOf(p.supply_status);
               const c = SUPPLY_COLOR[s];
               const saving = partSaving === p.id;
-              return <div key={p.id || i} style={{ background: "#131B2E", border: "1px solid rgba(255,255,255,0.08)", borderLeft: `3px solid ${c}`, borderRadius: 12, padding: "10px 12px", opacity: saving ? 0.6 : 1 }}>
+              return <div key={p.id || i} style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.08)", borderLeft: `3px solid ${c}`, borderRadius: 12, padding: "10px 12px", opacity: saving ? 0.6 : 1 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.name || "Part"}{p.sku ? <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}> · {p.sku}</span> : null}
+                      {p.name || "Part"}{p.sku ? <span style={{ color: "#8E8E93", fontWeight: 400 }}> · {p.sku}</span> : null}
                     </div>
-                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                    <div style={{ fontSize: 12, color: "#6E6E73" }}>
                       Qty {num(p.qty)}
-                      {num(p.unit_price) > 0 && <span style={{ color: "#00E699" }}> · {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span>}
+                      {num(p.unit_price) > 0 && <span style={{ color: "#248A3D" }}> · {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span>}
                     </div>
                   </div>
                   {/* One tap: where is this part right now? */}
                   <select value={s} disabled={!p.id || saving} title="Where is this part right now?"
                     onChange={e => patchPart(String(p.id), { supply_status: e.target.value })}
                     style={{ ...sel, flexShrink: 0, cursor: "pointer", fontWeight: 700, fontSize: 12, padding: "7px 8px", color: c, background: `${c}1f`, border: `1px solid ${c}66` }}>
-                    {SUPPLY_ORDER.map(v => <option key={v} value={v} style={{ background: "#0B1728", color: "white" }}>{SUPPLY_LABEL[v]}</option>)}
+                    {SUPPLY_ORDER.map(v => <option key={v} value={v} style={{ background: "#FFFFFF", color: "#1D1D1F" }}>{SUPPLY_LABEL[v]}</option>)}
                   </select>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-                  {p.po && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.4)", color: "#c7d2fe" }}>
+                  {p.po && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, background: "#EEEEFF", border: "1px solid rgba(99,102,241,0.4)", color: "#3634A3" }}>
                     {p.po.po_number ? `PO ${p.po.po_number}` : "On a PO"}{p.po.supplier ? ` · ${p.po.supplier}` : ""}
                   </span>}
-                  <label title="Wire, connectors, screws — stuff you don't track one by one" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!p.is_expendable} disabled={!p.id || saving} onChange={e => patchPart(String(p.id), { is_expendable: e.target.checked })} style={{ accentColor: "#00A3FF", cursor: "pointer" }} />
+                  <label title="Wire, connectors, screws — stuff you don't track one by one" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#6E6E73", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!p.is_expendable} disabled={!p.id || saving} onChange={e => patchPart(String(p.id), { is_expendable: e.target.checked })} style={{ accentColor: "#0071E3", cursor: "pointer" }} />
                     Expendable
                   </label>
                   <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{p.expected_at ? `Expected ${dayLabel(p.expected_at)}` : "Expected"}</span>
+                    <span style={{ fontSize: 12, color: "#6E6E73" }}>{p.expected_at ? `Expected ${dayLabel(p.expected_at)}` : "Expected"}</span>
                     <input type="date" value={String(p.expected_at ?? "").slice(0, 10)} disabled={!p.id || saving} title="When do we expect it?"
                       onChange={e => patchPart(String(p.id), { expected_at: e.target.value || null })}
                       style={{ ...sel, colorScheme: "dark", padding: "5px 6px", cursor: "pointer" }} />
@@ -2242,12 +2518,12 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>}
           {/* Purchase orders raised for this job */}
           {jobPos.length > 0 && <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>Purchase orders for this job</div>
+            <div style={{ fontSize: 12, color: "#6E6E73", marginBottom: 6 }}>Purchase orders for this job</div>
             <div style={{ display: "grid", gap: 6 }}>
-              {jobPos.map((po, i) => <div key={po.id || i} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px" }}>
+              {jobPos.map((po, i) => <div key={po.id || i} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", background: "#F5F5F7", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "8px 10px" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{po.po_number ? `PO ${po.po_number}` : "No PO number"}</div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{po.supplier || "No supplier"}{po.expected_at ? ` · expected ${dayLabel(po.expected_at)}` : ""}</div>
+                  <div style={{ fontSize: 12, color: "#6E6E73" }}>{po.supplier || "No supplier"}{po.expected_at ? ` · expected ${dayLabel(po.expected_at)}` : ""}</div>
                 </div>
                 <Badge tone={PO_STATUS_TONE[String(po.status)] ?? "default"}>{PO_STATUS_LABEL[String(po.status)] ?? String(po.status ?? "—")}</Badge>
               </div>)}
@@ -2260,7 +2536,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         {/* Team chat (was Messages) */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 8 }}>Team chat</h2>
-          {comments.length === 0 ? <Small>No messages yet.</Small> : comments.map((c, i) => <p key={c.id || i} style={{ margin: "6px 0", fontSize: 14 }}><b>{c.author_name || c.created_by || "Team"}:</b> <span style={{ color: "rgba(255,255,255,0.82)" }}>{c.content || c.body}</span></p>)}
+          {comments.length === 0 ? <Small>No messages yet.</Small> : comments.map((c, i) => <p key={c.id || i} style={{ margin: "6px 0", fontSize: 14 }}><b>{c.author_name || c.created_by || "Team"}:</b> <span style={{ color: "#3A3A3C" }}>{c.content || c.body}</span></p>)}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input placeholder="Write a message…" value={chat} onChange={e => setChat(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addComment(); }} style={{ ...input, padding: 9 }} />
             <button onClick={addComment} style={btn}>Send</button>
@@ -2276,18 +2552,18 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </label>
           </div>
           {photos.length === 0 ? <Small>No photos yet. At least one is required to complete the job.</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px,1fr))", gap: 8 }}>
-            {photos.map((p, i) => <a key={p.id || i} href={p.file_url || p.url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+            {photos.map((p, i) => <a key={p.id || i} href={p.file_url || p.url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(0,0,0,0.12)" }}>
               <img src={p.file_url || p.url} alt={p.caption || "Photo"} style={{ width: "100%", height: 84, objectFit: "cover", display: "block" }} />
             </a>)}
           </div>}
         </Card>
 
-        {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "rgba(255,255,255,0.8)", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
+        {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "#3A3A3C", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
         </>)}
 
-        {bucketOf(wo.status) !== "Done" && <div>
-          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#10b981" : "rgba(255,255,255,0.08)", color: canComplete ? "white" : "rgba(255,255,255,0.45)", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
-          {!canComplete && <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#fbbf24", textAlign: "center", marginTop: 8 }}><Lock size={12} /> {completeBlockReason}</p>}
+        {bucketOf(stOf(wo)) !== "Done" && <div>
+          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#248A3D" : "#F5F5F7", color: canComplete ? "white" : "#6E6E73", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
+          {!canComplete && <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#B25000", textAlign: "center", marginTop: 8 }}><Lock size={12} /> {completeBlockReason}</p>}
         </div>}
       </div>}
     </div>
