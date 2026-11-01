@@ -237,7 +237,7 @@ export function EventPage({ eventId, onClose, onChanged }: { eventId: string; on
           <div className="sub">
             <span>{fmtDate(e.event_date, true)}{e.start_time ? ` · ${fmtTime(e.start_time)}${e.end_time ? `–${fmtTime(e.end_time)}` : ''}` : ''}</span>
             {(e.venue || e.property_name) && <span>{e.venue || e.property_name}{e.booth_number ? ` · Booth ${e.booth_number}` : ''}</span>}
-            {d.site && <a href={`/sites/${d.site.id}`}>Property: {d.site.name}</a>}
+            {d.site && <a href={`/?tab=systems&site=${d.site.id}`}>Property: {d.site.name}</a>}
             {d.deal && <a href={`/crm/opportunities/${d.deal.id}`}>Deal: {d.deal.name}</a>}
             {e.host_name && <span>Host: {e.host_name}</span>}
           </div>
@@ -383,7 +383,7 @@ function Overview({ d, stats, patchEvent, updItem, goTab }: { d: Detail; stats: 
         {(d.site || d.deal) && (
           <div className="ep-card">
             <h2>Linked</h2>
-            {d.site && <a className="ep-row" style={{ textDecoration: 'none', color: 'inherit' }} href={`/sites/${d.site.id}`}><span style={{ flex: 1 }}>Property · <b>{d.site.name}</b></span><span style={{ color: BRAND }}>Open ›</span></a>}
+            {d.site && <a className="ep-row" style={{ textDecoration: 'none', color: 'inherit' }} href={`/?tab=systems&site=${d.site.id}`}><span style={{ flex: 1 }}>Property · <b>{d.site.name}</b></span><span style={{ color: BRAND }}>Open ›</span></a>}
             {d.deal && <a className="ep-row" style={{ textDecoration: 'none', color: 'inherit' }} href={`/crm/opportunities/${d.deal.id}`}><span style={{ flex: 1 }}>Deal · <b>{d.deal.name}</b>{d.deal.stage ? <span className="ev-note"> · {d.deal.stage}</span> : null}</span><span style={{ color: BRAND }}>Open ›</span></a>}
           </div>
         )}

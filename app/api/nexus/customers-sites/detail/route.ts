@@ -145,7 +145,7 @@ async function fetchSite(id: string, orgId: string | null, isCorporate: boolean)
       { label: 'Notes', value: data.notes },
     ]),
     actions: [
-      { label: 'Open Site', href: `/sites/${data.id}` },
+      { label: 'Open Site', href: `/?tab=systems&site=${data.id}` },
       { label: 'Open Systems', href: '/access' },
       { label: 'Open Jobs', href: '/maintenance' },
     ],

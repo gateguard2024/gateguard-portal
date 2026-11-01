@@ -53,7 +53,7 @@ export async function getSiteUniFiCloud(siteId: string): Promise<UniFiCloudCreds
   return { apiKey, siteId: c?.cloud_site_id || null, hostId: c?.cloud_host_id || null }
 }
 
-export interface UniFiDevice { name: string; model: string | null; type: string | null; ip: string | null; version: string | null; uptime_s: number | null; clients: number | null; online: boolean }
+export interface UniFiDevice { name: string; model: string | null; type: string | null; ip: string | null; version: string | null; uptime_s: number | null; clients: number | null; online: boolean; mac?: string | null; update_available?: boolean; product_line?: string | null }
 export interface UniFiOverview {
   connected: boolean
   site: { id: string | null; name: string | null }
@@ -62,6 +62,8 @@ export interface UniFiOverview {
   clients: { wifi: number; wired: number; guest: number; total: number }
   devices: UniFiDevice[]
   health: { total: number; online: number; offline: number }
+  /** Site Manager's own counters (additive). */
+  alerts?: { pending_updates: number; offline_gateways: number; offline_wifi: number; offline_wired: number; critical: number; internet_issues: number }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,6 +130,9 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
     clients: num(d.numSta, d.num_client, d.clientCount, d.connectedClients),
     // Site Manager reports device state in varied shapes/casing (e.g. "ONLINE",
     // "online", "connected", numeric 1, nested reportedState). Be tolerant.
+    mac: d.mac ?? null,
+    update_available: !!(d.updateAvailable || /update/i.test(String(d.firmwareStatus ?? ''))),
+    product_line: d.productLine ?? null,
     online: (() => {
       const raw = d.state ?? d.status ?? d.connectionState ?? d.reportedState?.state ?? d.reportedState?.status
       const s = String(raw ?? '').toLowerCase()
@@ -151,14 +156,16 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
     const mine = rows.find((r: any) => (r.siteId ?? r.site_id) === (creds.siteId ?? site?.siteId)) ?? rows[0]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const periods: any[] = mine?.periods ?? mine?.data ?? []
-    trend = periods.map(pp => dlOf(pp?.data ?? pp)).filter((x): x is number => x != null)
-    const p = periods.length ? (periods[periods.length - 1]?.data ?? periods[periods.length - 1]) : (mine?.data ?? mine)
+    // Each period is { metricTime, data: { wan: { download_kbps, upload_kbps, avgLatency, packetLoss, uptime, ispName } } }.
+    const wanOf = (pp: any) => pp?.data?.wan ?? pp?.data ?? pp // eslint-disable-line @typescript-eslint/no-explicit-any
+    trend = periods.map(pp => dlOf(wanOf(pp))).filter((x): x is number => x != null)
+    const p = periods.length ? wanOf(periods[periods.length - 1]) : wanOf(mine)
     download_mbps = dlOf(p)
     upload_mbps = num(p?.upload_kbps != null ? p.upload_kbps / 1000 : null, p?.wan?.upload_mbps, p?.uploadMbps, p?.upload_mbps)
-    latency_ms = num(p?.latency_avg_ms, p?.wan?.latency_ms, p?.latencyMs, p?.avgLatency)
+    latency_ms = num(p?.avgLatency, p?.latency_avg_ms, p?.wan?.latency_ms, p?.latencyMs)
     packet_loss_pct = num(p?.packetLoss, p?.wan?.packet_loss_pct, p?.packet_loss)
-    uptime_pct = num(p?.uptime, p?.wan?.uptime_pct, p?.uptimePercentage)
-    isp = isp ?? p?.isp_name ?? mine?.ispName ?? null
+    uptime_pct = num(stats.percentages?.wanUptime, p?.uptime, p?.wan?.uptime_pct, p?.uptimePercentage)
+    isp = isp ?? p?.ispName ?? p?.isp_name ?? mine?.ispName ?? null
   } catch { /* metrics optional */ }
 
   const gatewayOnline = devices.some(d => /gateway|udm|usg|uxg|ugw|console/i.test(`${d.type ?? ''}${d.model ?? ''}`) && d.online)
@@ -174,5 +181,13 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
     internet: { isp, status, public_ip: publicIp, download_mbps, upload_mbps, latency_ms, packet_loss_pct, uptime_pct, trend },
     clients: { wifi, wired, guest, total },
     devices, health: { total: devices.length, online, offline: devices.length - online },
+    alerts: {
+      pending_updates: num(counts.pendingUpdateDevice) ?? devices.filter(d => d.update_available).length,
+      offline_gateways: num(counts.offlineGatewayDevice) ?? 0,
+      offline_wifi: num(counts.offlineWifiDevice) ?? 0,
+      offline_wired: num(counts.offlineWiredDevice) ?? 0,
+      critical: num(counts.criticalNotification) ?? 0,
+      internet_issues: Array.isArray(stats.internetIssues) ? stats.internetIssues.length : (num(stats.internetIssues) ?? 0),
+    },
   }
 }

@@ -242,7 +242,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       const { data, error } = await q.order('name').limit(clamp(input.limit, 10))
       if (error) return { data: { error: error.message } }
       const rows = (data ?? []) as Row[]
-      return { data: rows, cards: rows.slice(0, 6).map(s => ({ kind: 'site', id: s.id, title: s.name, sub: [s.city, s.state].filter(Boolean).join(', ') + (s.units ? ` · ${s.units} units` : ''), href: `/sites/${s.id}` })) }
+      return { data: rows, cards: rows.slice(0, 6).map(s => ({ kind: 'site', id: s.id, title: s.name, sub: [s.city, s.state].filter(Boolean).join(', ') + (s.units ? ` · ${s.units} units` : ''), href: `/?tab=systems&site=${s.id}` })) }
     }
     case 'site_status': {
       let site: Row | null = null
@@ -260,7 +260,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       const offline = a.filter(x => /offline|down|fault/i.test(String(x.status))).slice(0, 10).map(x => ({ device: x.product_name, category: x.product_category, offline_since: x.offline_since ?? x.last_seen_at }))
       return {
         data: { site: site.name, devices: a.length, by_status: byStatus, offline, open_incidents: inc.data ?? [], open_work_orders: ((wos.data ?? []) as Row[]).map(woOut) },
-        cards: [{ kind: 'site', id: site.id, title: site.name, sub: `${a.length} devices · ${offline.length} offline · ${(inc.data ?? []).length} open incidents`, href: `/sites/${site.id}`, tone: offline.length || (inc.data ?? []).length ? 'red' : 'green' }],
+        cards: [{ kind: 'site', id: site.id, title: site.name, sub: `${a.length} devices · ${offline.length} offline · ${(inc.data ?? []).length} open incidents`, href: `/?tab=systems&site=${site.id}`, tone: offline.length || (inc.data ?? []).length ? 'red' : 'green' }],
       }
     }
     case 'live_systems': {
@@ -295,7 +295,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
         suggestion: offlineCams.length ? `${offlineCams.length} camera(s) offline — offer to create a work order if there isn't an open one.` : null,
       }
       const problems = offlineCams.length + (relays.ok ? relays.v.filter(r => r.on === null).length : 0)
-      return { data, cards: [{ kind: 'site', id: sid, title: `${site.name} — live`, sub: [doors.ok ? `${doors.v.length} doors` : null, cams.ok ? `${camList.length - offlineCams.length}/${camList.length} cameras online` : null, relays.ok ? `${relays.v.length} relays` : null].filter(Boolean).join(' · ') || 'No systems connected', href: `/sites/${sid}`, tone: problems ? 'red' : 'green' }] }
+      return { data, cards: [{ kind: 'site', id: sid, title: `${site.name} — live`, sub: [doors.ok ? `${doors.v.length} doors` : null, cams.ok ? `${camList.length - offlineCams.length}/${camList.length} cameras online` : null, relays.ok ? `${relays.v.length} relays` : null].filter(Boolean).join(' · ') || 'No systems connected', href: `/?tab=systems&site=${sid}`, tone: problems ? 'red' : 'green' }] }
     }
     case 'find_tasks': {
       let q = scoped('todos', 'id, title, status, priority, due_date, assigned_to, assigned_to_name, created_by, linked_label', ctx).not('status', 'in', '(done,completed,cancelled)')

@@ -242,7 +242,7 @@ export function ProductPage({ id, onClose, onChanged, onOpen, catalog = [], isCo
               <div className="pp-card">
                 <h2>Installed at ({d.used.installed.length})</h2>
                 {d.used.installed.length === 0 ? <p className="pp-empty" style={{ margin: 0 }}>Not recorded at any site.</p>
-                  : d.used.installed.slice(0, 50).map(a => <a key={a.id} className="pp-row" href={`/sites/${a.site_id}`}><span style={{ flex: 1 }}>{a.site?.name ?? 'Site'}{a.location_note ? <span className="pp-empty"> · {a.location_note}</span> : null}</span><span className="m">{a.serial_number ? `SN ${a.serial_number}` : cap(a.status)}</span></a>)}
+                  : d.used.installed.slice(0, 50).map(a => <a key={a.id} className="pp-row" href={`/?tab=systems&site=${a.site_id}`}><span style={{ flex: 1 }}>{a.site?.name ?? 'Site'}{a.location_note ? <span className="pp-empty"> · {a.location_note}</span> : null}</span><span className="m">{a.serial_number ? `SN ${a.serial_number}` : cap(a.status)}</span></a>)}
               </div>
               <div className="pp-card">
                 <h2>Purchase orders ({d.used.purchases.length})</h2>

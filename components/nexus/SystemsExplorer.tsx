@@ -37,6 +37,19 @@ export function SystemsExplorer() {
     window.scrollTo({ top: 0 });
   };
 
+  // Deep link: /?tab=systems&site=<id> (Lexi, Events, Catalog, Calendar…) opens that property.
+  useEffect(() => {
+    if (!sites || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('site');
+    if (!id) return;
+    params.delete('site');
+    const qs = params.toString();
+    try { window.history.replaceState({}, '', qs ? `/?${qs}` : '/'); } catch { /* file:// previews */ }
+    open(sites.find(s => String(s.id) === id) ?? { id, name: 'Property' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sites]);
+
   const sorted = useMemo(() => [...(sites ?? [])].sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''))), [sites]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();

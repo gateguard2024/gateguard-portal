@@ -211,7 +211,7 @@ export async function GET(req: NextRequest) {
         id: pm.id, type: 'pm_schedule',
         title: siteName ? `PM: ${siteName}` : `PM: ${pm.schedule_type ?? 'Maintenance'}`,
         date: etDateOf(dueIso), status: 'scheduled', color: '#0B7285',
-        link: pm.site_id ? `/sites/${pm.site_id}` : '/dispatch',
+        link: pm.site_id ? `/?tab=systems&site=${pm.site_id}` : '/dispatch',
       })
     }
 

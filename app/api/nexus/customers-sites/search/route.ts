@@ -124,7 +124,7 @@ async function searchSites(q: string, orgId: string | null, isCorporate: boolean
     title: row.name || 'Unnamed Site',
     subtitle: compact([row.property_type, row.units ? `${row.units} units` : null, addr(row)]) || 'Site record',
     meta: compact([row.status, row.primary_contact_name || row.pm_name]) || undefined,
-    href: `/sites/${row.id}`,
+    href: `/?tab=systems&site=${row.id}`,
     data: {
       units: typeof row.units === 'number' ? row.units : (row.units ? Number(row.units) || null : null),
       address: row.address ?? null,

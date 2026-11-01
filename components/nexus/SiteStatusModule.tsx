@@ -147,7 +147,7 @@ export function SiteStatusModule() {
             {/* ~4 rows visible, the rest scroll */}
             <div style={{ maxHeight: 192, overflowY: 'auto' }}>
               {data.sites.map((s, i) => (
-                <a key={s.id} href={`/sites/${s.id}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) 92px 76px 80px 96px 78px', alignItems: 'center', gap: 10, padding: '10px 0', textDecoration: 'none', color: 'inherit', borderTop: i > 0 ? `1px solid ${C.hair2}` : 'none' }}>
+                <a key={s.id} href={`/?tab=systems&site=${s.id}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) 92px 76px 80px 96px 78px', alignItems: 'center', gap: 10, padding: '10px 0', textDecoration: 'none', color: 'inherit', borderTop: i > 0 ? `1px solid ${C.hair2}` : 'none' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: HEALTH[s.health] }} />
                     <span style={{ minWidth: 0 }}>
