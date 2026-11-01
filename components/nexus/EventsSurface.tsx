@@ -145,7 +145,7 @@ export function EventsSurface() {
           : <MonthCal events={shown} onOpen={setOpenId} />}
       </div>
 
-      {creating && <CreateEvent templates={templates} initialTemplate={creating.templateId} onClose={() => setCreating(null)} onCreated={id => { setCreating(null); void load(); setOpenId(id) }} />}
+      {creating && <CreateEvent templates={templates} initialTemplate={creating.templateId} onClose={() => setCreating(null)} onCreated={(id, warning) => { setCreating(null); void load(); setOpenId(id); if (warning) setErr(warning) }} />}
       {plansOpen && <PlansManager templates={templates} onClose={() => setPlansOpen(false)} onChanged={loadTemplates} onUse={id => { setPlansOpen(false); setCreating({ templateId: id }) }} />}
       {openId && <EventPage eventId={openId} onClose={() => setOpenId(null)} onChanged={() => { void load(); void loadTemplates() }} />}
     </section>
@@ -297,7 +297,8 @@ function StartFromPlan({ templates, onPick }: { templates: TemplateRow[]; onPick
 }
 
 // ── New event ────────────────────────────────────────────────────────────────
-function CreateEvent({ templates, initialTemplate, onClose, onCreated }: { templates: TemplateRow[]; initialTemplate?: string; onClose: () => void; onCreated: (id: string) => void }) {
+function CreateEvent({ templates, initialTemplate, onClose, onCreated }: { templates: TemplateRow[]; initialTemplate?: string; onClose: () => void; onCreated: (id: string, warning: string | null) => void }) {
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
   const [step, setStep] = useState<1 | 2>(initialTemplate !== undefined ? 2 : 1)
   const [tplId, setTplId] = useState<string>(initialTemplate ?? '')
   const tpl = templates.find(t => t.id === tplId)
@@ -340,7 +341,7 @@ function CreateEvent({ templates, initialTemplate, onClose, onCreated }: { templ
       const r = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, title: f.title.trim() || autoTitle(), template_id: tplId || null }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok || !j.event) { setErr(j.error || 'Couldn’t create the event.'); setBusy(false); return }
-      onCreated(j.event.id)
+      onCreated(j.event.id, Array.isArray(j.warnings) && j.warnings.length ? `The event was created, but part of the plan didn’t copy: ${j.warnings.join('; ')}` : null)
     } catch { setErr('Couldn’t create the event.'); setBusy(false) }
   }
 
@@ -456,7 +457,7 @@ function CreateEvent({ templates, initialTemplate, onClose, onCreated }: { templ
         {step === 2 && (
           <div className="mf">
             <button className="ev-b line" onClick={onClose}>Cancel</button>
-            <button className="ev-b pri" disabled={busy} onClick={submit}>{busy ? 'Creating…' : 'Create event'}</button>
+            <button className="ev-b pri" disabled={busy || (!!tpl && !f.event_date)} title={tpl && !f.event_date ? 'Pick the event date first' : undefined} onClick={submit}>{busy ? 'Creating…' : 'Create event'}</button>
           </div>
         )}
       </div>
@@ -466,6 +467,7 @@ function CreateEvent({ templates, initialTemplate, onClose, onCreated }: { templ
 
 // ── Plans (templates) ────────────────────────────────────────────────────────
 function PlansManager({ templates, onClose, onChanged, onUse }: { templates: TemplateRow[]; onClose: () => void; onChanged: () => Promise<void> | void; onUse: (id: string) => void }) {
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
   const [edit, setEdit] = useState<{ id: string; name: string; event_type: string; description: string; default_budget: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -514,8 +516,8 @@ function PlansManager({ templates, onClose, onChanged, onUse }: { templates: Tem
                   <td className="hide-sm ev-note">{planCounts(t) || 'Empty'}{t.default_budget ? ` · ~${money(t.default_budget)}` : ''}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="ev-b pri sm" onClick={() => onUse(t.id)}>Use</button>{' '}
-                    <button className="ev-b line sm" onClick={() => setEdit({ id: t.id, name: t.name, event_type: t.event_type, description: t.description ?? '', default_budget: t.default_budget != null ? String(t.default_budget) : '' })}>Edit</button>
-                    {!t.is_starter && <> <button className="ev-b red sm" onClick={() => remove(t)}>Delete</button></>}
+                    {t.canEdit !== false && <button className="ev-b line sm" onClick={() => setEdit({ id: t.id, name: t.name, event_type: t.event_type, description: t.description ?? '', default_budget: t.default_budget != null ? String(t.default_budget) : '' })}>Edit</button>}
+                    {t.canEdit !== false && !/^a([1-9])\1{6}-0000-4000-8000-0{11}\1$/.test(t.id) && <> <button className="ev-b red sm" onClick={() => remove(t)}>Delete</button></>}
                   </td>
                 </tr>
               ))}

@@ -6,7 +6,7 @@
  * Access: lib/events-access.ts.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { eventsDb as supabase, guardEvent } from '@/lib/events-access'
+import { checkEventLinks, eventsDb as supabase, guardEvent } from '@/lib/events-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,30 +44,34 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const ros = Array.isArray(patch.run_of_show) ? patch.run_of_show : []
     patch.run_of_show = ros.slice(0, 60).map((r: { offset_min?: unknown; item?: unknown; owner?: unknown }) => ({ offset_min: Number(r?.offset_min) || 0, item: String(r?.item ?? '').slice(0, 200), owner: r?.owner ? String(r.owner).slice(0, 60) : '' })).filter((r: { item: string }) => r.item)
   }
-  if (!Object.keys(patch).length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
-  const { data, error } = await supabase.from('property_events').update(patch).eq('id', params.id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if ('event_date' in patch && patch.event_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(patch.event_date))) return NextResponse.json({ error: 'That date isn’t valid.' }, { status: 400 })
+  if ('site_id' in patch || 'opportunity_id' in patch) {
+    const linkErr = await checkEventLinks(g.user, { site_id: patch.site_id, opportunity_id: patch.opportunity_id })
+    if (linkErr) return NextResponse.json({ error: linkErr }, { status: 400 })
+  }
+  if (!Object.keys(patch).length && !body.shift_dates) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 
-  // Rescheduled with "move the plan too": slide every dated step by the same number of days.
+  // Rescheduled with "move the plan too": the date and every open dated step move
+  // together in one database transaction (migration 208) — never half-moved.
   let shifted = 0
   const oldDate = g.event.event_date as string | null
-  if (body.shift_dates && oldDate && patch.event_date && patch.event_date !== oldDate) {
-    const delta = Math.round((Date.parse(`${patch.event_date}T00:00:00Z`) - Date.parse(`${oldDate}T00:00:00Z`)) / 86400000)
-    if (isFinite(delta) && delta !== 0) {
-      const move = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) + delta * 86400000).toISOString().slice(0, 10)
-      for (const [table, col] of [['event_checklist_items', 'due_date'], ['event_supplies', 'needed_by'], ['event_campaign_steps', 'send_at']] as const) {
-        const { data: rows, error: rErr } = await supabase.from(table).select('*').eq('event_id', params.id).not(col, 'is', null)
-        if (rErr) return NextResponse.json({ error: `Event moved, but couldn’t move ${table}: ${rErr.message}`, event: data }, { status: 500 })
-        for (const r of (rows ?? []) as unknown as Record<string, string>[]) {
-          if (r.status === 'sent' || r.status === 'done') continue // finished steps stay where they were
-          const { error: uErr } = await supabase.from(table).update({ [col]: move(r[col]) }).eq('id', r.id).eq('event_id', params.id)
-          if (uErr) return NextResponse.json({ error: `Event moved, but couldn’t move ${table}: ${uErr.message}`, event: data }, { status: 500 })
-          shifted++
-        }
-      }
-    }
+  if (body.shift_dates && 'event_date' in patch && patch.event_date && patch.event_date !== oldDate) {
+    const { data: n, error: sErr } = await supabase.rpc('shift_event_dates', { p_event: params.id, p_new_date: patch.event_date })
+    if (sErr) return NextResponse.json({ error: `Couldn’t move the plan (run migration 208): ${sErr.message}` }, { status: 500 })
+    shifted = Number(n) || 0
+    delete patch.event_date
   }
-  return NextResponse.json({ event: data, ...(shifted ? { shifted } : {}) })
+  let event: Record<string, unknown> | null = null
+  if (Object.keys(patch).length) {
+    const { data, error } = await supabase.from('property_events').update(patch).eq('id', params.id).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    event = data
+  } else {
+    const { data, error } = await supabase.from('property_events').select('*').eq('id', params.id).single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    event = data
+  }
+  return NextResponse.json({ event, ...(shifted ? { shifted } : {}) })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {

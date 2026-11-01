@@ -24,9 +24,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const entries    = data ?? []
     const totalMins  = entries.reduce((acc, e) => acc + (e.duration_mins ?? 0), 0)
-    const activeEntry = entries.find(e => !e.clock_out) ?? null
+    // "Your" running clock: the caller's own open entry (a teammate's stays theirs).
+    const me = await getCurrentUser()
+    const mine = (e: { technician_id?: string | null; technician_name?: string | null }) => (me.id !== 'anonymous' && e.technician_id === me.id) || (!!me.name && e.technician_name === me.name)
+    const open = entries.filter(e => !e.clock_out)
+    const activeEntry = open.find(mine) ?? null
+    const othersActive = open.filter(e => !mine(e)).map(e => ({ id: e.id, technician_name: e.technician_name, clock_in: e.clock_in }))
 
-    return NextResponse.json({ entries, totalMins, activeEntry })
+    return NextResponse.json({ entries, totalMins, activeEntry, othersActive })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
@@ -38,6 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // Works for portal (Clerk) AND /tech (passes technician_name/technician_id).
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const body = await req.json()
     // user is optional — the /tech field tool calls without a Clerk session
     let user: { id?: string; name?: string; org_id?: string | null } | null = null
@@ -88,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 // PATCH — clock out (set clock_out, compute duration_mins)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await getCurrentUser()
+    if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const body = await req.json()
 
     if (!body.entry_id) {
@@ -100,7 +106,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .from('work_order_time_entries')
       .select('id, clock_in, clock_out')
       .eq('id', body.entry_id)
-      .single()
+      .eq('work_order_id', params.id)
+      .maybeSingle()
 
     if (fetchErr || !entry) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
     if (entry.clock_out)    return NextResponse.json({ error: 'Already clocked out' }, { status: 409 })
@@ -117,6 +124,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         notes:         body.notes ?? null,
       })
       .eq('id', body.entry_id)
+      .eq('work_order_id', params.id)
       .select()
       .single()
 

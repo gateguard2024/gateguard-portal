@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, type SMSEvent } from '@/lib/sms'
 import { getCurrentUser } from '@/lib/current-user'
+import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,7 @@ const LABEL: Record<string, string> = { scheduled: 'Scheduled notice', in_route:
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Work order not found' }, { status: 404 })
     let user: { name?: string } | null = null
     try { user = await getCurrentUser() } catch { user = null }
     const body = await req.json().catch(() => ({}))
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     if (!phone) return NextResponse.json({ error: 'No customer phone on file for this site. Add a primary contact phone on the site.' }, { status: 400 })
 
-    await sendSMS({
+    const sent = await sendSMS({
       event, to: phone,
       wo_number: wo.wo_number ?? '', title: wo.title ?? 'Service',
       customer_name: wo.customer_name ?? propertyName ?? 'Customer',
@@ -47,11 +49,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       property_name: propertyName ?? undefined,
       review_url: process.env.GOOGLE_REVIEW_URL || undefined,
     })
+    if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 502 })
 
-    // Best-effort log on the job timeline.
-    try {
-      await supabase.from('wo_comments').insert({ work_order_id: params.id, author_name: user?.name ?? 'System', content: `📱 Texted customer: ${LABEL[event] ?? event}${body.tech_eta ? ` (ETA ${body.tech_eta})` : ''}` })
-    } catch { /* non-blocking */ }
+    // Log it on the job timeline (the text already went, so a log failure is reported, not fatal).
+    const { error: logErr } = await supabase.from('wo_comments').insert({ work_order_id: params.id, author_name: user?.name ?? 'System', content: `📱 Texted customer: ${LABEL[event] ?? event}${body.tech_eta ? ` (ETA ${body.tech_eta})` : ''}` })
+    if (logErr) console.error('[notify-customer] log failed', logErr.message)
 
     return NextResponse.json({ ok: true, sent_to: phone.replace(/\d(?=\d{4})/g, '•') })
   } catch (e) {

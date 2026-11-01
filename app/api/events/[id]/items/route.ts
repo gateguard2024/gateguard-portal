@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { eventsDb as supabase, guardEvent } from '@/lib/events-access'
+import { sanitizeEmailHtml } from '@/lib/events-send'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ type Kind = 'checklist' | 'supply' | 'campaign' | 'guest'
 const CONFIG: Record<Kind, { table: string; fields: string[]; nums?: string[]; defaults: Record<string, unknown> }> = {
   checklist: { table: 'event_checklist_items', fields: ['title', 'category', 'due_date', 'status', 'owner_name', 'owner_user_id'], defaults: { status: 'open' } },
   supply:    { table: 'event_supplies',        fields: ['item', 'category', 'qty', 'vendor', 'cost', 'needed_by', 'status'], nums: ['qty', 'cost'], defaults: { status: 'needed' } },
-  campaign:  { table: 'event_campaign_steps',  fields: ['step', 'audience', 'send_at', 'email_subject', 'email_html', 'status', 'sort_order'], nums: ['sort_order'], defaults: { status: 'draft' } },
+  campaign:  { table: 'event_campaign_steps',  fields: ['step', 'audience', 'send_at', 'email_subject', 'email_html', 'status', 'sort_order', 'auto_send'], nums: ['sort_order'], defaults: { status: 'draft' } },
   guest:     { table: 'event_guests',          fields: ['name', 'email', 'phone', 'company', 'rsvp', 'notes', 'checked_in_at'], defaults: { rsvp: 'invited' } },
 }
 
@@ -26,6 +27,11 @@ function pick(cfg: { fields: string[]; nums?: string[] }, body: Record<string, u
     const v = body[k]
     out[k] = cfg.nums?.includes(k) ? (v === '' || v == null || !isFinite(Number(v)) ? null : Number(v)) : (v === '' ? null : v)
   }
+  // Email bodies are cleaned on save (simple formatting + safe links only).
+  if (typeof out.email_html === 'string') out.email_html = sanitizeEmailHtml(out.email_html)
+  if (typeof out.email_subject === 'string') out.email_subject = out.email_subject.replace(/[\r\n]+/g, ' ').slice(0, 250)
+  // Status 'sending' / 'partial' / 'sent' is set by the sender, not by hand.
+  if (cfg.fields.includes('step') && 'status' in out && !['draft', 'scheduled'].includes(String(out.status))) delete out.status
   return out
 }
 
@@ -42,7 +48,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const seen = new Set((existing ?? []).map(r => String(r.email ?? '').toLowerCase()).filter(Boolean))
     const rows: Record<string, unknown>[] = []
     let skipped = 0
-    for (const raw of (body.rows as Record<string, unknown>[]).slice(0, 500)) {
+    const all = body.rows as Record<string, unknown>[]
+    skipped += Math.max(0, all.length - 500) // over the limit — counted, not silently dropped
+    for (const raw of all.slice(0, 500)) {
       const r = pick(cfg, raw ?? {})
       const name = String(r.name ?? '').trim(); const email = String(r.email ?? '').trim().toLowerCase()
       if (!name && !email) { skipped++; continue }

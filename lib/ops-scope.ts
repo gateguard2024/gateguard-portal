@@ -34,6 +34,7 @@ export async function guardWorkOrder(req: NextRequest, woId: string): Promise<bo
   if (await isTechAuthed(req)) return true
 
   const user  = await getCurrentUser()
+  if (!user.id || user.id === 'anonymous') return false
   const scope = await resolveOrgScope(user)
   if (scope.all) return true
 
@@ -49,7 +50,9 @@ export async function guardWorkOrder(req: NextRequest, woId: string): Promise<bo
   // recordInScope's convention. Without this, assigning a tech to any org_id-less
   // WO 404'd the dispatcher's PATCH, so the assignment silently never saved and
   // the job never appeared at /tech.
-  if (orgId == null) return true
+  // A job with no company is Gate Guard's own (or legacy seed data): corporate
+  // only, the same rule the job window and lists use. (Was: open to anyone.)
+  if (orgId == null) return false
   return isInScope(scope, orgId)
 }
 
@@ -146,7 +149,9 @@ export async function recordInScope(table: string, id: string): Promise<boolean>
   const { data } = await db().from(table).select('org_id').eq('id', id).maybeSingle()
   if (!data) return false
   const orgId = (data as { org_id?: string | null }).org_id
-  if (orgId == null) return true
+  // A job with no company is Gate Guard's own (or legacy seed data): corporate
+  // only, the same rule the job window and lists use. (Was: open to anyone.)
+  if (orgId == null) return false
   return isInScope(scope, orgId)
 }
 

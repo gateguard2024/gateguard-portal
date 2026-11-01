@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/current-user'
 import { executeToolWithRevert, isSignedIn, type RevertPayload } from '@/lib/assistant-executor'
 import { TOOL_RISK_PROFILES, buildActionSummary, ACTION_TOOLS } from '@/lib/assistant-tools'
 import { resolveOrgScope, applyOrgScope, type OrgScope } from '@/lib/org-scope'
+import { canRunAssistantActions } from '@/lib/lexi/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -539,6 +540,8 @@ export async function POST(req: NextRequest) {
   if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const scope = await resolveOrgScope(user)
   const toolCtx = { user, scope }
+  // View-only Lexi users, client and master-agent accounts get answers, not actions.
+  const canAct = (await canRunAssistantActions(user)).ok
 
   const { messages, currentPage, userName } = await req.json()
 
@@ -665,7 +668,7 @@ RESPONSE RULES:
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
         system: systemPrompt,
-        tools: ACTION_TOOLS,
+        ...(canAct ? { tools: ACTION_TOOLS } : {}),
         messages: currentMessages,
       })
 
@@ -727,6 +730,12 @@ RESPONSE RULES:
                 tool_use_id: toolUseBlock.id,
                 content: JSON.stringify(toolResult),
               },
+              // Every tool call needs an answer, or the next request fails.
+              ...response.content.filter(b => b.type === 'tool_use' && b.id !== toolUseBlock.id).map(b => ({
+                type: 'tool_result' as const,
+                tool_use_id: (b as { id: string }).id,
+                content: 'Not run — one action at a time. Ask for it again if it is still needed.',
+              })),
             ],
           },
         ]

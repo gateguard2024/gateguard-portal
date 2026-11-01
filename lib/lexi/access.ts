@@ -37,3 +37,18 @@ export async function lexiAccess(user: PortalUser): Promise<AccessLevel> {
   const userOverride = (usr.data?.access_level ?? null) as AccessLevel | null
   return effectiveAccess({ role: normalizeRole(user.role), featureKey: LEXI_FEATURE, orgLevel, userOverride })
 }
+
+/**
+ * May this user run assistant ACTIONS (create / change records) through
+ * /api/assistant/execute + /revert? Used by Lexi, the floating assistant and My Day.
+ *   - Lexi 'view' users: no (look-up only).
+ *   - Client / property and master-agent accounts: no (not operational users).
+ *   - Everyone else signed in with a company: yes, scoped to their company.
+ */
+export async function canRunAssistantActions(user: PortalUser): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!user.id || user.id === 'anonymous') return { ok: false, error: 'Unauthorized' }
+  if (user.isCorporate) return { ok: true }
+  if (user.isClient || user.isMasterAgent) return { ok: false, error: 'Your account can’t make changes here.' }
+  if ((await lexiAccess(user)) === 'view') return { ok: false, error: 'Your Lexi access is view-only, so it can’t make changes.' }
+  return { ok: true }
+}

@@ -19,6 +19,8 @@
 
 - **Brivo remote unlock = `POST /v1/api/access-points/{id}/activate`, NOT `/unlock`.** `/unlock` (`RequestUnlockAccessPoint`) opens the door *on behalf of a card holder* and REQUIRES a `credentialValue` in the body — without it Brivo returns `403 "Invalid user"`. For an operator/admin "open gate" button use **`/activate`** ("Access Point Activation" — *"Unlocks an Access Point at the Administrator's request"*): no body, no credentialValue. Requirements: the Brivo admin account has unlock permission AND the door has **"Control From Browser" checked** in Brivo's Account Config Tool (per-door). `unlockBrivoDoor()` in `lib/brivo.ts` uses `/activate`. Confirmed working July 2026. (The "Enable Remote Access" account toggle just grants the dealer Support-Administrator access — NOT the fix.)
 - **Brivo auth = `grant_type: password`** with the site's stored Brivo username/password (`getSiteBrivoToken`). Reads (doors/users/events) work with any admin.
+- **Shelly relay timer:** `controlSiteShellyRelay(site, device, ch, on, timerSec)` — the timer flips it back after N s. Gate *pulse* = `on: true` + 1–10 s; *power-cycle* = `on: false` + N s. (Lexi had these swapped until Nov 2026.)
+- **PostgREST 12.2: `.or()` on an UPDATE/PATCH fails** with a bogus "column … does not exist". For conditional updates (locks, claims) use an RPC (see `claim_campaign_step`, migration 208).
 - **Shelly relays are matched by DEVICE NAME, not room.** `listSiteShellyRelays` only returns devices whose name contains the site name (or the `device_tag` field). If a relay is named "Front Gate" it won't match site "East Ponce Village" — set `device_tag` or rename the device. Server field = the account's API shard host (`shelly-12-eu.shelly.cloud`), not `control.shelly.cloud`.
 
 ---
@@ -456,10 +458,17 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 ---
 
-## MIGRATION STATUS (as of May 2026)
+## MIGRATION STATUS (as of Nov 2026)
+
+> ⚠️ **Numbering:** portal 200–204 and Nexus Resident (gatecard.co `v8.31-movein`) 200–207 both target the SAME Supabase project. Table names don't clash, but numbers do. Until the monorepo merges the folders, use the next number above BOTH ranges (next free: 209) — or switch to timestamped names.
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 208 | Events: per-guest send log + lock + auto-send, `shift_event_dates`, `event_rollups`, `claim_campaign_step` RPCs (205–207 are Nexus Resident's numbers) | ⏳ run on beta then prod (after 204) |
+| 204 | Events pro fields + 4 starter plans + RLS service-role-only on all event tables | ⏳ run on beta then prod |
+| 203 | `ai.lexi` feature (Lexi per dealer) | ⏳ run on beta then prod |
+| 202 | Catalog pro fields (labor_hours, unit, warranty_months, accessories) | ⏳ run on beta then prod |
+| 199–201 | Lexi conversations, brain/recordings, morning-brief settings | ⏳ run on beta then prod |
 | 177 | `client_portals.access_pin` (customer portal PIN gate, sha256 hash) | ⏳ run on beta then prod |
 | 176 | `gate_reboots` (per-site camera-monitored power-cycle macros) + RLS + GRANT | ⏳ run on beta then prod |
 | 175 | Enable RLS + service_role policy on `client_portals` (fixes Supabase rls_disabled_in_public) | ⏳ run on beta then prod |
@@ -497,6 +506,10 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - **Fix (in code, needs deploy):** `lib/brivo.ts` `listBrivoEvents()` now sends `occurredAfter`/`occurredBefore` (last 7 days, ISO 8601 **without** milliseconds — `…ssZ`). `brivoGet` forwards them.
 - **To verify after deploy:** hit `…/api/portal/<slug>/diag` → `brivo_site_token.events` should be a NUMBER. If still 400, the `lib/brivo.ts` change isn't in the deploy. If a NEW error, capture it.
 - Everything else (cameras, gates, billing) is confirmed working on the Marbella site.
+
+### Audit — November 1, 2026 (all session work proofed)
+Fixed: Lexi relay on/off inverted · view-only/client users could run actions via `/api/assistant/execute` · undo payloads now HMAC-signed (10-min, per user) · linked-record scope checks · job sub-routes (photos/time/comments/notify) had no ownership check · `guardWorkOrder` let anonymous + any dealer into no-company jobs (now corporate-only) · job PATCH accepted `org_id`/foreign techs · customer "Texted ✓" when Twilio failed · detached notification sends (now awaited) · duplicate review texts · calendar times 4–5 h off (UTC) · corporate CSV import could globalize a dealer's private SKU · `/api/kb/*` auth() broken by middleware bypass · Events: preview XSS, email HTML sanitized, per-guest send log + lock + batch sending (no double sends), leads used wrong owner column, role gate (no client/master-agent), link checks, atomic reschedule, ET dates.
+Open (decisions/bigger builds): plain-`user` role sees all company leads/jobs in Lexi + most of the portal (assigned-only rule only enforced for deals) · Lexi chat replies saved only at the end · Needs-a-date panel reads `/api/dispatch` (newest 300, ignores Me/Team) · old `NexusAssistant` (PortalShell) duplicates Lexi — retire · 94 committed `.fuse_hidden*` files (now gitignored) · single-source plan → `claude/Audit-2026-11-01.md` in the NEXUS project.
 
 ### NEXT UP (session 18 queue, in order)
 Portal Dashboard (polish) → **Sales Tab** → **rough estimator** → **Quotes** sections.

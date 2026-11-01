@@ -180,7 +180,9 @@ export function ProductEditor({
   isCorporate?: boolean;
   catalog?: ProductRow[];
 }) {
-  const isEdit = !!initial.id;
+  // Once a new product has been created, further saves update it (never create a second one).
+  const [savedId, setSavedId] = useState<string | null>(initial.id ?? null);
+  const isEdit = !!savedId;
   const [form, setForm] = useState<ProductForm>(initial);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -345,13 +347,14 @@ export function ProductEditor({
       const res = await fetch('/api/products', {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isEdit ? { id: form.id, ...payload } : payload),
+        body: JSON.stringify(isEdit ? { id: savedId, ...payload } : payload),
       });
       const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(d.error ?? 'Save failed');
       // Gate Guard cost lives server-only (product_costs) — corporate only. Saving it
       // also sets the locked dealer cost (cost + 10%) on the product.
       let saved = d.product as ProductRow;
+      if (saved?.id) { setSavedId(saved.id); setForm(f => ({ ...f, id: saved.id })); }
       if (isCorporate && saved?.id && form.ggCost !== initial.ggCost) {
         const c = await fetch('/api/admin/product-costs', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: saved.id, gg_cost: form.ggCost }) });
         const cd = await c.json().catch(() => ({}));

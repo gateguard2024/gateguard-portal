@@ -20,8 +20,9 @@ import { syncCalendars } from '@/inngest/functions/sync-calendars'
 import { ingestManual } from '@/inngest/functions/ingest-manual'
 import { fleetHealth } from '@/inngest/functions/fleet-health'
 import { lexiMorningBrief } from '@/inngest/functions/lexi-morning-brief'
+import { eventsAutoSend } from '@/inngest/functions/events-auto-send'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief],
+  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief, eventsAutoSend],
 })

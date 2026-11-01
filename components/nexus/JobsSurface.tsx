@@ -259,6 +259,16 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Deep link: /?tab=jobs&job=<id> opens that job page; the URL follows the open job.
+  useEffect(() => { try { const id = new URLSearchParams(window.location.search).get('job'); if (id) setSelectedJobId(id) } catch { /* ignore */ } }, [])
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href)
+      if (selectedJobId) u.searchParams.set('job', selectedJobId); else u.searchParams.delete('job')
+      window.history.replaceState(null, '', u.toString())
+    } catch { /* ignore */ }
+  }, [selectedJobId])
+
   // Opens the full job page (same one the Operations Hub uses).
   function openJob(id: string) {
     setStatus(null)

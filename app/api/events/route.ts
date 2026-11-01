@@ -7,43 +7,42 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { eventOrgIds, eventsDb as supabase, signedIn } from '@/lib/events-access'
+import { canUseEvents, checkEventLinks, eventOrgIds, eventsDb as supabase, EVENTS_DENIED, signedIn } from '@/lib/events-access'
+import { todayET } from '@/lib/tz'
 
 export const dynamic = 'force-dynamic'
 
-function addDays(dateStr: string | null | undefined, days: number): string | null {
-  if (!dateStr) return null
+function addDays(dateStr: string | null | undefined, days: number | null | undefined): string | null {
+  // An undated step in a plan stays undated (it isn't a day-of task).
+  if (!dateStr || days == null) return null
   const d = new Date(`${dateStr}T00:00:00`)
   if (isNaN(d.getTime())) return null
   d.setDate(d.getDate() + (days || 0))
   return d.toISOString().slice(0, 10)
 }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => todayET()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
 
 export async function GET() {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   const orgIds = await eventOrgIds(user)
-  let q = supabase.from('property_events').select('*').order('event_date', { ascending: true, nullsFirst: false }).limit(500)
+  // Newest dates first so upcoming events never fall off the end of the list.
+  let q = supabase.from('property_events').select('*').order('event_date', { ascending: false, nullsFirst: true }).limit(500)
   if (orgIds) q = q.in('org_id', orgIds)
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const events = (data ?? []) as Row[]
   const ids = events.map(e => e.id)
-  // Roll-ups for the board / list (one query per child table, not per event).
   const stats: Record<string, { done: number; total: number; late: number; yes: number; invited: number; checkedIn: number; spent: number }> = {}
   for (const id of ids) stats[id] = { done: 0, total: 0, late: 0, yes: 0, invited: 0, checkedIn: 0, spent: 0 }
   if (ids.length) {
-    const [cl, gu, su] = await Promise.all([
-      supabase.from('event_checklist_items').select('event_id, status, due_date').in('event_id', ids),
-      supabase.from('event_guests').select('event_id, rsvp, checked_in_at').in('event_id', ids),
-      supabase.from('event_supplies').select('event_id, cost, qty').in('event_id', ids),
-    ])
-    for (const c of (cl.data ?? []) as Row[]) { const s = stats[c.event_id]; if (!s) continue; s.total++; if (c.status === 'done') s.done++; else if (c.due_date && c.due_date < today()) s.late++ }
-    for (const g of (gu.data ?? []) as Row[]) { const s = stats[g.event_id]; if (!s) continue; s.invited++; if (g.rsvp === 'yes' || g.rsvp === 'attended') s.yes++; if (g.checked_in_at || g.rsvp === 'attended') s.checkedIn++ }
-    for (const x of (su.data ?? []) as Row[]) { const s = stats[x.event_id]; if (!s) continue; s.spent += (Number(x.cost) || 0) * (Number(x.qty) || 1) }
+    // One database call does the counting (migration 208), so big lists stay right.
+    const { data: roll, error: rErr } = await supabase.rpc('event_rollups', { p_ids: ids, p_today: today() })
+    if (rErr) return NextResponse.json({ error: `Couldn’t total the events (run migration 208): ${rErr.message}` }, { status: 500 })
+    for (const r of (roll ?? []) as Row[]) stats[r.event_id] = { done: r.done, total: r.total, late: r.late, yes: r.yes, invited: r.invited, checkedIn: r.checked_in, spent: Number(r.spent) || 0 }
   }
   return NextResponse.json({ events: events.map(e => ({ ...e, stats: stats[e.id] })) })
 }
@@ -51,10 +50,16 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   if (!body.title?.trim()) return NextResponse.json({ error: 'title is required' }, { status: 400 })
+  // A plan's steps are dated back from the event day — so a plan needs a date.
+  if (body.template_id && !body.event_date) return NextResponse.json({ error: 'Pick the event date so every step gets its due date.' }, { status: 400 })
+  if (body.event_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(body.event_date))) return NextResponse.json({ error: 'That date isn’t valid.' }, { status: 400 })
+  const linkErr = await checkEventLinks(user, { site_id: body.site_id, opportunity_id: body.opportunity_id, template_id: body.template_id })
+  if (linkErr) return NextResponse.json({ error: linkErr }, { status: 400 })
   const num = (v: unknown) => (v === '' || v == null || !isFinite(Number(v)) ? null : Number(v))
 
   const { data: evt, error } = await supabase.from('property_events').insert({
@@ -95,11 +100,13 @@ export async function POST(req: NextRequest) {
   // Clone the template's checklist / supplies / campaign with dates relative to the event.
   const warnings: string[] = []
   if (body.template_id) {
-    const [{ data: tTasks }, { data: tSupplies }, { data: tCampaign }] = await Promise.all([
+    const [ta, su, ca] = await Promise.all([
       supabase.from('event_template_tasks').select('*').eq('template_id', body.template_id),
       supabase.from('event_template_supplies').select('*').eq('template_id', body.template_id),
       supabase.from('event_template_campaign').select('*').eq('template_id', body.template_id),
     ])
+    for (const x of [ta, su, ca]) if (x.error) warnings.push(`plan: ${x.error.message}`)
+    const tTasks = ta.data, tSupplies = su.data, tCampaign = ca.data
     if (tTasks?.length) {
       const roleName = (r: unknown) => !r || r === 'host' ? (evt.host_name ?? null) : String(r).charAt(0).toUpperCase() + String(r).slice(1)
       const { error: e1 } = await supabase.from('event_checklist_items').insert((tTasks as Row[]).map(t => ({ event_id: evt.id, category: t.category, title: t.title, owner_name: roleName(t.owner_role), due_date: addDays(evt.event_date, t.offset_days), status: 'open' })))
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
       if (e2) warnings.push(`supplies: ${e2.message}`)
     }
     if (tCampaign?.length) {
-      const { error: e3 } = await supabase.from('event_campaign_steps').insert((tCampaign as Row[]).map(c => ({ event_id: evt.id, step: c.step, send_at: addDays(evt.event_date, c.offset_days), email_subject: c.email_subject, email_html: c.email_html, status: 'draft', sort_order: c.sort_order })))
+      const { error: e3 } = await supabase.from('event_campaign_steps').insert((tCampaign as Row[]).map(c => ({ event_id: evt.id, step: c.step, send_at: addDays(evt.event_date, c.offset_days), email_subject: c.email_subject, email_html: c.email_html, status: 'draft', sort_order: c.sort_order, audience: c.audience ?? null })))
       if (e3) warnings.push(`campaign: ${e3.message}`)
     }
   }

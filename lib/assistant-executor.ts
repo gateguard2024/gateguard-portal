@@ -1,9 +1,11 @@
+import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import type { PortalUser } from '@/lib/current-user'
 import { isInScope, type OrgScope } from '@/lib/org-scope'
-import { getSiteBrivoToken, unlockBrivoDoor } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoDoors, unlockBrivoDoor } from '@/lib/brivo'
 import { getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
-import { controlSiteShellyRelay } from '@/lib/shelly'
+import { controlSiteShellyRelay, listSiteShellyRelays } from '@/lib/shelly'
+import { dealCtx, dealVisible } from '@/lib/sales-deals'
 import { canOperate } from '@/lib/system-access'
 
 const supabase = createClient(
@@ -31,8 +33,33 @@ async function insertSafe(table: string, row: Record<string, unknown>): Promise<
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type RevertPayload =
-  | { operation: 'delete'; table: string; id: string }
-  | { operation: 'update'; table: string; id: string; data: Record<string, unknown> }
+  | { operation: 'delete'; table: string; id: string; exp?: number; sig?: string }
+  | { operation: 'update'; table: string; id: string; data: Record<string, unknown>; exp?: number; sig?: string }
+
+// ── Undo tokens ──────────────────────────────────────────────────────────────
+// The undo payload goes to the browser and comes back. It is signed for this
+// user with a short expiry, so a caller can only undo what they just did —
+// never hand-craft "delete deal X" or "set rep_id = me".
+const UNDO_TTL_MS = 10 * 60 * 1000
+const undoSecret = () => process.env.ASSISTANT_UNDO_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev-undo-secret'
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`
+  if (v && typeof v === 'object') return `{${Object.keys(v as object).sort().map(k => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(',')}}`
+  return JSON.stringify(v ?? null)
+}
+function undoSig(p: RevertPayload, userId: string, exp: number) {
+  const body = stable({ op: p.operation, table: p.table, id: p.id, data: p.operation === 'update' ? p.data : null, uid: userId, exp })
+  return crypto.createHmac('sha256', undoSecret()).update(body).digest('base64url')
+}
+export function signRevert(p: RevertPayload, userId: string): RevertPayload {
+  const exp = Date.now() + UNDO_TTL_MS
+  return { ...p, exp, sig: undoSig(p, userId, exp) }
+}
+function revertSigOk(p: RevertPayload, userId: string): boolean {
+  if (!p.sig || !p.exp || p.exp < Date.now()) return false
+  const want = Buffer.from(undoSig(p, userId, p.exp)), got = Buffer.from(String(p.sig))
+  return want.length === got.length && crypto.timingSafeEqual(want, got)
+}
 
 export interface ExecuteResult {
   success: boolean
@@ -65,12 +92,17 @@ async function runTool(
       const site = await getAllowedVaultBrivoSite(ctx.user, siteId)
       if (!site) return { success: false, error: 'That site has no Brivo connection, or it’s outside your access.' }
       if (!(await canOperate(ctx.user, siteId, 'doors'))) return { success: false, error: 'You don’t have door access for this site.' }
+      let doorName = 'Door'
       try {
         const { token, apiKey } = await getSiteBrivoToken(siteId)
+        // Use the site's real door list — never the name the model typed.
+        const door = (await listBrivoDoors(token, apiKey)).find(d => String(d.id) === doorId)
+        if (!door) return { success: false, error: 'That door isn’t on this site’s Brivo account.' }
+        doorName = door.name || 'Door'
         await unlockBrivoDoor(token, apiKey, doorId)
       } catch (e) { return { success: false, error: e instanceof Error ? e.message : 'Brivo didn’t open the door.' } }
-      await auditSystem(siteId, 'door_unlock', 'brivo', `Door unlocked: ${args.door_name ?? 'Door'}`, `Unlocked by ${ctx.user.name} via Lexi`, { door_id: doorId, door_name: args.door_name ?? null, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
-      return { success: true, message: `${args.door_name ?? 'The gate'} is opening.` }
+      await auditSystem(siteId, 'door_unlock', 'brivo', `Door unlocked: ${doorName}`, `Unlocked by ${ctx.user.name} via Lexi`, { door_id: doorId, door_name: doorName, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
+      return { success: true, message: `${doorName} is opening.` }
     }
     case 'relay_action': {
       if (!(ctx.user.isCorporate && ctx.user.role === 'admin')) return { success: false, error: 'Only Gate Guard admins can control relays through Lexi.' }
@@ -80,12 +112,18 @@ async function runTool(
       if (!(await canOperate(ctx.user, siteId, 'relays'))) return { success: false, error: 'You don’t have relay access for this site.' }
       const pulse = args.mode === 'pulse'
       const secs = pulse ? Math.min(10, Math.max(1, Number(args.seconds) || 1)) : Math.min(120, Math.max(5, Number(args.seconds) || 10))
+      let relayName = 'Relay'
       try {
-        // Shelly's own flip-back timer brings it back, so nothing waits here.
-        await controlSiteShellyRelay(siteId, deviceId, channel, !pulse, secs)
+        // Only relays tagged for THIS site (Shelly accounts are shared across properties).
+        const relay = (await listSiteShellyRelays(siteId)).find(r => r.id === deviceId && r.channel === channel)
+        if (!relay) return { success: false, error: 'That relay isn’t on this site.' }
+        relayName = relay.name || 'Relay'
+        // pulse = ON for a moment (gate trigger); power-cycle = OFF for N seconds.
+        // Shelly's own flip-back timer restores it, so nothing waits here.
+        await controlSiteShellyRelay(siteId, deviceId, channel, pulse, secs)
       } catch (e) { return { success: false, error: e instanceof Error ? e.message : 'The relay didn’t respond.' } }
-      await auditSystem(siteId, pulse ? 'relay_pulse' : 'relay_power_cycle', 'shelly', `${pulse ? 'Relay pulsed' : 'Power-cycled'}: ${args.relay_name ?? 'relay'}`, `By ${ctx.user.name} via Lexi${pulse ? '' : ` (off ${secs}s)`}`, { device_id: deviceId, channel, seconds: secs, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
-      return { success: true, message: pulse ? `${args.relay_name ?? 'Relay'} pulsed.` : `${args.relay_name ?? 'Relay'} is off now and turns itself back on in ${secs} seconds.` }
+      await auditSystem(siteId, pulse ? 'relay_pulse' : 'relay_power_cycle', 'shelly', `${pulse ? 'Relay pulsed' : 'Power-cycled'}: ${relayName}`, `By ${ctx.user.name} via Lexi${pulse ? ` (on ${secs}s)` : ` (off ${secs}s)`}`, { device_id: deviceId, channel, seconds: secs, by_user_id: ctx.user.id, by_name: ctx.user.name, via: 'lexi' })
+      return { success: true, message: pulse ? `${relayName} pulsed for ${secs} second${secs === 1 ? '' : 's'}.` : `${relayName} is off now and turns itself back on in ${secs} seconds.` }
     }
 
 
@@ -420,6 +458,7 @@ async function runTool(
 
     case 'update_opportunity_stage': {
       const id = args.id as string
+      if (args.stage === 'won' || args.stage === 'lost') return { success: false, error: 'Use “mark won” or “mark lost” for that — they need a confirmation.' }
       const { data: existing, error: fetchError } = await supabase
         .from('opportunities')
         .select('stage')
@@ -633,7 +672,13 @@ export const ALLOWED_TOOLS = new Set<string>([
 /** Is this row inside the caller's company scope? Corporate always yes. */
 export async function rowInScope(table: string, id: string, ctx: ToolContext): Promise<boolean> {
   const col = ORG_COL[table]
-  if (!col || !id) return false
+  if (!col || !id || !/^[0-9a-f-]{36}$/i.test(id)) return false
+  if (table === 'opportunities') {
+    // Deals follow the Sales rules: company scope, plus "reps see only their own".
+    const { data, error } = await supabase.from('opportunities').select('id, dealer_org_id, rep_id').eq('id', id).maybeSingle()
+    if (error || !data) return false
+    return dealVisible(data as { dealer_org_id: string | null; rep_id: string | null }, await dealCtx(ctx.user))
+  }
   if (ctx.scope.all) {
     // Corporate: still confirm the row exists.
     const { data, error } = await supabase.from(table).select('id').eq('id', id).maybeSingle()
@@ -662,19 +707,51 @@ export async function executeToolWithRevert(
     const id = String(args[target[1]] ?? '')
     if (!(await rowInScope(target[0], id, ctx))) return { success: false, error: 'That record wasn’t found or isn’t yours to change.' }
   }
+  // Records an action links to must be the caller's too (no notes on another company's deal).
+  for (const [arg, table] of LINKED_ARGS) {
+    const v = args[arg]
+    if (v == null || v === '') continue
+    if (!(await rowInScope(table, String(v), ctx))) return { success: false, error: 'A linked record wasn’t found or isn’t yours.' }
+  }
+  if (toolName === 'create_todo' && typeof args.linked_id === 'string' && args.linked_id) {
+    const table = LINK_TYPE_TABLE[String(args.linked_type ?? '')]
+    if (table && !(await rowInScope(table, args.linked_id, ctx))) return { success: false, error: 'The record this task links to wasn’t found or isn’t yours.' }
+  }
+  if (toolName === 'assign_technician' && args.technician_id && !ctx.scope.all) {
+    const { data: tech, error } = await supabase.from('technicians').select('id, org_id').eq('id', String(args.technician_id)).maybeSingle()
+    if (error || !tech || !isInScope(ctx.scope, (tech as { org_id: string | null }).org_id)) return { success: false, error: 'That technician isn’t on your team.' }
+  }
 
   const result = await runTool(toolName, args, ctx)
 
-  // Stamp new rows with the caller's company (corporate rows stay as before).
-  if (result.success && result.revertPayload?.operation === 'delete' && ctx.user.org_id) {
-    const col = ORG_COL[result.revertPayload.table]
-    if (col) {
-      const { error } = await supabase.from(result.revertPayload.table).update({ [col]: ctx.user.org_id }).eq('id', result.revertPayload.id)
-      if (error) console.error('[assistant-executor] org stamp failed', result.revertPayload.table, error.message)
+  // Stamp new rows with the caller's company (corporate rows stay as before). If
+  // that fails, remove the row — a record with no company is invisible to its owner.
+  if (result.success && result.revertPayload?.operation === 'delete') {
+    const { table, id } = result.revertPayload
+    const col = ORG_COL[table]
+    const stamp: Record<string, unknown> = {}
+    if (col && ctx.user.org_id) stamp[col] = ctx.user.org_id
+    if (table === 'opportunities') {
+      const deals = await dealCtx(ctx.user)
+      if (deals.profileId) {
+        const { error } = await supabase.from('opportunities').update({ rep_id: deals.profileId }).eq('id', id).is('rep_id', null)
+        if (error) console.error('[assistant-executor] rep stamp failed', error.message)
+      }
+    }
+    if (Object.keys(stamp).length) {
+      const { error } = await supabase.from(table).update(stamp).eq('id', id)
+      if (error) {
+        await supabase.from(table).delete().eq('id', id)
+        return { success: false, error: `Couldn’t save it to your company (${error.message}).` }
+      }
     }
   }
+  if (result.success && result.revertPayload) result.revertPayload = signRevert(result.revertPayload, ctx.user.id)
   return result
 }
+
+const LINKED_ARGS: [string, string][] = [['opportunity_id', 'opportunities'], ['lead_id', 'leads']]
+const LINK_TYPE_TABLE: Record<string, string> = { opportunity: 'opportunities', work_order: 'work_orders', lead: 'leads' }
 
 export async function revertAction(
   payload: RevertPayload,
@@ -682,6 +759,7 @@ export async function revertAction(
 ): Promise<{ success: boolean; error?: string }> {
   if (!isSignedIn(ctx.user)) return { success: false, error: 'Not signed in.' }
   if (!ORG_COL[payload.table]) return { success: false, error: 'That can’t be undone here.' }
+  if (!revertSigOk(payload, ctx.user.id)) return { success: false, error: 'That undo has expired.' }
   if (!(await rowInScope(payload.table, payload.id, ctx))) return { success: false, error: 'That record wasn’t found or isn’t yours.' }
   if (payload.operation === 'delete') {
     const { error } = await supabase

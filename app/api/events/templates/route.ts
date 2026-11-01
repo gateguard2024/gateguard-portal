@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
-import { eventsDb as supabase, guardEvent, signedIn } from '@/lib/events-access'
+import { canUseEvents, eventOrgIds, eventsDb as supabase, EVENTS_DENIED, guardEvent, signedIn } from '@/lib/events-access'
 
 export const dynamic = 'force-dynamic'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,9 +20,12 @@ const NONE = '00000000-0000-0000-0000-000000000000'
 export async function GET() {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   // Corporate starters (org_id NULL) + this company's own templates (corporate sees all).
+  // Starters + plans owned by any of the caller's companies (master dealers see their dealers' plans).
+  const orgIds = await eventOrgIds(user)
   let q = supabase.from('event_templates').select('*')
-  if (!user.isCorporate) q = q.or(`org_id.is.null,org_id.eq.${user.org_id ?? NONE}`)
+  if (orgIds) q = q.or(`org_id.is.null,org_id.in.(${orgIds.join(',') || NONE})`)
   const { data, error } = await q.order('is_starter', { ascending: false }).order('name', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const rows = (data ?? []) as Row[]
@@ -39,11 +42,13 @@ export async function GET() {
     for (const r of (b.data ?? []) as Row[]) if (counts[r.template_id]) counts[r.template_id].supplies++
     for (const r of (c.data ?? []) as Row[]) if (counts[r.template_id]) counts[r.template_id].emails++
   }
-  return NextResponse.json({ templates: rows.map(t => ({ ...t, counts: counts[t.id] })) })
+  // canEdit tells the page whether to offer Edit / Delete.
+  return NextResponse.json({ templates: rows.map(t => ({ ...t, counts: counts[t.id], canEdit: user.isCorporate || (t.org_id != null && !!orgIds?.includes(t.org_id)) })) })
 }
 
+// Days from the event to a step; null when either is undated (an undated step stays undated).
 const days = (from: string | null | undefined, to: string | null | undefined) =>
-  from && to ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) : 0
+  from && to ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) : null
 
 async function saveFromEvent(user: PortalUser, eventId: string, name?: string) {
   const g = await guardEvent(eventId); if ('error' in g) return NextResponse.json({ error: g.error }, { status: g.status })
@@ -55,9 +60,11 @@ async function saveFromEvent(user: PortalUser, eventId: string, name?: string) {
   ])
   const err = cl.error || su.error || ca.error
   if (err) return NextResponse.json({ error: err.message }, { status: 500 })
+  const ownerOrg = evt.org_id ?? user.org_id ?? null
   const { data: tpl, error } = await supabase.from('event_templates').insert({
-    org_id: evt.org_id ?? user.org_id ?? null,
-    is_starter: false,
+    org_id: ownerOrg,
+    // A plan with no company is visible to every dealer — say so honestly.
+    is_starter: ownerOrg == null,
     name: (name ?? '').trim() || `${evt.title} (plan)`,
     event_type: evt.event_type ?? 'other',
     description: evt.goal ?? null,
@@ -68,7 +75,7 @@ async function saveFromEvent(user: PortalUser, eventId: string, name?: string) {
   const steps = [
     (cl.data ?? []).length ? supabase.from('event_template_tasks').insert(((cl.data ?? []) as Row[]).map(t => ({ template_id: tpl.id, category: t.category, title: t.title, owner_role: null, offset_days: days(evt.event_date, t.due_date) }))) : null,
     (su.data ?? []).length ? supabase.from('event_template_supplies').insert(((su.data ?? []) as Row[]).map(s => ({ template_id: tpl.id, category: s.category ?? 'other', item: s.item, qty: s.qty, vendor: s.vendor, unit_cost: s.cost, offset_days: s.needed_by ? days(evt.event_date, s.needed_by) : null }))) : null,
-    (ca.data ?? []).length ? supabase.from('event_template_campaign').insert(((ca.data ?? []) as Row[]).map((c, i) => ({ template_id: tpl.id, step: c.step, offset_days: days(evt.event_date, c.send_at), email_subject: c.email_subject, email_html: c.email_html, sort_order: c.sort_order ?? i }))) : null,
+    (ca.data ?? []).length ? supabase.from('event_template_campaign').insert(((ca.data ?? []) as Row[]).map((c, i) => ({ template_id: tpl.id, step: c.step, offset_days: days(evt.event_date, c.send_at), email_subject: c.email_subject, email_html: c.email_html, sort_order: c.sort_order ?? i, audience: c.audience ?? null }))) : null,
   ].filter(Boolean)
   const results = await Promise.all(steps)
   const bad = results.find(r => r && (r as { error: unknown }).error) as { error: { message: string } } | undefined
@@ -86,6 +93,7 @@ async function saveFromEvent(user: PortalUser, eventId: string, name?: string) {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   const body = await req.json().catch(() => ({} as Row))
   if (body.from_event_id) return saveFromEvent(user, String(body.from_event_id), body.name ? String(body.name) : undefined)
   if (!String(body.name ?? '').trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -109,13 +117,15 @@ async function ownTemplate(user: PortalUser, id: string) {
   if (!row) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) }
   const isStarter = row.org_id == null
   if (user.isCorporate) return { row }
-  if (isStarter || row.org_id !== user.org_id) return { error: NextResponse.json({ error: isStarter ? 'Starter templates are edited by Gate Guard corporate.' : 'Not your template.' }, { status: 403 }) }
+  const orgIds = await eventOrgIds(user)
+  if (isStarter || !row.org_id || !orgIds?.includes(row.org_id)) return { error: NextResponse.json({ error: isStarter ? 'Starter templates are edited by Gate Guard corporate.' : 'Not your template.' }, { status: 403 }) }
   return { row }
 }
 
 export async function PATCH(req: NextRequest) {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   const body = await req.json().catch(() => ({} as Row))
   const o = await ownTemplate(user, String(body.id ?? '')); if (o.error) return o.error
   const patch: Row = {}
@@ -129,9 +139,11 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser()
   if (!signedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!canUseEvents(user)) return NextResponse.json({ error: EVENTS_DENIED }, { status: 403 })
   const id = req.nextUrl.searchParams.get('id') ?? ''
   const o = await ownTemplate(user, id); if (o.error) return o.error
-  if (o.row?.is_starter) return NextResponse.json({ error: 'Starter plans can’t be deleted.' }, { status: 400 })
+  // The built-in Gate Guard plans (migrations 162 + 204) stay; other plans can go.
+  if (/^a([1-9])\1{6}-0000-4000-8000-0{11}\1$/.test(id)) return NextResponse.json({ error: 'The built-in Gate Guard plans can’t be deleted. Edit them instead.' }, { status: 400 })
   for (const t of ['event_template_tasks', 'event_template_supplies', 'event_template_campaign']) {
     const { error } = await supabase.from(t).delete().eq('template_id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

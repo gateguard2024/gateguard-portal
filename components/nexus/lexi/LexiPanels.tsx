@@ -127,7 +127,7 @@ export function BrainPanel({ onClose }: { onClose: () => void }) {
 
 // ── Recording ────────────────────────────────────────────────────────────────
 type Done = { tasks?: number; note?: boolean; copied?: boolean; error?: string }
-export function RecordingPanel({ onClose }: { onClose: () => void }) {
+export function RecordingPanel({ onClose, canAct = true }: { onClose: () => void; canAct?: boolean }) {
   const [mode, setMode] = useState<'audio' | 'text'>('audio')
   const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
@@ -256,15 +256,15 @@ export function RecordingPanel({ onClose }: { onClose: () => void }) {
           <span className="t">{t.title}{t.owner ? <span style={{ color: T.ink3 }}> · {t.owner}</span> : null}</span>
           <input type="date" value={dues[i] ?? ''} onChange={e => setDues(ds => ds.map((v, j) => (j === i ? e.target.value || null : v)))} aria-label={`Due date for ${t.title}`} />
         </label>)}
-        <div className="row"><button type="button" className="btn" onClick={addTasks} disabled={working || picked === 0}>{working ? 'Adding…' : `Add ${picked} task${picked === 1 ? '' : 's'}`}</button>{done.tasks ? <span className="ok">✓ {done.tasks} added to your tasks</span> : null}</div>
+        {canAct ? <div className="row"><button type="button" className="btn" onClick={addTasks} disabled={working || picked === 0}>{working ? 'Adding…' : `Add ${picked} task${picked === 1 ? '' : 's'}`}</button>{done.tasks ? <span className="ok">✓ {done.tasks} added to your tasks</span> : null}</div> : <div className="help">Your Lexi access is view-only — copy these into your tasks yourself.</div>}
       </div>}
 
       <h3>Note for the record</h3>
       <div className="item"><span className="t">{rec.crm_note}</span></div>
-      <div className="row">
+      {canAct && <div className="row">
         <button type="button" className="btn line" onClick={logNote} disabled={working || !linked || linked.type !== 'opportunity' || !!done.note}>{done.note ? 'Logged ✓' : 'Log to the deal'}</button>
         {(!linked || linked.type !== 'opportunity') && <span className="help">Pick a deal above to log this note.</span>}
-      </div>
+      </div>}
 
       {rec.follow_up && <>
         <h3>Follow-up email</h3>

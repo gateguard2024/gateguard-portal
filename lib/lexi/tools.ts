@@ -19,6 +19,8 @@ import { searchGuide } from '@/lib/lexi/nexus-guide'
 import { getSiteBrivoToken, listBrivoDoors, listSiteBrivoEvents } from '@/lib/brivo'
 import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 import { listSiteShellyRelays } from '@/lib/shelly'
+import { addDaysISO, etMidnight, todayET } from '@/lib/tz'
+import { canOperate } from '@/lib/system-access'
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -34,7 +36,7 @@ export async function lexiCtx(user: PortalUser): Promise<LexiCtx> {
 }
 
 const NO_MATCH = '00000000-0000-0000-0000-000000000000'
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => todayET()
 const daysAgo = (iso?: string | null) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null)
 const clamp = (n: unknown, d: number, max = 25) => Math.max(1, Math.min(max, Number(n) || d))
 const like = (q: unknown) => `%${String(q ?? '').replace(/[%_,()]/g, ' ').trim()}%`
@@ -264,11 +266,14 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       // Each system on its own, with a time limit — one slow vendor never blocks the answer.
       const within = <T,>(p: Promise<T>, ms = 7000) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timed out')), ms))])
       const tryIt = async <T,>(f: () => Promise<T>): Promise<{ ok: true; v: T } | { ok: false; err: string }> => { try { return { ok: true, v: await within(f()) } } catch (e) { return { ok: false, err: e instanceof Error ? e.message : 'unavailable' } } }
+      // Each system only for people allowed to operate it (dealer techs may have some, not all).
+      const [canDoors, canCams, canRelays] = await Promise.all([canOperate(ctx.user, sid, 'doors'), canOperate(ctx.user, sid, 'cameras'), canOperate(ctx.user, sid, 'relays')])
+      const denied = async (): Promise<never> => { throw new Error('not allowed for your account') }
       const [doors, events, cams, relays, reboots] = await Promise.all([
-        tryIt(async () => { const { token, apiKey } = await getSiteBrivoToken(sid); return listBrivoDoors(token, apiKey) }),
-        tryIt(() => listSiteBrivoEvents(sid, 8)),
-        tryIt(async () => { const { token, baseHost } = await getSiteEagleEyeAccess(sid); return listEagleEyeCameras(token, baseHost) }),
-        tryIt(() => listSiteShellyRelays(sid)),
+        tryIt(async () => { if (!canDoors) return denied(); const { token, apiKey } = await getSiteBrivoToken(sid); return listBrivoDoors(token, apiKey) }),
+        tryIt(() => (canDoors ? listSiteBrivoEvents(sid, 8) : denied())),
+        tryIt(async () => { if (!canCams) return denied(); const { token, baseHost } = await getSiteEagleEyeAccess(sid); return listEagleEyeCameras(token, baseHost) }),
+        tryIt(() => (canRelays ? listSiteShellyRelays(sid) : denied())),
         tryIt(async () => { const { data, error } = await sb.from('gate_reboots').select('id, name, wait_seconds').eq('site_id', sid).limit(20); if (error) throw new Error(error.message); return data ?? [] }),
       ])
       const notSet = (r: { ok: boolean; err?: string }) => (!r.ok && /not (set|configured|connected)|no .*(creds|credentials|connection)|missing/i.test(r.err ?? '') ? 'not connected' : !r.ok ? `unavailable (${r.err})` : null)
@@ -292,7 +297,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
       const due = String(input.due ?? 'any')
       if (due === 'overdue') q = q.lt('due_date', today())
       if (due === 'today') q = q.eq('due_date', today())
-      if (due === 'week') q = q.lte('due_date', new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
+      if (due === 'week') q = q.lte('due_date', addDaysISO(today(), 7))
       if (has(input.query)) q = q.ilike('title', like(input.query))
       const { data, error } = await q.order('due_date', { ascending: true, nullsFirst: false }).limit(clamp(input.limit, 15))
       if (error) return { data: { error: error.message } }
@@ -384,11 +389,12 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
     }
     case 'my_calendar': {
       const days = clamp(input.days, 1, 14)
-      const start = new Date(); start.setHours(0, 0, 0, 0)
-      const end = new Date(start.getTime() + days * 86400000)
+      // Days are Eastern-time days (the server runs in UTC).
+      const startDay = today(), endDay = addDaysISO(startDay, days)
+      const start = etMidnight(startDay), end = etMidnight(endDay)
       const [ev, wos] = await Promise.all([
         sb.from('gcal_events').select('id, title, start_time, end_time, is_all_day, location').eq('user_id', ctx.user.id).gte('start_time', start.toISOString()).lt('start_time', end.toISOString()).order('start_time').limit(40),
-        scoped('work_orders', '*', ctx).gte('scheduled_date', start.toISOString().slice(0, 10)).lt('scheduled_date', end.toISOString().slice(0, 10)).in('status', OPEN_WO).limit(40),
+        scoped('work_orders', '*', ctx).gte('scheduled_date', startDay).lt('scheduled_date', endDay).in('status', OPEN_WO).limit(40),
       ])
       const events = (ev.data ?? []) as Row[]
       const jobs = ((wos.data ?? []) as Row[]).map(woOut)
@@ -420,7 +426,7 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
     }
     case 'daily_brief': {
       const t = today()
-      const week = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+      const week = addDaysISO(today(), 7)
       const stalledCut = new Date(Date.now() - STALLED_DAYS * 86400000).toISOString()
       const [tasks, todayJobs, unassigned, overdue, stalled, incidents, quotes] = await Promise.all([
         scoped('todos', 'id, title, status, priority, due_date, assigned_to_name, linked_label', ctx).not('status', 'in', '(done,completed,cancelled)').or(`assigned_to.eq.${ctx.user.id},created_by.eq.${ctx.user.id}`).lte('due_date', t).order('due_date').limit(10),

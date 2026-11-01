@@ -21,19 +21,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data: guests, error } = await supabase.from('event_guests').select('*').eq('event_id', params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const pickList = ((guests ?? []) as Row[]).filter(gu => ids ? ids.includes(gu.id) : (gu.rsvp === 'yes' || gu.rsvp === 'attended' || !!gu.checked_in_at))
+  // Leads always belong to a company (the event's, else the caller's).
+  const orgId = event.org_id ?? user.org_id ?? null
+  if (!orgId) return NextResponse.json({ error: 'This event has no company, so its guests can’t become leads yet.' }, { status: 400 })
   const out: { guest_id: string; lead_id: string }[] = []
   let skipped = 0
   const when = event.event_date ? ` on ${event.event_date}` : ''
   for (const gu of pickList) {
     if (gu.lead_id) { skipped++; continue }
     const { data: lead, error: lErr } = await supabase.from('leads').insert({
-      org_id: event.org_id ?? user.org_id ?? null,
-      assigned_to: user.id,
+      org_id: orgId,
+      // Same owner fields the Sales leads list uses (assigned_to is a profile uuid, not a login id).
+      assigned_to_user_id: user.id,
       company_name: gu.company || gu.name,
       contact_name: gu.name,
       email: gu.email || null,
       phone: gu.phone || null,
-      location: event.property_name || event.venue || null,
+      property_name: event.property_name || null,
+      location: event.venue || event.property_name || null,
       stage: 'new',
       source: 'event',
       notes: `Met at "${event.title}"${when}.${gu.notes ? ` ${gu.notes}` : ''}`,

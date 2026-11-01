@@ -68,14 +68,17 @@ function buildMessage(p: SMSPayload): string {
 
 // ── Twilio send ───────────────────────────────────────────────────────────────
 
-export async function sendSMS(payload: SMSPayload): Promise<void> {
+export type SMSResult = { ok: true; sid?: string } | { ok: false; error: string }
+
+/** Send one text. Never throws; returns what happened so callers can tell the user. */
+export async function sendSMS(payload: SMSPayload): Promise<SMSResult> {
   const SID   = process.env.TWILIO_ACCOUNT_SID
   const TOKEN = process.env.TWILIO_AUTH_TOKEN
   const FROM  = process.env.TWILIO_FROM_NUMBER
 
   if (!SID || !TOKEN || !FROM) {
     console.warn('[sms] Twilio env vars not set — skipping SMS')
-    return
+    return { ok: false, error: 'Texting isn’t set up yet (Twilio keys are missing).' }
   }
 
   // Normalize to E.164
@@ -83,7 +86,7 @@ export async function sendSMS(payload: SMSPayload): Promise<void> {
   const e164 = to.startsWith('1') ? `+${to}` : `+1${to}`
   if (e164.length < 12) {
     console.warn('[sms] Invalid phone number:', payload.to)
-    return
+    return { ok: false, error: 'That phone number doesn’t look right.' }
   }
 
   const body = buildMessage(payload)
@@ -98,15 +101,21 @@ export async function sendSMS(payload: SMSPayload): Promise<void> {
         'Content-Type':  'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({ From: FROM, To: e164, Body: body }).toString(),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) {
       const err = await res.text()
       console.error('[sms] Twilio error:', res.status, err)
-    } else {
-      console.log('[sms] Sent', payload.event, 'to', e164)
+      let msg = `Twilio said no (${res.status}).`
+      try { const j = JSON.parse(err); if (j?.message) msg = String(j.message) } catch { /* not JSON */ }
+      return { ok: false, error: msg }
     }
+    const j = await res.json().catch(() => ({}))
+    console.log('[sms] Sent', payload.event, 'to', e164)
+    return { ok: true, sid: (j as { sid?: string }).sid }
   } catch (err) {
     console.error('[sms] fetch failed:', err)
+    return { ok: false, error: 'Couldn’t reach Twilio.' }
   }
 }
 

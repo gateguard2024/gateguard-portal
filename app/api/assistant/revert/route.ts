@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { revertAction, isSignedIn, RevertPayload } from '@/lib/assistant-executor'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { canRunAssistantActions } from '@/lib/lexi/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,8 @@ export async function POST(req: NextRequest) {
   // getCurrentUser() never throws (signed-out = anonymous user), so check it.
   const user = await getCurrentUser()
   if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const may = await canRunAssistantActions(user)
+  if (!may.ok) return NextResponse.json({ success: false, error: may.error }, { status: 403 })
   const ctx = { user, scope: await resolveOrgScope(user) }
 
   let body: { revertPayload: RevertPayload }

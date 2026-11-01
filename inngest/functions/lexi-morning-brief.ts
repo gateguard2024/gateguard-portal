@@ -32,15 +32,26 @@ export const lexiMorningBrief = inngest.createFunction(
       return (data ?? []).map(r => String(r.user_id)).filter(Boolean)
     })
 
+    // The daily run fans out one event per person, so each brief runs (and
+    // retries) on its own — one bad account never blocks everyone after it.
+    if (!single) {
+      if (userIds.length) await step.sendEvent('fan-out', userIds.map(user_id => ({ name: 'lexi/brief.send', data: { user_id } })))
+      return { users: userIds.length, fannedOut: true }
+    }
+
     const results: Record<string, string> = {}
-    // One step per person, so a failure for one doesn't resend everyone else's.
     for (const uid of userIds) {
       results[uid] = await step.run(`brief-${uid}`, async () => {
         const u = await getUserById(uid)
         if (!u) return 'skipped: user not found'
+        if (!u.email) return 'skipped: no email address'
         if ((await lexiAccess(u)) === 'none') return 'skipped: Lexi is off for this user'
         const r = await sendMorningBrief(u)
-        if (!r.ok) throw new Error(r.error ?? 'send failed')
+        // Only retry what can get better (Resend / network); a config problem won't.
+        if (!r.ok) {
+          if (/RESEND_API_KEY|not configured|no email/i.test(r.error ?? '')) return `failed: ${r.error}`
+          throw new Error(r.error ?? 'send failed')
+        }
         return r.skipped ? `skipped: ${r.skipped}` : 'sent'
       })
     }

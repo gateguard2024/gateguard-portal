@@ -131,18 +131,22 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Fire SMS notification if phone provided
+  // Awaited: a detached send is dropped when the serverless function returns.
+  let smsError: string | null = null
   if (notify_phone) {
-    void sendSMS({
+    const sent = await sendSMS({
       event:         'payment_link',
       to:            notify_phone,
       wo_number,
       title,
       customer_name,
       payment_url:   pl.url,
-    }).catch(console.error)
+    })
+    if (!sent.ok) smsError = sent.error
   }
 
   return NextResponse.json({
+    ...(smsError ? { sms_error: smsError } : {}),
     payment_link_url: pl.url,
     payment_link_id:  pl.id,
     qr_url:           qrUrl,

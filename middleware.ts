@@ -35,10 +35,10 @@ function isBypassPath(pathname: string): boolean {
     isPublicAssetPath(pathname) ||
     // /tech tool — field techs auth via x-tech-code header, not Clerk
     pathname.startsWith('/tech') ||
-    // All /tech API routes — authenticated via x-tech-code only
-    // Exception: parse-survey-transcript is also called from the portal (/survey page)
-    // so it needs Clerk to run. It accepts EITHER x-tech-code OR a Clerk session.
-    (pathname.startsWith('/api/kb/') && !pathname.startsWith('/api/kb/parse-survey-transcript')) ||
+    // /api/kb/* is NOT bypassed any more: those routes accept EITHER a Clerk session
+    // (portal: manual upload, find-manual, coverage…) OR x-tech-code (field tool), and
+    // several call Clerk's auth(), which throws when clerkMiddleware didn't run.
+    // They go through clerkHandler without a forced sign-in (see below), like /api/aria/.
     pathname.startsWith('/api/plaud/') ||
     // Client-facing quote pages ONLY — the internal builder (/quotes, /quotes/new,
     // /quotes/[id]) stays behind Clerk. Public = proposal + approve views only.
@@ -126,6 +126,11 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
   // This supports both portal sessions (GET routes) and server-to-server
   // service-key POSTs (deep research → /api/aria/properties upsert, Inngest).
   if (pathname.startsWith('/api/aria/')) {
+    return NextResponse.next()
+  }
+  // Knowledge-base routes: same pattern — Clerk is available to auth(), but the
+  // field tool (x-tech-code, no login) is not redirected; each handler checks access.
+  if (pathname.startsWith('/api/kb/')) {
     return NextResponse.next()
   }
 

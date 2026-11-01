@@ -198,25 +198,28 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
   const EDITABLE_TYPES = new Set(['nexus_event', 'todo', 'tracker_task', 'crm_activity']);
   const isEditable = (e: CalEvent) => !e.id.startsWith('lead-act-') && (!e.type || EDITABLE_TYPES.has(e.type));
 
-  const saveEdit = async (evt: CalEvent, patch: { title: string; start: string; all_day: boolean }): Promise<boolean> => {
+  const saveEdit = async (evt: CalEvent, patch: { title: string; start: string; all_day: boolean; location?: string | null }): Promise<boolean> => {
     const t = evt.type ?? 'nexus_event';
+    // Due dates are the LOCAL calendar day of the chosen time (not the UTC day).
+    const localDay = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     try {
       let ok = false;
       if (t === 'todo') {
-        const due = patch.start ? String(patch.start).split('T')[0] : null;
+        const due = patch.start ? localDay(patch.start) : null;
         ok = (await fetch(`/api/todos/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, due_date: due }) })).ok;
       } else if (t === 'tracker_task') {
-        const due = patch.start ? String(patch.start).split('T')[0] : null;
+        const due = patch.start ? localDay(patch.start) : null;
         ok = (await fetch(`/api/tracker/items/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, due_date: due }) })).ok;
       } else if (t === 'crm_activity') {
         ok = (await fetch(`/api/crm/activities/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: patch.title, due_at: patch.start }) })).ok;
       } else {
-        ok = (await fetch(`/api/calendar/events/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, start: patch.start, all_day: patch.all_day }) })).ok;
+        ok = (await fetch(`/api/calendar/events/${evt.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: patch.title, start: patch.start, all_day: patch.all_day, ...(patch.location !== undefined ? { location: patch.location } : {}) }) })).ok;
       }
-      if (!ok) return false;
-      setEvents(prev => prev.map(e => (e.id === evt.id ? { ...e, title: patch.title, start: patch.start, all_day: patch.all_day } : e)));
+      if (!ok) { setEditErr('Couldn’t save that change. Try again.'); return false; }
+      setEditErr(null);
+      setEvents(prev => prev.map(e => (e.id === evt.id ? { ...e, title: patch.title, start: patch.start, all_day: patch.all_day, ...(patch.location !== undefined ? { location: patch.location } : {}) } : e)));
       return true;
-    } catch { return false; }
+    } catch { setEditErr('Couldn’t save that change. Try again.'); return false; }
   };
 
   const deleteEvent = async (evt: CalEvent): Promise<boolean> => {
@@ -229,10 +232,10 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     if (!url) return false;
     try {
       const r = await fetch(url, { method: 'DELETE' });
-      if (!r.ok) return false;
+      if (!r.ok) { setNeedsMsg(`Couldn’t delete “${evt.title}”. Try again.`); return false; }
       setEvents(prev => prev.filter(e => e.id !== evt.id));
       return true;
-    } catch { return false; }
+    } catch { setNeedsMsg(`Couldn’t delete “${evt.title}”. Try again.`); return false; }
   };
 
   // Sync calendar — pull/push Google Calendar via the existing sync endpoint.
@@ -275,6 +278,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
   const [needsTab, setNeedsTab] = useState<'late' | 'none'>('late');
   const [needsOpen, setNeedsOpen] = useState(true);
   const [needsMsg, setNeedsMsg] = useState<string | null>(null);
+  const [editErr, setEditErr] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
   useEffect(() => { loadNeeds(scope).then(setNeeds); }, [scope]);
@@ -287,7 +291,8 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     try {
       const r = item.kind === 'todo'
         ? await fetch(`/api/todos/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ due_date: day }) })
-        : await fetch(`/api/maintenance/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduled_date: day, ...(/^(open|new)$/i.test(item.rawStatus ?? '') ? { status: 'scheduled' } : {}) }) });
+        // Planning only — no automatic customer/tech texts or emails (the job page has "Send update").
+        : await fetch(`/api/maintenance/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduled_date: day, send_notifications: false, ...(/^(open|new)$/i.test(item.rawStatus ?? '') ? { status: 'scheduled' } : {}) }) });
       if (!r.ok) { setNeedsMsg(`Couldn’t move “${item.title}”. Try again.`); return; }
       setNeeds(prev => prev.filter(n => !(n.id === item.id && n.kind === item.kind)));
       setNeedsMsg(`Moved “${item.title}” to ${dueLabel(day)}.`);
@@ -570,14 +575,14 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
     };
     const saveInline = async () => {
       const startIso = ef.date ? new Date(`${ef.date}T${ef.time || '09:00'}:00`).toISOString() : selectedEvent.start;
-      const ok = await saveEdit(selectedEvent, { title: ef.title.trim() || selectedEvent.title, start: startIso, all_day: !ef.time });
+      const ok = await saveEdit(selectedEvent, { title: ef.title.trim() || selectedEvent.title, start: startIso, all_day: !ef.time, ...((selectedEvent.type ?? 'nexus_event') === 'nexus_event' ? { location: ef.location || null } : {}) });
       if (ok) {
         setSelectedEvent(prev => (prev ? { ...prev, title: ef.title.trim() || prev.title, start: startIso, all_day: !ef.time, location: ef.location || null } : prev));
         setInlineEdit(false);
         onChange?.();
       }
     };
-    const close = () => { setSelectedEvent(null); setInlineEdit(false); };
+    const close = () => { setSelectedEvent(null); setInlineEdit(false); setEditErr(null); };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(15,23,42,0.42)] backdrop-blur-sm" onClick={close}>
         <div onClick={e => e.stopPropagation()} className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.12)' }}>
@@ -593,6 +598,7 @@ export default function CalendarViews({ onChange }: { onChange?: () => void } = 
 
             {inlineEdit ? (
               <div className="flex flex-col gap-3">
+                {editErr && <div role="alert" className="rounded-lg px-3 py-1.5 text-xs bg-[#FFECEC] text-[#D70015]">{editErr}</div>}
                 <input value={ef.title} onChange={e => setEf(f => ({ ...f, title: e.target.value }))} placeholder="Event title" className="w-full bg-transparent border-b border-black/10 outline-none px-1 py-1.5 text-xl font-semibold placeholder:text-[#8E8E93]" style={textPrimary} />
                 <div className="grid grid-cols-2 gap-3">
                   <input type="date" value={ef.date} onChange={e => setEf(f => ({ ...f, date: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />

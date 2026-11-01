@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { addDaysISO, etDateOf, etMidnight, etTimeOf } from '@/lib/tz'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
@@ -66,7 +67,8 @@ export interface CalendarEvent {
   id: string
   type: 'nexus_event' | 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task' | 'property_event'
   title: string
-  date: string       // YYYY-MM-DD
+  date: string       // YYYY-MM-DD (Eastern)
+  start?: string     // full ISO timestamp for timed events (the browser shows it in local time)
   time?: string      // HH:MM if has time
   status: string
   priority?: string
@@ -94,6 +96,9 @@ export async function GET(req: NextRequest) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay   = new Date(year, month, 0).getDate()
     const endDate   = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    // Timestamp columns: the month in Eastern time, as UTC instants.
+    const rangeStart = etMidnight(startDate).toISOString()
+    const rangeEnd   = etMidnight(addDaysISO(endDate, 1)).toISOString()
 
     // ── Resolve which org IDs this request covers ─────────────────────────────
     // corporate → null (no org filter). me → own org. team → full subtree.
@@ -114,8 +119,8 @@ export async function GET(req: NextRequest) {
       let nexusQ = supabase
         .from('calendar_events')
         .select('id, title, start_time, end_time, status, location, org_id, category')
-        .gte('start_time', `${startDate}T00:00:00`)
-        .lte('start_time', `${endDate}T23:59:59`)
+        .gte('start_time', rangeStart)
+        .lt('start_time', rangeEnd)
         .neq('status', 'cancelled')
         .order('start_time', { ascending: true })
       nexusQ = byOrg(nexusQ as any)
@@ -124,8 +129,7 @@ export async function GET(req: NextRequest) {
         const startIso = ev.start_time as string
         events.push({
           id: ev.id, type: 'nexus_event', title: ev.title ?? 'Nexus Event',
-          date: startIso.split('T')[0],
-          time: startIso.includes('T') ? startIso.split('T')[1]?.substring(0, 5) : undefined,
+          date: etDateOf(startIso), time: etTimeOf(startIso), start: startIso,
           status: ev.status ?? 'confirmed', color: '#007CFF', category: (ev.category as string) ?? undefined,
         })
       }
@@ -195,8 +199,8 @@ export async function GET(req: NextRequest) {
       .select('id, schedule_type, next_due_at, site_id, sites(name)')
       .eq('is_active', true)
       .not('next_due_at', 'is', null)
-      .gte('next_due_at', `${startDate}T00:00:00`)
-      .lte('next_due_at', `${endDate}T23:59:59`)
+      .gte('next_due_at', rangeStart)
+      .lt('next_due_at', rangeEnd)
       .order('next_due_at', { ascending: true })
     pmQ = byOrg(pmQ as any)
     const { data: pmRows } = await pmQ
@@ -206,7 +210,7 @@ export async function GET(req: NextRequest) {
       events.push({
         id: pm.id, type: 'pm_schedule',
         title: siteName ? `PM: ${siteName}` : `PM: ${pm.schedule_type ?? 'Maintenance'}`,
-        date: dueIso.split('T')[0], status: 'scheduled', color: '#0B7285',
+        date: etDateOf(dueIso), status: 'scheduled', color: '#0B7285',
         link: pm.site_id ? `/sites/${pm.site_id}` : '/dispatch',
       })
     }
@@ -221,8 +225,8 @@ export async function GET(req: NextRequest) {
       .from('crm_activities')
       .select('id, type, subject, due_at, completed_at, opportunity_id, opportunities(name)')
       .not('due_at', 'is', null)
-      .gte('due_at', `${startDate}T00:00:00`)
-      .lte('due_at', `${endDate}T23:59:59`)
+      .gte('due_at', rangeStart)
+      .lt('due_at', rangeEnd)
       .is('completed_at', null)
       .order('due_at', { ascending: true })
     if (scopedOppIds) actQ = actQ.in('opportunity_id', scopedOppIds.length ? scopedOppIds : [NO_MATCH])
@@ -232,8 +236,7 @@ export async function GET(req: NextRequest) {
       const dueIso = act.due_at as string
       events.push({
         id: act.id, type: 'crm_activity', title: act.subject ?? 'CRM Activity',
-        date: dueIso.split('T')[0],
-        time: dueIso.includes('T') ? dueIso.split('T')[1]?.substring(0, 5) : undefined,
+        date: etDateOf(dueIso), time: etTimeOf(dueIso), start: dueIso,
         status: 'open', color: ACTIVITY_COLORS[act.type] ?? '#7C3AED',
         link: act.opportunity_id ? `/crm/opportunities/${act.opportunity_id}` : '/crm',
         opportunity_name: (act as any).opportunities?.name ?? undefined,
@@ -252,8 +255,8 @@ export async function GET(req: NextRequest) {
         .not('lead_id', 'is', null)
         .is('opportunity_id', null)
         .not('due_at', 'is', null)
-        .gte('due_at', `${startDate}T00:00:00`)
-        .lte('due_at', `${endDate}T23:59:59`)
+        .gte('due_at', rangeStart)
+        .lt('due_at', rangeEnd)
         .is('completed_at', null)
         .order('due_at', { ascending: true })
       leadActQ = byOrg(leadActQ as any, 'dealer_org_id')
@@ -265,8 +268,7 @@ export async function GET(req: NextRequest) {
         events.push({
           id: `lead-act-${act.id}`, type: 'crm_activity',
           title: act.subject ?? 'Lead follow-up',
-          date: dueIso.split('T')[0],
-          time: dueIso.includes('T') ? dueIso.split('T')[1]?.substring(0, 5) : undefined,
+          date: etDateOf(dueIso), time: etTimeOf(dueIso), start: dueIso,
           status: 'open', color: ACTIVITY_COLORS_LEAD[act.type] ?? '#7C3AED',
           link: act.lead_id ? `/crm/leads/${act.lead_id}` : '/crm',
           opportunity_name: leadName ? `Lead: ${leadName}` : undefined,
@@ -323,15 +325,16 @@ export async function GET(req: NextRequest) {
         .from('gcal_events')
         .select('gcal_event_id, title, start_time, end_time, is_all_day, status')
         .eq('user_id', user.id)
-        .gte('start_time', `${startDate}T00:00:00`)
-        .lte('start_time', `${endDate}T23:59:59`)
+        .gte('start_time', rangeStart)
+        .lt('start_time', rangeEnd)
         .order('start_time', { ascending: true })
       for (const ge of gcalRows ?? []) {
         const startIso = ge.start_time as string
         events.push({
           id: ge.gcal_event_id, type: 'gcal', title: ge.title ?? '(No title)',
-          date: startIso.split('T')[0],
-          time: ge.is_all_day ? undefined : startIso.split('T')[1]?.substring(0, 5),
+          date: ge.is_all_day ? startIso.slice(0, 10) : etDateOf(startIso),
+          time: ge.is_all_day ? undefined : etTimeOf(startIso),
+          ...(ge.is_all_day ? {} : { start: startIso }),
           status: ge.status ?? 'confirmed', color: '#10B981', gcal_event_id: ge.gcal_event_id,
         })
       }

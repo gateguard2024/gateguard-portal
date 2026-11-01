@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
 import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
 import { guardWorkOrder } from '@/lib/ops-scope'
+import { getCurrentUser } from '@/lib/current-user'
+import { isInScope, resolveOrgScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,6 +129,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // so a patch never hard-fails on an unknown column.
   const upd: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
   delete upd.send_notifications; delete upd.notify   // control flags, never columns
+  // Never from the browser: identity / ownership columns. Only corporate may move a job between companies.
+  for (const k of ['id', 'created_at', 'created_by', 'wo_number']) delete upd[k]
+  const me = await getCurrentUser()
+  if (!me.isCorporate) delete upd.org_id
+  // A tech can only be assigned from the caller's own team.
+  if (body.assignee_id && !me.isCorporate && me.id !== 'anonymous') {
+    const scope = await resolveOrgScope(me)
+    const { data: tech } = await supabase.from('technicians').select('id, org_id').eq('id', String(body.assignee_id)).maybeSingle()
+    if (!tech || !isInScope(scope, (tech as { org_id: string | null }).org_id)) return NextResponse.json({ error: 'That technician isn’t on your team.' }, { status: 400 })
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any = null; let error: { code?: string; message: string } | null = null
   for (let i = 0; i < 8; i++) {
@@ -194,9 +206,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     } catch (_) { /* non-fatal */ }
   }
 
+  // Every notification is awaited before we answer — a detached send is dropped
+  // when the serverless function returns. Failures are logged, never block the save.
+  const bg: Promise<unknown>[] = []
   if (sendNotifications && emailEvent && recipientEmail) {
-    // Fire and forget — don't block response
-    notifyWOEvent({
+    bg.push(notifyWOEvent({
       work_order_id:   params.id,
       wo_number:       data.wo_number,
       title:           data.title,
@@ -206,14 +220,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       assignee_name:   data.assignee_name ?? undefined,
       scheduled_date:  data.scheduled_date ?? undefined,
       tech_eta:        data.tech_eta ?? undefined,
-    }).catch(console.error)
+    }).catch(console.error))
   }
 
   // Also notify the assigned TECH — on a status change, or when they were just
   // assigned. Honors the same send_notifications opt-out.
   const justAssigned = body.assignee_id !== undefined && !!body.assignee_id
   if (sendNotifications && (emailEvent || justAssigned) && data.assignee_id) {
-    void (async () => {
+    bg.push((async () => {
       try {
         const { data: tech } = await supabase.from('technicians').select('email').eq('id', data.assignee_id).maybeSingle()
         const techEmail = (tech as { email?: string } | null)?.email
@@ -231,14 +245,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           })
         }
       } catch (e) { console.error('[maintenance PATCH] tech notify failed:', (e as Error).message) }
-    })()
+    })())
   }
 
   // ── SMS notification ──────────────────────────────────────────────────────
   // Pull PM phone from site — fire SMS in parallel with email
   const smsEvent = statusChanged ? SMS_EVENT[body.status] : null
   if (sendNotifications && smsEvent && currentSiteId) {
-    void (async () => {
+    bg.push((async () => {
       try {
         const { data: siteRow } = await supabase
           .from('sites')
@@ -258,19 +272,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             scheduled_date: data.scheduled_date ?? undefined,
             tech_eta:       data.tech_eta ?? undefined,
             property_name:  sr?.name as string | undefined,
-            review_url:     smsEvent === 'completed'
-              ? `https://g.page/r/gateguard/review`
-              : undefined,
+            // The review request goes out once, through /api/reviews/send below.
+            review_url:     undefined,
           })
         }
-      } catch (_) { /* non-fatal */ }
-    })()
+      } catch (e) { console.error('[maintenance PATCH] SMS failed:', (e as Error).message) }
+    })())
   }
 
   // ── Post-WO review trigger ────────────────────────────────────────────────
   // Fire review request SMS when WO is marked completed (non-blocking)
-  if (body.status === 'completed' && statusChanged) {
-    void (async () => {
+  if (sendNotifications && body.status === 'completed' && statusChanged) {
+    bg.push((async () => {
       try {
         // Get PM phone from linked site if not already fetched
         let contactPhone: string | null = null
@@ -299,10 +312,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             property_name:  data.customer_name,
           }),
         })
-      } catch (_) { /* non-fatal */ }
-    })()
+      } catch (e) { console.error('[maintenance PATCH] review request failed:', (e as Error).message) }
+    })())
   }
 
+  await Promise.allSettled(bg)
   return NextResponse.json({ work_order: data })
 }
 

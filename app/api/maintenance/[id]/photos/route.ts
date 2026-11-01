@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { isTechAuthed } from '@/lib/tech-auth'
 import { guardWorkOrder } from '@/lib/ops-scope'
 
 const supabase = createClient(
@@ -29,17 +28,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Portal (Clerk) OR /tech (x-tech-code) may post photos.
-  let user: { org_id?: string | null; name?: string; email?: string } | null = null
-  try { user = await getCurrentUser() } catch { user = null }
-  if (!user && !(await isTechAuthed(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const body = await req.json()
+  // Portal (Clerk) OR /tech (x-tech-code) may post photos — but only to a job they can reach.
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const me = await getCurrentUser()
+  const user: { org_id?: string | null; name?: string; email?: string } | null = me.id && me.id !== 'anonymous' ? me : null
+  const body = await req.json().catch(() => ({}))
   const { file_url, file_name, caption } = body
 
-  if (!file_url) {
-    return NextResponse.json({ error: 'file_url is required' }, { status: 400 })
+  if (!file_url || !/^https:\/\//i.test(String(file_url))) {
+    return NextResponse.json({ error: 'A photo link (https) is required' }, { status: 400 })
   }
 
   const org_id = user?.org_id ?? null
@@ -64,6 +61,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { searchParams } = new URL(req.url)
   const photoId = searchParams.get('photo_id')
   if (!photoId) return NextResponse.json({ error: 'photo_id required' }, { status: 400 })

@@ -517,7 +517,7 @@ export function LexiSurface() {
     </section>}
 
     <section className="lx-chat" aria-label="Chat with Lexi">
-      <div className="lx-thread" aria-live="polite">
+      <div className="lx-thread">
         {msgs.length === 0 && <div className="lx-empty"><b>What can I do for you?</b>Ask about deals, jobs, sites, your inbox or how to use Nexus — or tell me to make a task, a work order, a lead or a follow-up.</div>}
         {msgs.map((m, mi) => m.role === 'user'
           ? <div key={m.id} className="lx-u">{m.text}</div>
@@ -587,7 +587,7 @@ export function LexiSurface() {
     <div className="lx-note">Lexi can make mistakes. Small changes can be undone for 30 seconds; bigger ones always ask first.</div>
 
     {panel === 'brain' && <BrainPanel onClose={() => setPanel(null)} />}
-    {panel === 'recording' && <RecordingPanel onClose={() => setPanel(null)} />}
+    {panel === 'recording' && <RecordingPanel canAct={(brief as { canAct?: boolean } | null)?.canAct !== false} onClose={() => setPanel(null)} />}
 
     {histOpen && <div className="lx-hist" onClick={() => setHistOpen(false)}>
       <div className="p" onClick={e => e.stopPropagation()} role="dialog" aria-label="Lexi history">

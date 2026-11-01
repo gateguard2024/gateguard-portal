@@ -25,10 +25,11 @@ export interface TemplateRow {
   id: string; name: string; event_type: string; description?: string | null
   default_budget?: number | null; default_duration_min?: number | null; is_starter?: boolean; org_id?: string | null
   counts?: { tasks: number; supplies: number; emails: number }
+  canEdit?: boolean
 }
 export interface ChecklistItem { id: string; category?: string | null; title: string; owner_name?: string | null; due_date?: string | null; status?: string | null }
 export interface Supply { id: string; category?: string | null; item: string; qty?: number | null; vendor?: string | null; cost?: number | null; needed_by?: string | null; status?: string | null }
-export interface CampaignStep { id: string; step: string; audience?: string | null; send_at?: string | null; status?: string | null; email_subject?: string | null; email_html?: string | null; sort_order?: number | null }
+export interface CampaignStep { id: string; step: string; audience?: string | null; send_at?: string | null; status?: string | null; email_subject?: string | null; email_html?: string | null; sort_order?: number | null; sent_guest_ids?: string[] | null; sent_at?: string | null; auto_send?: boolean | null }
 export interface Guest { id: string; name?: string | null; email?: string | null; phone?: string | null; company?: string | null; rsvp?: string | null; lead_id?: string | null; notes?: string | null; checked_in_at?: string | null }
 export interface Detail {
   event: EventRow; checklist: ChecklistItem[]; supplies: Supply[]; campaign: CampaignStep[]; guests: Guest[]
@@ -150,16 +151,23 @@ export const toHHMM = (start: string | null | undefined, offsetMin: number) => {
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 }
 
-/** Email bodies are stored as simple HTML; people edit them as plain text. */
+/** Email bodies are stored as simple HTML; people edit them as plain text with two
+ *  shortcuts that survive a round trip: **bold** and [link text](https://… or {{rsvp_link}}). */
 export function htmlToText(html?: string | null) {
   return String(html ?? '')
     .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n\n').replace(/<\/?p[^>]*>/gi, '')
-    .replace(/<a [^>]*>(.*?)<\/a>/gi, '$1').replace(/<\/?(strong|b|em|i)>/gi, '').replace(/<[^>]+>/g, '')
+    .replace(/<a [^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, (_m, href: string, t: string) => `[${t}](${href.replace(/&amp;/g, '&')})`)
+    .replace(/<a[^>]*>(.*?)<\/a>/gi, '$1')
+    .replace(/<(strong|b)>(.*?)<\/\1>/gi, '**$2**').replace(/<\/?(em|i)>/gi, '').replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim()
 }
 export function textToHtml(text: string) {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return text.trim().split(/\n{2,}/).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const inline = (p: string) => esc(p)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+|\{\{\s*rsvp_link\s*\}\})\)/g, '<a href="$2">$1</a>')
+    .replace(/\n/g, '<br>')
+  return text.trim().split(/\n{2,}/).map(p => `<p>${inline(p)}</p>`).join('')
 }
 
 export const eventHref = (id: string) => `/?tab=events&event=${id}`

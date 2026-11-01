@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
+import { canRunAssistantActions, LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
 import { executeToolWithRevert, isSignedIn, ALLOWED_TOOLS } from '@/lib/assistant-executor'
 import { ACTION_TOOLS, TOOL_RISK_PROFILES, buildActionSummary } from '@/lib/assistant-tools'
 import { READ_TOOLS, READ_TOOL_NAMES, TOOL_LABEL, lexiCtx, runReadTool, type LexiCard } from '@/lib/lexi/tools'
@@ -34,7 +34,7 @@ import { BRAIN_TOOLS, BRAIN_TOOL_NAMES, brainPrompt, loadBrain, runBrainTool } f
 import { REPORT_TOOL, runReport, type LexiChart } from '@/lib/lexi/reports'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const level = await lexiAccess(user)
   if (level === 'none') return NextResponse.json({ error: LEXI_OFF_MESSAGE }, { status: 403 })
-  const canAct = level === 'edit'
+  const canAct = level === 'edit' && (await canRunAssistantActions(user)).ok
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Lexi isn’t set up yet (missing ANTHROPIC_API_KEY).' }, { status: 503 })
 
   const body = await req.json().catch(() => ({}))

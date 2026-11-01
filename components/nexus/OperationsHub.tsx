@@ -409,7 +409,7 @@ export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boo
     {page === "Procurement" && <Procurement />}
     {page === "PM" && <PM />}
     {page === "Playbooks" && <Playbooks />}
-    {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
+    {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} />}
     {toast && <div className="oh-toast" role="status">{toast}<button type="button" onClick={() => setToast(null)}>OK</button></div>}
   </div>;
 }
@@ -1536,7 +1536,12 @@ function Parts() {
   async function attachManualToProduct(p: any, file: File) {
     setMUploading(p.id); setMsg(null);
     const url = await uploadManual(p.id, file);
-    if (url) { await fetch("/api/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, manual_url: url }) }).catch(() => {}); setMsg(`Manual attached to ${p.name} ✓ — vectorizing now.`); load(); loadCoverage(); }
+    if (url) {
+      const r = await fetch("/api/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, manual_url: url }) }).catch(() => null);
+      const d = r ? await r.json().catch(() => ({})) : {};
+      setMsg(r?.ok ? `Manual attached to ${p.name} ✓ — vectorizing now.` : (d?.error || "The manual didn’t attach. Try again."));
+      load(); loadCoverage();
+    }
     else setMsg("Upload failed — try a smaller PDF or paste the URL.");
     setMUploading(null);
   }
@@ -1855,20 +1860,24 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   useEffect(() => { if (!techsProp?.length) fetch("/api/dispatch").then(r => r.json()).then(d => setTechsOwn(d.techs ?? [])).catch(() => {}); }, [techsProp]);
   const techs = techsProp?.length ? techsProp : techsOwn;
   const [saveErr, setSaveErr] = useState<string | null>(null);
-  const onUpdate = async (wid: string, patch: Record<string, unknown>) => {
+  // Saves straight to the job and reports whether it worked (so the page can undo
+  // what it showed). onUpdateProp is only told after a successful save.
+  const onUpdate = async (wid: string, patch: Record<string, unknown>): Promise<boolean> => {
     setSaveErr(null);
-    if (onUpdateProp) { await onUpdateProp(wid, patch); return; }
     try {
       const r = await fetch(`/api/maintenance/${wid}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
-      if (!r.ok) setSaveErr("That change didn’t save. Try again.");
-    } catch { setSaveErr("That change didn’t save. Try again."); }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); setSaveErr(d?.error ? `That change didn’t save: ${d.error}` : "That change didn’t save. Try again."); return false; }
+      return true;
+    } catch { setSaveErr("That change didn’t save. Try again."); return false; }
   };
+  void onUpdateProp;
   // Linked tasks, files and follow-up work orders (from the job window feed).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [extra, setExtra] = useState<{ tasks: any[]; files: any[]; subs: any[] }>({ tasks: [], files: [], subs: [] });
   const [taskForm, setTaskForm] = useState({ title: "", due: "" });
   const [extraBusy, setExtraBusy] = useState(false);
   const [extraMsg, setExtraMsg] = useState<string | null>(null);
+  const [invoiceMade, setInvoiceMade] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   // Job timer (clock in / out) and customer sign-off.
@@ -2010,10 +2019,19 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
       + (partsPending.length ? ` ${partsPending.join(", ")}.` : "");
   const doneCount = checklist.filter(c => c.is_complete || c.completed || c.done).length;
   const allStepsDone = checklist.length > 0 && doneCount === checklist.length;
-  const hasPhoto = photos.length > 0;
+  // A customer signature is saved alongside photos but isn't proof-of-work.
+  const hasPhoto = photos.some(ph => !String((ph as { file_name?: string }).file_name ?? '').startsWith('signature|'));
   const canComplete = allStepsDone && hasPhoto;
   const completeBlockReason = !allStepsDone ? (checklist.length === 0 ? "Add at least one step, then check it off" : `Finish all steps (${doneCount}/${checklist.length})`) : !hasPhoto ? "Add at least one photo as proof" : "";
-  const patchField = (p: Record<string, unknown>) => { onUpdate(id, { ...p, send_notifications: notifyOnChange }); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
+  // Shows the change right away; puts the old values back if the save fails.
+  const patchField = async (p: Record<string, unknown>) => {
+    const before: Record<string, unknown> = {}
+    if (wo) for (const k of Object.keys(p)) before[k] = (wo as Record<string, unknown>)[k]
+    setWo((w: typeof wo) => w ? { ...w, ...p } : w)
+    const ok = await onUpdate(id, { ...p, send_notifications: notifyOnChange })
+    if (!ok) setWo((w: typeof wo) => w ? { ...w, ...before } : w)
+    return ok
+  };
 
   // Every step/phase write goes through here. Returns false AND shows a plain
   // message on failure — nothing is swallowed. The raw server text is kept in a
@@ -2102,7 +2120,8 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   }
   async function addComment() {
     const content = chat.trim(); if (!content) return; setChat("");
-    await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => null);
+    if (!r?.ok) { setChat(content); setExtraMsg("Your note didn’t save. Try again."); }
     load(true);
   }
   async function askAI() {
@@ -2117,24 +2136,30 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   async function assignPlaybook(pb: any) {
     if (!pb) return;
     const steps: string[] = (pb.steps ?? []).map((s: unknown) => typeof s === "string" ? s : ((s as { title?: string; text?: string })?.title || (s as { text?: string })?.text || "")).filter(Boolean);
-    for (const title of steps) await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
+    let failed = 0
+    for (const title of steps) { const r = await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => null); if (!r?.ok) failed++ }
+    if (failed) setExtraMsg(`${failed} of ${steps.length} playbook steps didn’t save. Try again.`);
     load(true);
   }
   async function uploadWoPhoto(file: File) {
-    if (!file || woUploading) return; setWoUploading(true);
+    if (!file || woUploading) return; setWoUploading(true); setExtraMsg(null);
     try {
       const up = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) }).then(r => r.json());
-      if (up?.signedUrl) {
-        await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
-        await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) }).catch(() => {});
-      }
-    } catch (_) { /* ignore */ }
+      if (!up?.signedUrl) throw new Error("start");
+      // Only record the photo if the file actually uploaded — no broken "proof".
+      const put = await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
+      if (!put.ok) throw new Error("upload");
+      const r = await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) });
+      if (!r.ok) throw new Error("save");
+    } catch { setExtraMsg("The photo didn’t upload. Try again."); }
     setWoUploading(false); load(true);
   }
   async function addPart() {
     if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
-    await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null, phase_id: costPhase || null }) }).catch(() => {});
-    setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load(true);
+    const r = await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null, phase_id: costPhase || null }) }).catch(() => null);
+    setPartBusy(false);
+    if (!r?.ok) { setPartErr({ msg: "That part didn’t save.", detail: r ? `Server said ${r.status}.` : "You may be offline." }); return; }
+    setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); load(true);
   }
   // Update one part's procurement fields. Optimistic so the dropdown answers
   // instantly; on failure the old value is put back and the reason is shown.
@@ -2168,34 +2193,41 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   }
   async function logLabor() {
     const h = Number(laborH); if (!h || h <= 0 || partBusy) return; setPartBusy(true);
-    await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h, phase_id: costPhase || null }) }).catch(() => {});
-    setLaborH(""); setPartBusy(false); load(true);
+    const r = await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h, phase_id: costPhase || null }) }).catch(() => null);
+    setPartBusy(false);
+    if (!r?.ok) { setPartErr({ msg: "That labor didn’t save.", detail: r ? `Server said ${r.status}.` : "You may be offline." }); return; }
+    setLaborH(""); load(true);
   }
   async function addCrew(techId: string, role = "crew") {
     if (!techId) return; setCrewPick("");
-    await fetch(`/api/maintenance/${id}/crew`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ technician_id: techId, role }) }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/crew`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ technician_id: techId, role }) }).catch(() => null);
+    if (!r?.ok) setExtraMsg("That crew change didn’t save. Try again.");
     load(true);
   }
   async function removeCrew(memberId: string) {
     setCrew(c => c.filter(x => x.id !== memberId));
-    await fetch(`/api/maintenance/${id}/crew?member_id=${memberId}`, { method: "DELETE" }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/crew?member_id=${memberId}`, { method: "DELETE" }).catch(() => null);
+    if (!r?.ok) setExtraMsg("That crew change didn’t save. Try again.");
     load(true);
   }
   async function addPhase() {
     const name = phaseForm.name.trim(); if (!name) return;
-    await fetch(`/api/maintenance/${id}/phases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, scheduled_date: phaseForm.scheduled_date || null }) }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/phases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, scheduled_date: phaseForm.scheduled_date || null }) }).catch(() => null);
+    if (!r?.ok) { setExtraMsg("That phase didn’t save. Try again."); return; }
     setPhaseForm({ name: "", scheduled_date: "" }); load(true);
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function patchPhase(phaseId: string, body: any) {
     setPhases(ps => ps.map(p => p.id === phaseId ? { ...p, ...body } : p)); // optimistic
-    await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (!r?.ok) setExtraMsg("That phase change didn’t save. Try again.");
     load(true);
   }
   async function removePhase(phaseId: string) {
     setPhases(ps => ps.filter(p => p.id !== phaseId));
     if (costPhase === phaseId) setCostPhase("");
-    await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "DELETE" }).catch(() => {});
+    const r = await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "DELETE" }).catch(() => null);
+    if (!r?.ok) setExtraMsg("That phase didn’t delete. Try again.");
     load(true);
   }
   async function jobAction(payload: Record<string, unknown>, okMsg: string): Promise<boolean> {
@@ -2258,7 +2290,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     load(true);
   }
   async function createInvoice() {
-    if (invBusy || !wo) return; setInvBusy(true); setSmsMsg(null);
+    if (invBusy || !wo || invoiceMade) return; setInvBusy(true); setSmsMsg(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lineItems = [
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2267,7 +2299,8 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     ];
     const r = await fetch(`/api/invoices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site_id: wo.site_id ?? null, work_order_id: id, line_items: lineItems, notes: `From work order ${wo.wo_number || ""}`.trim() }) }).then(x => x.json()).catch(() => null);
     setInvBusy(false);
-    setSmsMsg(r?.id || r?.invoice?.id ? "Invoice created ✓ — open Money/Docs to set rates, send & collect payment." : (r?.error || "Couldn't create invoice."));
+    if (r?.id || r?.invoice?.id) setInvoiceMade(true);
+    setSmsMsg(r?.id || r?.invoice?.id ? "Invoice created ✓ — open Money/Docs to set the labor rate, send & collect payment." : (r?.error || "Couldn't create invoice."));
   }
 
   // One phase block: header ("Headend — 2 of 3 done"), its steps indented under
@@ -2342,14 +2375,15 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   }
   // The one obvious next thing to do (ServiceTitan / Housecall Pro style).
   const primary: { label: string; run: () => void; tone?: string } | null = !wo ? null
-    : bucket === "Done" ? { label: invBusy ? "Creating invoice…" : "Create invoice", run: createInvoice, tone: "#248A3D" }
+    : bucket === "Done" ? { label: invoiceMade ? "Invoice created ✓" : invBusy ? "Creating invoice…" : "Create invoice", run: createInvoice, tone: "#248A3D" }
     : onHold ? { label: "Resume job", run: () => goStep("Scheduled") }
     : bucket === "In Progress" ? { label: "Finish job", run: () => goStep("Done"), tone: "#248A3D" }
     : bucket === "Scheduled" ? { label: "Start job", run: () => goStep("In Progress") }
     : !wo.assignee_id ? { label: "Assign a tech", run: () => { setTab("Overview"); setTimeout(() => document.getElementById("jp-tech")?.focus(), 60); } }
     : !sched ? { label: "Set a date", run: () => { setTab("Overview"); setTimeout(() => document.getElementById("jp-date")?.focus(), 60); } }
     : { label: "Mark scheduled", run: () => goStep("Scheduled") };
-  const link = typeof window !== "undefined" ? `${window.location.origin}/maintenance/${id}` : `/maintenance/${id}`;
+  // Opens this same job page (Jobs tab) — not the old /maintenance screen.
+  const link = typeof window !== "undefined" ? `${window.location.origin}/?tab=jobs&job=${id}` : `/?tab=jobs&job=${id}`;
 
   return <div className="jp" style={{ position: "fixed", inset: 0, zIndex: 130, overflowY: "auto", backgroundColor: "#EEF2F7", backgroundImage: "linear-gradient(180deg,#0E1726 0px,#18263F 200px,#283B5E 380px,#5D7193 560px,#B4C1D6 760px,#E2E8F1 940px,#EEF2F7 1100px)", backgroundRepeat: "no-repeat", backgroundAttachment: "local", color: INK, fontFamily: FONT, letterSpacing: "-0.01em", WebkitOverflowScrolling: "touch" }}>
     <style>{`
@@ -2462,7 +2496,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         {tab === "Overview" && (<>
         <Card>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(stOf(wo))} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select id="jp-tech" value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input id="jp-date" type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
@@ -2641,7 +2675,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
             <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>
           </div>
-          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "#E8F6EC", border: "1px solid rgba(0,230,153,0.4)", color: "#248A3D", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
+          <button onClick={createInvoice} disabled={invBusy || invoiceMade} style={{ ...btn, marginTop: 12, width: "100%", background: "#E8F6EC", border: "1px solid rgba(0,230,153,0.4)", color: "#248A3D", opacity: invBusy || invoiceMade ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invoiceMade ? "Invoice created ✓" : invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
           {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 

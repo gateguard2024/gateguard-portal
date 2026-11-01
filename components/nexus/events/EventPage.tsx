@@ -6,7 +6,7 @@
  * Data: /api/events/[id] (+ /items, /campaign, /leads), /api/events/templates.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fillMerge, MERGE_FIELDS } from '@/lib/events-merge'
+import { fillMerge, MERGE_FIELDS, sanitizeEmailHtml } from '@/lib/events-merge'
 import {
   AUDIENCES, BOOTH_TYPES, BRAND, EVENT_TYPES, FLOW, FONT, GREEN, LINE, MUTED, ORANGE, PLAN_CATS, PLAN_LABEL, RED, RSVPS,
   SHADOW, STATUS_COLOR, STATUS_LABEL, SUPPLY_CATS, SUPPLY_LABEL, SUPPLY_STATUS, TEXT, TYPE_LABEL,
@@ -137,21 +137,43 @@ export function EventPage({ eventId, onClose, onChanged }: { eventId: string; on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, onChanged, say])
   const updItem = useCallback(async (kind: Kind, id: string, fields: Record<string, unknown>) => {
-    let before: Detail | null = null
-    setD(x => { before = x; return x ? { ...x, [listKey[kind]]: (x[listKey[kind]] as { id: string }[]).map(r => (r.id === id ? { ...r, ...fields } : r)) } : x })
+    // Remember just this item's old values, so a failed save undoes only this change.
+    let prev: Record<string, unknown> | null = null
+    setD(x => {
+      if (!x) return x
+      const list = x[listKey[kind]] as unknown as Record<string, unknown>[]
+      const row = list.find(r => r.id === id)
+      if (row) { prev = {}; for (const k of Object.keys(fields)) prev[k] = row[k] }
+      return { ...x, [listKey[kind]]: list.map(r => (r.id === id ? { ...r, ...fields } : r)) }
+    })
     try {
-      await jsonOrErr(await fetch(`/api/events/${eventId}/items`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, item_id: id, ...fields }) }).catch(() => null))
+      const j = await jsonOrErr(await fetch(`/api/events/${eventId}/items`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, item_id: id, ...fields }) }).catch(() => null))
+      if (j?.item) setD(x => (x ? { ...x, [listKey[kind]]: (x[listKey[kind]] as unknown as Record<string, unknown>[]).map(r => (r.id === id ? { ...r, ...j.item } : r)) } : x))
       onChanged(); return true
-    } catch (e) { if (before) setD(before); say((e as Error).message, true); return false }
+    } catch (e) {
+      const back = prev as Record<string, unknown> | null
+      if (back) setD(x => (x ? { ...x, [listKey[kind]]: (x[listKey[kind]] as unknown as Record<string, unknown>[]).map(r => (r.id === id ? { ...r, ...back } : r)) } : x))
+      say((e as Error).message, true); return false
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, onChanged, say])
   const delItem = useCallback(async (kind: Kind, id: string) => {
-    let before: Detail | null = null
-    setD(x => { before = x; return x ? { ...x, [listKey[kind]]: (x[listKey[kind]] as { id: string }[]).filter(r => r.id !== id) } : x })
+    let removed: { row: unknown; at: number } | null = null
+    setD(x => {
+      if (!x) return x
+      const list = x[listKey[kind]] as unknown as { id: string }[]
+      const at = list.findIndex(r => r.id === id)
+      if (at >= 0) removed = { row: list[at], at }
+      return { ...x, [listKey[kind]]: list.filter(r => r.id !== id) }
+    })
     try {
       await jsonOrErr(await fetch(`/api/events/${eventId}/items?kind=${kind}&item_id=${id}`, { method: 'DELETE' }).catch(() => null))
       onChanged()
-    } catch (e) { if (before) setD(before); say((e as Error).message, true) }
+    } catch (e) {
+      const back = removed as { row: unknown; at: number } | null
+      if (back) setD(x => { if (!x) return x; const list = [...(x[listKey[kind]] as unknown as unknown[])]; list.splice(back.at, 0, back.row); return { ...x, [listKey[kind]]: list } })
+      say((e as Error).message, true)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, onChanged, say])
 
@@ -165,7 +187,7 @@ export function EventPage({ eventId, onClose, onChanged }: { eventId: string; on
     const yes = d.guests.filter(g => g.rsvp === 'yes' || g.rsvp === 'attended').length
     const came = d.guests.filter(g => g.rsvp === 'attended' || g.checked_in_at).length
     const leads = d.guests.filter(g => g.lead_id).length
-    const dueMail = d.campaign.filter(c => c.status !== 'sent' && c.send_at && c.send_at <= t).length
+    const dueMail = d.campaign.filter(c => c.status !== 'sent' && !c.auto_send && c.send_at && c.send_at <= t).length
     return { done, total: d.checklist.length, late, spent, toOrder, yes, came, leads, invited: d.guests.length, dueMail }
   }, [d])
 
@@ -278,8 +300,8 @@ function Inline({ value, onSave, className = 'ep-flat', placeholder, type = 'tex
   useEffect(() => setV(value), [value])
   const commit = () => { if (v !== value) onSave(v) }
   return <input className={className} type={type} value={v} placeholder={placeholder} style={style} aria-label={ariaLabel ?? placeholder}
-    onChange={ev => { setV(ev.target.value); if (type === 'date' || type === 'time') { if (ev.target.value !== value) onSave(ev.target.value) } }}
-    onBlur={type === 'date' || type === 'time' ? undefined : commit}
+    onChange={ev => setV(ev.target.value)}
+    onBlur={commit}
     onKeyDown={ev => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }} />
 }
 
@@ -292,11 +314,15 @@ function Overview({ d, stats, patchEvent, updItem, goTab }: { d: Detail; stats: 
     const list = d.checklist.filter(x => planCat(x.category) === c.id)
     return { ...c, total: list.length, done: list.filter(x => x.status === 'done').length, late: list.filter(x => x.status !== 'done' && x.due_date && x.due_date < t).length }
   }).filter(c => c.total)
+  // Changing the date asks (in plain buttons) whether the plan moves with it.
+  const [pendingDate, setPendingDate] = useState<string | null>(null)
+  const hasPlan = !!(d.checklist.length || d.supplies.length || d.campaign.length)
   const setDate = (v: string) => {
     if (!v || v === e.event_date) return
-    const move = e.event_date && (d.checklist.length || d.supplies.length || d.campaign.length) ? window.confirm('Move every step, order and email by the same number of days?\n\nOK = move the plan with the event · Cancel = only change the event date') : false
-    void patchEvent({ event_date: v, shift_dates: move })
+    if (e.event_date && hasPlan) { setPendingDate(v); return }
+    void patchEvent({ event_date: v })
   }
+  const applyDate = async (move: boolean) => { const v = pendingDate; setPendingDate(null); if (v) await patchEvent({ event_date: v, shift_dates: move }) }
   return (
     <div className="ep-grid">
       <div>
@@ -334,7 +360,16 @@ function Overview({ d, stats, patchEvent, updItem, goTab }: { d: Detail; stats: 
           <dl className="ep-dl">
             <dt>Name</dt><dd><Inline className="ev-in" value={e.title} onSave={v => v.trim() && void patchEvent({ title: v.trim() })} ariaLabel="Name" /></dd>
             <dt>Type</dt><dd><select className="ev-in" value={e.event_type} onChange={ev => void patchEvent({ event_type: ev.target.value })} aria-label="Type">{EVENT_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}{!TYPE_LABEL[e.event_type] && <option value={e.event_type}>{e.event_type}</option>}</select></dd>
-            <dt>Date</dt><dd><input className="ev-in" type="date" defaultValue={e.event_date ?? ''} key={e.event_date ?? 'none'} onBlur={ev => setDate(ev.target.value)} aria-label="Date" /></dd>
+            <dt>Date</dt><dd><input className="ev-in" type="date" defaultValue={e.event_date ?? ''} key={`${e.event_date ?? 'none'}-${pendingDate ?? ''}`} onBlur={ev => setDate(ev.target.value)} aria-label="Date" />
+              {pendingDate && <div className="ev-msg" role="alertdialog" aria-label="Move the plan?" style={{ marginTop: 8, marginBottom: 0 }}>
+                Moving to {fmtDate(pendingDate)}. Move every open step, order and unsent email by the same number of days?
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button className="ev-b pri sm" onClick={() => void applyDate(true)}>Move the plan too</button>
+                  <button className="ev-b line sm" onClick={() => void applyDate(false)}>Only the event date</button>
+                  <button className="ev-b line sm" onClick={() => setPendingDate(null)}>Cancel</button>
+                </div>
+              </div>}
+            </dd>
             <dt>Time</dt><dd style={{ display: 'flex', gap: 6 }}><Inline className="ev-in" type="time" value={e.start_time ?? ''} onSave={v => void patchEvent({ start_time: v })} ariaLabel="Starts" /><Inline className="ev-in" type="time" value={e.end_time ?? ''} onSave={v => void patchEvent({ end_time: v })} ariaLabel="Ends" /></dd>
             <dt>Property / account</dt><dd><Inline className="ev-in" value={e.property_name ?? ''} onSave={v => void patchEvent({ property_name: v })} ariaLabel="Property" /></dd>
             <dt>Venue</dt><dd><Inline className="ev-in" value={e.venue ?? ''} onSave={v => void patchEvent({ venue: v })} ariaLabel="Venue" /></dd>
@@ -510,14 +545,14 @@ function EmailsTab({ event, steps, guests, addItem, updItem, delItem, say, reloa
       <div className="hint">Invites, reminders and thank-yous, in send order. Each guest gets their own copy with their name filled in. Emails come from noreply@gateguard.co and replies go to you.</div>
       {!sorted.length && <div className="ev-note">No emails yet.</div>}
       {sorted.map(s => {
-        const due = s.status !== 'sent' && s.send_at && s.send_at <= t
+        const due = s.status !== 'sent' && !s.auto_send && s.send_at && s.send_at <= t
         const isOpen = open === s.id
         return (
           <div className="ep-mail" key={s.id}>
             <div className="mh" onClick={() => setOpen(isOpen ? null : s.id)} role="button" aria-expanded={isOpen} tabIndex={0} onKeyDown={ev => { if (ev.key === 'Enter') setOpen(isOpen ? null : s.id) }}>
-              <span className="ev-dot" style={{ background: s.status === 'sent' ? GREEN : due ? ORANGE : '#C7C7CC' }} />
+              <span className="ev-dot" style={{ background: s.status === 'sent' ? GREEN : s.status === 'partial' ? ORANGE : due ? ORANGE : '#C7C7CC' }} />
               <div className="t">{stepLabel(s.step)}<div className="ev-note" style={{ fontWeight: 400 }}>{s.email_subject ? fillMerge(s.email_subject, event, null, event.host_name ?? '', false) : 'No subject'}</div></div>
-              <span className="ev-note" style={{ whiteSpace: 'nowrap', color: due ? ORANGE : undefined, fontWeight: due ? 600 : 400 }}>{s.status === 'sent' ? 'Sent' : s.send_at ? `${due ? 'Send now · ' : 'Send '}${fmtDate(s.send_at)}` : 'No send date'}</span>
+              <span className="ev-note" style={{ whiteSpace: 'nowrap', color: due ? ORANGE : undefined, fontWeight: due ? 600 : 400 }}>{s.status === 'sent' ? `Sent${(s.sent_guest_ids ?? []).length ? ` to ${(s.sent_guest_ids ?? []).length}` : ''}` : s.status === 'partial' ? `Partly sent (${(s.sent_guest_ids ?? []).length})` : s.status === 'sending' ? 'Sending…' : s.send_at ? `${due ? 'Send now · ' : s.auto_send ? 'Auto-sends ' : 'Send '}${fmtDate(s.send_at)}` : 'No send date'}</span>
               <span style={{ color: MUTED }}>{isOpen ? '▴' : '▾'}</span>
             </div>
             {isOpen && <EmailEditor event={event} step={s} guests={guests} updItem={updItem} delItem={delItem} say={say} reload={reload} />}
@@ -535,11 +570,14 @@ function EmailEditor({ event, step, guests, updItem, delItem, say, reload }: { e
   const ta = useRef<HTMLTextAreaElement>(null)
   const dirty = subject !== (step.email_subject ?? '') || body !== htmlToText(step.email_html)
   const audience = step.audience ?? 'all'
+  // Only guests who haven't had this email yet — sending again never repeats anyone.
+  const already = new Set((step.sent_guest_ids ?? []).map(String))
   const reach = guests.filter(g => {
     const r = g.rsvp ?? 'invited'
-    if (!/.+@.+\..+/.test(String(g.email ?? ''))) return false
+    if (already.has(g.id) || !/.+@.+\..+/.test(String(g.email ?? ''))) return false
     return audience === 'invited' ? r === 'invited' : audience === 'yes' ? r === 'yes' : audience === 'attended' ? (r === 'attended' || !!g.checked_in_at) : audience === 'no_show' ? (r === 'yes' && !g.checked_in_at) : r !== 'no'
   }).length
+  const sentCount = already.size
   const insert = (f: string) => {
     const el = ta.current; const tok = `{{${f}}}`
     if (!el) { setBody(b => b + tok); return }
@@ -547,15 +585,21 @@ function EmailEditor({ event, step, guests, updItem, delItem, say, reload }: { e
     setBody(body.slice(0, a) + tok + body.slice(b))
     requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = a + tok.length })
   }
-  const save = async () => { if (await updItem('campaign', step.id, { email_subject: subject, email_html: textToHtml(body) })) say('Email saved') }
+  const save = async (quiet = false): Promise<boolean> => {
+    const ok = await updItem('campaign', step.id, { email_subject: subject, email_html: textToHtml(body) })
+    if (ok && !quiet) say('Email saved')
+    return ok
+  }
   const send = async (test: boolean) => {
-    if (dirty) await save()
-    if (!test && !window.confirm(`Send “${subject}” to ${reach} guest${reach === 1 ? '' : 's'} now?`)) return
+    // Never send an old copy: if the latest edits didn't save, stop here.
+    if (dirty && !(await save(true))) return
+    if (!test && !window.confirm(`Send “${subject}” to ${reach} ${sentCount ? 'more ' : ''}guest${reach === 1 ? '' : 's'} now?`)) return
     setBusy(true)
     try {
-      const r = await fetch(`/api/events/${event.id}/campaign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step_id: step.id, test, resend: step.status === 'sent' }) }).catch(() => null)
+      const r = await fetch(`/api/events/${event.id}/campaign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step_id: step.id, test }) }).catch(() => null)
       const j = await jsonOrErr(r)
-      say(test ? 'Test sent to your inbox' : `Sent to ${j.sent} guest${j.sent === 1 ? '' : 's'}${j.failed ? ` · ${j.failed} failed` : ''}${j.skipped ? ` · ${j.skipped} had no email` : ''}`)
+      const extra = [j.failed ? `${j.failed} failed${j.errors?.[0] ? ` (${j.errors[0]})` : ''}` : '', j.skipped ? `${j.skipped} had no email` : '', j.remaining ? `${j.remaining} still to send — press Send again` : ''].filter(Boolean).join(' · ')
+      say(test ? 'Test sent to your inbox' : `Sent to ${j.sent} guest${j.sent === 1 ? '' : 's'}${extra ? ` · ${extra}` : ''}`, !!j.failed)
       if (!test) await reload()
     } catch (e) { say((e as Error).message, true) }
     setBusy(false)
@@ -572,18 +616,28 @@ function EmailEditor({ event, step, guests, updItem, delItem, say, reload }: { e
       <label className="ev-lbl">Message</label>
       <div style={{ marginBottom: 6 }}><span className="ev-note" style={{ marginRight: 6 }}>Insert:</span>{MERGE_FIELDS.map(f => <button key={f} className="ep-fld" onClick={() => insert(f)}>{f.replace(/_/g, ' ')}</button>)}</div>
       {preview
-        ? <div className="ep-prev" dangerouslySetInnerHTML={{ __html: `<div style="font-weight:600;margin-bottom:10px">${fillMerge(subject, event, { name: 'Jordan Smith' }, event.host_name ?? '')}</div>${fillMerge(textToHtml(body), event, { name: 'Jordan Smith' }, event.host_name ?? '')}` }} />
+        ? <div className="ep-prev">
+            {/* Subject as plain text; body through the same cleaner the sender uses. */}
+            <div style={{ fontWeight: 600, marginBottom: 10 }}>{fillMerge(subject, event, { name: 'Jordan Smith' }, event.host_name ?? '', false)}</div>
+            <div dangerouslySetInnerHTML={{ __html: fillMerge(sanitizeEmailHtml(textToHtml(body)), event, { name: 'Jordan Smith' }, event.host_name ?? '', true, { rsvp_link: '#' }) }} />
+          </div>
         : <textarea ref={ta} className="ev-ta" rows={9} value={body} onChange={e => setBody(e.target.value)} />}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
-        <button className="ev-b pri sm" disabled={!dirty} onClick={save}>Save</button>
+        <button className="ev-b pri sm" disabled={!dirty} onClick={() => void save()}>Save</button>
         <button className="ev-b line sm" onClick={() => setPreview(p => !p)}>{preview ? 'Edit' : 'Preview'}</button>
         <button className="ev-b line sm" disabled={busy} onClick={() => void send(true)}>Send me a test</button>
         <button className="ev-b line sm" onClick={copy}>Copy text</button>
-        <button className="ev-b pri sm" disabled={busy || !reach} onClick={() => void send(false)}>{busy ? 'Sending…' : step.status === 'sent' ? `Send again (${reach})` : `Send to ${reach} guest${reach === 1 ? '' : 's'}`}</button>
+        <button className="ev-b pri sm" disabled={busy || !reach} onClick={() => void send(false)}>{busy ? 'Sending…' : sentCount ? `Send to ${reach} new guest${reach === 1 ? '' : 's'}` : `Send to ${reach} guest${reach === 1 ? '' : 's'}`}</button>
         <span style={{ flex: 1 }} />
         <button className="ev-b red sm" onClick={() => { if (window.confirm('Delete this email?')) void delItem('campaign', step.id) }}>Delete</button>
       </div>
-      {!reach && <div className="ev-note" style={{ marginTop: 8 }}>No guests with an email address match “{AUDIENCES.find(a => a.id === audience)?.label}”. Add guests on the Guests tab.</div>}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13.5 }}>
+        <input type="checkbox" checked={!!step.auto_send} disabled={!step.send_at} onChange={e => void updItem('campaign', step.id, { auto_send: e.target.checked })} />
+        Send automatically on {step.send_at ? fmtDate(step.send_at) : 'the send date'} at 9 AM Eastern{!step.send_at ? ' (set a send date first)' : ''}
+      </label>
+      {sentCount > 0 && <div className="ev-note" style={{ marginTop: 6 }}>Already sent to {sentCount} guest{sentCount === 1 ? '' : 's'}{step.sent_at ? ` (${fmtDate(String(step.sent_at).slice(0, 10))})` : ''}. Sending again only reaches guests who haven’t had it.</div>}
+      {!reach && <div className="ev-note" style={{ marginTop: 8 }}>{sentCount ? 'Everyone in this group already got it.' : <>No guests with an email address match “{AUDIENCES.find(a => a.id === audience)?.label}”. Add guests on the Guests tab.</>}</div>}
+      <div className="ev-note" style={{ marginTop: 6 }}>Tip: **bold** and [link text](https://…) work in the message. “rsvp link” lets guests reply to you to RSVP.</div>
     </div>
   )
 }

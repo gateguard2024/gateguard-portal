@@ -35,6 +35,11 @@ function serviceDb() {
 
 // Global catalog rows (org_id null) are corporate-only; private rows belong to a company.
 type Scope = Awaited<ReturnType<typeof resolveOrgScope>>
+// Columns an import may set (anything else in a CSV row is ignored).
+const IMPORT_COLS = ['sku', 'name', 'brand', 'category', 'subcategory', 'description', 'specs', 'adi_sku', 'manual_url', 'image_url', 'sell_price', 'dealer_cost', 'list_price', 'msrp', 'active', 'field_service', 'tags', 'labor_hours', 'warranty_months', 'unit', 'accessories'] as const
+// PostgREST .or() treats , ( ) as syntax — strip them from search text.
+const safeSearch = (q: string) => q.replace(/[%_,()*\\]/g, ' ').trim()
+
 function canEdit(row: { org_id?: string | null } | null | undefined, scope: Scope): boolean {
   if (!row) return false
   if (scope.all) return true
@@ -86,10 +91,11 @@ export async function GET(req: NextRequest) {
       : query.is('org_id', null)
   }
 
-  if (q) {
+  const qs = q ? safeSearch(q) : ''
+  if (qs) {
     // ilike search across name, sku, brand, description
     query = query.or(
-      `name.ilike.%${q}%,sku.ilike.%${q}%,brand.ilike.%${q}%,description.ilike.%${q}%`
+      `name.ilike.%${qs}%,sku.ilike.%${qs}%,brand.ilike.%${qs}%,description.ilike.%${qs}%`
     )
   }
 
@@ -113,17 +119,27 @@ export async function POST(req: NextRequest) {
     const rowsIn = Array.isArray(body.rows) ? (body.rows as Record<string, unknown>[]) : []
     if (rowsIn.length === 0) return NextResponse.json({ error: 'No rows provided.' }, { status: 400 })
     const org_id = scope.all ? ((body.org_id as string) ?? null) : (scope.own_id ?? null)
+    // Only catalog columns from an import — never ids, owners or internal fields.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let rows: Record<string, any>[] = rowsIn.map(r => ({ ...r, org_id }))
-    // A dealer's import must never overwrite a global or another company's SKU.
+    let rows: Record<string, any>[] = rowsIn.map(r => {
+      const clean: Record<string, unknown> = {}
+      for (const k of IMPORT_COLS) if (k in r && r[k] !== undefined) clean[k] = r[k]
+      Object.assign(clean, proFields(r))
+      if (!proFields(r).unit) delete clean.unit
+      if (!('accessories' in proFields(r))) delete clean.accessories
+      return { ...clean, org_id }
+    })
+    // An import must never overwrite an item owned by someone else: for a dealer that
+    // is any global or other-company SKU; for Gate Guard, a dealer's private SKU
+    // (which would otherwise become global and show that dealer's prices to everyone).
     const skipped: string[] = []
-    if (!scope.all) {
+    {
       const skus = rows.map(r => String(r.sku ?? '').trim()).filter(Boolean)
       const { data: existing, error: exErr } = skus.length ? await serviceDb().from('products').select('sku, org_id').in('sku', skus) : { data: [], error: null }
       if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 })
-      const locked = new Set((existing ?? []).filter(e => !canEdit(e, scope)).map(e => String(e.sku)))
+      const locked = new Set((existing ?? []).filter(e => (scope.all ? (e.org_id ?? null) !== (org_id ?? null) : !canEdit(e, scope))).map(e => String(e.sku)))
       rows = rows.filter(r => { if (locked.has(String(r.sku ?? '').trim())) { skipped.push(String(r.sku)); return false } return true })
-      if (!rows.length) return NextResponse.json({ error: 'Those SKUs belong to the Gate Guard catalog (or another company) and can’t be changed by an import.', skipped }, { status: 403 })
+      if (!rows.length) return NextResponse.json({ error: scope.all ? 'Those SKUs belong to a dealer’s private catalog, so the import left them alone.' : 'Those SKUs belong to the Gate Guard catalog (or another company) and can’t be changed by an import.', skipped }, { status: 403 })
     }
     async function upsertRows(rs: Record<string, unknown>[]) {
       return serviceDb().from('products').upsert(rs, { onConflict: 'sku' }).select('*')
@@ -256,6 +272,11 @@ export async function PATCH(req: NextRequest) {
   if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 })
   if (!current) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
   if (!canEdit(current, scope)) return NextResponse.json({ error: 'Only Gate Guard can change items in the main catalog. Add your own version instead.' }, { status: 403 })
+  // When Gate Guard's cost is on file, the dealer cost is locked to it (+10%) — set it there, not here.
+  if ('dealer_cost' in patch && current.org_id == null) {
+    const { data: gc } = await serviceDb().from('product_costs').select('gg_cost').eq('product_id', id).maybeSingle()
+    if (gc && (gc as { gg_cost: number | null }).gg_cost != null) delete patch.dealer_cost
+  }
 
   let { data, error } = await serviceDb().from('products').update(patch).eq('id', id).select('*').single()
   let guard = 0

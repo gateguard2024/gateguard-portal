@@ -276,6 +276,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const fileName = clean(body.file_name)
     const url = clean(body.url)
     if (!fileName || !url) return NextResponse.json({ success: false, message: 'Missing file.' }, { status: 400 })
+    // Only real web links (our storage) — never javascript: or data: links that run when clicked.
+    if (!/^https:\/\//i.test(url)) return NextResponse.json({ success: false, message: 'That file link isn’t valid.' }, { status: 400 })
     const orgId = job.org_id ?? user.org_id
     if (!orgId) return NextResponse.json({ success: false, message: 'No organization on this job.' }, { status: 400 })
     const { data, error: insErr } = await supabase

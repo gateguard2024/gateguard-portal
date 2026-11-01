@@ -39,3 +39,6 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+
+# FUSE mount leftovers (created when an open file is deleted on a mounted folder)
+.fuse_hidden*
