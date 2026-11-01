@@ -46,6 +46,8 @@ function decTok(stored: string | null | undefined): string | null {
 const OAUTH_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
 const AUTHORIZE_URL   = 'https://appcenter.intuit.com/connect/oauth2'
 export const QBO_SCOPE = 'com.intuit.quickbooks.accounting'
+/** Intuit retired minor versions 1–74 in Aug 2025; 75 is the baseline. */
+export const QBO_MINOR = '75'
 
 export function qboEnvironment(): 'production' | 'sandbox' {
   return process.env.QBO_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production'
@@ -225,10 +227,48 @@ export async function qboApi(
 export async function qboQuery<T = any>(
   auth: Extract<QboAuth, { ok: true }>, query: string
 ): Promise<{ ok: true; rows: T[] } | { ok: false; error: string }> {
-  const res = await qboApi(auth, `/query?query=${encodeURIComponent(query)}&minorversion=73`, { method: 'GET' })
+  const res = await qboApi(auth, `/query?query=${encodeURIComponent(query)}&minorversion=${QBO_MINOR}`, { method: 'GET' })
   if (!res.ok) return { ok: false, error: `QBO query ${res.status}: ${await res.text()}` }
   const body = await res.json()
   const entity = Object.keys(body?.QueryResponse ?? {}).find(k => Array.isArray(body.QueryResponse[k]))
   const rows = entity ? (body.QueryResponse[entity] as T[]) : []
   return { ok: true, rows }
+}
+
+/** Pull a readable message out of a QuickBooks error body (Fault.Error[0]). */
+export function qboFaultMessage(body: unknown, status?: number): { message: string; code: string | null } {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = body as any
+  const e = b?.Fault?.Error?.[0] ?? b?.fault?.error?.[0]
+  if (e) return { message: [e.Message, e.Detail].filter(Boolean).join(' — ') || `QuickBooks error ${e.code ?? status ?? ''}`, code: e.code != null ? String(e.code) : null }
+  if (typeof b === 'string' && b) return { message: b.slice(0, 300), code: null }
+  return { message: `QuickBooks returned ${status ?? 'an error'}`, code: null }
+}
+
+/**
+ * JSON call to QuickBooks with the current minor version. Never throws:
+ * returns { ok, data } or { ok:false, error, code, status }. Retries once on 429/5xx.
+ */
+export async function qboJson<T = any>( // eslint-disable-line @typescript-eslint/no-explicit-any
+  auth: Extract<QboAuth, { ok: true }>, path: string, init?: { method?: string; body?: unknown }
+): Promise<{ ok: true; data: T } | { ok: false; error: string; code: string | null; status: number }> {
+  const sep = path.includes('?') ? '&' : '?'
+  const url = `${path}${sep}minorversion=${QBO_MINOR}`
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res: Response
+    try {
+      res = await qboApi(auth, url, { method: init?.method ?? 'GET', ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}), signal: AbortSignal.timeout(20000) })
+    } catch (e) {
+      if (attempt === 0) continue
+      return { ok: false, error: e instanceof Error ? e.message : 'Couldn’t reach QuickBooks', code: null, status: 0 }
+    }
+    const text = await res.text()
+    let body: unknown = text
+    try { body = text ? JSON.parse(text) : {} } catch { /* not JSON */ }
+    if (res.ok) return { ok: true, data: body as T }
+    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await new Promise(r => setTimeout(r, 1200)); continue }
+    const f = qboFaultMessage(body, res.status)
+    return { ok: false, error: f.message, code: f.code, status: res.status }
+  }
+  return { ok: false, error: 'QuickBooks didn’t answer', code: null, status: 0 }
 }

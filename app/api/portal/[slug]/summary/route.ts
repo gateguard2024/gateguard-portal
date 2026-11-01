@@ -14,7 +14,7 @@ async function fetchQboPayLink(qbInvoiceId: string): Promise<string | null> {
   try {
     const auth = await getQboAuth()
     if (!auth.ok) return null
-    const res = await qboApi(auth, `/invoice/${qbInvoiceId}?include=invoiceLink&minorversion=73`)
+    const res = await qboApi(auth, `/invoice/${qbInvoiceId}?include=invoiceLink&minorversion=75`)
     if (!res.ok) return null
     const body = await res.json()
     return body?.Invoice?.InvoiceLink ?? null

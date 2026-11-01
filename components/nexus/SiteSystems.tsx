@@ -1,64 +1,28 @@
 'use client';
 
-// Site Systems — a single scrolling, widget-based dashboard for everything we run
-// at a property: live cameras, doors (unlock + camera linking), recent activity,
-// network, relays, and controllers. Real per-site data via each widget's API.
-// Corporate-only credential setup lives behind the ⚙ gear (dealers never see keys).
-import React, { useState } from "react";
-import { Settings } from "lucide-react";
-import { SiteSecurity } from "@/components/nexus/SiteSecurity";
-import { SiteDoors } from "@/components/nexus/SiteDoors";
-import { SiteRelays } from "@/components/nexus/SiteRelays";
-import { SiteNetwork } from "@/components/nexus/SiteNetwork";
-import { SitePanels } from "@/components/nexus/SitePanels";
-import { SiteActivity } from "@/components/nexus/SiteActivity";
-import { SiteConnections } from "@/components/nexus/SiteConnections";
-import { SiteIncidents } from "@/components/nexus/SiteIncidents";
+// Site Systems on the Operations site page — the same panel as the Systems tab
+// (status, quick actions, Live · Doors & gates · People · Activity · Faults ·
+// Network · Controllers), without the page header. One source for both places.
+// 🔒 "Setup & keys" renders only for corporate users (credential endpoints also
+// refuse non-corporate server-side).
+import React, { useState } from 'react';
+import { CSS } from '@/components/nexus/systems/shared';
+import { SitePanel } from '@/components/nexus/SiteCommand';
 
-export function SiteSystems({ siteId, isCorporate, initialTab, headerTheme = "dark" }: { siteId: string; isCorporate: boolean; initialTab?: string; headerTheme?: "dark" | "light" }) {
-  // initialTab "setup" opens the credential panel straight away (e.g. new sites).
-  const [showSetup, setShowSetup] = useState(initialTab === "setup");
-
-  const light = headerTheme === "light";
-  const titleColor = light ? "#1D1D1F" : "rgba(255,255,255,0.95)";
-  const subColor = light ? "#6E6E73" : "rgba(255,255,255,0.5)";
-  const gear = light
-    ? { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, borderRadius: 10, padding: "7px 14px", cursor: "pointer", background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.12)", color: "#1D1D1F" } as const
-    : { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: "7px 14px", cursor: "pointer", background: "#22303f", border: "1px solid rgba(0,163,255,0.28)", color: "#00A3FF" } as const;
-
+export function SiteSystems({ siteId, isCorporate, initialTab }: { siteId: string; isCorporate: boolean; initialTab?: string; headerTheme?: 'dark' | 'light' }) {
+  const [setupReq, setSetupReq] = useState(0);
   return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+    <div className="sy sy-emb">
+      <style>{CSS}{'.sy.sy-emb{padding:0;max-width:none}'}</style>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: titleColor }}>Site Systems</div>
-          <div style={{ fontSize: 12, color: subColor }}>Live cameras, doors, network &amp; more — all this property&apos;s systems in one place.</div>
+          <div style={{ fontSize: 17, fontWeight: 600 }}>Systems</div>
+          <div style={{ fontSize: 13, color: '#6E6E73' }}>Cameras, doors, people, activity and network for this property.</div>
         </div>
-        {isCorporate && (
-          <button onClick={() => setShowSetup(s => !s)} style={gear}><Settings size={14} /> {showSetup ? "Hide setup" : "Setup & keys"}</button>
-        )}
+        {isCorporate && <button type="button" className="sy-b line" onClick={() => setSetupReq(n => n + 1)}>Setup &amp; keys</button>}
       </div>
-
-      {/* Corporate-only: vendor credentials + connect (collapsed by default). */}
-      {isCorporate && showSetup && <SiteConnections siteId={siteId} />}
-
-      {/* Faults & uptime — log outages, track downtime, promote to a work order. */}
-      <SiteIncidents siteId={siteId} />
-
-      {/* Widgets — one scrolling dashboard. */}
-      <SiteSecurity siteId={siteId} />
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 14 }}>
-        <SiteDoors siteId={siteId} />
-        <SiteActivity siteId={siteId} />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 14 }}>
-        <SiteNetwork siteId={siteId} />
-        <SiteRelays siteId={siteId} />
-      </div>
-
-      <SitePanels siteId={siteId} isCorporate={isCorporate} />
+      {/* initialTab "setup" (new sites) opens the vendor logins straight away. */}
+      <SitePanel siteId={siteId} isCorporate={isCorporate} initialSetup={initialTab === 'setup'} setupRequest={setupReq} />
     </div>
   );
 }

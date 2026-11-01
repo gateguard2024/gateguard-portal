@@ -78,6 +78,8 @@ function isBypassPath(pathname: string): boolean {
     ) ||
     // Inngest webhook — event routing; platform authenticates via signing key
     pathname.startsWith('/api/inngest') ||
+    // QuickBooks webhook — Intuit POST verified by intuit-signature HMAC, no Clerk session
+    pathname.startsWith('/api/integrations/quickbooks/webhook') ||
     // Stripe webhook — raw HTTP POST with Stripe-Signature header, no Clerk session
     pathname.startsWith('/api/billing/webhook') ||
     // Clerk webhook — verified via Svix signature, no Clerk session

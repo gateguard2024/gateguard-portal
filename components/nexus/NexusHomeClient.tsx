@@ -52,7 +52,7 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Design', id: 'design' },
 ]
 
-const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs', 'lexi', 'catalog', 'events']
+const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs', 'lexi', 'catalog', 'events', 'systems']
 
 const NEXUS_VERSION = 'v2.4.0'
 // Pages converted to the new light look show the new version.
@@ -82,7 +82,7 @@ async function postAssistant(messages: ChatMessage[]) {
 }
 
 export default function NexusHomeClient() {
-  const { user } = useUser()
+  const { user, isLoaded: userLoaded } = useUser()
   const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
   const isCorporate = meta.org_tier === 'corporate'
   // Lexi has something for you: count of urgent "I noticed…" items (red/orange) → glowing ring on the center button.
@@ -121,6 +121,9 @@ export default function NexusHomeClient() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('view') === 'admin') {
+      // Wait for the signed-in user before deciding — otherwise a deep link
+      // (e.g. back from QuickBooks) is dropped while Clerk is still loading.
+      if (!userLoaded) return
       if (isAdmin) setActiveTab('people')
       params.delete('view')
       const qs = params.toString()
@@ -133,7 +136,7 @@ export default function NexusHomeClient() {
       const qs = params.toString()
       window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
     }
-  }, [isAdmin])
+  }, [isAdmin, userLoaded])
 
   useEffect(() => {
     function openAdmin() { if (isAdmin) setActiveTab('people') }

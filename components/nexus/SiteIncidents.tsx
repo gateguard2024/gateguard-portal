@@ -1,227 +1,131 @@
 'use client';
 
-// SiteIncidents — the site fault ledger + uptime tracker. Logs "gate stuck open",
-// "camera down", etc. to the existing `incidents` table with a structured cause,
-// tracks uptime %, time-since-last, MTTR and current downtime, and can promote a
-// fault to a service work order. Manual entry today; the SAME endpoint is what the
-// AI watcher + ggsoc.com will write to later (tagged by `source`).
+// SiteIncidents — the site fault ledger + uptime tracker (Systems → Faults).
+// Logs "gate stuck open", "camera down", etc. to the `incidents` table with a
+// structured cause, tracks uptime %, time since last, MTTR and current downtime,
+// and can send a tech (promote to a work order). Manual entry today; the SAME
+// endpoint is what the AI watcher + ggsoc.com will write to (tagged by `source`).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { INCIDENT_CATEGORIES, INCIDENT_PRESETS, CATEGORY_BY_ID, causeLabel, categoryLabel, SEVERITY_META, type IncidentSeverity } from '@/lib/incident-taxonomy';
+import { INCIDENT_CATEGORIES, INCIDENT_PRESETS, CATEGORY_BY_ID, causeLabel, categoryLabel, type IncidentSeverity } from '@/lib/incident-taxonomy';
+import { type Any, Card, Dot, DOT, Field, GREEN, MUTED, Note, RED, Sheet, dur, getJson, send, type Notify } from '@/components/nexus/systems/shared';
 
-const TILE = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
-const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
-const INPUT = { background: '#16232f', border: '1px solid #1E293B', color: '#eaf2fb', borderRadius: 10, padding: '8px 10px', fontSize: 13, outline: 'none', width: '100%' } as const;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Incident = Record<string, any>;
 type Stats = { openCount: number; resolvedCount: number; timeSinceLastMs: number | null; currentDowntimeMs: number; mttrMs: number | null; downtimeMs: number; uptimePct: number; windowDays: number };
+const SEV_DOT: Record<string, string> = { critical: DOT.red, high: DOT.red, medium: DOT.orange, low: DOT.gray };
+const SEV_LABEL: Record<string, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const ago = (ts?: string | null) => { if (!ts) return ''; const ms = Date.now() - Date.parse(ts); return Number.isNaN(ms) ? '' : `${dur(ms)} ago`; };
 
-function dur(ms: number | null | undefined): string {
-  if (ms == null) return '—';
-  const m = Math.floor(ms / 60000);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 48) return `${h}h ${m % 60}m`;
-  return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
-function ago(ts: string | null | undefined): string {
-  if (!ts) return '';
-  const ms = Date.now() - Date.parse(ts);
-  return Number.isNaN(ms) ? '' : dur(ms) + ' ago';
-}
-
-export function SiteIncidents({ siteId }: { siteId: string }) {
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+export function SiteIncidents({ siteId, notify, onChanged, logRequest }: { siteId: string; notify?: Notify; onChanged?: () => void; logRequest?: number }) {
+  const [incidents, setIncidents] = useState<Any[] | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const say: Notify = useCallback((m, ok = true) => { if (notify) notify(m, ok); else if (!ok) setErr(m); }, [notify]);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const j = await fetch(`/api/incidents?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json());
-      setIncidents(Array.isArray(j.incidents) ? j.incidents : []);
-      setStats(j.stats ?? null);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    const r = await getJson(`/api/incidents?site_id=${siteId}`);
+    if (!r.ok) { setErr(r.data.error || 'Couldn’t load faults.'); setIncidents(i => i ?? []); return; }
+    setErr(null);
+    setIncidents(Array.isArray(r.data.incidents) ? r.data.incidents : []);
+    setStats(r.data.stats ?? null);
   }, [siteId]);
   useEffect(() => { void load(); }, [load]);
+  // "Report a problem" quick action opens the log sheet.
+  useEffect(() => { if (logRequest) setLogOpen(true); }, [logRequest]);
 
-  const open = useMemo(() => incidents.filter(i => i.status === 'open' || i.status === 'investigating'), [incidents]);
-  const recent = useMemo(() => incidents.filter(i => i.status === 'resolved' || i.status === 'closed').slice(0, 6), [incidents]);
+  const open = useMemo(() => (incidents ?? []).filter(i => i.status === 'open' || i.status === 'investigating'), [incidents]);
+  const recent = useMemo(() => (incidents ?? []).filter(i => i.status === 'resolved' || i.status === 'closed').slice(0, 8), [incidents]);
 
-  async function patch(id: string, body: Record<string, unknown>) {
-    await fetch(`/api/incidents/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    await load();
+  async function patch(i: Any, body: Any, done: string) {
+    if (body.action === 'convert_to_wo' && !window.confirm(`Create a service work order for “${i.title}”?`)) return;
+    setBusy(i.id);
+    const r = await send(`/api/incidents/${i.id}`, 'PATCH', body);
+    setBusy(null);
+    if (!r.ok) { say(r.data.error || 'Didn’t save.', false); return; }
+    say(done); await load(); onChanged?.();
   }
 
-  const healthColor = !stats ? '#00A3FF' : stats.uptimePct >= 99 ? '#00E699' : stats.uptimePct >= 95 ? '#fbbf24' : '#f87171';
+  const up = stats?.uptimePct;
+  const tiles = [
+    { l: `Uptime · ${stats?.windowDays ?? 90} days`, v: up != null ? `${up}%` : '—', c: up == null ? undefined : up >= 99 ? GREEN : up >= 95 ? '#B25000' : RED },
+    { l: 'Open faults', v: String(open.length), c: open.length ? RED : undefined },
+    { l: 'Since last fault', v: dur(stats?.timeSinceLastMs) },
+    { l: 'Down right now', v: open.length ? dur(stats?.currentDowntimeMs || null) : 'None' },
+    { l: 'Average fix time', v: dur(stats?.mttrMs) },
+  ];
 
   return (
-    <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#00A3FF' }}>Faults &amp; uptime</div>
-          <div style={{ fontSize: 12, color: '#c3d3e2' }}>Track outages, downtime and why systems went down.</div>
-        </div>
-        <button onClick={() => setLogOpen(true)} style={{ background: '#1E293B', border: '1px solid rgba(0,163,255,0.3)', color: '#cfe0f0', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>＋ Log issue</button>
+    <div className="sy-stack">
+      <div className="sy-kpis" style={{ marginBottom: 0 }}>
+        {tiles.map(t => <div key={t.l} className="sy-kpi"><div className="l">{t.l}</div><div className="v" style={{ color: t.c }}>{incidents == null ? '—' : t.v}</div></div>)}
       </div>
-
-      {/* Uptime stat tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8, marginBottom: 12 }}>
-        <Stat label={`Uptime · ${stats?.windowDays ?? 90}d`} value={stats ? `${stats.uptimePct}%` : '—'} color={healthColor} />
-        <Stat label="Open faults" value={stats?.openCount ?? 0} color={open.length ? '#f87171' : '#00E699'} />
-        <Stat label="Since last" value={dur(stats?.timeSinceLastMs)} sub="incident" color="#00A3FF" />
-        <Stat label="Current down" value={dur(stats?.currentDowntimeMs || null)} sub={open.length ? 'active' : 'none'} color={open.length ? '#fbbf24' : '#00A3FF'} />
-        <Stat label="Avg fix (MTTR)" value={dur(stats?.mttrMs)} color="#00A3FF" />
-      </div>
-
-      {/* Open faults */}
-      {loading ? <div style={{ fontSize: 12, color: '#00A3FF', padding: '8px 0' }}>Loading faults…</div>
-        : open.length === 0 ? <div style={{ fontSize: 12, color: '#00E699', padding: '10px 0' }}>✓ All systems operational — no open faults.</div>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {open.map(i => <FaultRow key={i.id} inc={i} onResolve={() => patch(i.id, { status: 'resolved' })} onConvert={() => patch(i.id, { action: 'convert_to_wo' })} />)}
-          </div>}
-
-      {/* Recently resolved */}
+      <Card title="Open faults" sub="What’s down, why, and for how long." right={<button type="button" className="sy-b pri sm" onClick={() => setLogOpen(true)}>Log a fault</button>}>
+        {err && <div style={{ marginBottom: 8 }}><Note tone="red">{err}</Note></div>}
+        {incidents == null ? <div className="sy-empty">Loading…</div>
+          : !open.length ? <div className="sy-empty" style={{ color: GREEN }}>All systems working — no open faults.</div>
+          : open.map(i => (
+            <div key={i.id} className="sy-row" style={{ flexWrap: 'wrap' }}>
+              <Dot c={SEV_DOT[i.severity] ?? DOT.orange} />
+              <div className="main" style={{ minWidth: 200 }}>
+                <div className="t">{i.title}</div>
+                <div className="m">{[SEV_LABEL[i.severity] ?? 'Medium', categoryLabel(i.category), i.cause ? causeLabel(i.category, i.cause) : null, `down ${ago(i.started_at)}`, i.source && i.source !== 'manual' ? `via ${i.source}` : null, i.work_order_id ? 'tech sent' : null].filter(Boolean).join(' · ')}</div>
+              </div>
+              {!i.work_order_id && <button type="button" className="sy-b line sm" onClick={() => patch(i, { action: 'convert_to_wo' }, 'Work order created.')} disabled={busy === i.id}>Send a tech</button>}
+              <button type="button" className="sy-b go sm" onClick={() => patch(i, { status: 'resolved' }, 'Marked fixed.')} disabled={busy === i.id}>Fixed</button>
+            </div>
+          ))}
+      </Card>
       {recent.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#00A3FF', marginBottom: 6 }}>Recently resolved</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {recent.map(i => {
-              const down = i.resolved_at && i.started_at ? Date.parse(i.resolved_at) - Date.parse(i.started_at) : null;
-              return (
-                <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E699' }} />
-                  <span style={{ color: '#c3d3e2' }}>{i.title}</span>
-                  <span style={{ color: '#00A3FF' }}>· {categoryLabel(i.category)}{i.cause ? ` · ${causeLabel(i.category, i.cause)}` : ''}</span>
-                  <span style={{ color: '#00A3FF', marginLeft: 'auto' }}>down {dur(down)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <Card title="Recently fixed">
+          {recent.map(i => {
+            const down = i.resolved_at && i.started_at ? Date.parse(i.resolved_at) - Date.parse(i.started_at) : null;
+            return (
+              <div key={i.id} className="sy-row">
+                <Dot c={DOT.green} />
+                <div className="main"><div className="t" style={{ fontSize: 13 }}>{i.title}</div><div className="m">{[categoryLabel(i.category), i.cause ? causeLabel(i.category, i.cause) : null].filter(Boolean).join(' · ')}</div></div>
+                <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>down {dur(down)}</span>
+              </div>
+            );
+          })}
+        </Card>
       )}
-
-      {logOpen && <LogModal siteId={siteId} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); void load(); }} />}
+      {logOpen && <LogSheet siteId={siteId} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); say('Fault logged.'); void load(); onChanged?.(); }} onError={m => say(m, false)} />}
     </div>
   );
 }
 
-function Stat({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
-  return (
-    <div style={TILE}>
-      <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF' }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 800, color, lineHeight: 1.1, marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 9, color: '#00A3FF' }}>{sub}</div>}
-    </div>
-  );
-}
-
-function FaultRow({ inc, onResolve, onConvert }: { inc: Incident; onResolve: () => void; onConvert: () => void }) {
-  const sev = SEVERITY_META[(inc.severity as IncidentSeverity)] ?? SEVERITY_META.medium;
-  return (
-    <div style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sev.color, boxShadow: `0 0 8px ${sev.color}` }} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#eaf2fb' }}>{inc.title}</div>
-        <div style={{ fontSize: 10.5, color: '#c3d3e2' }}>
-          {categoryLabel(inc.category)}{inc.cause ? ` · ${causeLabel(inc.category, inc.cause)}` : ''} · down {ago(inc.started_at)}
-          {inc.source && inc.source !== 'manual' ? ` · via ${inc.source}` : ''}
-          {inc.work_order_id ? ' · WO created' : ''}
-        </div>
-      </div>
-      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: sev.color, border: `1px solid ${sev.color}66`, borderRadius: 999, padding: '2px 8px' }}>{sev.label}</span>
-      {!inc.work_order_id && <button onClick={onConvert} style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Send tech</button>}
-      <button onClick={onResolve} style={{ background: 'rgba(0,230,153,0.14)', border: '1px solid rgba(0,230,153,0.4)', color: '#00E699', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Resolve</button>
-    </div>
-  );
-}
-
-function LogModal({ siteId, onClose, onSaved }: { siteId: string; onClose: () => void; onSaved: () => void }) {
+function LogSheet({ siteId, onClose, onSaved, onError }: { siteId: string; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   const [category, setCategory] = useState<string>('gate');
-  const [cause, setCause] = useState<string>('');
+  const [cause, setCause] = useState('');
   const [title, setTitle] = useState('');
   const [severity, setSeverity] = useState<IncidentSeverity>('high');
   const [description, setDescription] = useState('');
   const [startedAt, setStartedAt] = useState('');
   const [busy, setBusy] = useState(false);
-
   const causes = CATEGORY_BY_ID[category]?.causes ?? [];
-
-  function applyPreset(p: typeof INCIDENT_PRESETS[number]) {
-    setCategory(p.category); setCause(p.cause); setSeverity(p.severity);
-    if (!title) setTitle(p.label);
-  }
 
   async function save() {
     if (!title.trim()) return;
     setBusy(true);
-    try {
-      await fetch('/api/incidents', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ site_id: siteId, title: title.trim(), category, cause: cause || null, severity, description: description || null, started_at: startedAt ? new Date(startedAt).toISOString() : undefined }) });
-      onSaved();
-    } catch { /* ignore */ } finally { setBusy(false); }
+    const r = await send('/api/incidents', 'POST', { site_id: siteId, title: title.trim(), category, cause: cause || null, severity, description: description.trim() || null, started_at: startedAt ? new Date(startedAt).toISOString() : undefined });
+    setBusy(false);
+    if (!r.ok) { onError(r.data.error || 'Couldn’t log the fault.'); return; }
+    onSaved();
   }
-
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '88dvh', overflowY: 'auto', background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', borderRadius: 22, padding: 18, boxShadow: '0 30px 70px rgba(0,0,0,0.6)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-          <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#00A3FF' }}>Site fault</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#eaf2fb' }}>Log an issue</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12, cursor: 'pointer' }}>Close</button>
-        </div>
-
-        {/* Presets */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-          {INCIDENT_PRESETS.map(p => (
-            <button key={p.key} onClick={() => applyPreset(p)} style={{ background: '#16232f', border: '1px solid #1E293B', color: '#c3d3e2', borderRadius: 999, padding: '5px 11px', fontSize: 11.5, cursor: 'pointer' }}>{p.label}</button>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="What happened? (e.g. Main gate stuck open)" style={INPUT} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>System</div>
-              <select value={category} onChange={e => { setCategory(e.target.value); setCause(''); }} style={{ ...INPUT, padding: '8px 8px' }}>
-                {INCIDENT_CATEGORIES.map(cat => <option key={cat.id} value={cat.id} style={{ background: '#111a24' }}>{cat.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Why it's down</div>
-              <select value={cause} onChange={e => setCause(e.target.value)} style={{ ...INPUT, padding: '8px 8px' }}>
-                <option value="" style={{ background: '#111a24' }}>Select cause…</option>
-                {causes.map(x => <option key={x.id} value={x.id} style={{ background: '#111a24' }}>{x.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Severity</div>
-              <select value={severity} onChange={e => setSeverity(e.target.value as IncidentSeverity)} style={{ ...INPUT, padding: '8px 8px' }}>
-                <option value="low" style={{ background: '#111a24' }}>Low</option>
-                <option value="medium" style={{ background: '#111a24' }}>Medium</option>
-                <option value="high" style={{ background: '#111a24' }}>High</option>
-                <option value="critical" style={{ background: '#111a24' }}>Critical</option>
-              </select>
-            </div>
-            <div>
-              <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#00A3FF', marginBottom: 4 }}>Down since</div>
-              <input type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} style={{ ...INPUT, padding: '7px 8px' }} />
-            </div>
-          </div>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Notes (optional)" style={{ ...INPUT, resize: 'vertical' }} />
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#c3d3e2', fontSize: 12.5, cursor: 'pointer', padding: '8px 10px' }}>Cancel</button>
-          <button onClick={save} disabled={busy || !title.trim()} style={{ background: '#1E293B', border: '1px solid #1E293B', color: '#cfe0f0', borderRadius: 10, padding: '8px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !title.trim() ? 0.4 : 1 }}>{busy ? 'Logging…' : 'Log fault'}</button>
-        </div>
-        <div style={{ fontSize: 9.5, color: '#00A3FF', marginTop: 8 }}>Logged to the site ledger. Later, the AI watcher and GGSOC will file these automatically.</div>
+    <Sheet title="Log a fault" sub="Goes on this property’s fault history and uptime." onClose={onClose} width={500}>
+      <div className="sy-chips">
+        {INCIDENT_PRESETS.map(p => <button key={p.key} type="button" className="sy-chip" onClick={() => { setCategory(p.category); setCause(p.cause); setSeverity(p.severity); if (!title) setTitle(p.label); }}>{p.label}</button>)}
       </div>
-    </div>
+      <Field label="What happened?"><input className="sy-in" value={title} onChange={e => setTitle(e.target.value)} placeholder="Main gate stuck open" /></Field>
+      <div className="sy-grid2" style={{ gap: 10 }}>
+        <Field label="System"><select className="sy-in" value={category} onChange={e => { setCategory(e.target.value); setCause(''); }}>{INCIDENT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
+        <Field label="Why it’s down"><select className="sy-in" value={cause} onChange={e => setCause(e.target.value)}><option value="">Not sure</option>{causes.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}</select></Field>
+        <Field label="How bad"><select className="sy-in" value={severity} onChange={e => setSeverity(e.target.value as IncidentSeverity)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></Field>
+        <Field label="Down since"><input className="sy-in" type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} /></Field>
+      </div>
+      <Field label="Notes (optional)"><textarea className="sy-in" rows={2} value={description} onChange={e => setDescription(e.target.value)} /></Field>
+      <button type="button" className="sy-b pri" onClick={save} disabled={busy || !title.trim()}>{busy ? 'Logging…' : 'Log fault'}</button>
+    </Sheet>
   );
 }

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
             model: MODEL,
             max_tokens: 1500,
             system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice, { corporate: user.isCorporate, canAct }), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
-            tools: cachedTools([...READ_TOOLS, REPORT_TOOL, ...BRAIN_TOOLS, ...(pending || !canAct ? [] : ACTION_TOOLS)]),
+            tools: cachedTools([...READ_TOOLS.filter(t => t.name !== 'quickbooks_money' || user.isCorporate), REPORT_TOOL, ...BRAIN_TOOLS, ...(pending || !canAct ? [] : ACTION_TOOLS)]),
             messages: cachedMessages(messages),
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })

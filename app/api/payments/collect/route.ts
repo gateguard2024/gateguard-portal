@@ -114,14 +114,23 @@ export async function POST(req: NextRequest) {
   // is abandoned the moment the response returns — so the customer could pay a
   // Stripe link for an invoice that was never recorded. Real money, no paper.
   // Awaited now; the insert must land BEFORE we hand back the payment URL.
-  const { error: invErr } = await supabase.from('invoices').insert({
+  // stripe_payment_link_id lets the Stripe webhook mark this invoice paid the
+  // moment the customer pays (migration 209). Before 209 runs, save without it.
+  const invRow = {
     work_order_id:      work_order_id,
     invoice_number:     `GG-INV-${Date.now().toString().slice(-6)}`,
     status:             'sent',
     total:              amount_cents / 100,
     stripe_payment_link: pl.url,
+    stripe_payment_link_id: pl.id ?? null,
     created_at:         new Date().toISOString(),
-  })
+  }
+  let { error: invErr } = await supabase.from('invoices').insert(invRow)
+  if (invErr && /stripe_payment_link_id/.test(invErr.message)) {
+    const { stripe_payment_link_id: _omit, ...older } = invRow
+    void _omit
+    ;({ error: invErr } = await supabase.from('invoices').insert(older))
+  }
   if (invErr) {
     // Do NOT hand out a payment link we can't account for.
     return NextResponse.json(

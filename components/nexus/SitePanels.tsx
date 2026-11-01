@@ -1,135 +1,115 @@
 'use client';
 
-// Controllers (control panels) for a site — the hybrid hardware registry.
-// Corporate adds/programs serials + door names. A field tech/dealer can scan a
-// replacement serial (no Brivo); corporate then confirms the swap in one click
-// with the door mapping preserved.
-import React, { useEffect, useState } from "react";
+// Controllers (control panels) for a site — the hybrid hardware registry
+// (Systems → Controllers). Corporate adds/programs serials + door names. A field
+// tech/dealer can enter a replacement serial (no Brivo needed); corporate then
+// confirms the swap in one click with the door mapping preserved. Won deals
+// arrive as "requested" panels whose door list the dealer confirms.
+import React, { useCallback, useEffect, useState } from 'react';
+import { type Any, Card, Dot, DOT, Field, Note, Sheet, getJson, send, type Notify } from '@/components/nexus/systems/shared';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Panel = { id: string; model: string | null; serial: string | null; pending_serial: string | null; status: string; doors: any[]; source?: string; dealer_confirmed?: boolean };
+const doorNames = (doors: unknown): string[] => (Array.isArray(doors) ? doors : []).map((d: unknown) => typeof d === 'string' ? d : (d as { name?: string })?.name).filter(Boolean) as string[];
+const STATUS: Record<string, { t: string; c: string }> = {
+  live: { t: 'Live', c: DOT.green }, programmed: { t: 'Programmed', c: DOT.blue },
+  replace_pending: { t: 'Replacement pending', c: DOT.orange }, requested: { t: 'Requested', c: DOT.gray },
+};
+const splitDoors = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 
-const doorNames = (doors: unknown[]): string[] => (Array.isArray(doors) ? doors : []).map((d: unknown) => typeof d === "string" ? d : (d as { name?: string })?.name).filter(Boolean) as string[];
-
-const STATUS = (s: string) => s === "live" ? { t: "Live", c: "#00E699" } : s === "programmed" ? { t: "Programmed", c: "#00A3FF" } : s === "replace_pending" ? { t: "Replace pending", c: "#fbbf24" } : { t: "Requested", c: "#94a3b8" };
-
-export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporate: boolean }) {
-  const [panels, setPanels] = useState<Panel[]>([]);
-  const [loading, setLoading] = useState(true);
+export function SitePanels({ siteId, isCorporate, notify }: { siteId: string; isCorporate: boolean; notify?: Notify }) {
+  const [panels, setPanels] = useState<Any[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ model: "", serial: "", doors: "" });
-  const [editDoors, setEditDoors] = useState<string | null>(null); // panel id being edited
-  const [doorDraft, setDoorDraft] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [replace, setReplace] = useState<Any | null>(null);
+  const [doorsFor, setDoorsFor] = useState<Any | null>(null);
+  const say: Notify = useCallback((m, ok = true) => { if (notify) notify(m, ok); else setErr(ok ? null : m); }, [notify]);
 
-  const load = React.useCallback(() => {
-    setLoading(true);
-    fetch(`/api/sites/${siteId}/panels`).then(r => r.json()).then(d => setPanels(d.panels ?? [])).catch(() => {}).finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const r = await getJson(`/api/sites/${siteId}/panels`);
+    setPanels(Array.isArray(r.data.panels) ? r.data.panels : []);
+    setErr(r.ok ? null : (r.data.error || 'Couldn’t load controllers.'));
   }, [siteId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  async function addPanel() {
-    if (busy) return; setBusy("add"); setMsg(null);
-    const doors = form.doors.split(",").map(s => s.trim()).filter(Boolean);
-    const r = await fetch(`/api/sites/${siteId}/panels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: form.model.trim() || null, serial: form.serial.trim() || null, doors }) }).then(x => x.json()).catch(() => null);
+  async function put(p: Any | null, body: Any, done: string) {
+    setBusy(p?.id ?? 'x');
+    const r = await send(`/api/sites/${siteId}/panels`, 'PUT', body);
     setBusy(null);
-    if (r?.ok) { setForm({ model: "", serial: "", doors: "" }); setShowAdd(false); load(); } else setMsg(r?.error || "Couldn't add.");
-  }
-  async function requestReplace(p: Panel) {
-    const ns = window.prompt(`New controller serial for "${p.model || "panel"}" (scan or type):`);
-    if (!ns || !ns.trim()) return;
-    setBusy(p.id); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/panels`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_replace", panel_id: p.id, new_serial: ns.trim() }) }).then(x => x.json()).catch(() => null);
-    setBusy(null);
-    setMsg(r?.ok ? "New serial sent — corporate will confirm the swap. Doors keep working once swapped." : (r?.error || "Couldn't submit."));
-    if (r?.ok) load();
-  }
-  async function saveDoors(p: Panel) {
-    setBusy(p.id); setMsg(null);
-    const doors = doorDraft.split(",").map(s => s.trim()).filter(Boolean);
-    const r = await fetch(`/api/sites/${siteId}/panels`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set_doors", panel_id: p.id, doors }) }).then(x => x.json()).catch(() => null);
-    setBusy(null);
-    if (r?.ok) { setEditDoors(null); load(); } else setMsg(r?.error || "Couldn't save doors.");
-  }
-  async function confirmDoors(p: Panel) {
-    setBusy(p.id); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/panels`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm_doors", panel_id: p.id }) }).then(x => x.json()).catch(() => null);
-    setBusy(null);
-    if (r?.ok) { setMsg("Door list confirmed ✓ — Gate Guard will program the controller."); load(); } else setMsg(r?.error || "Couldn't confirm.");
-  }
-  async function confirmSwap(p: Panel) {
-    setBusy(p.id); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/panels`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm_swap", panel_id: p.id }) }).then(x => x.json()).catch(() => null);
-    setBusy(null);
-    if (r?.ok) { setMsg("Swap confirmed ✓"); load(); } else setMsg(r?.error || "Couldn't confirm.");
+    if (!r.ok || r.data.ok === false) { say(r.data.error || 'Didn’t save.', false); return false; }
+    say(done); await load(); return true;
   }
 
-  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "8px 10px", width: "100%", fontSize: 12.5 } as const;
-  const btn = { fontSize: 12, fontWeight: 600, borderRadius: 9, padding: "6px 12px", cursor: "pointer" } as const;
-
-  if (loading) return <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading controllers…</div>;
-  // Dealer-facing: nothing logged yet → hide (corporate adds these during setup).
-  if (panels.length === 0 && !isCorporate) return null;
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {isCorporate && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Corporate programs serials + door names. Dealers/techs scan replacement serials.</div>
-          <button onClick={() => setShowAdd(s => !s)} style={{ ...btn, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF" }}>{showAdd ? "Cancel" : "+ Add controller"}</button>
-        </div>
-      )}
-      {isCorporate && showAdd && (
-        <div style={{ display: "grid", gap: 7, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
-          <input placeholder="Model (e.g. 2-door controller)" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} style={input} />
-          <input placeholder="Serial number" value={form.serial} onChange={e => setForm({ ...form, serial: e.target.value })} style={input} />
-          <input placeholder="Door names (comma-separated: Front Gate, Pool, Lobby)" value={form.doors} onChange={e => setForm({ ...form, doors: e.target.value })} style={input} />
-          <button onClick={addPanel} disabled={busy === "add"} style={{ ...btn, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", opacity: busy === "add" ? 0.5 : 1 }}>{busy === "add" ? "Adding…" : "Add controller"}</button>
-        </div>
-      )}
-      {panels.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>No controllers logged yet.{isCorporate ? "" : " Corporate adds these during setup."}</div>
-        : panels.map(p => { const st = STATUS(p.status); return (
-          <div key={p.id} style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>{p.model || "Controller"}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.82)", marginTop: 2 }}>Serial: {p.serial || "—"}{p.pending_serial ? ` · new: ${p.pending_serial}` : ""}</div>
-                {doorNames(p.doors).length > 0 && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>Doors: {doorNames(p.doors).join(", ")}</div>}
+    <Card title={`Controllers${panels?.length ? ` (${panels.length})` : ''}`}
+      sub={isCorporate ? 'Serial numbers and the doors each controller runs. Techs can enter a replacement serial; you confirm the swap.' : 'The access controllers at this property.'}
+      right={isCorporate ? <button type="button" className="sy-b blue sm" onClick={() => setAdding(true)}>Add controller</button> : undefined}>
+      {err && <div style={{ marginBottom: 8 }}><Note tone="red">{err}</Note></div>}
+      {panels == null ? <div className="sy-empty">Loading…</div>
+        : !panels.length ? <div className="sy-empty">No controllers recorded yet.{isCorporate ? '' : ' Gate Guard adds these during setup.'}</div>
+        : panels.map(p => {
+          const st = STATUS[p.status] ?? STATUS.requested;
+          const names = doorNames(p.doors);
+          const kickoff = p.source === 'kickoff' && p.status === 'requested' && !p.dealer_confirmed;
+          return (
+            <div key={p.id} style={{ padding: '12px 0', borderTop: '1px solid rgba(0,0,0,.08)' }}>
+              <div className="sy-row" style={{ borderTop: 0, padding: 0, flexWrap: 'wrap' }}>
+                <Dot c={st.c} />
+                <div className="main" style={{ minWidth: 200 }}>
+                  <div className="t">{p.model || 'Controller'} <span className="sy-pill" style={{ marginLeft: 6 }}>{st.t}</span>{p.dealer_confirmed && <span className="sy-pill" style={{ marginLeft: 6 }}>Doors confirmed</span>}</div>
+                  <div className="m">Serial {p.serial || '—'}{p.pending_serial ? ` · new serial ${p.pending_serial}` : ''}{names.length ? ` · ${names.join(', ')}` : ''}</div>
+                </div>
+                {p.serial && p.status !== 'replace_pending' && <button type="button" className="sy-b line sm" onClick={() => setReplace(p)} disabled={busy === p.id}>Replace controller</button>}
+                {isCorporate && p.status === 'replace_pending' && <button type="button" className="sy-b pri sm" onClick={() => { if (window.confirm(`Confirm the swap to serial ${p.pending_serial}? Do this after it’s set up in Brivo.`)) void put(p, { action: 'confirm_swap', panel_id: p.id }, 'Swap confirmed.'); }} disabled={busy === p.id}>Confirm swap</button>}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: st.c, whiteSpace: "nowrap" }}>{st.t}</span>
-                {p.dealer_confirmed && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#00E699", whiteSpace: "nowrap" }}>Doors confirmed ✓</span>}
-              </div>
-            </div>
-
-            {/* Win → kickoff: a new "requested" panel waiting for the dealer to confirm the door list. */}
-            {p.source === "kickoff" && p.status === "requested" && !p.dealer_confirmed && (
-              <div style={{ marginTop: 9, background: "rgba(0,163,255,0.08)", border: "1px solid rgba(0,163,255,0.25)", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11.5, color: "#00A3FF", fontWeight: 600 }}>🎉 Deal won — check the door list</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 3 }}>We pre-filled these doors from the survey. Fix anything that&apos;s wrong, then confirm. Gate Guard programs the controller after you confirm.</div>
-                {editDoors === p.id ? (
-                  <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-                    <input value={doorDraft} onChange={e => setDoorDraft(e.target.value)} placeholder="Door names (comma-separated)" style={input} />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => saveDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF" }}>{busy === p.id ? "Saving…" : "Save doors"}</button>
-                      <button onClick={() => setEditDoors(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.65)" }}>Cancel</button>
+              {kickoff && (
+                <div style={{ marginTop: 10 }}>
+                  <Note tone="blue">
+                    <b style={{ fontWeight: 600 }}>Deal won — check the door list.</b> We filled these in from the survey. Fix anything that’s wrong, then confirm and Gate Guard will program the controller.
+                    <div className="sy-acts" style={{ marginTop: 8 }}>
+                      <button type="button" className="sy-b line sm" onClick={() => setDoorsFor(p)}>Edit door list</button>
+                      <button type="button" className="sy-b pri sm" onClick={() => put(p, { action: 'confirm_doors', panel_id: p.id }, 'Door list confirmed — Gate Guard will program it.')} disabled={busy === p.id}>Confirm door list</button>
                     </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    <button onClick={() => { setEditDoors(p.id); setDoorDraft(doorNames(p.doors).join(", ")); }} style={{ ...btn, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.78)" }}>Edit door list</button>
-                    <button onClick={() => confirmDoors(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.45)", color: "#00E699" }}>{busy === p.id ? "…" : "Confirm door list ✓"}</button>
-                  </div>
-                )}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-              {p.serial && p.status !== "replace_pending" && <button onClick={() => requestReplace(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.4)", color: "#fde68a", opacity: busy === p.id ? 0.5 : 1 }}>{busy === p.id ? "…" : "Replace controller"}</button>}
-              {isCorporate && p.status === "replace_pending" && <button onClick={() => confirmSwap(p)} disabled={busy === p.id} style={{ ...btn, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.45)", color: "#00E699" }}>Confirm swap in Brivo</button>}
+                  </Note>
+                </div>
+              )}
             </div>
-          </div>
-        ); })}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") || msg.includes("sent") ? "#00E699" : "#FF4D4D" }}>{msg}</div>}
-    </div>
+          );
+        })}
+
+      {adding && <AddSheet onClose={() => setAdding(false)} onSave={async f => { setBusy('add'); const r = await send(`/api/sites/${siteId}/panels`, 'POST', { model: f.model.trim() || null, serial: f.serial.trim() || null, doors: splitDoors(f.doors) }); setBusy(null); if (!r.ok || r.data.ok === false) { say(r.data.error || 'Couldn’t add.', false); return; } say('Controller added.'); setAdding(false); void load(); }} busy={busy === 'add'} />}
+      {replace && <SerialSheet panel={replace} onClose={() => setReplace(null)} onSave={async s => { if (await put(replace, { action: 'request_replace', panel_id: replace.id, new_serial: s }, 'New serial sent — Gate Guard will confirm the swap.')) setReplace(null); }} busy={busy === replace.id} />}
+      {doorsFor && <DoorsSheet panel={doorsFor} onClose={() => setDoorsFor(null)} onSave={async d => { if (await put(doorsFor, { action: 'set_doors', panel_id: doorsFor.id, doors: splitDoors(d) }, 'Door list saved.')) setDoorsFor(null); }} busy={busy === doorsFor.id} />}
+    </Card>
+  );
+}
+
+function AddSheet({ onClose, onSave, busy }: { onClose: () => void; onSave: (f: { model: string; serial: string; doors: string }) => void; busy: boolean }) {
+  const [f, setF] = useState({ model: '', serial: '', doors: '' });
+  return (
+    <Sheet title="Add controller" onClose={onClose} width={460}>
+      <Field label="Model"><input className="sy-in" value={f.model} onChange={e => setF({ ...f, model: e.target.value })} placeholder="2-door controller" /></Field>
+      <Field label="Serial number"><input className="sy-in" value={f.serial} onChange={e => setF({ ...f, serial: e.target.value })} /></Field>
+      <Field label="Doors it runs (comma-separated)"><input className="sy-in" value={f.doors} onChange={e => setF({ ...f, doors: e.target.value })} placeholder="Front Gate, Pool, Lobby" /></Field>
+      <button type="button" className="sy-b pri" onClick={() => onSave(f)} disabled={busy}>{busy ? 'Adding…' : 'Add controller'}</button>
+    </Sheet>
+  );
+}
+function SerialSheet({ panel, onClose, onSave, busy }: { panel: Any; onClose: () => void; onSave: (s: string) => void; busy: boolean }) {
+  const [s, setS] = useState('');
+  return (
+    <Sheet title="Replace controller" sub={`${panel.model || 'Controller'} · current serial ${panel.serial}`} onClose={onClose} width={440}>
+      <Field label="New controller’s serial number"><input className="sy-in" value={s} onChange={e => setS(e.target.value)} autoFocus /></Field>
+      <div style={{ fontSize: 12, color: '#6E6E73' }}>Doors keep their names. Gate Guard confirms the swap in Brivo.</div>
+      <button type="button" className="sy-b pri" onClick={() => s.trim() && onSave(s.trim())} disabled={busy || !s.trim()}>{busy ? 'Sending…' : 'Send new serial'}</button>
+    </Sheet>
+  );
+}
+function DoorsSheet({ panel, onClose, onSave, busy }: { panel: Any; onClose: () => void; onSave: (d: string) => void; busy: boolean }) {
+  const [d, setD] = useState(doorNames(panel.doors).join(', '));
+  return (
+    <Sheet title="Door list" sub={panel.model || 'Controller'} onClose={onClose} width={460}>
+      <Field label="Door names (comma-separated)"><textarea className="sy-in" rows={3} value={d} onChange={e => setD(e.target.value)} /></Field>
+      <button type="button" className="sy-b pri" onClick={() => onSave(d)} disabled={busy}>{busy ? 'Saving…' : 'Save door list'}</button>
+    </Sheet>
   );
 }

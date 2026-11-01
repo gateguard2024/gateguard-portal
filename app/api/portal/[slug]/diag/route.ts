@@ -90,7 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     const auth = await getQboAuth()
     let live_query: string | { rows: number } = 'not attempted'
     if (auth.ok) {
-      const r = await qboApi(auth, `/query?query=${encodeURIComponent('select * from CompanyInfo')}&minorversion=73`)
+      const r = await qboApi(auth, `/query?query=${encodeURIComponent('select * from CompanyInfo')}&minorversion=75`)
       if (r.ok) { const j = await r.json().catch(() => ({})); live_query = { rows: (j?.QueryResponse?.CompanyInfo ?? []).length } }
       else live_query = `HTTP ${r.status}: ${(await r.text()).slice(0, 180)}`
     }

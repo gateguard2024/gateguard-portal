@@ -21,6 +21,7 @@ import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 import { listSiteShellyRelays } from '@/lib/shelly'
 import { addDaysISO, etMidnight, todayET } from '@/lib/tz'
 import { canOperate } from '@/lib/system-access'
+import { getReport, overview } from '@/lib/qbo-reports'
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -141,6 +142,11 @@ export const READ_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] },
   },
   {
+    name: 'quickbooks_money',
+    description: 'Gate Guard corporate only — the company books from QuickBooks: cash in the bank, money customers owe (aging buckets + the most-late customers), bills we owe, and profit & loss (this month, last month, year to date). view="overview" (default) for the picture; view="pnl" | "ar" | "ap" | "balance" for that full report (pnl takes optional start/end YYYY-MM-DD). Numbers are cached up to 30 minutes. Use for "how much cash do we have", "who owes us", "are we profitable this month".',
+    input_schema: { type: 'object', properties: { view: { type: 'string', enum: ['overview', 'pnl', 'ar', 'ap', 'balance'] }, start: { type: 'string' }, end: { type: 'string' } } },
+  },
+  {
     name: 'search_manuals',
     description: 'Search equipment manuals and knowledge articles (gate operators, access control, cameras, wiring). Use for how-to, troubleshooting and spec questions.',
     input_schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] },
@@ -154,7 +160,7 @@ export const TOOL_LABEL: Record<string, string> = {
   find_work_orders: 'Checking jobs', get_work_order: 'Opening the job', find_sites: 'Finding the property',
   site_status: 'Checking the systems', live_systems: 'Checking the live systems', find_tasks: 'Checking tasks', find_leads: 'Looking through leads',
   find_customers: 'Finding the customer', find_messages: 'Checking your inbox', waiting_on_me: 'Checking who’s waiting on you', find_products: 'Looking in the catalog', get_thread: 'Reading the email', my_calendar: 'Checking your calendar',
-  search_manuals: 'Searching the manuals', nexus_help: 'Checking the Nexus guide',
+  search_manuals: 'Searching the manuals', quickbooks_money: 'Reading QuickBooks', nexus_help: 'Checking the Nexus guide',
 }
 
 // ── Shapers ──────────────────────────────────────────────────────────────────
@@ -415,6 +421,23 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
           help_articles: ((arts ?? []) as Row[]).map(a => ({ title: a.title, text: String(a.content ?? a.description ?? '').slice(0, 1500) })),
         },
       }
+    }
+    case 'quickbooks_money': {
+      if (!ctx.user.isCorporate) return { data: { error: 'QuickBooks numbers are only for Gate Guard corporate.' } }
+      const view = String(input.view ?? 'overview')
+      if (view === 'overview') {
+        const r = await overview()
+        if (!r.ok) return { data: { error: r.error } }
+        return { data: r.data, cards: [{ kind: 'customer', id: 'qbo', title: 'QuickBooks', sub: `Cash ${money(r.data.cash.total)} · Owed to us ${money(r.data.receivable.total)}`, href: '/?view=admin&qb=1', tone: r.data.receivable.over90 > 0 ? 'orange' : 'green' }] }
+      }
+      const t = today()
+      const ymd = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
+      const map = { pnl: ['ProfitAndLoss', { start_date: ymd(input.start) ?? `${t.slice(0, 7)}-01`, end_date: ymd(input.end) ?? t }], ar: ['AgedReceivables', { report_date: t }], ap: ['AgedPayables', { report_date: t }], balance: ['BalanceSheet', { end_date: t }] } as const
+      const m = map[view as keyof typeof map]
+      if (!m) return { data: { error: `Unknown view ${view}` } }
+      const r = await getReport(m[0], { ...m[1] })
+      if (!r.ok) return { data: { error: r.error } }
+      return { data: { ...r.report, rows: r.report.rows.slice(0, 120) } }
     }
     case 'search_manuals': {
       try {

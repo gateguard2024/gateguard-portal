@@ -1,224 +1,180 @@
 'use client';
 
-// SiteCommand — the dealer's main interface with a single property. Composes the
-// proven per-site widgets (cameras, doors, activity, network, relays, controllers,
-// credentials) and adds a top intelligence strip + faults/uptime + quick tools.
-// Reuses every existing widget as-is (no rewrites) so nothing regresses.
-import React, { useCallback, useEffect, useState } from 'react';
-import { Settings } from 'lucide-react';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Camera, DoorOpen, TrendingUp, Zap, LockOpen, Key, AlertTriangle, History, Wifi, Cpu, RotateCcw } = require('lucide-react') as any;
-import { SiteSecurity } from '@/components/nexus/SiteSecurity';
-import { SiteDoors } from '@/components/nexus/SiteDoors';
-import { SiteRelays } from '@/components/nexus/SiteRelays';
-import { SiteNetwork } from '@/components/nexus/SiteNetwork';
-import { SitePanels } from '@/components/nexus/SitePanels';
-import { SiteActivity } from '@/components/nexus/SiteActivity';
-import { SiteConnections } from '@/components/nexus/SiteConnections';
+// SiteCommand — one property's systems (Systems tab → a location). Light Apple look.
+//   Status tiles: health · cameras · doors · uptime/faults · door events today
+//   Quick actions: unlock a door · reset a gate · visitor pass · report a fault · cameras
+//   Tabs: Live · Doors & gates · People · Activity · Faults · Network · Controllers
+// The same panel (SitePanel) is used on the Operations site page via SiteSystems.
+// 🔒 "Setup & keys" (vendor logins) renders ONLY for corporate users — and every
+// credential endpoint refuses non-corporate server-side. Never loosen this.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CSS, type Any, getJson, Sheet, useFlash, DOT, Dot, GREEN, RED, ORANGE, type SiteCtx } from '@/components/nexus/systems/shared';
+import { LiveTab } from '@/components/nexus/systems/LiveTab';
+import { DoorsTab } from '@/components/nexus/systems/DoorsTab';
+import { PeopleTab } from '@/components/nexus/systems/PeopleTab';
+import { ActivityTab } from '@/components/nexus/systems/ActivityTab';
+import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
-import { SiteAccessControl } from '@/components/nexus/SiteAccessControl';
-import { GateReboots } from '@/components/nexus/GateReboots';
-import { SiteCameraEvents } from '@/components/nexus/SiteCameraEvents';
-import { SiteNetworkDevices } from '@/components/nexus/SiteNetworkDevices';
+import { SitePanels } from '@/components/nexus/SitePanels';
+import { SiteConnections } from '@/components/nexus/SiteConnections';
+import { todayET, etDateOf } from '@/lib/tz';
 
-const TILE = { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', borderRadius: 14, padding: 12 } as const;
-const WELL = 'linear-gradient(180deg,#22303f,#1a2532)';
+type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' },
+  { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
+];
+type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number };
 
-type Summary = {
-  devices: { camera: number; gate: number; reader: number; intercom: number; network: number; total: number; online: number; offline: number; attention: number; camerasOnline: number; gatesOnline: number };
-  doors: { total: number; panelsLive: number };
-  faults: { open: number; uptimePct: number; timeSinceLastMs: number | null };
-  eventsToday: number;
-  healthScore: number;
-  vendors: Record<string, boolean>;
+const ICONS: Record<string, React.ReactNode> = {
+  unlock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.8-1.2" /></svg>,
+  gate: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>,
+  pass: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0" /><path d="M19 8v6M16 11h6" /></svg>,
+  fault: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v4M12 17.5v.5" /></svg>,
+  cam: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="2" y="6" width="14" height="12" rx="2" /><path d="m16 10 6-3v10l-6-3" /></svg>,
 };
 
-function jump(id: string) {
-  const el = typeof document !== 'undefined' ? document.getElementById(id) : null;
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+function readTab(): Tab { try { const t = localStorage.getItem('gg_systems_tab') as Tab | null; return t && TABS.some(x => x.id === t) ? t : 'live'; } catch { return 'live'; } }
 
-export function SiteCommand({ siteId, isCorporate }: { siteId: string; isCorporate: boolean }) {
-  const [showSetup, setShowSetup] = useState(false);
-  const [s, setS] = useState<Summary | null>(null);
-  const [showReboot, setShowReboot] = useState(false);
-  // Live vendor truth for the strip (lazy — after the fast local summary paints).
-  const [live, setLive] = useState<{ cameras?: { online: number; total: number }; doors?: number; eventsToday?: number }>({});
+/** The panel: status, quick actions and tabs for one property. */
+export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: { siteId: string; isCorporate: boolean; initialSetup?: boolean; setupRequest?: number }) {
+  const [flash, notify] = useFlash();
+  const [tab, setTabState] = useState<Tab>('live');
+  useEffect(() => { setTabState(readTab()); }, []);
+  const setTab = useCallback((t: Tab) => { setTabState(t); try { localStorage.setItem('gg_systems_tab', t); } catch { /* private mode */ } }, []);
+  const [setup, setSetup] = useState(!!initialSetup && isCorporate);
+  useEffect(() => { if (setupRequest && isCorporate) setSetup(true); }, [setupRequest, isCorporate]);
+  const openSetup = useCallback(() => { if (isCorporate) setSetup(true); }, [isCorporate]);
+  const ctx: SiteCtx = useMemo(() => ({ siteId, isCorporate, notify, openSetup }), [siteId, isCorporate, notify, openSetup]);
 
-  const load = useCallback(async () => {
-    try { const j = await fetch(`/api/sites/${siteId}/command-summary`, { cache: 'no-store' }).then(r => r.json()); if (j && j.devices) setS(j); } catch { /* ignore */ }
+  // ── Shared data (loaded once, used by tiles + tabs) ────────────────────────
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [cams, setCams] = useState<Any[] | null>(null); const [camErr, setCamErr] = useState<string | null>(null);
+  const [doors, setDoors] = useState<Any[] | null>(null); const [doorErr, setDoorErr] = useState<string | null>(null);
+  const [camMap, setCamMap] = useState<Record<string, Any>>({});
+  const [relays, setRelays] = useState<Any[] | null>(null); const [relayErr, setRelayErr] = useState<string | null>(null);
+  const [events, setEvents] = useState<Any[] | null>(null); const [eventErr, setEventErr] = useState<string | null>(null);
+  const [net, setNet] = useState<Any | null | undefined>(undefined);
+  const [who, setWho] = useState('');
+  const [faultReq, setFaultReq] = useState(0);
+  const [guestReq, setGuestReq] = useState(0);
+
+  const loadSummary = useCallback(async () => { const r = await getJson(`/api/sites/${siteId}/command-summary`); if (r.ok) setSummary(r.data as Summary); }, [siteId]);
+  const loadCams = useCallback(async () => {
+    const r = await getJson(`/api/eagle-eye/cameras?site_id=${siteId}`);
+    setCams(Array.isArray(r.data.cameras) ? r.data.cameras : []); setCamErr(r.ok ? null : (r.data.error || 'Cameras unavailable.'));
   }, [siteId]);
-  useEffect(() => { void load(); }, [load]);
+  const loadDoors = useCallback(async () => {
+    const [d, m] = await Promise.all([getJson(`/api/brivo/doors?site_id=${siteId}`), getJson(`/api/sites/${siteId}/door-cameras`)]);
+    setDoors(Array.isArray(d.data.doors) ? d.data.doors : []); setDoorErr(d.ok ? null : (d.data.error || 'Doors unavailable.'));
+    const map: Record<string, Any> = {}; for (const x of (m.data.mappings ?? []) as Any[]) map[String(x.door_id)] = x; setCamMap(map);
+  }, [siteId]);
+  const loadRelays = useCallback(async () => {
+    const r = await getJson(`/api/shelly/relays?site_id=${siteId}`);
+    setRelays(Array.isArray(r.data.relays) ? r.data.relays : []); setRelayErr(r.ok ? null : (r.data.error || 'Relays unavailable.'));
+  }, [siteId]);
+  const loadEvents = useCallback(async () => {
+    const r = await getJson(`/api/brivo/events?site_id=${siteId}`);
+    setEvents(Array.isArray(r.data.events) ? r.data.events : []); setEventErr(r.ok ? null : (r.data.error || 'Door events unavailable.'));
+  }, [siteId]);
 
-  // Pull REAL counts from Eagle Eye (cameras) + Brivo (doors, today's events).
-  // Each is independent and failure-tolerant — a card just keeps the local value.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [camR, doorR, evR] = await Promise.allSettled([
-        fetch(`/api/eagle-eye/cameras?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
-        fetch(`/api/brivo/doors?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
-        fetch(`/api/brivo/events?site_id=${siteId}`, { cache: 'no-store' }).then(r => r.json()),
-      ]);
-      if (cancelled) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const next: { cameras?: { online: number; total: number }; doors?: number; eventsToday?: number } = {};
-      if (camR.status === 'fulfilled' && Array.isArray(camR.value?.cameras)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cams = camR.value.cameras as any[];
-        next.cameras = { total: cams.length, online: cams.filter(c => c.online !== false).length };
-      }
-      if (doorR.status === 'fulfilled' && Array.isArray(doorR.value?.doors)) next.doors = doorR.value.doors.length;
-      if (evR.status === 'fulfilled' && Array.isArray(evR.value?.events)) {
-        const today = new Date().toDateString();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        next.eventsToday = (evR.value.events as any[]).filter(e => e.occurred && new Date(e.occurred).toDateString() === today).length;
-      }
-      setLive(next);
-    })();
-    return () => { cancelled = true; };
-  }, [siteId]);
+    setSummary(null); setCams(null); setDoors(null); setRelays(null); setEvents(null); setNet(undefined);
+    void loadSummary(); void loadCams(); void loadDoors(); void loadRelays(); void loadEvents();
+  }, [loadSummary, loadCams, loadDoors, loadRelays, loadEvents]);
+  // Door events stay live (tiles + Activity tab): every 20s while the page is visible.
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) void loadEvents(); }, 20000); return () => clearInterval(t); }, [loadEvents]);
+  // Network is only fetched when someone opens it.
+  useEffect(() => {
+    if (tab !== 'network' || net !== undefined) return;
+    void getJson(`/api/unifi/cloud/overview?site_id=${siteId}`).then(r => setNet(r.ok && r.data?.connected ? r.data : null));
+  }, [tab, net, siteId]);
 
-  const gear = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, borderRadius: 12, padding: '7px 14px', cursor: 'pointer', background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' } as const;
-  // Prefer LIVE vendor counts; fall back to the fast local summary until they land.
-  const camOnline = live.cameras ? live.cameras.online : (s ? s.devices.camerasOnline : null);
-  const camTotal  = live.cameras ? live.cameras.total  : (s ? s.devices.camera : null);
-  const camerasDown = (camOnline != null && camTotal != null) ? Math.max(0, camTotal - camOnline) : 0;
-  const doorCount = live.doors != null ? live.doors : (s ? (s.doors.total || s.devices.gate) : null);
-  const eventsTodayVal = live.eventsToday != null ? live.eventsToday : (s ? s.eventsToday : null);
-  const hs = (live.cameras && live.cameras.total > 0)
-    ? Math.max(0, Math.round((live.cameras.online / live.cameras.total) * 100 - (s?.faults.open ?? 0) * 4))
-    : (s?.healthScore ?? null);
-  const hsColor = hs == null ? '#00A3FF' : hs >= 85 ? '#00E699' : hs >= 60 ? '#fbbf24' : '#f87171';
-  const R = 23, C = 2 * Math.PI * R, filled = hs != null ? (hs / 100) * C : 0;
+  const setRelayState = useCallback((id: string, ch: number, on: boolean) => setRelays(p => (p ?? []).map(r => String(r.id) === id && Number(r.channel ?? 0) === ch ? { ...r, on, ison: on } : r)), []);
+  const afterSetup = useCallback(() => { void loadCams(); void loadDoors(); void loadRelays(); void loadEvents(); setNet(undefined); }, [loadCams, loadDoors, loadRelays, loadEvents]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tools: { label: string; icon: any; color: string; onClick: () => void }[] = [
-    { label: 'Unlock door', icon: LockOpen, color: '#00E699', onClick: () => jump('sec-access') },
-    { label: 'Open / reset gate', icon: RotateCcw, color: '#00A3FF', onClick: () => setShowReboot(true) },
-    { label: 'Cameras', icon: Camera, color: '#00A3FF', onClick: () => jump('sec-cameras') },
-    { label: 'Access & passes', icon: Key, color: '#fbbf24', onClick: () => jump('sec-access') },
-    { label: 'Report a fault', icon: AlertTriangle, color: '#f87171', onClick: () => jump('sec-faults') },
-    { label: 'Activity log', icon: History, color: '#8FD3EC', onClick: () => jump('sec-access') },
+  // ── Tiles ──────────────────────────────────────────────────────────────────
+  const camTotal = cams?.length ?? 0;
+  const camOff = (cams ?? []).filter(c => c.online === false).length;
+  const today = todayET();
+  const eventsToday = events ? events.filter(e => e.created_at && etDateOf(e.created_at) === today).length : null;
+  const openFaults = summary?.faults?.open ?? 0;
+  const health = camTotal > 0
+    ? Math.max(0, Math.round(((camTotal - camOff) / camTotal) * 100 - openFaults * 4))
+    : (summary?.healthScore ?? null);
+  const hColor = health == null ? undefined : health >= 85 ? GREEN : health >= 60 ? ORANGE : RED;
+  const tiles: { l: string; v: string; s: string; dot?: string; color?: string; go?: Tab }[] = [
+    { l: 'Health', v: health == null ? '—' : String(health), s: health == null ? 'Not enough data' : health >= 85 ? 'Good' : health >= 60 ? 'Keep an eye on it' : 'Needs attention', color: hColor, dot: health == null ? DOT.gray : health >= 85 ? DOT.green : health >= 60 ? DOT.orange : DOT.red, go: 'faults' },
+    { l: 'Cameras', v: cams == null ? '—' : camTotal ? `${camTotal - camOff}/${camTotal}` : '—', s: cams == null ? 'Loading…' : !camTotal ? 'None connected' : camOff ? `${camOff} offline` : 'All online', dot: camOff ? DOT.orange : DOT.blue, go: 'live' },
+    { l: 'Doors & gates', v: doors == null ? '—' : String(doors.length), s: doors == null ? 'Loading…' : doorErr && !doors.length ? 'Brivo not connected' : 'From Brivo', dot: DOT.blue, go: 'doors' },
+    { l: 'Uptime · 90 days', v: summary?.faults ? `${summary.faults.uptimePct}%` : '—', s: openFaults ? `${openFaults} open fault${openFaults === 1 ? '' : 's'}` : 'No open faults', dot: openFaults ? DOT.red : DOT.green, go: 'faults' },
+    { l: 'Door events today', v: eventsToday == null ? '—' : String(eventsToday), s: eventErr && !(events ?? []).length ? 'Not available' : 'Live from Brivo', dot: DOT.blue, go: 'activity' },
+  ];
+  const go = (t: Tab, then?: () => void) => { setTab(t); if (then) setTimeout(then, 60); };
+  const quick: { k: string; label: string; run: () => void }[] = [
+    { k: 'unlock', label: 'Unlock a door', run: () => go('doors') },
+    { k: 'gate', label: 'Reset a gate', run: () => go('doors', () => document.getElementById('sy-reboots')?.scrollIntoView({ behavior: 'smooth', block: 'start' })) },
+    { k: 'pass', label: 'Visitor pass', run: () => go('people', () => setGuestReq(n => n + 1)) },
+    { k: 'fault', label: 'Report a fault', run: () => go('faults', () => setFaultReq(n => n + 1)) },
+    { k: 'cam', label: 'Watch cameras', run: () => go('live') },
   ];
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {/* Corporate setup gear */}
-      {isCorporate && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={() => setShowSetup(v => !v)} style={gear}><Settings size={14} /> {showSetup ? 'Hide setup' : 'Setup & keys'}</button>
-        </div>
+    <>
+      <div className="sy-kpis" aria-label="Property status">
+        {tiles.map(t => (
+          <button key={t.l} type="button" className="sy-kpi" onClick={() => t.go && setTab(t.go)}>
+            <div className="l">{t.dot && <Dot c={t.dot} />}{t.l}</div>
+            <div className="v" style={{ color: t.color }}>{t.v}</div>
+            <div className="s">{t.s}</div>
+          </button>
+        ))}
+      </div>
+      <div className="sy-quick">
+        {quick.map(q => <button key={q.k} type="button" className="sy-q" onClick={q.run}><span className="ic">{ICONS[q.k]}</span>{q.label}</button>)}
+      </div>
+      <div className="sy-tabs" role="tablist" aria-label="Systems">
+        {TABS.map(t => (
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+            {t.label}{t.id === 'faults' && openFaults > 0 && <span className="n">{openFaults}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div role="tabpanel" aria-label={TABS.find(x => x.id === tab)?.label}>
+        {tab === 'live' && <LiveTab ctx={ctx} cams={cams} camErr={camErr} doors={doors} camMap={camMap} reloadDoors={loadDoors} />}
+        {tab === 'doors' && <DoorsTab ctx={ctx} doors={doors} doorErr={doorErr} camMap={camMap} cams={cams} relays={relays} relayErr={relayErr} reloadDoors={loadDoors} reloadRelays={loadRelays} setRelayState={setRelayState} />}
+        {tab === 'people' && <PeopleTab ctx={ctx} guestRequest={guestReq} onActivity={n => { setWho(n); setTab('activity'); }} />}
+        {tab === 'activity' && <ActivityTab ctx={ctx} brivoEvents={events} brivoErr={eventErr} who={who} setWho={setWho} />}
+        {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
+        {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}
+        {tab === 'controllers' && <SitePanels siteId={siteId} isCorporate={isCorporate} notify={notify} />}
+      </div>
+
+      {setup && isCorporate && (
+        <Sheet title="Setup & keys" sub="Corporate only — this property’s vendor logins." onClose={() => { setSetup(false); afterSetup(); }} width={640}>
+          <SiteConnections siteId={siteId} />
+        </Sheet>
       )}
-      {isCorporate && showSetup && <SiteConnections siteId={siteId} />}
-
-      {/* Intelligence strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 10 }}>
-        <div style={{ ...TILE, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <svg width="52" height="52" viewBox="0 0 52 52">
-            <circle cx="26" cy="26" r={R} fill="none" stroke="#12202c" strokeWidth="6" />
-            {hs != null && hs > 0 && <circle cx="26" cy="26" r={R} fill="none" stroke={hsColor} strokeWidth="6" strokeDasharray={`${filled} ${C - filled}`} strokeLinecap="round" transform="rotate(-90 26 26)" />}
-            <text x="26" y="30" textAnchor="middle" fontSize="13" fontWeight="700" fill="#eaf2fb">{hs ?? '—'}</text>
-          </svg>
-          <div>
-            <div style={{ color: '#00A3FF', fontSize: 11 }}>Site health</div>
-            <div style={{ color: hsColor, fontSize: 12, fontWeight: 600 }}>{hs == null ? '—' : hs >= 85 ? 'Good' : hs >= 60 ? 'Watch' : 'Attention'}</div>
-            <div style={{ color: '#00A3FF', fontSize: 10 }}>{s ? `${s.faults.open} open fault${s.faults.open === 1 ? '' : 's'}` : '…'}</div>
-          </div>
-        </div>
-        <StripTile icon={Camera} label="Cameras" value={camTotal != null ? `${camOnline}/${camTotal}` : '—'} sub={camerasDown ? `${camerasDown} down` : 'all online'} subColor={camerasDown ? '#f87171' : '#00E699'} />
-        <StripTile icon={DoorOpen} label="Doors / gates" value={doorCount != null ? String(doorCount) : '—'} sub={live.doors != null ? 'live · Brivo' : (s ? `${s.doors.panelsLive} controllers live` : '')} subColor="#c3d3e2" />
-        <StripTile icon={TrendingUp} label="Uptime · 90d" value={s ? `${s.faults.uptimePct}%` : '—'} sub={live.cameras ? `${live.cameras.online} cam online${live.doors != null ? ` · ${live.doors} doors` : ''}` : (s ? `${s.devices.online}/${s.devices.total} devices online` : '')} subColor="#c3d3e2" />
-        <StripTile icon={Zap} label="Events today" value={eventsTodayVal != null ? String(eventsTodayVal) : '—'} sub={live.eventsToday != null ? 'live · Brivo access' : 'access + system'} subColor="#00A3FF" />
-      </div>
-
-      {/* Quick tools */}
-      <div style={{ background: WELL, border: '1px solid #1E293B', borderRadius: 16, padding: 12 }}>
-        <div style={{ color: '#00A3FF', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Quick tools</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8 }}>
-          {tools.map(t => (
-            <button key={t.label} onClick={t.onClick} style={{ ...TILE, textAlign: 'center', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden><t.icon size={19} style={{ color: t.color }} /></div>
-              <div style={{ color: '#e2ebf4', fontSize: 11.5, marginTop: 4 }}>{t.label}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Live access & control — gate reset, door unlock, passes, door activity */}
-      <div id="sec-access"><SiteAccessControl siteId={siteId} /></div>
-
-      {/* Faults & uptime (built) */}
-      <div id="sec-faults"><SiteIncidents siteId={siteId} /></div>
-
-      {/* Widgets — reused as-is, each under a defining section header. */}
-      <div id="sec-cameras">
-        <SectionHead icon={Camera} title="Cameras" desc="Live security — Eagle Eye" />
-        <SiteSecurity siteId={siteId} />
-        <SiteCameraEvents siteId={siteId} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 14 }}>
-        <div id="sec-doors">
-          <SectionHead icon={DoorOpen} title="Doors" desc="Access points — Brivo" />
-          <SiteDoors siteId={siteId} />
-        </div>
-        <div id="sec-activity">
-          <SectionHead icon={History} title="Activity" desc="Recent access events" />
-          <SiteActivity siteId={siteId} />
-        </div>
-      </div>
-
-      {/* Network — UniFi. Own defining section per request. */}
-      <div id="sec-network">
-        <SectionHead icon={Wifi} title="Network" desc="Internet, clients & gear health — UniFi" accent="#00A3FF" />
-        <SiteNetwork siteId={siteId} />
-        <SiteNetworkDevices siteId={siteId} />
-      </div>
-
-      <div id="sec-relays">
-        <SectionHead icon={Zap} title="Relays & power" desc="Gate relays & smart switches — Shelly" />
-        <SiteRelays siteId={siteId} />
-      </div>
-
-      <div id="sec-panels">
-        <SectionHead icon={Cpu} title="Controllers & doors" desc="Panels, door programming & provisioning" />
-        <SitePanels siteId={siteId} isCorporate={isCorporate} />
-      </div>
-
-      {/* Gate re-boot — opened from the “Open / reset gate” quick tool */}
-      {showReboot && (
-        <div onClick={() => setShowReboot(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(4,10,20,0.62)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 16px', overflowY: 'auto' }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(760px, 96vw)', position: 'relative' }}>
-            <button onClick={() => setShowReboot(false)} style={{ position: 'absolute', top: -34, right: 0, background: 'transparent', border: 'none', color: '#c3d3e2', fontSize: 13, cursor: 'pointer' }}>✕ Close</button>
-            <GateReboots siteId={siteId} isCorporate={isCorporate} />
-          </div>
-        </div>
-      )}
-    </div>
+      {flash}
+    </>
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SectionHead({ icon: Icon, title, desc, accent = '#00A3FF' }: { icon: any; title: string; desc: string; accent?: string }) {
+export function SiteCommand({ siteId, isCorporate, site, onBack }: { siteId: string; isCorporate: boolean; site?: Any; onBack?: () => void }) {
+  const [setupReq, setSetupReq] = useState(0);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 10, background: WELL, border: '1px solid #1E293B', borderLeft: `3px solid ${accent}`, borderRadius: 12 }}>
-      <Icon size={16} style={{ color: accent }} aria-hidden />
-      <div>
-        <div style={{ color: '#eaf2fb', fontSize: 13, fontWeight: 700, letterSpacing: '0.01em' }}>{title}</div>
-        <div style={{ color: '#c3d3e2', fontSize: 10.5 }}>{desc}</div>
-      </div>
-    </div>
-  );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function StripTile({ icon: Icon, label, value, sub, subColor }: { icon: any; label: string; value: string; sub: string; subColor: string }) {
-  return (
-    <div style={TILE}>
-      <div style={{ color: '#00A3FF', fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}><Icon size={13} aria-hidden /> {label}</div>
-      <div style={{ color: '#eaf2fb', fontSize: 22, fontWeight: 700, lineHeight: 1.1, marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ color: subColor, fontSize: 10, marginTop: 1 }}>{sub}</div>}
+    <div className="sy">
+      <style>{CSS}</style>
+      <header className="sy-hd">
+        <div style={{ minWidth: 0 }}>
+          {onBack && <button type="button" className="sy-back" onClick={onBack}>‹ All locations</button>}
+          <h1>{site?.name || 'Property'}</h1>
+          {(site?.address || site?.city) && <div className="sub">{[site.address, site.city, site.state].filter(Boolean).join(', ')}</div>}
+        </div>
+        {isCorporate && <div className="sy-acts"><button type="button" className="sy-b dark" onClick={() => setSetupReq(n => n + 1)}>Setup &amp; keys</button></div>}
+      </header>
+      <SitePanel siteId={siteId} isCorporate={isCorporate} setupRequest={setupReq} />
     </div>
   );
 }

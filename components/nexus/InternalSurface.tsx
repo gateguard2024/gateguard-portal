@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { InternalDealerOnboardingBoard } from '@/components/nexus/InternalDealerOnboardingBoard'
 import { IntegrationsConsole } from '@/components/nexus/IntegrationsConsole'
@@ -13,6 +13,7 @@ import { PricingConsoleBody } from '@/components/admin/PricingConsoleBody'
 import { CostSheetBody } from '@/components/admin/CostSheetBody'
 import { AriaCapsBody } from '@/components/admin/AriaCapsBody'
 import { AdminReportConsole } from '@/components/nexus/AdminReportConsole'
+import { QuickBooksPage } from '@/components/nexus/quickbooks/QuickBooksPage'
 
 // ---- Console tokens (identical to Operations / Sales / My Day steel) ----
 const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
@@ -20,7 +21,7 @@ const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%)
 const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
-type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
+type InternalPanel = 'quickbooks' | 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -113,6 +114,19 @@ export function InternalSurface() {
   // Cost is corporate-only — the card is hidden from everyone else, and the
   // /api/admin/costs route refuses non-corporate even if they reach it.
   const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === 'corporate'
+  // ?qb=1 (back from QuickBooks sign-in, or a Lexi link) opens the QuickBooks page.
+  const [qbNotice, setQbNotice] = useState<{ ok: boolean; reason?: string | null } | null>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('qb') !== '1') return
+    const res = p.get('qbo')
+    if (res) setQbNotice({ ok: res === 'connected', reason: p.get('qbreason') })
+    setActivePanel('quickbooks')
+    for (const k of ['qb', 'qbo', 'qbreason']) p.delete(k)
+    const qs = p.toString()
+    window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
+  }, [])
 
   const cards: InternalCard[] = [
     { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', accent: '#00A3FF', glyph: 'activity', badge: 'Build' },
@@ -121,6 +135,7 @@ export function InternalSurface() {
     { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', accent: '#00A3FF', glyph: 'job-open', badge: 'Corporate' },
     { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', accent: '#7EE0A8', glyph: 'priority', badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', accent: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
+    ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Gate Guard’s books: cash, who owes us, profit — and invoice + payment sync.', accent: '#7EE0A8', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
     ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', accent: '#F2637E', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
     ...(isCorporate ? [{ id: 'aria-caps', title: 'ARIA Save Caps', subtitle: 'Cap how many properties each dealer can save to the Intel DB per month.', accent: '#00A3FF', glyph: 'research', badge: 'Corporate' } as InternalCard] : []),
     { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', accent: '#8FD3EC', glyph: 'research' },
@@ -154,6 +169,11 @@ export function InternalSurface() {
           Internal stays simple: track product work, onboard dealers, manage users and features, find playbooks, or train the team.
         </div>
       </div>
+
+      {/* Corporate only in the UI; every /api/integrations/quickbooks route also refuses non-corporate. */}
+      {activePanel === 'quickbooks' && isCorporate && (
+        <QuickBooksPage notice={qbNotice} onClose={() => { setActivePanel(null); setQbNotice(null) }} />
+      )}
 
       {activePanel === 'tracker' && (
         <InternalDetailShell title="Tracker" subtitle="Product work, build issues, bugs, and Nexus roadmap tasks." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Nexus Tracker" onClick={() => router.push('/tracker')} /><ActionButton label="Open Playbook" muted /></>}>

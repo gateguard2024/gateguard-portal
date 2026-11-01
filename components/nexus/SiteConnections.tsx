@@ -1,222 +1,164 @@
 'use client';
 
-// Per-site vendor connections (#83 expanded). Admins paste each property's own
-// Brivo / Eagle Eye / Shelly / UniFi credentials; they're encrypted server-side
-// (never returned). Brivo has a live Test. UI-only field metadata — no secrets
-// or server crypto imported here.
-import React, { useEffect, useState } from "react";
+// Per-site vendor connections — Systems → Setup & keys. 🔒 CORPORATE ONLY: the
+// caller only renders this for corporate users, and every endpoint it calls
+// (/api/sites/[id]/integrations, /api/eagle-eye/connect, /api/unifi/cloud/sites)
+// refuses non-corporate server-side. Credentials are encrypted server-side and
+// never returned. UI-only field metadata — no secrets or server crypto here.
+import React, { useCallback, useEffect, useState } from 'react';
+import { type Any, BLUE, Dot, DOT, Field, MUTED, Note, getJson, send } from '@/components/nexus/systems/shared';
 
-type Vendor = "brivo" | "eagle_eye" | "shelly" | "unifi";
-type Field = { key: string; label: string; secret?: boolean; placeholder?: string; group?: string; advanced?: boolean };
+type Vendor = 'brivo' | 'eagle_eye' | 'shelly' | 'unifi';
+type FieldDef = { key: string; label: string; secret?: boolean; placeholder?: string; advanced?: boolean };
 
-const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
-  { vendor: "brivo", label: "Brivo · Access Control", fields: [
-    { key: "username", label: "Brivo username" }, { key: "password", label: "Brivo password", secret: true },
-    { key: "api_key", label: "Brivo API key", secret: true }, { key: "client_id", label: "Brivo client ID" }, { key: "client_secret", label: "Brivo client secret", secret: true },
-    { key: "site_id", label: "Brivo site ID", placeholder: "e.g. 123456" }, { key: "credential_value", label: "Remote-unlock credential value", secret: true, placeholder: "digital credential of a user who can open these doors" } ] },
-  { vendor: "eagle_eye", label: "Eagle Eye · Cameras", fields: [
-    { key: "client_id", label: "EEN client ID" }, { key: "client_secret", label: "EEN client secret", secret: true } ] },
-  { vendor: "shelly", label: "Shelly · Relays / Power", fields: [
-    { key: "auth_key", label: "Cloud auth key", secret: true }, { key: "server", label: "Cloud server", placeholder: "shelly-12-eu.shelly.cloud" },
-    { key: "device_tag", label: "Property tag in device names", placeholder: "defaults to site name, e.g. Elevate Greene" } ] },
-  { vendor: "unifi", label: "UniFi · Network (cloud)", fields: [
-    { key: "cloud_api_key", label: "Cloud API key (unifi.ui.com)", secret: true },
-    { key: "cloud_site_id", label: "Cloud site ID", placeholder: "use the picker below" },
-    { key: "cloud_host_id", label: "Cloud host ID (optional)", advanced: true } ] },
+const VENDORS: { vendor: Vendor; label: string; what: string; fields: FieldDef[] }[] = [
+  { vendor: 'brivo', label: 'Brivo', what: 'Doors, people, door activity', fields: [
+    { key: 'username', label: 'Brivo username' }, { key: 'password', label: 'Brivo password', secret: true },
+    { key: 'api_key', label: 'API key', secret: true }, { key: 'client_id', label: 'Client ID' }, { key: 'client_secret', label: 'Client secret', secret: true },
+    { key: 'site_id', label: 'Brivo site ID', placeholder: 'e.g. 123456' },
+    { key: 'credential_value', label: 'Remote-unlock credential value', secret: true, placeholder: 'not needed for the Unlock button', advanced: true } ] },
+  { vendor: 'eagle_eye', label: 'Eagle Eye', what: 'Cameras, recordings, camera events', fields: [
+    { key: 'client_id', label: 'EEN client ID' }, { key: 'client_secret', label: 'EEN client secret', secret: true } ] },
+  { vendor: 'shelly', label: 'Shelly', what: 'Relays, gate pulse, power', fields: [
+    { key: 'auth_key', label: 'Cloud auth key', secret: true }, { key: 'server', label: 'Cloud server', placeholder: 'shelly-12-eu.shelly.cloud' },
+    { key: 'device_tag', label: 'Property tag in device names', placeholder: 'defaults to the property name' } ] },
+  { vendor: 'unifi', label: 'UniFi', what: 'Internet, network gear, clients', fields: [
+    { key: 'cloud_api_key', label: 'Cloud API key (unifi.ui.com)', secret: true },
+    { key: 'cloud_site_id', label: 'Cloud site ID', placeholder: 'or use “Find my UniFi sites”' },
+    { key: 'cloud_host_id', label: 'Cloud host ID', advanced: true } ] },
 ];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Status = { vendor: Vendor; configured: boolean; status: string | null; last_verified_at: string | null; last_error: string | null };
 
-export function SiteConnections({ siteId }: { siteId: string }) {
-  const [statuses, setStatuses] = useState<Status[]>([]);
+export function SiteConnections({ siteId, onChanged }: { siteId: string; onChanged?: () => void }) {
+  const [statuses, setStatuses] = useState<Status[] | null>(null);
   const [keyOk, setKeyOk] = useState(true);
-  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<Vendor | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [cloudSites, setCloudSites] = useState<{ site_id: string; name: string; host_id: string | null; host_name: string | null }[]>([]);
-  const [loadingSites, setLoadingSites] = useState(false);
-  const [showAdv, setShowAdv] = useState(false);
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const [cloudSites, setCloudSites] = useState<Any[]>([]);
+  const [adv, setAdv] = useState(false);
 
-  const load = React.useCallback(() => {
-    setLoading(true);
-    fetch(`/api/sites/${siteId}/integrations`).then(r => r.json()).then(d => {
-      setStatuses(d.integrations ?? []); setKeyOk(d.key_configured !== false);
-    }).catch(() => {}).finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const r = await getJson(`/api/sites/${siteId}/integrations`);
+    if (!r.ok) { setMsg({ t: r.data.error || 'Couldn’t load connections.', ok: false }); setStatuses([]); return; }
+    setStatuses(r.data.integrations ?? []); setKeyOk(r.data.key_configured !== false);
   }, [siteId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  function statusOf(v: Vendor) { return statuses.find(s => s.vendor === v); }
-  function chip(s?: Status) {
-    if (!s || !s.configured) return { label: "Not set", color: "#64748b" };
-    if (s.status === "verified") return { label: "Verified", color: "#00E699" };
-    if (s.status === "error") return { label: "Error", color: "#f87171" };
-    return { label: "Configured", color: "#fbbf24" };
-  }
+  const statusOf = (v: Vendor) => (statuses ?? []).find(s => s.vendor === v);
+  const chip = (s?: Status) => !s?.configured ? { t: 'Not set up', c: DOT.gray } : s.status === 'verified' ? { t: 'Working', c: DOT.green } : s.status === 'error' ? { t: 'Error', c: DOT.red } : { t: 'Saved, not tested', c: DOT.orange };
 
   async function save(vendor: Vendor) {
+    if (!Object.values(form).some(v => v.trim())) { setMsg({ t: 'Fill in at least one field.', ok: false }); return; }
     setBusy(true); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/integrations`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vendor, credentials: form }) }).then(x => x.json()).catch(() => null);
+    const r = await send(`/api/sites/${siteId}/integrations`, 'PUT', { vendor, credentials: form });
     setBusy(false);
-    if (r && r.ok) { setMsg("Saved ✓"); setForm({}); setOpen(null); load(); }
-    else setMsg((r && r.error) || "Couldn't save.");
+    if (!r.ok || !r.data.ok) { setMsg({ t: r.data.error || 'Couldn’t save.', ok: false }); return; }
+    setMsg({ t: vendor === 'eagle_eye' ? 'Saved. Now tap “Connect Eagle Eye” to approve access.' : 'Saved. Tap Test to check it.', ok: true });
+    setForm({}); if (vendor !== 'eagle_eye') setOpen(null); await load(); onChanged?.();
   }
   async function test(vendor: Vendor) {
     setBusy(true); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/integrations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test", vendor }) }).then(x => x.json()).catch(() => null);
+    const r = await send(`/api/sites/${siteId}/integrations`, 'POST', { action: 'test', vendor });
     setBusy(false);
-    setMsg(r?.verified ? "Connection verified ✓" : r?.note || r?.error || "Test finished.");
-    load();
+    setMsg(r.data.verified ? { t: 'Connection works.', ok: true } : { t: r.data.note || r.data.error || 'Test finished — check the status.', ok: !!r.ok && !r.data.error });
+    await load(); onChanged?.();
   }
   async function remove(vendor: Vendor, label: string) {
-    if (!window.confirm(`Remove the ${label} login for this site? This can't be undone.`)) return;
+    if (!window.confirm(`Remove the ${label} login for this property? Its systems stop showing until it’s added again.`)) return;
     setBusy(true); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/integrations?vendor=${vendor}`, { method: "DELETE" }).then(x => x.json()).catch(() => null);
+    const r = await send(`/api/sites/${siteId}/integrations?vendor=${vendor}`, 'DELETE');
     setBusy(false);
-    if (r && r.ok) { setMsg("Removed ✓"); setOpen(null); load(); }
-    else setMsg((r && r.error) || "Couldn't remove.");
+    if (!r.ok || !r.data.ok) { setMsg({ t: r.data.error || 'Couldn’t remove.', ok: false }); return; }
+    setMsg({ t: `${label} removed.`, ok: true }); setOpen(null); await load(); onChanged?.();
   }
-
-  // UniFi cloud: save whatever's typed (so the key is stored), then list the account's
-  // sites so the user can pick this property instead of pasting a Cloud site ID.
-  async function loadUniFiSites() {
-    setLoadingSites(true); setMsg(null);
-    try {
-      if (Object.keys(form).length) {
-        await fetch(`/api/sites/${siteId}/integrations`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vendor: "unifi", credentials: form }) });
-      }
-      const r = await fetch(`/api/unifi/cloud/sites?site_id=${siteId}`).then(x => x.json()).catch(() => null);
-      if (r?.sites?.length) { setCloudSites(r.sites); load(); }
-      else { setCloudSites([]); setMsg(r?.error || "No sites returned for this key. Double-check the Cloud API key."); }
-    } catch { setMsg("Couldn't load sites."); }
-    finally { setLoadingSites(false); }
+  async function findUniFiSites() {
+    setBusy(true); setMsg(null);
+    if (Object.values(form).some(v => v.trim())) {
+      const s = await send(`/api/sites/${siteId}/integrations`, 'PUT', { vendor: 'unifi', credentials: form });
+      if (!s.ok) { setBusy(false); setMsg({ t: s.data.error || 'Couldn’t save the key.', ok: false }); return; }
+    }
+    const r = await getJson(`/api/unifi/cloud/sites?site_id=${siteId}`);
+    setBusy(false);
+    if (r.data.sites?.length) { setCloudSites(r.data.sites); void load(); }
+    else { setCloudSites([]); setMsg({ t: r.data.error || 'No UniFi sites came back for this key — check the Cloud API key.', ok: false }); }
   }
-
-  const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18 } as const;
-  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
   return (
-    <>
-    <div style={card}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Connections</div>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>This property&apos;s own Brivo, Eagle Eye, Shelly, and UniFi logins. Stored encrypted — never shown again.</div>
-      {!keyOk && <div style={{ fontSize: 12, color: "#FF4D4D", marginBottom: 10 }}>Server encryption key not set (CREDENTIALS_ENC_KEY) — saving is disabled until it&apos;s configured.</div>}
-      {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div> : (
-        <div style={{ display: "grid", gap: 8 }}>
-          {VENDORS.map(({ vendor, label, fields }) => {
-            const s = statusOf(vendor); const c = chip(s); const isOpen = open === vendor;
-            return (
-              <div key={vendor} style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>{label}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: c.color }}>{c.label}</span>
-                    <button onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); }} style={{ fontSize: 12, color: "#00A3FF", background: "none", border: "none", cursor: "pointer" }}>{isOpen ? "Cancel" : s?.configured ? "Update" : "Set up"}</button>
-                  </div>
+    <div style={{ display: 'grid', gap: 12 }}>
+      <Note>Each property’s own logins. Stored encrypted and never shown again — to change one, enter it again. Only Gate Guard corporate can see this.</Note>
+      {!keyOk && <Note tone="red">The server’s encryption key (CREDENTIALS_ENC_KEY) isn’t set, so saving is off until it is.</Note>}
+      {msg && <Note tone={msg.ok ? 'green' : 'red'}>{msg.t}</Note>}
+      {statuses == null ? <div className="sy-empty">Loading…</div> : VENDORS.map(({ vendor, label, what, fields }) => {
+        const s = statusOf(vendor); const c = chip(s); const isOpen = open === vendor;
+        return (
+          <div key={vendor} style={{ border: '1px solid rgba(0,0,0,.1)', borderRadius: 12, padding: 12 }}>
+            <div className="sy-row" style={{ padding: 0, borderTop: 0 }}>
+              <div className="main"><div className="t">{label}</div><div className="m">{what}</div></div>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED }}><Dot c={c.c} />{c.t}</span>
+              <button type="button" className="sy-b line sm" onClick={() => { setOpen(isOpen ? null : vendor); setForm({}); setMsg(null); setCloudSites([]); setAdv(false); }}>{isOpen ? 'Cancel' : s?.configured ? 'Change' : 'Set up'}</button>
+            </div>
+            {s?.last_error && !isOpen && <div style={{ fontSize: 12, color: '#D70015', marginTop: 6 }}>{s.last_error}</div>}
+            {isOpen && (
+              <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                {fields.filter(f => !f.advanced || adv).map(f => (
+                  <Field key={f.key} label={f.label}>
+                    <input className="sy-in" type={f.secret ? 'password' : 'text'} autoComplete="new-password" placeholder={f.placeholder ?? ''} value={form[f.key] ?? ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                  </Field>
+                ))}
+                {fields.some(f => f.advanced) && <button type="button" onClick={() => setAdv(v => !v)} style={{ justifySelf: 'start', border: 0, background: 'none', padding: 0, color: BLUE, font: 'inherit', fontSize: 13, cursor: 'pointer' }}>{adv ? 'Hide optional fields' : 'Optional fields'}</button>}
+                {vendor === 'unifi' && <div style={{ display: 'grid', gap: 8 }}>
+                  <button type="button" className="sy-b line sm" style={{ justifySelf: 'start' }} onClick={findUniFiSites} disabled={busy}>{busy ? 'Looking…' : 'Find my UniFi sites'}</button>
+                  {cloudSites.length > 0 && <select className="sy-in" aria-label="UniFi site" value={form.cloud_site_id ?? ''} onChange={e => { const x = cloudSites.find(y => y.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: x?.host_id ?? p.cloud_host_id ?? '' })); }}>
+                    <option value="">Pick this property’s UniFi site…</option>
+                    {cloudSites.map(x => <option key={x.site_id} value={x.site_id}>{x.name}{x.host_name ? ` · ${x.host_name}` : ''}</option>)}
+                  </select>}
+                </div>}
+                <div className="sy-acts">
+                  <button type="button" className="sy-b pri sm" onClick={() => save(vendor)} disabled={busy || !keyOk}>{busy ? 'Saving…' : 'Save'}</button>
+                  {s?.configured && vendor !== 'eagle_eye' && <button type="button" className="sy-b line sm" onClick={() => test(vendor)} disabled={busy}>Test</button>}
+                  {s?.configured && vendor === 'eagle_eye' && <button type="button" className="sy-b line sm" onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }}>{s.status === 'verified' ? 'Reconnect Eagle Eye' : 'Connect Eagle Eye'}</button>}
+                  {s?.configured && <button type="button" className="sy-b warn sm" style={{ marginLeft: 'auto' }} onClick={() => remove(vendor, label)} disabled={busy}>Remove</button>}
                 </div>
-                {s?.last_error && !isOpen && <div style={{ fontSize: 11, color: "#FF4D4D", marginTop: 4 }}>{s.last_error}</div>}
-                {isOpen && (
-                  <div style={{ display: "grid", gap: 7, marginTop: 10 }}>
-                    {/* Primary fields */}
-                    {fields.filter(f => !f.advanced).map(f => (
-                      <input key={f.key} type={f.secret ? "password" : "text"} autoComplete="new-password"
-                        placeholder={f.label + (f.placeholder ? ` (${f.placeholder})` : "")}
-                        value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} style={input} />
-                    ))}
-                    {/* UniFi cloud site picker */}
-                    {vendor === "unifi" && (
-                      <div style={{ display: "grid", gap: 6, paddingTop: 2 }}>
-                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#00A3FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
-                        {cloudSites.length > 0 && (
-                          <select value={form.cloud_site_id ?? ""} onChange={e => { const s = cloudSites.find(x => x.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: s?.host_id ?? p.cloud_host_id ?? "" })); }} style={input}>
-                            <option value="">— pick this property&apos;s UniFi site —</option>
-                            {cloudSites.map(s => <option key={s.site_id} value={s.site_id}>{s.name}{s.host_name ? ` · ${s.host_name}` : ""}</option>)}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                    {/* Advanced (collapsed): local controller + Access fields */}
-                    {fields.some(f => f.advanced) && (
-                      <>
-                        <button type="button" onClick={() => setShowAdv(v => !v)} style={{ justifySelf: "start", fontSize: 11, color: "rgba(255,255,255,0.5)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>{showAdv ? "▾ Hide optional" : "▸ Optional"}</button>
-                        {showAdv && fields.filter(f => f.advanced).map((f, idx, arr) => (
-                          <React.Fragment key={f.key}>
-                            {f.group && f.group !== arr[idx - 1]?.group && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{f.group}</div>}
-                            <input type={f.secret ? "password" : "text"} autoComplete="new-password"
-                              placeholder={f.label + (f.placeholder ? ` (${f.placeholder})` : "")}
-                              value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} style={input} />
-                          </React.Fragment>
-                        ))}
-                      </>
-                    )}
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
-                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
-                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,230,153,0.16)", border: "1px solid rgba(0,230,153,0.4)", color: "#00E699", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
-                      {s?.configured && <button onClick={() => remove(vendor, label)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,77,77,0.14)", border: "1px solid rgba(255,77,77,0.4)", color: "#FF4D4D", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1, marginLeft: "auto" }}>Remove</button>}
-                    </div>
-                  </div>
-                )}
               </div>
-            );
-          })}
-        </div>
-      )}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
+            )}
+          </div>
+        );
+      })}
+      <SiteQuickBooks siteId={siteId} />
     </div>
-    <SiteQuickBooks siteId={siteId} />
-    </>
   );
 }
 
-// QuickBooks lives in Systems too: one Gate Guard QBO company, each site linked to
-// its Customer record. From that link, invoices + the customer portal (balance, Pay
-// links) all resolve — no re-entering anything.
+// This property's QuickBooks customer (bulk matching lives in Admin → QuickBooks).
 function SiteQuickBooks({ siteId }: { siteId: string }) {
   const [data, setData] = useState<{ connected: boolean; current: { id: string; name: string } | null; customers: { id: string; name: string }[] } | null>(null);
+  const [pick, setPick] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [pick, setPick] = useState("");
-  const load = React.useCallback(() => {
-    fetch(`/api/sites/${siteId}/qbo-customer`).then(r => r.json()).then(d => { setData(d); setPick(d?.current?.id ?? ""); }).catch(() => {});
-  }, [siteId]);
-  useEffect(() => { load(); }, [load]);
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const load = useCallback(async () => { const r = await getJson(`/api/sites/${siteId}/qbo-customer`); if (r.ok) { setData(r.data as never); setPick(r.data?.current?.id ?? ''); } }, [siteId]);
+  useEffect(() => { void load(); }, [load]);
   async function save() {
-    const cust = data?.customers.find(c => c.id === pick);
     setBusy(true); setMsg(null);
-    const r = await fetch(`/api/sites/${siteId}/qbo-customer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ qbo_customer_id: pick || null, qbo_customer_name: cust?.name ?? null }) }).then(x => x.json()).catch(() => null);
+    const r = await send(`/api/sites/${siteId}/qbo-customer`, 'POST', { qbo_customer_id: pick || null, qbo_customer_name: data?.customers.find(c => c.id === pick)?.name ?? null });
     setBusy(false);
-    if (r?.ok) { setMsg("Linked ✓"); load(); } else setMsg(r?.error || "Couldn't save.");
+    if (r.ok && r.data.ok) { setMsg({ t: 'Saved.', ok: true }); void load(); } else setMsg({ t: r.data.error || 'Couldn’t save.', ok: false });
   }
-  const card = { background: "linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))", border: "1px solid #1E293B", borderRadius: 18, padding: 18, marginTop: 12 } as const;
-  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
+  if (!data) return null;
   return (
-    <div style={card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)" }}>QuickBooks · Billing</div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Link this property to its Customer in your Gate Guard QuickBooks. Invoices, portal balance &amp; Pay all resolve from here.</div>
-        </div>
-        <span style={{ fontSize: 11, fontWeight: 700, color: data?.connected ? "#00E699" : "#fbbf24", whiteSpace: "nowrap" }}>{data?.connected ? "Connected" : "Not connected"}</span>
+    <div style={{ border: '1px solid rgba(0,0,0,.1)', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
+      <div className="sy-row" style={{ padding: 0, borderTop: 0 }}>
+        <div className="main"><div className="t">QuickBooks</div><div className="m">Which QuickBooks customer this property is billed to</div></div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED }}><Dot c={data.connected ? DOT.green : DOT.gray} />{data.connected ? (data.current ? data.current.name : 'Not linked') : 'Not connected'}</span>
       </div>
-      {data && !data.connected && (
-        <button onClick={() => { window.location.href = "/api/integrations/quickbooks/connect"; }} style={{ marginTop: 12, fontSize: 12, fontWeight: 600, background: "rgba(45,127,184,0.2)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "8px 14px", cursor: "pointer" }}>Connect QuickBooks →</button>
-      )}
-      {data?.connected && (
-        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-          <select value={pick} onChange={e => setPick(e.target.value)} style={input}>
-            <option value="">— link this site to a QuickBooks customer —</option>
-            {(data.customers ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,163,255,0.18)", border: "1px solid rgba(0,163,255,0.45)", color: "#00A3FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Saving…" : "Save link"}</button>
-            {data.current && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Currently: {data.current.name}</span>}
-          </div>
+      {!data.connected ? <a className="sy-b line sm" style={{ justifySelf: 'start' }} href="/?view=admin&qb=1">Set up QuickBooks</a> : (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select className="sy-in" aria-label="QuickBooks customer" value={pick} onChange={e => setPick(e.target.value)}><option value="">Not linked</option>{data.customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          <button type="button" className="sy-b pri sm" style={{ height: 36 }} onClick={save} disabled={busy}>{busy ? '…' : 'Save'}</button>
         </div>
       )}
-      {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#00E699" : "#fbbf24", marginTop: 10 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: msg.ok ? '#1A7F37' : '#D70015' }}>{msg.t}</div>}
     </div>
   );
 }

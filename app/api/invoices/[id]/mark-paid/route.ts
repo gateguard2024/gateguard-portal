@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
+import { inngest } from '@/inngest/client'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,13 +76,10 @@ export async function POST(
     if (payoutErr) console.warn('[mark-paid] commission payout release failed:', payoutErr.message)
   }
 
-  // Fire QB sync in background (non-blocking — failure must not block the paid flow)
-  void (async () => {
-    try {
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-      await fetch(`${base}/api/invoices/${params.id}/qb-sync`, { method: 'POST' })
-    } catch (_) { /* non-blocking */ }
-  })()
+  // Tell the QuickBooks sync job (Inngest) — it sends the payment if auto-sync is on.
+  // Queued, not a detached fetch (those are dropped when the function returns).
+  try { await inngest.send({ name: 'qbo/sync.now', data: { invoice_id: params.id } }) }
+  catch (e) { console.warn('[mark-paid] QuickBooks sync not queued (the 15-minute job will catch it):', e instanceof Error ? e.message : e) }
 
   return NextResponse.json({ invoice: updated })
 }
