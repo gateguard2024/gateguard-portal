@@ -16,7 +16,8 @@
  * Writes go through lib/assistant-executor.ts (scoped + undoable). Confirmed
  * actions run via /api/assistant/execute; undo via /api/assistant/revert.
  *
- * Phase 1: Gate Guard corporate only.
+ * Access: Gate Guard corporate always; dealers when Gate Guard turns on the
+ * 'ai.lexi' feature for them (lib/lexi/access.ts). 'view' = answers only.
  * Phase 2: the Brain (company knowledge + personal memory, lib/lexi/brain.ts) is
  * added to the instructions on every message; remember / forget edit it.
  */
@@ -24,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
 import { executeToolWithRevert, isSignedIn, ALLOWED_TOOLS } from '@/lib/assistant-executor'
 import { ACTION_TOOLS, TOOL_RISK_PROFILES, buildActionSummary } from '@/lib/assistant-tools'
 import { READ_TOOLS, READ_TOOL_NAMES, TOOL_LABEL, lexiCtx, runReadTool, type LexiCard } from '@/lib/lexi/tools'
@@ -42,10 +44,10 @@ const FAST_MODEL = process.env.LEXI_FAST_MODEL || 'claude-haiku-4-5-20251001'
 const MAX_ROUNDS = 6
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function systemPrompt(name: string, role: string, brain: string, voice = false) {
+function systemPrompt(name: string, role: string, brain: string, voice = false, company: { corporate: boolean; canAct: boolean } = { corporate: true, canAct: true }) {
   const now = new Date()
   return `You are Lexi, the AI assistant inside Nexus — Gate Guard's operating system for a gate, access-control and camera company that sells to apartment communities.
-You work for ${name} (${role}). Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}.
+You work for ${name} (${role})${company.corporate ? ' at Gate Guard' : ' at a Gate Guard dealer — you only see their company’s records, and Gate Guard’s shared product catalog'}. Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}.
 
 ${NEXUS_MAP}
 
@@ -63,7 +65,8 @@ How you work:
 - Reports: for "show me / chart / report" questions about pipeline, wins, or jobs, call run_report; the chart appears on screen, so just point out what stands out.
 - You can't yet send emails, text customers or place calls. If asked, say that's coming soon and offer what you can do now (draft the text, create a task).
 - Memory: when the user states a lasting preference or fact, or says "remember…", save it with remember (one fact per call). Company-wide facts (pricing, policies, scripts) go to the shared Brain only when they clearly mean the whole team. When they correct a saved fact, forget the old one and remember the new one.
-- Only discuss Gate Guard work. Be warm and confident, never chatty.${voice ? `
+- Only discuss Gate Guard work. Be warm and confident, never chatty.${company.canAct ? '' : `
+- This user has read-only Lexi: you can look things up and answer, but you can't create or change anything. If they ask you to, say their admin can turn on full Lexi, and tell them where to do it themselves in Nexus.`}${voice ? `
 - VOICE MODE: the user is talking to you hands-free and your reply is read out loud. Answer in 1–3 short spoken sentences. No lists, no markdown, no headings, no URLs or IDs. Say numbers and dates the way a person would ("about twelve thousand dollars", "this Tuesday"). The records you found are on their screen as cards — say "I put them on your screen" instead of reading them all. If you prepared an action that needs their OK, say in one sentence what it is; the app asks them to say confirm or skip.` : ''}
 
 ── The Brain ──
@@ -105,7 +108,9 @@ async function makeTitle(text: string): Promise<string> {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
   if (!isSignedIn(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!user.isCorporate) return NextResponse.json({ error: 'Lexi is in early access for Gate Guard corporate.' }, { status: 403 })
+  const level = await lexiAccess(user)
+  if (level === 'none') return NextResponse.json({ error: LEXI_OFF_MESSAGE }, { status: 403 })
+  const canAct = level === 'edit'
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Lexi isn’t set up yet (missing ANTHROPIC_API_KEY).' }, { status: 503 })
 
   const body = await req.json().catch(() => ({}))
@@ -167,8 +172,8 @@ export async function POST(req: NextRequest) {
           const s = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1500,
-            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
-            tools: cachedTools([...READ_TOOLS, REPORT_TOOL, ...BRAIN_TOOLS, ...(pending ? [] : ACTION_TOOLS)]),
+            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice, { corporate: user.isCorporate, canAct }), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
+            tools: cachedTools([...READ_TOOLS, REPORT_TOOL, ...BRAIN_TOOLS, ...(pending || !canAct ? [] : ACTION_TOOLS)]),
             messages: cachedMessages(messages),
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })
@@ -200,7 +205,7 @@ export async function POST(req: NextRequest) {
               const ev = { ok: r.ok, summary: r.summary, message: r.message, revertPayload: null }
               did.push(ev); send({ type: 'did', ...ev })
               results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(r), ...(r.ok ? {} : { is_error: true }) })
-            } else if (ALLOWED_TOOLS.has(block.name)) {
+            } else if (ALLOWED_TOOLS.has(block.name) && canAct) {
               const risk = TOOL_RISK_PROFILES[block.name] ?? 'medium'
               const summary = buildActionSummary(block.name, args)
               if (risk === 'low' && !pending) {

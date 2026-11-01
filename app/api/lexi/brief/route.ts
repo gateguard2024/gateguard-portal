@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
+import { LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
 import { isSignedIn } from '@/lib/assistant-executor'
 import { lexiCtx, briefCounts } from '@/lib/lexi/tools'
 import { getLexiSettings, sendMorningBrief, setBriefEmail } from '@/lib/lexi/proactive'
@@ -17,7 +18,7 @@ export const maxDuration = 60
 async function caller() {
   const user = await getCurrentUser()
   if (!isSignedIn(user)) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!user.isCorporate) return { error: NextResponse.json({ error: 'Lexi is in early access for Gate Guard corporate.' }, { status: 403 }) }
+  if ((await lexiAccess(user)) === 'none') return { error: NextResponse.json({ error: LEXI_OFF_MESSAGE }, { status: 403 }) }
   return { user }
 }
 

@@ -87,8 +87,15 @@ export default function NexusHomeClient() {
   const isCorporate = meta.org_tier === 'corporate'
   // Lexi has something for you: count of urgent "I noticed…" items (red/orange) → glowing ring on the center button.
   const [lexiCount, setLexiCount] = useState(0)
+  // Dealers see Lexi when Gate Guard turns on the "ai.lexi" feature for them.
+  const [lexiOn, setLexiOn] = useState(false)
   useEffect(() => {
-    if (!isCorporate) return
+    if (isCorporate) { setLexiOn(true); return }
+    if (!user) return
+    fetch('/api/user-features/me').then(r => (r.ok ? r.json() : {})).then((d: { features?: Record<string, string> }) => setLexiOn(!!d?.features?.['ai.lexi'] && d.features['ai.lexi'] !== 'none')).catch(() => {})
+  }, [isCorporate, user])
+  useEffect(() => {
+    if (!lexiOn) return
     let alive = true
     const check = () => fetch('/api/lexi/nudges').then(r => (r.ok ? r.json() : { nudges: [] })).then(d => {
       if (alive) setLexiCount((Array.isArray(d?.nudges) ? d.nudges : []).filter((n: { tone?: string }) => n.tone === 'red' || n.tone === 'orange').length)
@@ -96,7 +103,7 @@ export default function NexusHomeClient() {
     void check()
     const t = setInterval(check, 10 * 60 * 1000)
     return () => { alive = false; clearInterval(t) }
-  }, [isCorporate])
+  }, [lexiOn])
   const isAdmin =
     meta.org_tier === 'corporate' ||
     meta.org_tier === 'master_dealer' ||
@@ -211,8 +218,8 @@ export default function NexusHomeClient() {
             const active = activeTab === id
             return <button key={id} type="button" onClick={() => goTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: '#FFFFFF', border: '1px solid #FFFFFF', color: '#1D1D1F', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.2)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.82)' }}>{label}</button>
           })}
-          {/* Lexi — the Nexus logo, center of the bar (Phase 1: corporate only). */}
-          {isCorporate && <button type="button" onClick={() => goTab('lexi')} aria-label={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} title={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} aria-current={activeTab === 'lexi' ? 'page' : undefined}
+          {/* Lexi — the Nexus logo, center of the bar (corporate, and dealers with the ai.lexi feature). */}
+          {lexiOn && <button type="button" onClick={() => goTab('lexi')} aria-label={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} title={lexiCount ? `Lexi — ${lexiCount} things need you` : 'Lexi — Nexus AI'} aria-current={activeTab === 'lexi' ? 'page' : undefined}
             className="relative mx-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105"
             style={{ background: activeTab === 'lexi' ? 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#6B7EFF 100%)' : 'rgba(255,255,255,0.08)', border: activeTab === 'lexi' ? '1px solid rgba(255,255,255,0.7)' : '1px solid rgba(107,126,255,0.45)', boxShadow: activeTab === 'lexi' ? '0 0 22px rgba(74,140,255,0.55)' : '0 0 14px rgba(74,140,255,0.25)' }}>
             <svg width="24" height="24" viewBox="0 0 68 68" fill="none" aria-hidden="true">

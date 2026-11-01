@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
+import { LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
 import { isSignedIn } from '@/lib/assistant-executor'
 import { addBrain, canEditCompanyBrain, deleteBrain, loadBrain, notReady } from '@/lib/lexi/brain'
 
@@ -17,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 async function caller() {
   const user = await getCurrentUser()
   if (!isSignedIn(user)) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!user.isCorporate) return { error: NextResponse.json({ error: 'Lexi is in early access for Gate Guard corporate.' }, { status: 403 }) }
+  if ((await lexiAccess(user)) === 'none') return { error: NextResponse.json({ error: LEXI_OFF_MESSAGE }, { status: 403 }) }
   return { user }
 }
 

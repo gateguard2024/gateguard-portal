@@ -2,10 +2,11 @@
  * /api/lexi/nudges — Lexi's "I noticed…" list.
  *   GET                       → { nudges: [{ key, tone, kind, title, detail, ask, href }] }
  *   POST { key, days }        → hide that item for N days (1–30)
- * Scoped like everything else in Lexi (lib/lexi/tools.ts). Corporate-only for now.
+ * Scoped like everything else in Lexi (lib/lexi/tools.ts). Gated by the ai.lexi feature (lib/lexi/access.ts).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
+import { LEXI_OFF_MESSAGE, lexiAccess } from '@/lib/lexi/access'
 import { isSignedIn } from '@/lib/assistant-executor'
 import { lexiCtx } from '@/lib/lexi/tools'
 import { computeNudges, snoozeNudge } from '@/lib/lexi/proactive'
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic'
 async function caller() {
   const user = await getCurrentUser()
   if (!isSignedIn(user)) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!user.isCorporate) return { error: NextResponse.json({ error: 'Lexi is in early access for Gate Guard corporate.' }, { status: 403 }) }
+  if ((await lexiAccess(user)) === 'none') return { error: NextResponse.json({ error: LEXI_OFF_MESSAGE }, { status: 403 }) }
   return { user }
 }
 

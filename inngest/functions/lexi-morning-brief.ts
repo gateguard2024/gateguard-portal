@@ -1,13 +1,13 @@
 // Lexi's morning brief. Weekdays at 6:30am Eastern, emails everyone who turned
 // it on in Lexi (user_settings.lexi_brief_email). Each person gets only what
 // they're allowed to see: the user is loaded from Clerk and every read goes
-// through Lexi's scoped tools. Lexi is corporate-only for now, so anyone else
-// is skipped. Safe to retry: a brief already sent today is not sent again.
+// through Lexi's scoped tools. Anyone Lexi is off for (lib/lexi/access.ts) is skipped. Safe to retry: a brief already sent today is not sent again.
 // Also runs on the "lexi/brief.send" event for one user (data.user_id).
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '@/inngest/client'
 import { getUserById } from '@/lib/current-user'
 import { sendMorningBrief } from '@/lib/lexi/proactive'
+import { lexiAccess } from '@/lib/lexi/access'
 
 export const lexiMorningBrief = inngest.createFunction(
   {
@@ -38,7 +38,7 @@ export const lexiMorningBrief = inngest.createFunction(
       results[uid] = await step.run(`brief-${uid}`, async () => {
         const u = await getUserById(uid)
         if (!u) return 'skipped: user not found'
-        if (!u.isCorporate) return 'skipped: Lexi is corporate-only'
+        if ((await lexiAccess(u)) === 'none') return 'skipped: Lexi is off for this user'
         const r = await sendMorningBrief(u)
         if (!r.ok) throw new Error(r.error ?? 'send failed')
         return r.skipped ? `skipped: ${r.skipped}` : 'sent'
