@@ -162,6 +162,121 @@ export async function eagleEyeFullFrame(token: string, baseHost: string, deviceI
   return null
 }
 
+// ── Live frames (preview MJPEG feed) ─────────────────────────────────────────
+// `liveImage.jpeg` is NOT live: Eagle Eye returns the last still it stored, which
+// only refreshes while someone is watching (Marbella, Nov 2 2026: Gym/Leasing at
+// 7:22 PM the day before, Mail Left at 8:22 AM, fetched at noon). The `main`
+// liveImage fails for those cameras, so eagleEyeFullFrame falls through to that
+// stale preview. The real live picture is the preview feed's multipart (MJPEG)
+// stream: GET /feeds → multipartUrl, authorised by a media-session cookie
+// (GET /media/session → url → GET url sets it). We open the stream server-side,
+// keep the first complete JPEG and close it. Docs: developer.eagleeyenetworks.com/docs/watch-live-video
+
+export interface EenLiveTrace { step: string; status?: number; note?: string; ms: number }
+
+const eenMediaCookies = new Map<string, { cookie: string; at: number }>()
+
+async function eenMediaCookie(token: string, baseHost: string, trace: EenLiveTrace[], fresh = false): Promise<string> {
+  const key = `${baseHost}|${token.slice(-16)}`
+  const hit = eenMediaCookies.get(key)
+  if (!fresh && hit && Date.now() - hit.at < 4 * 60_000) return hit.cookie
+  const t0 = Date.now()
+  const s = await fetch(`https://${baseHost}/api/v3.0/media/session`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(5000),
+  })
+  trace.push({ step: 'media/session', status: s.status, ms: Date.now() - t0 })
+  if (!s.ok) return ''
+  const { url } = await s.json().catch(() => ({ url: '' }))
+  if (!url) return ''
+  const t1 = Date.now()
+  const c = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual', signal: AbortSignal.timeout(5000) })
+  const set = typeof c.headers.getSetCookie === 'function' ? c.headers.getSetCookie() : [c.headers.get('set-cookie') ?? '']
+  const cookie = set.filter(Boolean).map(v => v.split(';')[0]).join('; ')
+  trace.push({ step: 'media cookie', status: c.status, note: cookie ? `${set.length} cookie(s)` : 'no cookie', ms: Date.now() - t1 })
+  if (cookie) eenMediaCookies.set(key, { cookie, at: Date.now() })
+  return cookie
+}
+
+async function eenPreviewMultipartUrl(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[]): Promise<string> {
+  const t0 = Date.now()
+  const r = await fetch(`https://${baseHost}/api/v3.0/feeds?deviceId=${encodeURIComponent(deviceId)}&include=multipartUrl`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(5000),
+  })
+  trace.push({ step: 'feeds', status: r.status, ms: Date.now() - t0 })
+  if (!r.ok) return ''
+  const j = await r.json().catch(() => ({}))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const feeds: any[] = j.results ?? j.data ?? []
+  const pick = feeds.find(f => f?.type === 'preview' && f?.multipartUrl) ?? feeds.find(f => f?.multipartUrl)
+  if (!pick) trace.push({ step: 'feeds', note: `no multipartUrl (${feeds.map(f => f?.type).join(',') || 'none'})`, ms: 0 })
+  return pick?.multipartUrl ?? ''
+}
+
+/** Pull the first complete JPEG out of a multipart/x-mixed-replace body. */
+function firstJpeg(buf: Buffer): Buffer | null {
+  const soi = buf.indexOf(Buffer.from([0xff, 0xd8, 0xff]))
+  if (soi < 0) return null
+  // Prefer the part's Content-Length when the header gives one.
+  const head = buf.subarray(Math.max(0, soi - 400), soi).toString('latin1')
+  const m = /content-length:\s*(\d+)/i.exec(head)
+  if (m) {
+    const len = Number(m[1])
+    return buf.length >= soi + len ? Buffer.from(buf.subarray(soi, soi + len)) : null
+  }
+  // Otherwise the frame ends at the next part boundary ("\r\n--").
+  const next = buf.indexOf('\r\n--', soi, 'latin1')
+  if (next < 0) return null
+  const eoi = buf.lastIndexOf(Buffer.from([0xff, 0xd9]), next)
+  return eoi > soi ? Buffer.from(buf.subarray(soi, eoi + 2)) : null
+}
+
+/** A truly current JPEG from the camera's live preview feed, or null.
+ * Pass `trace` to collect step-by-step results (portal ?debug=1). */
+export async function eagleEyeLiveFrame(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[] = [], budgetMs = 8000): Promise<Buffer | null> {
+  const started = Date.now()
+  try {
+    const [url, cookie] = await Promise.all([eenPreviewMultipartUrl(token, baseHost, deviceId, trace), eenMediaCookie(token, baseHost, trace)])
+    if (!url) return null
+    for (const attempt of [0, 1]) {
+      const left = budgetMs - (Date.now() - started)
+      if (left < 1500) { trace.push({ step: 'stream', note: 'out of time', ms: 0 }); return null }
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), left)
+      const t0 = Date.now()
+      try {
+        const ck = attempt === 0 ? cookie : await eenMediaCookie(token, baseHost, trace, true)
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, ...(ck ? { Cookie: ck } : {}) }, signal: ctl.signal })
+        trace.push({ step: 'stream', status: res.status, note: res.headers.get('content-type') ?? '', ms: Date.now() - t0 })
+        if ((res.status === 401 || res.status === 403) && attempt === 0) { await res.body?.cancel().catch(() => {}); continue }
+        if (!res.ok || !res.body) return null
+        const reader = res.body.getReader()
+        let buf = Buffer.alloc(0)
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf = Buffer.concat([buf, Buffer.from(value)])
+          const jpg = firstJpeg(buf)
+          if (jpg && jpg.length > 1000) {
+            ctl.abort()
+            trace.push({ step: 'frame', note: `${jpg.length} bytes`, ms: Date.now() - t0 })
+            return jpg
+          }
+          if (buf.length > 4_000_000) break
+        }
+        trace.push({ step: 'frame', note: `no frame in ${buf.length} bytes`, ms: Date.now() - t0 })
+        return null
+      } catch (e) {
+        trace.push({ step: 'stream', note: e instanceof Error ? e.name : 'error', ms: Date.now() - t0 })
+        return null
+      } finally { clearTimeout(timer) }
+    }
+    return null
+  } catch (e) {
+    trace.push({ step: 'live', note: e instanceof Error ? e.message : 'error', ms: Date.now() - started })
+    return null
+  }
+}
+
 /** Resolve a recorded-video MP4 URL for a camera around a timestamp. */
 export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, deviceId: string, sinceISO: string): Promise<string | null> {
   try {
