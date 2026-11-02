@@ -450,3 +450,23 @@ export async function listEagleEyeCameras(token: string, baseHost: string): Prom
   }
   return rows.map(c => ({ id: String(c.id ?? c.esn ?? ''), esn: c.esn ? String(c.esn) : (c.id ? String(c.id) : null), name: c.name ?? 'Camera', tags: Array.isArray(c.tags) ? c.tags.map((t: unknown) => String(t)) : [], online: eenOnline(c) }))
 }
+
+/**
+ * The camera's live preview feed as a continuous stream (multipart/x-mixed-replace
+ * MJPEG) — for an <img> in the dealer viewer, so live plays at the camera's preview
+ * rate instead of one still every few seconds. Token + media cookie stay server-side;
+ * the route pipes the body through. Returns the upstream Response, or null.
+ * Frame rate = the camera's preview update rate in Eagle Eye (0.25 s = 4 fps … 16 s).
+ */
+export async function eagleEyeLiveStream(token: string, baseHost: string, deviceId: string, signal?: AbortSignal): Promise<Response | null> {
+  const trace: EenLiveTrace[] = []
+  const [url, cookie] = await Promise.all([eenPreviewMultipartUrl(token, baseHost, deviceId, trace), eenMediaCookie(token, baseHost, trace)])
+  if (!url) return null
+  for (const attempt of [0, 1]) {
+    const ck = attempt === 0 ? cookie : await eenMediaCookie(token, baseHost, trace, true)
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, ...(ck ? { Cookie: ck } : {}) }, signal })
+    if ((res.status === 401 || res.status === 403) && attempt === 0) { await res.body?.cancel().catch(() => {}); continue }
+    return res.ok && res.body ? res : null
+  }
+  return null
+}

@@ -58,11 +58,13 @@ const localDayStart = (ymd: string) => new Date(`${ymd}T00:00:00`).getTime()
 const ymdOf = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 /** Where the viewer reads from. Dealer side = the default; the property portal passes its PIN-gated routes. */
-export type ViewerApi = { video: (qs: string) => string; preview: (camId: string, t: number) => string; clip: (camId: string, ts: string) => string }
+export type ViewerApi = { video: (qs: string) => string; preview: (camId: string, t: number) => string; clip: (camId: string, ts: string) => string; live?: (camId: string, n: number) => string }
 export const siteViewerApi = (siteId: string): ViewerApi => ({
   video: qs => `/api/sites/${siteId}/video?${qs}`,
   preview: (camId, t) => previewUrl(siteId, camId, t),
   clip: (camId, ts) => clipUrl(siteId, camId, ts),
+  // Continuous Eagle Eye preview feed (MJPEG) — smooth live instead of a still every 2 s.
+  live: (camId, n) => `/api/eagle-eye/live?site_id=${encodeURIComponent(siteId)}&camera_id=${encodeURIComponent(camId)}&n=${n}`,
 })
 
 export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
@@ -235,6 +237,7 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
               isEdge && edge ? (liveFail ? <><EdgeSnap edge={edge} cam={cam.id} everyMs={1000} height={720} alt={cam.name} /><span className="cv-tag">Snapshots · {liveFail}</span></>
                 : <EdgeLive key={cam.key} edge={edge} cam={cam.id} onFail={setLiveFail} />)
                 : isEdge ? <div className="off">The Edge device isn’t reachable right now.</div>
+                : api.live ? <LiveStream key={cam.key} src={n => api.live!(cam.id, n)} name={cam.name} fallback={<LiveCamRefresh src={t => api.preview(cam.id, t)} name={cam.name} />} />
                 : <LiveCamRefresh key={cam.key} src={t => api.preview(cam.id, t)} name={cam.name} />
             ) : isEdge && edge ? (
               <HlsVideo key={vodUrl} ref={vref} url={vodUrl} pass={edge.pass} rate={rate} controls={false} onError={setErr} onTime={t => setOffset(t)} />
@@ -433,7 +436,27 @@ function EventList({ events, edge, pos, onPlay }: { events: VEvent[] | null; edg
   )
 }
 
-// Eagle Eye live = the existing preview route, refreshed every 2 s.
+// Eagle Eye live, smooth: one continuous MJPEG stream from the camera's preview feed
+// (frame rate = the camera's preview rate in Eagle Eye, up to 4 fps). The server cuts
+// a stream at 5 minutes, so it reconnects every 4½; it pauses while the tab is hidden.
+// Two failures in a row → fall back to stills.
+function LiveStream({ src, name, fallback }: { src: (n: number) => string; name: string; fallback: React.ReactNode }) {
+  const [n, setN] = useState(0)
+  const [fails, setFails] = useState(0)
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) setN(x => x + 1) }, 270_000); return () => clearInterval(t) }, [])
+  useEffect(() => {
+    const v = () => { setHidden(document.hidden); if (!document.hidden) setN(x => x + 1) }
+    document.addEventListener('visibilitychange', v)
+    return () => document.removeEventListener('visibilitychange', v)
+  }, [])
+  if (fails >= 2) return <>{fallback}</>
+  if (hidden) return null
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img key={n} src={src(n)} alt={name} onLoad={() => setFails(0)} onError={() => { setFails(f => f + 1); setN(x => x + 1) }} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+}
+
+// Eagle Eye live fallback = the existing preview route, refreshed every 2 s.
 function LiveCamRefresh({ src, name }: { src: (tick: number) => string; name: string }) {
   const [tick, setTick] = useState(0)
   const [bad, setBad] = useState(false)
