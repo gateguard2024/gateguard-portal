@@ -32,19 +32,22 @@ const mapTechStatus = (s: string) => {
 }
 
 // GET /api/dispatch — jobs + tech roster scoped to caller's org
-export async function GET() {
+// GET /api/dispatch?cancelled=1 — only cancelled jobs (newest 100), for the Cancelled list.
+export async function GET(req: NextRequest) {
   const user  = await getCurrentUser()
   const scope = await resolveOrgScope(user)
+  const onlyCancelled = req.nextUrl.searchParams.get('cancelled') === '1'
 
   let jobQuery = supabase
     .from('work_orders')
     .select('id, wo_number, title, customer_name, job_type, assignee_id, assignee_name, priority, status, scheduled_date, due_date, site_id, created_at')
-    // Every live status — procurement and stuck jobs used to be left out, so a
-    // job dragged to those columns vanished from the Operations Hub. Cancelled
-    // jobs stay out. 300 so older open jobs aren't pushed off by completed ones.
-    .not('status', 'in', '(cancelled,canceled,deleted)')
     .order('created_at', { ascending: false })
-    .limit(300)
+  // Every live status — procurement and stuck jobs used to be left out, so a
+  // job dragged to those columns vanished from the Operations Hub. Cancelled
+  // jobs stay out. 300 so older open jobs aren't pushed off by completed ones.
+  jobQuery = onlyCancelled
+    ? jobQuery.in('status', ['cancelled', 'canceled']).limit(100)
+    : jobQuery.not('status', 'in', '(cancelled,canceled,deleted)').limit(300)
 
   jobQuery = applyOrgScope(jobQuery, scope, 'org_id')
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
 import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
-import { guardWorkOrder } from '@/lib/ops-scope'
+import { guardSite, guardWorkOrder } from '@/lib/ops-scope'
 import { getCurrentUser } from '@/lib/current-user'
 import { isInScope, resolveOrgScope } from '@/lib/org-scope'
 
@@ -133,6 +133,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   for (const k of ['id', 'created_at', 'created_by', 'wo_number']) delete upd[k]
   const me = await getCurrentUser()
   if (!me.isCorporate) delete upd.org_id
+  // A job can only be moved to a site the caller can see.
+  if (body.site_id && !(await guardSite(req, String(body.site_id)))) return NextResponse.json({ error: 'That site isn’t one of yours.' }, { status: 400 })
   // A tech can only be assigned from the caller's own team.
   if (body.assignee_id && !me.isCorporate && me.id !== 'anonymous') {
     const scope = await resolveOrgScope(me)
@@ -170,6 +172,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         .update({ current_job_id: params.id })
         .eq('id', body.assignee_id)
     }
+  }
+
+  // A cancelled job is nobody's current job any more.
+  if (body.status === 'cancelled') {
+    const { error: tErr } = await supabase.from('technicians').update({ current_job_id: null }).eq('current_job_id', params.id)
+    if (tErr) console.error('[maintenance] free tech on cancel failed:', tErr.message)
   }
 
   // When the job is completed, free the assigned tech back to "available"

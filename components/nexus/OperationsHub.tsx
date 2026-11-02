@@ -212,6 +212,7 @@ const WO_FILTERS = [
   { key: "overdue", label: "Overdue" },
   { key: "done", label: "Done" },
   { key: "all", label: "All" },
+  { key: "cancelled", label: "Cancelled" },
 ];
 const woMatches = (w: RealWO, f: string) => {
   if (f.startsWith("b:")) return bucketOf(stOf(w)) === f.slice(2);
@@ -220,6 +221,7 @@ const woMatches = (w: RealWO, f: string) => {
   if (f === "urgent") return isOpenWO(w) && isUrgent(w);
   if (f === "overdue") return isOverdue(w);
   if (f === "done") return !isOpenWO(w);
+  if (f === "cancelled") return true; // that list is loaded separately (cancelled jobs only)
   return true;
 };
 
@@ -517,7 +519,16 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onBulk, onOpen, 
     if (ok) { resetForm(); setShowNew(false); }
   }
   const canSubmit = form.isTask ? !!form.title.trim() : !!form.customer_name.trim();
-  const shown = jobs.filter(w => {
+  // Cancelled jobs are kept off the board; this list loads them on their own (and reloads
+  // whenever the jobs change, so a job cancelled or reopened moves right away).
+  const [cancelledJobs, setCancelledJobs] = useState<RealWO[] | null>(null);
+  useEffect(() => {
+    let dead = false;
+    fetch("/api/dispatch?cancelled=1").then(r => (r.ok ? r.json() : null)).then(d => { if (!dead && d) setCancelledJobs(d.jobs ?? []); }).catch(() => {});
+    return () => { dead = true; };
+  }, [jobs]);
+  const base = filter === "cancelled" ? (cancelledJobs ?? []) : jobs;
+  const shown = base.filter(w => {
     if (!woMatches(w, filter)) return false;
     if (q && !`${w.woNumber ?? ""} ${w.title ?? ""} ${w.property ?? ""} ${w.assignedTech ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
@@ -548,9 +559,11 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onBulk, onOpen, 
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
-  const count = (f: string) => jobs.filter(w => woMatches(w, f)).length;
+  const count = (f: string) => f === "cancelled" ? (cancelledJobs?.length ?? 0) : jobs.filter(w => woMatches(w, f)).length;
   const bucketChip = filter.startsWith("b:") ? JOB_COLUMNS.find(c => c.key === filter.slice(2)) : null;
-  const statusSel = (w: RealWO) => <select value={bucketOf(stOf(w))} onClick={e => e.stopPropagation()} onChange={e => onUpdate(w.id, { status: COL_TO_DB[e.target.value] })} style={sel} aria-label={`Status of ${woName(w)}`}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>;
+  const statusSel = (w: RealWO) => /^cancel/i.test(stOf(w))
+    ? <button type="button" onClick={e => { e.stopPropagation(); onUpdate(w.id, { status: "open" }); }} style={{ ...sel, cursor: "pointer" }} aria-label={`Reopen ${woName(w)}`}>Cancelled · Reopen</button>
+    : <select value={bucketOf(stOf(w))} onClick={e => e.stopPropagation()} onChange={e => onUpdate(w.id, { status: COL_TO_DB[e.target.value] })} style={sel} aria-label={`Status of ${woName(w)}`}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>;
   const techSel = (w: RealWO) => <select value={w.assignedTechId ?? ""} onClick={e => e.stopPropagation()} onChange={e => { const t = techs.find(x => x.id === e.target.value); onUpdate(w.id, { assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={sel} aria-label={`Tech for ${woName(w)}`}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>;
 
   return <div style={{ display: "grid", gap: 16 }}>
@@ -1880,6 +1893,20 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   const [invoiceMade, setInvoiceMade] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelWhy, setCancelWhy] = useState("Customer cancelled");
+  const [cancelNote, setCancelNote] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  // Site on a job: pick / change / remove.
+  const [sitePick, setSitePick] = useState(false);
+  const [siteQ, setSiteQ] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [siteList, setSiteList] = useState<any[] | null>(null);
+  const [siteBusy, setSiteBusy] = useState(false);
+  useEffect(() => {
+    if (!sitePick || siteList) return;
+    fetch("/api/sites?limit=500").then(r => r.json()).then(d => setSiteList(Array.isArray(d) ? d : (d.sites ?? d.records ?? []))).catch(() => setSiteList([]));
+  }, [sitePick, siteList]);
   // Job timer (clock in / out) and customer sign-off.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [activeEntry, setActiveEntry] = useState<any>(null);
@@ -1923,6 +1950,8 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [photos, setPhotos] = useState<any[]>([]);
   const [woUploading, setWoUploading] = useState(false);
+  const [upProg, setUpProg] = useState<{ done: number; total: number } | null>(null);
+  const [dragOver, setDragOver] = useState<"photo" | "file" | null>(null);
   const [showAddPart, setShowAddPart] = useState(false);
   const [pForm, setPForm] = useState({ name: "", qty: "1", unit_cost: "", unit_price: "" });
   const [laborH, setLaborH] = useState("");
@@ -2141,18 +2170,54 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     if (failed) setExtraMsg(`${failed} of ${steps.length} playbook steps didn’t save. Try again.`);
     load(true);
   }
-  async function uploadWoPhoto(file: File) {
-    if (!file || woUploading) return; setWoUploading(true); setExtraMsg(null);
+  // One photo: get an upload link, upload, then record it. Only recorded if the file
+  // actually uploaded — no broken "proof".
+  async function uploadOnePhoto(file: File): Promise<boolean> {
     try {
       const up = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) }).then(r => r.json());
-      if (!up?.signedUrl) throw new Error("start");
-      // Only record the photo if the file actually uploaded — no broken "proof".
+      if (!up?.signedUrl) return false;
       const put = await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
-      if (!put.ok) throw new Error("upload");
+      if (!put.ok) return false;
       const r = await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) });
-      if (!r.ok) throw new Error("save");
-    } catch { setExtraMsg("The photo didn’t upload. Try again."); }
-    setWoUploading(false); load(true);
+      return r.ok;
+    } catch { return false; }
+  }
+  // One file (drawing, permit, quote…): upload, then attach it to the job.
+  async function uploadOneFile(file: File): Promise<boolean> {
+    try {
+      const u = await fetch(`/api/nexus/jobs/job-window/${id}/attachment-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) });
+      const ud = await u.json().catch(() => ({}));
+      if (!u.ok || !ud?.signedUrl) return false;
+      const put = await fetch(ud.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!put.ok) return false;
+      const r = await fetch(`/api/nexus/jobs/job-window/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_attachment", file_name: file.name, url: ud.publicUrl, file_type: file.type, size_bytes: file.size }) });
+      const d = await r.json().catch(() => ({}));
+      return r.ok && d.success !== false;
+    } catch { return false; }
+  }
+  // Many at once (pick several, or drop them in): 3 at a time, with a count, one reload at the end.
+  async function uploadMany(files: File[], kind: "photo" | "file") {
+    const list = files.filter(Boolean).slice(0, 40);
+    if (!list.length || woUploading || extraBusy) return;
+    const setBusy = kind === "photo" ? setWoUploading : setExtraBusy;
+    setBusy(true); setExtraMsg(null); setUpProg({ done: 0, total: list.length });
+    const one = kind === "photo" ? uploadOnePhoto : uploadOneFile;
+    const failed: string[] = [];
+    let next = 0, done = 0;
+    await Promise.all(Array.from({ length: Math.min(3, list.length) }, async () => {
+      while (next < list.length) {
+        const f = list[next++];
+        if (!(await one(f))) failed.push(f.name);
+        done++; setUpProg({ done, total: list.length });
+      }
+    }));
+    setBusy(false); setUpProg(null); load(true);
+    const ok = list.length - failed.length;
+    const noun = kind === "photo" ? "photo" : "file";
+    setExtraMsg(failed.length
+      ? `${ok} of ${list.length} ${noun}s added. These didn’t upload — try them again: ${failed.slice(0, 5).join(", ")}${failed.length > 5 ? "…" : ""}`
+      : `${ok} ${noun}${ok === 1 ? "" : "s"} added.`);
+    if (files.length > 40) setExtraMsg(m => `${m ?? ""} Only the first 40 were added — add the rest in another batch.`);
   }
   async function addPart() {
     if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
@@ -2243,18 +2308,6 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   async function addJobTask() {
     if (!taskForm.title.trim()) return;
     if (await jobAction({ action: "create_task", title: taskForm.title.trim(), due_date: taskForm.due }, "Task added.")) setTaskForm({ title: "", due: "" });
-  }
-  async function uploadJobFile(file: File) {
-    setExtraBusy(true); setExtraMsg(null);
-    try {
-      const u = await fetch(`/api/nexus/jobs/job-window/${id}/attachment-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) });
-      const ud = await u.json().catch(() => ({}));
-      if (!u.ok) throw new Error(ud?.error || "Couldn’t start the upload.");
-      const put = await fetch(ud.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
-      if (!put.ok) throw new Error("Upload failed.");
-      setExtraBusy(false);
-      await jobAction({ action: "add_attachment", file_name: file.name, url: ud.publicUrl, file_type: file.type, size_bytes: file.size }, "File added.");
-    } catch (e) { setExtraMsg(e instanceof Error ? e.message : "Upload failed."); setExtraBusy(false); }
   }
   useEffect(() => { if (!activeEntry) return; const t = setInterval(() => setNowTick(Date.now()), 1000); return () => clearInterval(t); }, [activeEntry]);
   async function toggleTimer() {
@@ -2355,14 +2408,15 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   }
 
   // ── Page header data ──────────────────────────────────────────────────────
+  const cancelled = !!wo && /^cancel/.test(stOf(wo).toLowerCase());
   const bucket = wo ? bucketOf(stOf(wo)) : "New";
-  const onHold = bucket === "Procurement" || bucket === "Stuck";
+  const onHold = !cancelled && (bucket === "Procurement" || bucket === "Stuck");
   const STEPS: { key: string; label: string }[] = [{ key: "New", label: "New" }, { key: "Scheduled", label: "Scheduled" }, { key: "In Progress", label: "Working" }, { key: "Done", label: "Done" }];
   const stepIdx = onHold ? 1 : Math.max(0, STEPS.findIndex(x => x.key === bucket));
   const addr = wo ? [wo.site_address, wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).join(", ") : "";
   const phone = wo ? (wo.site_contact_phone || wo.site_pm_phone || "") : "";
   const sched = wo?.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : null;
-  const late = !!sched && bucket !== "Done" && sched < todayKey();
+  const late = !cancelled && !!sched && bucket !== "Done" && sched < todayKey();
   const laborHrs = Math.round((laborMins / 60) * 10) / 10;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const signed = photos.some((p: any) => String(p.file_name ?? p.caption ?? "").split("|")[0].toLowerCase() === "signature");
@@ -2370,11 +2424,41 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   const runLabel = `${Math.floor(runSecs / 3600)}:${String(Math.floor((runSecs % 3600) / 60)).padStart(2, "0")}:${String(runSecs % 60).padStart(2, "0")}`;
   function goStep(key: string) {
     if (!wo) return;
+    if (cancelled) { setHint("This job is cancelled. Tap Reopen job first."); return; }
     if (key === "Done" && !canComplete) { setHint(completeBlockReason + " — then finish the job."); setTab(!allStepsDone ? "Execution" : "Activity"); return; }
     setHint(null); patchField({ status: COL_TO_DB[key] });
   }
   // The one obvious next thing to do (ServiceTitan / Housecall Pro style).
+  // Cancel: asks why, saves the reason as a note on the job, then sets status "cancelled"
+  // (off the board, the schedule and the tech's list). Reopen puts it back to New.
+  async function cancelJob() {
+    if (!wo || cancelBusy) return;
+    const why = cancelWhy === "Other" ? cancelNote.trim() : [cancelWhy, cancelNote.trim()].filter(Boolean).join(" — ");
+    if (!why) { setHint("Say why it’s being cancelled."); return; }
+    setCancelBusy(true); setHint(null);
+    const note = await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: `Job cancelled: ${why}` }) }).catch(() => null);
+    if (!note?.ok) { setCancelBusy(false); setHint("Couldn’t save the reason, so the job wasn’t cancelled. Try again."); return; }
+    const ok = await patchField({ status: "cancelled" });
+    setCancelBusy(false);
+    if (ok) { setCancelOpen(false); setCancelNote(""); load(true); } else setHint("The job wasn’t cancelled. Try again.");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function setJobSite(s: any | null) {
+    if (!wo || siteBusy) return;
+    setSiteBusy(true); setHint(null);
+    const ok = await patchField(s ? { site_id: s.id, customer_name: s.name ?? null } : { site_id: null });
+    setSiteBusy(false);
+    if (ok) { setSitePick(false); setSiteQ(""); load(true); } else setHint("The site didn’t change. Try again.");
+  }
+  async function reopenJob() {
+    if (!wo) return;
+    setHint(null);
+    const ok = await patchField({ status: "open" });
+    if (ok) await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "Job reopened." }) }).catch(() => null);
+    load(true);
+  }
   const primary: { label: string; run: () => void; tone?: string } | null = !wo ? null
+    : cancelled ? { label: "Reopen job", run: () => { void reopenJob(); } }
     : bucket === "Done" ? { label: invoiceMade ? "Invoice created ✓" : invBusy ? "Creating invoice…" : "Create invoice", run: createInvoice, tone: "#248A3D" }
     : onHold ? { label: "Resume job", run: () => goStep("Scheduled") }
     : bucket === "In Progress" ? { label: "Finish job", run: () => goStep("Done"), tone: "#248A3D" }
@@ -2441,10 +2525,11 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         <div style={{ minWidth: 0 }}>
           <div className="no">{wo.wo_number || "Work order"}{wo.job_type ? ` · ${wo.job_type}` : ""}</div>
           <h1>{wo.title || "Work order"}</h1>
-          <div className="sub">{wo.customer_name || "No site"}{addr ? ` · ${addr}` : ""}</div>
+          <div className="sub">{wo.site_id || wo.customer_name ? <>{wo.customer_name || "Site"}{addr ? ` · ${addr}` : ""}</> : <button type="button" onClick={() => { setTab("Overview"); setSitePick(true); }} style={{ background: "none", border: 0, padding: 0, color: "#8EC1FF", font: "inherit", cursor: "pointer", textDecoration: "underline" }}>No site — add one</button>}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {wo.priority && <span className="jp-pill" style={/crit|urg/.test(String(wo.priority).toLowerCase()) ? { background: "#FFECEC", color: "#D70015" } : String(wo.priority).toLowerCase() === "high" ? { background: "#FFF4E5", color: "#B25000" } : { background: "rgba(255,255,255,.14)", color: "#fff" }}>{String(wo.priority)[0].toUpperCase() + String(wo.priority).slice(1)} priority</span>}
+          {cancelled && <span className="jp-pill" style={{ background: "#FFECEC", color: "#D70015" }}>Cancelled</span>}
           {onHold && <span className="jp-pill" style={{ background: "#FFF4E5", color: "#B25000" }}>{bucket === "Procurement" ? "Waiting on parts" : "Stuck"}</span>}
           {late && <span className="jp-pill" style={{ background: "#FFECEC", color: "#D70015" }}>Late</span>}
           {wo.is_callback && <span className="jp-pill" style={{ background: "#FFF4E5", color: "#B25000" }}>Callback</span>}
@@ -2460,12 +2545,28 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             </button>)}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {!onHold && bucket !== "Done" && <select aria-label="Put on hold" value="" onChange={e => { if (e.target.value) goStep(e.target.value); }} style={{ ...sel, height: 34 }}>
+            {!cancelled && bucket !== "Done" && <button type="button" onClick={() => setCancelOpen(v => !v)} aria-expanded={cancelOpen} style={{ ...sel, height: 34, color: "#D70015", cursor: "pointer" }}>Cancel job…</button>}
+            {!cancelled && !onHold && bucket !== "Done" && <select aria-label="Put on hold" value="" onChange={e => { if (e.target.value) goStep(e.target.value); }} style={{ ...sel, height: 34 }}>
               <option value="">Put on hold…</option><option value="Procurement">Waiting on parts</option><option value="Stuck">Stuck / blocked</option>
             </select>}
             {primary && <button type="button" className="jp-pri" onClick={primary.run} disabled={invBusy} style={{ background: primary.tone ?? BLUE }}>{primary.label}</button>}
           </div>
         </div>
+        {cancelled && <div role="status" style={{ fontSize: 13, color: "#D70015", background: "#FFECEC", borderRadius: 10, padding: "8px 12px" }}>This job is cancelled. It’s off the board, the schedule and the tech’s list. The reason is in Notes. Tap Reopen job if it’s back on.</div>}
+        {cancelOpen && !cancelled && <div style={{ display: "grid", gap: 8, background: "#FFF6F6", border: "1px solid rgba(215,0,21,.18)", borderRadius: 12, padding: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Cancel this job?</div>
+          <div style={{ fontSize: 13, color: "#6E6E73" }}>It comes off the board, the schedule and the tech’s list. Nothing is deleted — you can reopen it from Work orders → Cancelled.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <select aria-label="Why is it cancelled?" value={cancelWhy} onChange={e => setCancelWhy(e.target.value)} style={{ ...sel, height: 36 }}>
+              {["Customer cancelled", "Duplicate job", "Made by mistake", "Fixed without a visit", "Not needed anymore", "Other"].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <input aria-label="More detail" value={cancelNote} onChange={e => setCancelNote(e.target.value)} placeholder={cancelWhy === "Other" ? "Why? (required)" : "More detail (optional)"} style={{ ...sel, height: 36, flex: 1, minWidth: 180 }} />
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={() => setCancelOpen(false)} style={{ ...sel, height: 34, cursor: "pointer" }}>Keep job</button>
+            <button type="button" onClick={() => { void cancelJob(); }} disabled={cancelBusy || (cancelWhy === "Other" && !cancelNote.trim())} style={{ height: 34, padding: "0 14px", borderRadius: 10, border: 0, background: "#D70015", color: "#fff", fontWeight: 600, cursor: "pointer", opacity: cancelBusy ? 0.6 : 1 }}>{cancelBusy ? "Cancelling…" : "Cancel job"}</button>
+          </div>
+        </div>}
         {(hint || saveErr) && <div role="status" style={{ fontSize: 13, color: "#B25000", background: "#FFF4E5", borderRadius: 10, padding: "8px 12px" }}>{saveErr || hint}</div>}
         {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div role="status" style={{ fontSize: 13, color: smsMsg.includes("✓") ? "#1A7F37" : "#D70015", background: smsMsg.includes("✓") ? "#E8F6EC" : "#FFECEC", borderRadius: 10, padding: "8px 12px" }}>{smsMsg}</div>}
         <div className="jp-quick">
@@ -2495,8 +2596,31 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
 
         {tab === "Overview" && (<>
         <Card>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 200 }}><Small>Site</Small>
+              <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{wo.site_id || wo.customer_name ? (wo.customer_name || "Site") : <span style={{ color: "#6E6E73", fontWeight: 400 }}>No site (general task)</span>}</div>
+              {addr && <div style={{ fontSize: 12.5, color: "#6E6E73" }}>{addr}</div>}
+            </div>
+            <button type="button" onClick={() => setSitePick(v => !v)} aria-expanded={sitePick} style={{ ...sel, height: 34, cursor: "pointer" }}>{wo.site_id ? "Change site" : "Add a site"}</button>
+          </div>
+          {sitePick && <div style={{ display: "grid", gap: 6, marginBottom: 12, padding: 10, borderRadius: 12, background: "#F5F5F7" }}>
+            <input autoFocus placeholder="Search sites by name, address or city" value={siteQ} onChange={e => setSiteQ(e.target.value)} aria-label="Search sites" style={{ ...sel, height: 36 }} />
+            {siteList == null ? <div style={{ fontSize: 13, color: "#6E6E73" }}>Loading sites…</div>
+              : <div style={{ maxHeight: 240, overflowY: "auto", display: "grid", gap: 4 }}>
+                {siteList.filter(s => !siteQ.trim() || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.trim().toLowerCase())).slice(0, 40).map(s => (
+                  <button key={s.id} type="button" disabled={siteBusy} onClick={() => { void setJobSite(s); }} style={{ textAlign: "left", border: `1px solid ${String(s.id) === String(wo.site_id) ? "#0071E3" : "rgba(0,0,0,.08)"}`, background: "#fff", borderRadius: 10, padding: "8px 10px", cursor: "pointer" }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name || "Unnamed site"}{String(s.id) === String(wo.site_id) ? " · current" : ""}</div>
+                    <div style={{ fontSize: 12, color: "#6E6E73" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ") || "No address"}</div>
+                  </button>))}
+                {siteList.length === 0 && <div style={{ fontSize: 13, color: "#6E6E73" }}>No sites yet — add one in Locations.</div>}
+              </div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              {wo.site_id && <button type="button" disabled={siteBusy} onClick={() => { void setJobSite(null); }} style={{ ...sel, height: 32, cursor: "pointer" }}>Remove site (general task)</button>}
+              <button type="button" onClick={() => setSitePick(false)} style={{ ...sel, height: 32, cursor: "pointer" }}>Done</button>
+            </div>
+          </div>}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select disabled={cancelled} title={cancelled ? "Cancelled — use Reopen job" : undefined} value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select id="jp-tech" value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input id="jp-date" type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
@@ -2820,19 +2944,24 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         </Card>
 
         {/* Photos (proof) */}
+        <div onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragOver("photo"); } }} onDragLeave={() => setDragOver(null)}
+          onDrop={e => { e.preventDefault(); setDragOver(null); void uploadMany(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")), "photo"); }}
+          style={{ borderRadius: 16, outline: dragOver === "photo" ? "2px dashed #0071E3" : undefined, outlineOffset: 2 }}>
         <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
             <h2 style={{ fontSize: 15 }}>Photos ({photos.length})</h2>
-            <label style={{ ...btn, padding: "6px 12px", display: "inline-block" }}>{woUploading ? "Uploading…" : "+ Photo"}
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadWoPhoto(f); e.target.value = ""; }} />
+            <label style={{ ...btn, padding: "6px 12px", display: "inline-block", opacity: woUploading ? 0.7 : 1 }}>{woUploading && upProg ? `Uploading ${upProg.done} of ${upProg.total}…` : "+ Photos"}
+              <input type="file" accept="image/*" multiple disabled={woUploading} aria-label="Add photos (you can pick several)" style={{ display: "none" }} onChange={e => { const fs = Array.from(e.target.files ?? []); e.target.value = ""; void uploadMany(fs, "photo"); }} />
             </label>
           </div>
+          <Small>Pick as many as you want, or drag them here.</Small>
           {photos.length === 0 ? <Small>No photos yet. At least one is required to complete the job.</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px,1fr))", gap: 8 }}>
             {photos.map((p, i) => <a key={p.id || i} href={p.file_url || p.url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(0,0,0,0.12)" }}>
               <img src={p.file_url || p.url} alt={p.caption || "Photo"} style={{ width: "100%", height: 84, objectFit: "cover", display: "block" }} />
             </a>)}
           </div>}
         </Card>
+        </div>
 
         {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "#3A3A3C", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
 
@@ -2856,13 +2985,17 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         </Card>
 
         {/* Files: drawings, quotes, permits, manuals */}
+        <div onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragOver("file"); } }} onDragLeave={() => setDragOver(null)}
+          onDrop={e => { e.preventDefault(); setDragOver(null); void uploadMany(Array.from(e.dataTransfer.files), "file"); }}
+          style={{ borderRadius: 16, outline: dragOver === "file" ? "2px dashed #0071E3" : undefined, outlineOffset: 2 }}>
         <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
             <h2 style={{ fontSize: 15 }}>Files ({extra.files.length})</h2>
-            <label style={{ ...btn, padding: "6px 12px", display: "inline-block" }}>{extraBusy ? "Working…" : "+ File"}
-              <input type="file" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadJobFile(f); e.target.value = ""; }} />
+            <label style={{ ...btn, padding: "6px 12px", display: "inline-block", opacity: extraBusy ? 0.7 : 1 }}>{extraBusy && upProg ? `Uploading ${upProg.done} of ${upProg.total}…` : extraBusy ? "Working…" : "+ Files"}
+              <input type="file" multiple disabled={extraBusy} aria-label="Add files (you can pick several)" style={{ display: "none" }} onChange={e => { const fs = Array.from(e.target.files ?? []); e.target.value = ""; void uploadMany(fs, "file"); }} />
             </label>
           </div>
+          <Small>Pick as many as you want, or drag them here.</Small>
           {extra.files.length === 0 ? <Small>No files yet. Add drawings, permits or the signed quote.</Small> : <div style={{ display: "grid", gap: 6 }}>
             {extra.files.map(f => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 10, background: "#F7F8FA", color: INK, textDecoration: "none", fontSize: 14 }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.file_name || "File"}</span>
@@ -2870,6 +3003,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             </a>)}
           </div>}
         </Card>
+        </div>
 
         {/* Follow-up work orders spun off this job */}
         {extra.subs.length > 0 && <Card>
