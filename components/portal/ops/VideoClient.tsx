@@ -6,7 +6,7 @@
  * /api/portal/[slug]/video (lib/video.ts — the same layer the dealer side uses).
  *
  *   Cameras — a featured player (a gate camera by default) + every camera.
- *             Eagle Eye = fresh main-stream frames via /camera-preview;
+ *             Eagle Eye = preview stills via /camera-preview (same as the dealer wall, every 5 s);
  *             Edge = live video straight from the device (MSE), snapshots as fallback.
  *             Tap a camera to feature it; "Playback & timeline" opens the shared
  *             Viewer (live ⇄ playback, timeline, events, 1-min clip download).
@@ -171,7 +171,7 @@ function Inner({ slug }: { slug: string }) {
     }
     if (state[c.key] === 'black') return <div className="vz-off">No signal: the camera is sending a black picture</div>
     if (state[c.key] === 'error') return <div className="vz-off">No picture from this camera</div>
-    return <EenFrame key={c.key + (big ? ':big' : '')} src={t => api.preview(c.id, t)} everyMs={big ? 3000 : 12000} alt={c.name} onState={s => mark(c.key, s)} />
+    return <EenFrame key={c.key + (big ? ':big' : '')} src={t => api.preview(c.id, t)} everyMs={big ? 3000 : 5000} alt={c.name} onState={s => mark(c.key, s)} />
   }
 
   return (
