@@ -197,7 +197,7 @@ async function eenMediaCookie(token: string, baseHost: string, trace: EenLiveTra
   return cookie
 }
 
-async function eenPreviewMultipartUrl(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[]): Promise<string> {
+async function eenPreviewMultipartUrl(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[], prefer: 'preview' | 'main' = 'preview'): Promise<string> {
   const t0 = Date.now()
   const r = await fetch(`https://${baseHost}/api/v3.0/feeds?deviceId=${encodeURIComponent(deviceId)}&include=multipartUrl`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(5000),
@@ -207,7 +207,7 @@ async function eenPreviewMultipartUrl(token: string, baseHost: string, deviceId:
   const j = await r.json().catch(() => ({}))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feeds: any[] = j.results ?? j.data ?? []
-  const pick = feeds.find(f => f?.type === 'preview' && f?.multipartUrl) ?? feeds.find(f => f?.multipartUrl)
+  const pick = feeds.find(f => f?.type === prefer && f?.multipartUrl) ?? feeds.find(f => f?.multipartUrl)
   if (!pick) trace.push({ step: 'feeds', note: `no multipartUrl (${feeds.map(f => f?.type).join(',') || 'none'})`, ms: 0 })
   return pick?.multipartUrl ?? ''
 }
@@ -232,10 +232,10 @@ function firstJpeg(buf: Buffer): Buffer | null {
 
 /** A truly current JPEG from the camera's live preview feed, or null.
  * Pass `trace` to collect step-by-step results (portal ?debug=1). */
-export async function eagleEyeLiveFrame(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[] = [], budgetMs = 8000): Promise<Buffer | null> {
+export async function eagleEyeLiveFrame(token: string, baseHost: string, deviceId: string, trace: EenLiveTrace[] = [], budgetMs = 8000, feed: 'preview' | 'main' = 'preview'): Promise<Buffer | null> {
   const started = Date.now()
   try {
-    const [url, cookie] = await Promise.all([eenPreviewMultipartUrl(token, baseHost, deviceId, trace), eenMediaCookie(token, baseHost, trace)])
+    const [url, cookie] = await Promise.all([eenPreviewMultipartUrl(token, baseHost, deviceId, trace, feed), eenMediaCookie(token, baseHost, trace)])
     if (!url) return null
     for (const attempt of [0, 1]) {
       const left = budgetMs - (Date.now() - started)
@@ -249,6 +249,9 @@ export async function eagleEyeLiveFrame(token: string, baseHost: string, deviceI
         trace.push({ step: 'stream', status: res.status, note: res.headers.get('content-type') ?? '', ms: Date.now() - t0 })
         if ((res.status === 401 || res.status === 403) && attempt === 0) { await res.body?.cancel().catch(() => {}); continue }
         if (!res.ok || !res.body) return null
+        // Not a picture stream (e.g. a main feed that isn't MJPEG) → give up now, don't wait out the budget.
+        const ct = res.headers.get('content-type') ?? ''
+        if (ct && !/multipart|jpe?g/i.test(ct)) { trace.push({ step: 'stream', note: `not MJPEG (${ct})`, ms: Date.now() - t0 }); await res.body.cancel().catch(() => {}); return null }
         const reader = res.body.getReader()
         let buf = Buffer.alloc(0)
         while (true) {

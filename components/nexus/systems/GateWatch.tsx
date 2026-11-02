@@ -4,7 +4,8 @@
  * state (Closed / Open 3 min / LEFT OPEN), the last close-up the AI looked at, and
  * "Wrong?" buttons that teach it. Setup: pick the camera, outline the gate on a
  * live picture, teach it what open and closed look like, test it.
- * Engine: lib/gate-ai.ts + lib/gate-watch.ts (checks every 1–2 min).
+ * Engine: lib/gate-ai.ts + lib/gate-watch.ts (closed every 30 min, open every minute).
+ * Right? Yes / No on each reading teaches it (Yes = confirmed example, No = corrected example) and counts accuracy.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { type Any, BLUE, Card, DOT, Dot, GREEN, MUTED, Note, RED, Sheet, getJson, send, type SiteCtx } from './shared'
@@ -19,6 +20,7 @@ const CSS = `
 .gw-row{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid rgba(0,0,0,.08)}
 .gw-row:first-child{border-top:0}
 .gw-thumb{width:112px;aspect-ratio:16/10;border-radius:8px;background:#0B0D12;object-fit:cover;flex:none}
+.gw-ask{display:inline-flex;align-items:center;gap:6px}.gw-ask .q{font-size:12px;color:#6E6E73}
 .gw-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;white-space:nowrap}
 .gw-pill.red{background:#FFECEC;color:${RED}}.gw-pill.orange{background:#FFF4E5;color:#B25000}.gw-pill.green{background:#E8F6EC;color:${GREEN}}.gw-pill.gray{background:#F2F2F7;color:#3A3A3C}
 .gw-draw{position:relative;border-radius:10px;overflow:hidden;background:#0B0D12;cursor:crosshair;user-select:none}
@@ -40,11 +42,30 @@ const CSS = `
 function statePill(g: Any) {
   const taughtOk = (g.taught?.open ?? 0) > 0 && (g.taught?.closed ?? 0) > 0
   if (!g.enabled) return <span className="gw-pill gray">Paused</span>
+  if (g.state === 'left_open' && !g.incident_id) return <span className="gw-pill orange" title="A service ticket is already open — alerts are paused until that work order is finished"><Dot c={DOT.orange} />Left open · ticket open</span>
   if (g.state === 'left_open') return <span className="gw-pill red"><Dot c={DOT.red} />Left open · {forMin(g.open_since)} min</span>
   if (g.state === 'open') return <span className="gw-pill orange"><Dot c={DOT.orange} />Open · {forMin(g.open_since)} min</span>
   if (g.state === 'closed') return <span className="gw-pill green"><Dot c={DOT.green} />Closed</span>
   if (g.state === 'blind') return <span className="gw-pill orange">Can’t see the gate</span>
   return <span className="gw-pill gray">{taughtOk ? 'Starting…' : 'Needs teaching'}</span>
+}
+
+/** Read a picture file, shrink it to ≤ 1600 px and return base64 JPEG (no data: prefix). */
+function shrinkPicture(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\//.test(file.type)) { reject(new Error('not a picture')); return }
+    const url = URL.createObjectURL(file)
+    const im = new Image()
+    im.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight))
+      const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k)
+      c.getContext('2d')?.drawImage(im, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      resolve(c.toDataURL('image/jpeg', 0.88).split(',')[1] ?? '')
+    }
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')) }
+    im.src = url
+  })
 }
 
 export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null }) {
@@ -93,11 +114,22 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ fontSize: 14, fontWeight: 600 }}>{g.label}</span>{statePill(g)}</div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>{[g.camera_name, `alert after ${Math.round(g.threshold_sec / 60)} min`, g.last_checked_at ? `checked ${ago(g.last_checked_at)}${g.last_confidence != null ? ` · ${g.last_confidence}% sure` : ''}${g.last_method ? ` · ${METHOD[g.last_method] ?? g.last_method}` : ''}` : 'not checked yet'].filter(Boolean).join(' · ')}</div>
                   {g.last_reason && <div style={{ fontSize: 12, color: MUTED, marginTop: 2, fontStyle: 'italic' }}>“{g.last_reason}”</div>}
+                  {(g.feedback?.right ?? 0) + (g.feedback?.wrong ?? 0) > 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Right {g.feedback.right} of {g.feedback.right + g.feedback.wrong} times you checked (30 days)</div>}
                   {!taughtOk && <div style={{ fontSize: 12, color: BLUE, marginTop: 4 }}>{canSetup ? 'Teach it one picture open and one closed to make it accurate.' : 'Not taught yet — ask your admin to finish setup.'}</div>}
                 </div>
                 <div className="sy-acts" style={{ justifyContent: 'flex-end' }}>
                   <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'check_now' }, `${g.label} checked.`)}>{busy === g.id ? 'Checking…' : 'Check now'}</button>
-                  {(isOpen || g.state === 'closed') && g.last_frame && <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'feedback', correct: isOpen ? 'closed' : 'open' }, 'Thanks — it learned from that.')} aria-label={`Wrong — ${g.label} is actually ${isOpen ? 'closed' : 'open'}`}>Wrong? It’s {isOpen ? 'closed' : 'open'}</button>}
+                  {g.last_frame && (isOpen || g.state === 'closed') && (g.feedback?.rated
+                    ? <span className="gw-pill gray" title="Someone already marked this reading">Marked</span>
+                    : <span className="gw-ask" role="group" aria-label={`Is ${g.label} really ${isOpen ? 'open' : 'closed'}?`}>
+                      <span className="q">Right?</span>
+                      <button type="button" className="sy-b go sm" disabled={busy === g.id} onClick={() => act(g, { action: 'confirm' }, 'Thanks — saved as a correct answer.')} aria-label={`Right — ${g.label} is ${isOpen ? 'open' : 'closed'}`}>Yes</button>
+                      <button type="button" className="sy-b warn sm" disabled={busy === g.id} onClick={() => act(g, { action: 'feedback', correct: isOpen ? 'closed' : 'open' }, 'Thanks — it learned from that.')} aria-label={`Wrong — ${g.label} is actually ${isOpen ? 'closed' : 'open'}`}>No, it’s {isOpen ? 'closed' : 'open'}</button>
+                    </span>)}
+                  {g.last_frame && !isOpen && g.state !== 'closed' && <>
+                    <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'feedback', correct: 'open', teach_only: true }, 'Thanks — it learned from that.')} aria-label={`${g.label} is open in the last picture`}>It’s open</button>
+                    <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'feedback', correct: 'closed', teach_only: true }, 'Thanks — it learned from that.')} aria-label={`${g.label} is closed in the last picture`}>It’s closed</button>
+                  </>}
                   {canSetup && <button type="button" className="sy-b line sm" onClick={() => setEdit(g)} aria-label={`Set up ${g.label}`}>Set up</button>}
                 </div>
               </div>
@@ -118,12 +150,13 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
   const hold0 = Array.isArray(gate?.hold_open_hours) && gate.hold_open_hours[0] ? gate.hold_open_hours[0] : null
   const [f, setF] = useState({
     camera_key: gate?.camera_key ?? presetCamera ?? '', label: gate?.label ?? '', gate_type: gate?.gate_type ?? 'swing', threshold_min: gate ? Math.round(gate.threshold_sec / 60) : 5,
-    brivo_door_id: gate?.brivo_door_id ?? '', phones: (gate?.notify_phones ?? []).join(', '), notes: gate?.notes ?? '', enabled: gate?.enabled ?? true,
+    brivo_door_id: gate?.brivo_door_id ?? '', phones: (gate?.notify_phones ?? []).join(', '), emails: (gate?.notify_emails ?? []).join(', '), notes: gate?.notes ?? '', enabled: gate?.enabled ?? true,
     hold: !!hold0, holdDays: (hold0?.days ?? [1, 2, 3, 4, 5]) as number[], holdStart: hold0?.start ?? '09:00', holdEnd: hold0?.end ?? '18:00',
   })
   const [region, setRegion] = useState<{ x: number; y: number }[]>(Array.isArray(gate?.region) ? gate.region : [])
   const [snap, setSnap] = useState<string | null>(null)
   const [snapBusy, setSnapBusy] = useState(false)
+  const [snapNote, setSnapNote] = useState<string | null>(null)
   const [refs, setRefs] = useState<Any[]>([])
   const [checks, setChecks] = useState<Any[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -144,7 +177,29 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
     setSnapBusy(true)
     const r = await send(`/api/sites/${siteId}/gates`, 'POST', { action: 'snapshot', camera_key: key })
     setSnapBusy(false)
-    if (r.ok) setSnap(r.data.image); else notify(r.data.error || 'No picture from that camera.', false)
+    if (r.ok) { setSnap(r.data.image); setSnapNote(r.data.stale ? 'This is Eagle Eye’s last stored picture — it may be old. If it doesn’t look like right now, upload a picture instead.' : null) }
+    else { notify(r.data.error || 'No picture from that camera.', false); setSnapNote('Couldn’t get the camera’s picture. Upload one instead (a full screenshot or export from this camera).') }
+  }
+  // A picture from the person's computer: used for the outline and for teaching.
+  async function useFileForOutline(file: File | undefined) {
+    if (!file) return
+    const img = await shrinkPicture(file).catch(() => null)
+    if (!img) { notify('That file isn’t a picture we can read (use JPG or PNG).', false); return }
+    setSnap(img); setSnapNote('Using your picture. It must be the whole view from this camera, so the outline lines up with the live picture.')
+  }
+  async function teachFiles(state: 'open' | 'closed', files: FileList | null) {
+    if (!g?.id || !files?.length) return
+    setBusy(`teach-${state}`)
+    let ok = 0; let lastErr = ''
+    for (const file of Array.from(files).slice(0, 8)) {
+      const image = await shrinkPicture(file).catch(() => null)
+      if (!image) { lastErr = `${file.name} isn’t a picture we can read.`; continue }
+      const r = await send(`/api/sites/${siteId}/gates`, 'POST', { action: 'teach', id: g.id, state, image })
+      if (r.ok) { ok++; setRefs(x => [r.data.ref, ...x]) } else lastErr = r.data.error || 'Couldn’t save a picture.'
+    }
+    setBusy(null)
+    if (ok) notify(`Saved ${ok} ${state.toUpperCase()} picture${ok === 1 ? '' : 's'}.${lastErr ? ` ${lastErr}` : ''}`, !lastErr)
+    else notify(lastErr || 'Nothing was saved.', false)
   }
   useEffect(() => { const k = gate?.camera_key ?? presetCamera; if (k) void getSnap(k) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -159,7 +214,7 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
     setBusy('save')
     const r = await send(`/api/sites/${siteId}/gates`, 'POST', {
       action: 'save', id: g?.id, camera_key: f.camera_key, camera_name: cam?.name ?? g?.camera_name ?? null, label: f.label, gate_type: f.gate_type, region,
-      threshold_min: f.threshold_min, brivo_door_id: f.brivo_door_id || null, notify_phones: f.phones, notes: f.notes, enabled: f.enabled,
+      threshold_min: f.threshold_min, brivo_door_id: f.brivo_door_id || null, notify_phones: f.phones, notify_emails: f.emails, notes: f.notes, enabled: f.enabled,
       hold_open_hours: f.hold ? [{ days: f.holdDays, start: f.holdStart, end: f.holdEnd }] : [],
     })
     setBusy(null)
@@ -223,6 +278,7 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
         <label><span className="sy-lbl">Alert if open longer than (minutes)</span><input className="sy-in" type="number" min={1} max={1440} value={f.threshold_min} onChange={e => setF({ ...f, threshold_min: Number(e.target.value) || 5 })} /></label>
         <label><span className="sy-lbl">Brivo door for this gate (optional)</span><select className="sy-in" value={f.brivo_door_id} onChange={e => setF({ ...f, brivo_door_id: e.target.value })}><option value="">None</option>{doors.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></label>
         <label><span className="sy-lbl">Text these numbers when it’s left open</span><input className="sy-in" value={f.phones} onChange={e => setF({ ...f, phones: e.target.value })} placeholder="404-555-0100, 678-555-0199" /></label>
+        <label><span className="sy-lbl">Also email (info@gateguard.co always gets these)</span><input className="sy-in" type="text" inputMode="email" value={f.emails} onChange={e => setF({ ...f, emails: e.target.value })} placeholder="manager@property.com, owner@company.com" /></label>
       </div>
       <label><span className="sy-lbl">Anything that helps (optional)</span><input className="sy-in" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="e.g. Two panels, swings away from the camera; the left lane is the exit" /></label>
       <div>
@@ -250,8 +306,10 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
             </svg>
           </div>
         )}
+        {snapNote && <div style={{ marginTop: 6 }}><Note tone="orange">{snapNote}</Note></div>}
         <div className="sy-acts" style={{ marginTop: 6 }}>
           <button type="button" className="sy-b line sm" onClick={() => getSnap()} disabled={!f.camera_key || snapBusy}>{snapBusy ? 'Loading…' : 'New picture'}</button>
+          <label className="sy-b line sm" style={{ cursor: 'pointer' }}>Upload a picture<input type="file" accept="image/*" hidden aria-label="Upload a picture to outline the gate on" onChange={e => { void useFileForOutline(e.target.files?.[0]); e.target.value = '' }} /></label>
           <button type="button" className="sy-b line sm" onClick={() => setRegion(r => r.slice(0, -1))} disabled={!region.length}>Undo point</button>
           <button type="button" className="sy-b line sm" onClick={() => setRegion([])} disabled={!region.length}>Clear outline</button>
           <span style={{ fontSize: 12, color: region.length >= 3 ? GREEN : MUTED, alignSelf: 'center' }}>{region.length >= 3 ? `Outline set (${region.length} points)` : `${region.length} of at least 3 points`}</span>
@@ -265,7 +323,7 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
 
       {g?.id && <>
         <div>
-          <div className="gw-sec">Teach it this gate <span style={{ fontWeight: 400, color: MUTED }}>· save the live picture when the gate is closed, and again when it’s open. 2–3 of each (day and night) makes it very accurate.</span></div>
+          <div className="gw-sec">Teach it this gate <span style={{ fontWeight: 400, color: MUTED }}>· save the live picture when the gate is closed, and again when it’s open. 2–3 of each (day and night) makes it very accurate. You can also upload pictures — use the whole view from this camera (e.g. saved from Eagle Eye), not a close-up.</span></div>
           {f.brivo_door_id && <div style={{ marginBottom: 8 }}><button type="button" className="sy-b blue sm" onClick={openGate} disabled={busy === 'open'}>{busy === 'open' ? 'Opening…' : 'Open the gate now (Brivo)'}</button></div>}
           <div className="gw-refs">
             {(['closed', 'open'] as const).map(s => (
@@ -279,7 +337,10 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
                     <button type="button" onClick={() => delRef(r.id)} aria-label={`Delete this ${s} picture`}>✕</button>
                   </div>)}
                 </div>
-                <button type="button" className="sy-b line sm" onClick={() => teach(s)} disabled={!!busy}>{busy === `teach-${s}` ? 'Saving…' : `Gate is ${s} now — save picture`}</button>
+                <div className="sy-acts">
+                  <button type="button" className="sy-b line sm" onClick={() => teach(s)} disabled={!!busy}>{busy === `teach-${s}` ? 'Saving…' : `Gate is ${s} now — save picture`}</button>
+                  <label className="sy-b line sm" style={{ cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>Upload {s} pictures<input type="file" accept="image/*" multiple hidden disabled={!!busy} aria-label={`Upload pictures of the gate ${s}`} onChange={e => { void teachFiles(s, e.target.files); e.target.value = '' }} /></label>
+                </div>
               </div>
             ))}
           </div>
