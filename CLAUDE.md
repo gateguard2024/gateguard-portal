@@ -470,9 +470,9 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
-| 214 | Gate Watch emails: `gate_watches.notify_emails text[]` (ALTER only). info@gateguard.co always gets alerts (in code) | ⏳ run on beta then prod |
-| 213 | Inactive + take offline: ALTER only — `sites.inactive_at/_reason/_by, last_service_date, decommission jsonb`; `organizations.inactive_*`; `site_assets.removed_at/_to/_by, removal_wo_id, removal_photo` | ⏳ run on beta then prod |
-| 212 | Job texts: `wo_texts` (two-way Twilio texts per work order, unique `twilio_sid`) + GRANT/RLS | ⏳ run on beta then prod |
+| 214 | Gate Watch emails: `gate_watches.notify_emails text[]` (ALTER only). info@gateguard.co always gets alerts (in code) | ✅ beta (Nov 2 2026) · ⏳ prod |
+| 213 | Inactive + take offline: ALTER only — `sites.inactive_at/_reason/_by, last_service_date, decommission jsonb`; `organizations.inactive_*`; `site_assets.removed_at/_to/_by, removal_wo_id, removal_photo` | ✅ beta (Nov 2 2026) · ⏳ prod |
+| 212 | Job texts: `wo_texts` (two-way Twilio texts per work order, unique `twilio_sid`) + GRANT/RLS | ✅ beta (Nov 2 2026) · ⏳ prod |
 | 211 | Lexi nightly review: `user_settings.lexi_evening_*` (on, time, days, phone, email, last_sent), `lexi_top3`, `lexi_bring_always` (ALTER only) | ✅ run (Nov 1 2026) |
 | 210 | Gate Watch: `gate_watches` (config + live state), `gate_watch_refs` (taught pictures), `gate_watch_checks` (log) + GRANT/RLS. Needs `incidents` category/cause/source (167) | ✅ run (Nov 1 2026) |
 | 209 | QuickBooks sync: `qbo_settings`, `qbo_sync_log`, `qbo_report_cache` (+GRANT/RLS), link columns on products/invoices/organizations/commission_payouts, `qbo_claim_sync` RPC. Needs 174 + 179 | ✅ run (Nov 1 2026) |
@@ -524,6 +524,7 @@ Fixed: Lexi relay on/off inverted · view-only/client users could run actions vi
 Open (decisions/bigger builds): plain-`user` role sees all company leads/jobs in Lexi + most of the portal (assigned-only rule only enforced for deals) · Lexi chat replies saved only at the end · Needs-a-date panel reads `/api/dispatch` (newest 300, ignores Me/Team) · old `NexusAssistant` (PortalShell) duplicates Lexi — retire · 94 committed `.fuse_hidden*` files (now gitignored) · single-source plan → `claude/Audit-2026-11-01.md` in the NEXUS project.
 
 ### NEXT UP (session 18 queue, in order)
+**▶ START HERE (Russel, Nov 2 2026):** on the **Systems page** (SiteCommand, per property) add a place to **set up / launch the Property Manager interface** (the `/portal/<slug>` portal: create/turn on, PIN, which cameras/gates, open it) **and manage its users + their codes** (manager logins / PINs, gate codes). Today this lives only in corporate `/admin/portals` — bring it to the property's Systems page (respect corporate-only rules for keys).
 Portal Dashboard (polish) → **Sales Tab** → **rough estimator** → **Quotes** sections.
 Remaining portal pages still to build in the approved style: **Doors/Gates**, **Users**, **Package Room**, **Settings** (demo-first pattern, then production).
 
