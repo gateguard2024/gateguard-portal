@@ -11,7 +11,7 @@
  * (straight from the device with a pass).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DOT, LiveCam, getJson, previewUrl } from '../shared'
+import { DOT, LiveCam, getJson, previewUrl, clipUrl } from '../shared'
 import { EdgeLive, EdgeSnap, HlsVideo, camPath, edgeUrl, type EdgePass } from './players'
 
 export type Cam = { key: string; provider: 'een' | 'edge'; id: string; name: string; online: boolean | null }
@@ -37,7 +37,16 @@ const fmtT = (ms: number, withDay = false, sec = true) => new Date(ms).toLocaleS
 const localDayStart = (ymd: string) => new Date(`${ymd}T00:00:00`).getTime()
 const ymdOf = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
-export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: { siteId: string; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
+/** Where the viewer reads from. Dealer side = the default; the property portal passes its PIN-gated routes. */
+export type ViewerApi = { video: (qs: string) => string; preview: (camId: string, t: number) => string; clip: (camId: string, ts: string) => string }
+export const siteViewerApi = (siteId: string): ViewerApi => ({
+  video: qs => `/api/sites/${siteId}/video?${qs}`,
+  preview: (camId, t) => previewUrl(siteId, camId, t),
+  clip: (camId, ts) => clipUrl(siteId, camId, ts),
+})
+
+export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
+  const api = useMemo(() => apiProp ?? siteViewerApi(siteId), [apiProp, siteId])
   const [cam, setCam] = useState<Cam>(firstCam)
   const isEdge = cam.provider === 'edge'
   const [mode, setMode] = useState<'live' | 'play'>(startAt ? 'play' : 'live')
@@ -69,7 +78,7 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
     const s = day ? localDayStart(day) : Date.now() - 24 * HOUR
     const e = day ? Math.min(s + 24 * HOUR, Date.now()) : Date.now()
     const q = `start=${encodeURIComponent(new Date(s).toISOString())}&end=${encodeURIComponent(new Date(e).toISOString())}&camera=${encodeURIComponent(cam.key)}`
-    void Promise.all([getJson(`/api/sites/${siteId}/video?view=timeline&${q}`), getJson(`/api/sites/${siteId}/video?view=events&${q}`)]).then(([t, ev]) => {
+    void Promise.all([getJson(api.video(`view=timeline&${q}`)), getJson(api.video(`view=events&${q}`))]).then(([t, ev]) => {
       if (!alive) return
       setSegs(Array.isArray(t.data.segments) ? t.data.segments : [])
       setTlErr(t.data.error || (!t.ok ? 'Timeline unavailable.' : null))
@@ -77,7 +86,7 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
     })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, cam.key, refresh])
+  }, [api, cam.key, refresh])
   useEffect(() => { setSegs(null); setEvents(null) }, [cam.key, day])
 
   const pos = mode === 'live' ? now : playAt + offset * 1000
@@ -127,7 +136,7 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
   const clipFrom = Math.floor(pos / 1000) - 10
   const downloadUrl = isEdge && edge
     ? edgeUrl(edge, `/api/${camPath(cam.id)}/start/${clipFrom}/end/${clipFrom + 60}/clip.mp4?download=true`)
-    : `/api/eagle-eye/clip?site_id=${siteId}&camera_id=${encodeURIComponent(cam.id)}&ts=${encodeURIComponent(new Date(pos - 10000).toISOString())}`
+    : api.clip(cam.id, new Date(pos - 10000).toISOString())
 
   function saveFrame() {
     const v = vref.current
@@ -139,7 +148,7 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
         return
       } catch { /* cross-origin frame — fall through to the camera's snapshot */ }
     }
-    window.open(isEdge && edge ? edgeUrl(edge, `/api/${camPath(cam.id)}/latest.jpg`) : previewUrl(siteId, cam.id, Date.now()), '_blank', 'noopener')
+    window.open(isEdge && edge ? edgeUrl(edge, `/api/${camPath(cam.id)}/latest.jpg`) : api.preview(cam.id, Date.now()), '_blank', 'noopener')
   }
 
   const shownEvents = useMemo(() => (events ?? []).filter(e => show[groupOf(e.kind)]), [events, show])
@@ -170,12 +179,12 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
               isEdge && edge ? (liveFail ? <><EdgeSnap edge={edge} cam={cam.id} everyMs={1000} height={720} alt={cam.name} /><span className="cv-tag">Snapshots · {liveFail}</span></>
                 : <EdgeLive key={cam.key} edge={edge} cam={cam.id} onFail={setLiveFail} />)
                 : isEdge ? <div className="off">The Edge device isn’t reachable right now.</div>
-                : <LiveCamRefresh key={cam.key} siteId={siteId} camId={cam.id} name={cam.name} />
+                : <LiveCamRefresh key={cam.key} src={t => api.preview(cam.id, t)} name={cam.name} />
             ) : isEdge && edge ? (
               <HlsVideo key={vodUrl} ref={vref} url={vodUrl} pass={edge.pass} rate={rate} controls={false} onError={setErr} onTime={t => setOffset(t)} />
             ) : (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video key={`${cam.key}-${playAt}`} ref={vref} autoPlay playsInline src={`/api/eagle-eye/clip?site_id=${siteId}&camera_id=${encodeURIComponent(cam.id)}&ts=${encodeURIComponent(new Date(playAt).toISOString())}`}
+              <video key={`${cam.key}-${playAt}`} ref={vref} autoPlay playsInline src={api.clip(cam.id, new Date(playAt).toISOString())}
                 onTimeUpdate={e => setOffset((e.target as HTMLVideoElement).currentTime)} onError={() => setErr('No recording for that time.')}
                 onLoadedMetadata={e => { (e.target as HTMLVideoElement).playbackRate = rate }}
                 onEnded={() => playFrom(pos + 1000)}
@@ -210,7 +219,7 @@ export function Viewer({ siteId, cam: firstCam, cams, edge, startAt, onClose }: 
                 <button key={c.key} type="button" className={`cv-thumb ${c.key === cam.key ? 'on' : ''}`} onClick={() => switchCam(c)} aria-label={`Switch to ${c.name}`} aria-current={c.key === cam.key}>
                   {c.online === false ? <div className="off">Offline</div>
                     : c.provider === 'edge' ? (edge ? <EdgeSnap edge={edge} cam={c.id} everyMs={10_000} height={180} alt={c.name} /> : <div className="off">—</div>)
-                    : <StripSnap siteId={siteId} camId={c.id} name={c.name} />}
+                    : <StripSnap src={t => api.preview(c.id, t)} name={c.name} />}
                   <span className="nm">{c.name}</span>
                 </button>
               ))}
@@ -353,20 +362,20 @@ function EventList({ events, edge, pos, onPlay }: { events: VEvent[] | null; edg
 }
 
 // Eagle Eye live = the existing preview route, refreshed every 2 s.
-function LiveCamRefresh({ siteId, camId, name }: { siteId: string; camId: string; name: string }) {
+function LiveCamRefresh({ src, name }: { src: (tick: number) => string; name: string }) {
   const [tick, setTick] = useState(0)
   const [bad, setBad] = useState(false)
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) setTick(n => n + 1) }, 2000); return () => clearInterval(t) }, [])
   if (bad) return <div className="off">No live preview for this camera.</div>
-  return <LiveCam src={previewUrl(siteId, camId, tick)} alt={name} onError={() => setBad(true)} />
+  return <LiveCam src={src(tick)} alt={name} onError={() => setBad(true)} />
 }
 // Camera strip tiles refresh slowly (every 10 s) to keep the viewer light.
-function StripSnap({ siteId, camId, name }: { siteId: string; camId: string; name: string }) {
+function StripSnap({ src, name }: { src: (tick: number) => string; name: string }) {
   const [tick, setTick] = useState(0)
   const [bad, setBad] = useState(false)
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) setTick(n => n + 1) }, 10_000); return () => clearInterval(t) }, [])
   if (bad) return <div className="off">No preview</div>
-  return <LiveCam src={previewUrl(siteId, camId, tick)} alt={name} onError={() => setBad(true)} />
+  return <LiveCam src={src(tick)} alt={name} onError={() => setBad(true)} />
 }
 
 const BG = '#0D1117', PANEL = '#161B22', LINE2 = 'rgba(255,255,255,.08)', INK = '#E6EDF3', SUB = '#8B949E', ACC = '#0A84FF'

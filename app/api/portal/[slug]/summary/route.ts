@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { portalCameraScope } from '@/lib/video'
 import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 import { getSiteBrivoToken, listBrivoDoors, listBrivoEvents } from '@/lib/brivo'
 import { getQboAuth, qboApi } from '@/lib/qbo'
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const siteId = v.portal.site_id
   if (!siteId) return NextResponse.json({ cameras: [], doors: [], activity: [], balanceDue: null })
 
-  const camWhitelist = v.portal.camera_ids && v.portal.camera_ids.length ? new Set(v.portal.camera_ids) : null
+  const camScope = portalCameraScope(v.portal.camera_ids)
   const doorWhitelist = v.portal.door_ids && v.portal.door_ids.length ? new Set(v.portal.door_ids) : null
 
   // ── Cameras (Eagle Eye) ──────────────────────────────────────────────────
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     try {
       const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
       const all = await listEagleEyeCameras(token, baseHost)
-      const scoped = camWhitelist ? all.filter(c => camWhitelist.has(c.id)) : all
+      const scoped = all.filter(c => camScope.allow(`een:${c.id}`))
       return scoped.map(c => ({ id: c.id, name: c.name, online: c.online !== false }))
     } catch { return [] }
   })()
