@@ -53,6 +53,7 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
   const [err, setErr] = useState<string | null>(null)
   const [canSetup, setCanSetup] = useState(false)
   const [edit, setEdit] = useState<Any | 'new' | null>(null)
+  const [presetCam, setPresetCam] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => {
     const r = await getJson(`/api/sites/${siteId}/gates`)
@@ -75,7 +76,7 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
       <style>{CSS}</style>
       <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Gate Watch (AI){left > 0 && <span className="gw-pill red">{left} left open</span>}</span>}
         sub="Watches each gate camera and alerts when a gate stays open too long — no one has to look."
-        right={canSetup ? <button type="button" className="sy-b pri sm" onClick={() => setEdit('new')}>Add a gate</button> : undefined}>
+        right={canSetup ? <button type="button" className="sy-b pri sm" onClick={() => { setPresetCam(null); setEdit('new') }}>Add a gate</button> : undefined}>
         {err && <div style={{ marginBottom: 8 }}><Note tone="orange">{err}</Note></div>}
         {gates == null ? <div className="sy-empty">Loading…</div>
           : !gates.length ? <div className="sy-empty">{canSetup ? 'No gates watched yet. Add one: pick its camera, outline the gate, and show it what open and closed look like.' : 'No gates are being watched here yet.'}</div>
@@ -103,18 +104,20 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
             )
           })}
       </Card>
-      {edit && <GateSetup ctx={ctx} gate={edit === 'new' ? null : edit} doors={doors ?? []} onClose={() => { setEdit(null); void load() }} />}
+      {edit && <GateSetup key={edit === 'new' ? `new-${presetCam ?? ''}` : edit.id} ctx={ctx} gate={edit === 'new' ? null : edit} presetCamera={edit === 'new' ? presetCam : null} others={gates ?? []} doors={doors ?? []}
+        onClose={() => { setEdit(null); setPresetCam(null); void load() }}
+        onAddAnother={cam => { setPresetCam(cam); setEdit('new'); void load() }} />}
     </>
   )
 }
 
-function GateSetup({ ctx, gate, doors, onClose }: { ctx: SiteCtx; gate: Any | null; doors: Any[]; onClose: () => void }) {
+function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnother }: { ctx: SiteCtx; gate: Any | null; presetCamera?: string | null; others: Any[]; doors: Any[]; onClose: () => void; onAddAnother: (cameraKey: string) => void }) {
   const { siteId, notify } = ctx
   const [cams, setCams] = useState<Any[]>([])
   const [g, setG] = useState<Any | null>(gate)
   const hold0 = Array.isArray(gate?.hold_open_hours) && gate.hold_open_hours[0] ? gate.hold_open_hours[0] : null
   const [f, setF] = useState({
-    camera_key: gate?.camera_key ?? '', label: gate?.label ?? '', gate_type: gate?.gate_type ?? 'swing', threshold_min: gate ? Math.round(gate.threshold_sec / 60) : 5,
+    camera_key: gate?.camera_key ?? presetCamera ?? '', label: gate?.label ?? '', gate_type: gate?.gate_type ?? 'swing', threshold_min: gate ? Math.round(gate.threshold_sec / 60) : 5,
     brivo_door_id: gate?.brivo_door_id ?? '', phones: (gate?.notify_phones ?? []).join(', '), notes: gate?.notes ?? '', enabled: gate?.enabled ?? true,
     hold: !!hold0, holdDays: (hold0?.days ?? [1, 2, 3, 4, 5]) as number[], holdStart: hold0?.start ?? '09:00', holdEnd: hold0?.end ?? '18:00',
   })
@@ -143,7 +146,7 @@ function GateSetup({ ctx, gate, doors, onClose }: { ctx: SiteCtx; gate: Any | nu
     setSnapBusy(false)
     if (r.ok) setSnap(r.data.image); else notify(r.data.error || 'No picture from that camera.', false)
   }
-  useEffect(() => { if (gate?.camera_key) void getSnap(gate.camera_key) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const k = gate?.camera_key ?? presetCamera; if (k) void getSnap(k) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addPoint(e: React.MouseEvent) {
     const r = drawRef.current!.getBoundingClientRect()
@@ -201,6 +204,9 @@ function GateSetup({ ctx, gate, doors, onClose }: { ctx: SiteCtx; gate: Any | nu
 
   const W = dim.w, H = dim.h
   const pts = region.map(p => `${p.x * W},${p.y * H}`).join(' ')
+  // Other gates watched on this same camera — drawn dashed so you outline only this one.
+  const sameCam = others.filter(o => o.id !== g?.id && o.camera_key === f.camera_key && Array.isArray(o.region) && o.region.length >= 3)
+  const mid = (r: { x: number; y: number }[]) => ({ x: r.reduce((a, p) => a + p.x, 0) / r.length * W, y: r.reduce((a, p) => a + p.y, 0) / r.length * H })
   const byState = (s: string) => refs.filter(r => r.state === s)
   const verdictPill = (v: string) => v === 'closed' ? 'green' : v === 'open' ? 'orange' : v === 'partial' ? 'orange' : 'gray'
 
@@ -231,11 +237,13 @@ function GateSetup({ ctx, gate, doors, onClose }: { ctx: SiteCtx; gate: Any | nu
 
       <div>
         <div className="gw-sec">Outline the gate <span style={{ fontWeight: 400, color: MUTED }}>· click its corners on the picture (include the space it swings or slides into)</span></div>
+        {sameCam.length > 0 && <div style={{ marginBottom: 6 }}><Note tone="blue">This camera also watches {sameCam.map(o => o.label).join(', ')} (white dashed). Outline only this gate and keep the outlines apart — each gate is judged only inside its own outline.</Note></div>}
         {!snap ? <div className="sy-empty">{snapBusy ? 'Getting a picture…' : f.camera_key ? 'No picture yet.' : 'Pick the camera above.'}</div> : (
           <div ref={drawRef} className="gw-draw" onClick={addPoint} role="img" aria-label="Camera picture — click to outline the gate">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img alt="" src={`data:image/jpeg;base64,${snap}`} draggable={false} onLoad={e => { const im = e.currentTarget; if (im.naturalWidth) setDim({ w: im.naturalWidth, h: im.naturalHeight }) }} />
             <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+              {sameCam.map(o => <g key={o.id}><polygon points={o.region.map((p: Any) => `${p.x * W},${p.y * H}`).join(' ')} fill="rgba(255,255,255,.10)" stroke="#fff" strokeOpacity={0.85} strokeDasharray={`${W / 90} ${W / 120}`} strokeWidth={Math.max(2, W / 400)} /><text x={mid(o.region).x} y={mid(o.region).y} textAnchor="middle" fontSize={Math.max(14, W / 45)} fontWeight={600} fill="#fff" stroke="#000" strokeWidth={Math.max(2, W / 400)} paintOrder="stroke">{o.label}</text></g>)}
               {region.length >= 3 && <polygon points={pts} fill="rgba(255,214,10,.18)" stroke="#FFD60A" strokeWidth={Math.max(2, W / 330)} />}
               {region.length > 0 && region.length < 3 && <polyline points={pts} fill="none" stroke="#FFD60A" strokeWidth={3} />}
               {region.map((p, i) => <circle key={i} cx={p.x * W} cy={p.y * H} r={Math.max(6, W / 120)} fill="#FFD60A" stroke="#000" strokeWidth={2} />)}
@@ -299,6 +307,7 @@ function GateSetup({ ctx, gate, doors, onClose }: { ctx: SiteCtx; gate: Any | nu
         </div>}
 
         <div className="sy-acts" style={{ justifyContent: 'flex-end' }}>
+          {!confirmDel && <button type="button" className="sy-b line sm" style={{ marginRight: 'auto' }} onClick={() => onAddAnother(f.camera_key)} disabled={!f.camera_key}>Add another gate on this camera</button>}
           {confirmDel ? <><span style={{ fontSize: 13, color: RED, alignSelf: 'center' }}>Stop watching this gate and delete its pictures?</span><button type="button" className="sy-b line sm" onClick={() => setConfirmDel(false)}>Keep</button><button type="button" className="sy-b warn sm" onClick={remove} disabled={busy === 'del'}>Remove gate</button></>
             : <button type="button" className="sy-b warn sm" onClick={() => setConfirmDel(true)}>Remove gate</button>}
         </div>

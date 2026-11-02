@@ -169,6 +169,7 @@ export const SETUP_GUIDES: SetupGuide[] = [
     tips: [
       'Gate open on purpose during the day? Add hold-open hours so it doesn\'t text then.',
       'Wrong answer? Tap "Wrong?" on the gate. That picture is saved and it learns.',
+      'Two or more gates in one camera picture (entry and exit, or two lanes)? Add each one as its own gate with the same camera, and outline only that gate. Other gates on that camera show as white dashed outlines. After saving, "Add another gate on this camera" starts the next one.',
     ],
   },
   {

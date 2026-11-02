@@ -142,7 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!frame) return bad(fErr ?? 'No picture from the camera.', 502)
       const crop = await cropGate(frame, gateInfo(g).region)
       const image = (await sharp(crop).jpeg({ quality: 80 }).toBuffer()).toString('base64')
-      const { data, error } = await sbx.from('gate_watch_refs').insert({ gate_id: g.id, state, image, sig: await signature(crop), source: 'setup', created_by: a.user.name }).select('id, state, image, source, created_at').single()
+      const { data, error } = await sbx.from('gate_watch_refs').insert({ gate_id: g.id, state, image, sig: await signature(crop, gateInfo(g).region), source: 'setup', created_by: a.user.name }).select('id, state, image, source, created_at').single()
       if (error) return bad(error.message, 500)
       // Keep the newest 8 per state.
       const { data: extra } = await sbx.from('gate_watch_refs').select('id').eq('gate_id', g.id).eq('state', state).order('created_at', { ascending: false }).range(8, 100)
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!correct) return bad('Say whether the gate was open or closed.')
       if (!g.last_frame) return bad('No recent picture to learn from — run a check first.')
       const buf = Buffer.from(g.last_frame, 'base64')
-      const { error } = await sbx.from('gate_watch_refs').insert({ gate_id: g.id, state: correct, image: g.last_frame, sig: await signature(buf), source: 'feedback', created_by: a.user.name })
+      const { error } = await sbx.from('gate_watch_refs').insert({ gate_id: g.id, state: correct, image: g.last_frame, sig: await signature(buf, gateInfo(g).region), source: 'feedback', created_by: a.user.name })
       if (error) return bad(error.message, 500)
       const now = new Date().toISOString()
       const patch: Record<string, unknown> = { pending_state: null, pending_count: 0, pending_since: null, unclear_count: 0, next_check_at: now }
