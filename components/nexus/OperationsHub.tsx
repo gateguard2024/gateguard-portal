@@ -26,6 +26,7 @@ import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
 import CalendarViews from "@/components/nexus/CalendarViews";
 import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
+import { isInactive, statusOf } from "@/components/nexus/systems/Decommission";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
@@ -498,7 +499,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onBulk, onOpen, 
       .then(d => setSites(Array.isArray(d) ? d : (d.sites ?? d.records ?? [])))
       .catch(() => {}).finally(() => setSitesLoading(false));
   }, [showNew, sites.length]);
-  const siteMatches = sites.filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
+  const siteMatches = sites.filter(s => !isInactive(s.status) || s.status === "decommissioning").filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
   function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false }); setSiteQ(""); }
   // Only close the popup if the work order ACTUALLY saved.
   // This used to fire onCreate() without awaiting it and then close + reset
@@ -1056,12 +1057,13 @@ function Locations() {
   const [loading, setLoading] = useState(true);
   const [openSite, setOpenSite] = useState<string | null>(null);
   const [openToSetup, setOpenToSetup] = useState(false);   // new sites open on the Setup tab
+  const [showInactive, setShowInactive] = useState(false);  // inactive / offline sites hidden unless asked for
   // + Add a site (5th-grade simple: name + basics → opens the site to add its keys)
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", city: "", state: "", units: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = React.useCallback(() => { setLoading(true); fetch("/api/sites?limit=60").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/sites?limit=300").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
   async function createSite() {
     if (!form.name.trim() || busy) return; setBusy(true); setMsg(null);
@@ -1093,14 +1095,19 @@ function Locations() {
   </Card>;
   if (loading) return <>{addBar}<Card><Small>Loading sites…</Small></Card></>;
   if (sites.length === 0) return <>{addBar}<Card><Small>No sites yet. Tap “+ Add a site” to create your first one.</Small></Card>{openSite && <SiteDetailDrawer id={openSite} systemsTab={openToSetup ? "setup" : undefined} onClose={() => { setOpenSite(null); setOpenToSetup(false); load(); }} />}</>;
+  const inactiveCount = sites.filter(s => isInactive(s.status)).length;
+  const shownSites = showInactive ? sites : sites.filter(s => !isInactive(s.status));
   return <>
     {addBar}
+    {inactiveCount > 0 && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+      <button type="button" aria-pressed={showInactive} onClick={() => setShowInactive(v => !v)} style={{ height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid rgba(0,0,0,.14)", background: "#fff", color: "#1D1D1F", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{showInactive ? "Hide inactive" : `Show inactive (${inactiveCount})`}</button>
+    </div>}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
-      {sites.map(s => <Card key={s.id} style={{ cursor: "pointer" }}>
+      {shownSites.map(s => <Card key={s.id} style={{ cursor: "pointer", ...(isInactive(s.status) ? { opacity: 0.72 } : {}) }}>
         <div onClick={() => setOpenSite(s.id)}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <b style={{ fontSize: 15 }}>{s.name || "Site"}</b>
-            {s.offline_asset_count > 0 ? <Badge tone="urgent">{s.offline_asset_count} offline</Badge> : <Badge tone="good">healthy</Badge>}
+            {isInactive(s.status) ? <Badge>{statusOf(s.status).label}</Badge> : s.offline_asset_count > 0 ? <Badge tone="urgent">{s.offline_asset_count} offline</Badge> : <Badge tone="good">healthy</Badge>}
           </div>
           <Small>{[s.city, s.state].filter(Boolean).join(", ") || "—"}</Small>
           <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
@@ -1955,6 +1962,56 @@ function JobTexts({ woId }: { woId: string }) {
 
 /* ── Customer updates: pick a preset, edit the draft, choose who + how, send ───── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* ── Removal job: mark where each device went (back to stock / thrown out / left with customer) ── */
+const REMOVED_WHERE: { k: string; l: string }[] = [{ k: "stock", l: "Back to stock" }, { k: "disposed", l: "Thrown out" }, { k: "left_on_site", l: "Left with customer" }];
+function RemovalCard({ woId, onChanged }: { woId: string; onChanged: () => void }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [d, setD] = useState<{ installed: any[]; removed: any[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = React.useCallback(async () => {
+    const r = await fetch(`/api/maintenance/${woId}/removal`, { cache: "no-store" }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    if (!r?.ok) { setErr(j?.error || "Couldn’t load the equipment list."); setD(x => x ?? { installed: [], removed: [] }); return; }
+    setErr(null); setD({ installed: j.installed ?? [], removed: j.removed ?? [] });
+  }, [woId]);
+  useEffect(() => { void load(); }, [load]);
+  async function mark(assetId: string, to: string | null) {
+    setBusy(assetId); setErr(null);
+    const r = await fetch(`/api/maintenance/${woId}/removal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ asset_id: assetId, to }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    setBusy(null);
+    if (!r?.ok) { setErr(j?.error || "That didn’t save."); return; }
+    await load(); onChanged();
+  }
+  const where = (k?: string | null) => REMOVED_WHERE.find(w => w.k === k)?.l ?? "Removed";
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+        <b style={{ fontSize: 15, fontWeight: 600 }}>Equipment to remove</b>
+        {d && <Small>{d.removed.length} of {d.installed.length + d.removed.length} done</Small>}
+      </div>
+      <div style={{ fontSize: 12.5, color: "#6E6E73", margin: "4px 0 8px" }}>For each device, tap where it went. The step on this job checks itself off.</div>
+      {err && <div role="alert" style={{ fontSize: 12.5, color: "#D70015", marginBottom: 8 }}>{err}</div>}
+      {d == null ? <Small>Loading…</Small> : d.installed.length + d.removed.length === 0 ? <Small>No equipment is on record for this property.</Small> : <>
+        {d.installed.map(a => (
+          <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "9px 0", borderTop: "1px solid rgba(0,0,0,.08)" }}>
+            <div style={{ flex: 1, minWidth: 160 }}><div style={{ fontSize: 14, fontWeight: 500 }}>{a.product_name || "Device"}</div><div style={{ fontSize: 12, color: "#6E6E73" }}>{[a.location_note, a.serial_number && `SN ${a.serial_number}`].filter(Boolean).join(" · ")}</div></div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {REMOVED_WHERE.map(w => <button key={w.k} type="button" disabled={!!busy} onClick={() => { void mark(a.id, w.k); }} style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid rgba(0,0,0,.14)", background: "#fff", color: "#1D1D1F", fontSize: 12.5, fontWeight: 500, cursor: "pointer" }}>{w.l}</button>)}
+            </div>
+          </div>))}
+        {d.removed.map(a => (
+          <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: "1px solid rgba(0,0,0,.08)" }}>
+            <span aria-hidden style={{ color: "#248A3D", fontWeight: 600 }}>✓</span>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, color: "#3A3A3C" }}>{a.product_name || "Device"}</div><div style={{ fontSize: 12, color: "#6E6E73" }}>{where(a.removed_to)}{a.removed_by ? ` · ${a.removed_by}` : ""}</div></div>
+            <button type="button" disabled={!!busy} onClick={() => { void mark(a.id, null); }} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: "1px solid rgba(0,0,0,.14)", background: "#fff", color: "#3A3A3C", fontSize: 12, cursor: "pointer" }}>Undo</button>
+          </div>))}
+      </>}
+    </Card>
+  );
+}
+
 function CustomerUpdates({ woId, wo, checklist, parts, onSent }: { woId: string; wo: any; checklist: any[]; parts: any[]; onSent: () => void }) {
   const { user } = useUser();
   const [preset, setPreset] = useState<string | null>(null);
@@ -2815,7 +2872,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             <input autoFocus placeholder="Search sites by name, address or city" value={siteQ} onChange={e => setSiteQ(e.target.value)} aria-label="Search sites" style={{ ...sel, height: 36 }} />
             {siteList == null ? <div style={{ fontSize: 13, color: "#6E6E73" }}>Loading sites…</div>
               : <div style={{ maxHeight: 240, overflowY: "auto", display: "grid", gap: 4 }}>
-                {siteList.filter(s => !siteQ.trim() || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.trim().toLowerCase())).slice(0, 40).map(s => (
+                {siteList.filter(s => !isInactive(s.status) || s.status === "decommissioning" || String(s.id) === String(wo.site_id)).filter(s => !siteQ.trim() || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.trim().toLowerCase())).slice(0, 40).map(s => (
                   <button key={s.id} type="button" disabled={siteBusy} onClick={() => { void setJobSite(s); }} style={{ textAlign: "left", border: `1px solid ${String(s.id) === String(wo.site_id) ? "#0071E3" : "rgba(0,0,0,.08)"}`, background: "#fff", borderRadius: 10, padding: "8px 10px", cursor: "pointer" }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name || "Unnamed site"}{String(s.id) === String(wo.site_id) ? " · current" : ""}</div>
                     <div style={{ fontSize: 12, color: "#6E6E73" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ") || "No address"}</div>
@@ -2865,6 +2922,9 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
           </div>
           {smsMsg && !smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
+
+        {/* Equipment removal (taking a property offline) — where each device went. */}
+        {String(wo.job_type ?? "").toLowerCase() === "removal" && wo.site_id && <RemovalCard woId={id} onChanged={() => load(true)} />}
 
         {/* Two-way texts with the customer (Twilio) — replies land here. */}
         <JobTexts woId={id} />

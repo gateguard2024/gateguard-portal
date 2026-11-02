@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useUser } from '@clerk/nextjs';
 import {
   Search,
   Building2,
@@ -98,7 +99,72 @@ const getTypeColor = (type: ResultType) => {
     case 'site': return '#34D399'; // Emerald
   }
 };
+// --- Customer active / inactive (CORPORATE ONLY — /api/customers/[id]/status refuses everyone else) ---
+function CustomerStatusBox({ orgId }: { orgId: string }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [d, setD] = useState<any | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [alsoSites, setAlsoSites] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const r = await fetch(`/api/customers/${orgId}/status`, { cache: 'no-store' }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    if (!r?.ok) { setErr(j?.error || 'Couldn’t load the status.'); return; }
+    setErr(null); setD(j);
+  }, [orgId]);
+  useEffect(() => { setD(null); setOpen(false); setMsg(null); setReason(''); void load(); }, [load]);
+  const inactive = d?.customer && (d.customer.status === 'inactive' || d.customer.is_active === false);
+  async function save(active: boolean) {
+    setBusy(true); setMsg(null);
+    const r = await fetch(`/api/customers/${orgId}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active, reason, sites: alsoSites }) }).catch(() => null);
+    const j = await r?.json().catch(() => null);
+    setBusy(false);
+    if (!r?.ok) { setMsg(j?.error || 'That didn’t save.'); return; }
+    setD(j); setOpen(false); setReason('');
+    const n = Number(j.changedSites ?? 0);
+    setMsg(`${active ? 'Active again' : 'Marked inactive'}${n ? ` · ${n} propert${n === 1 ? 'y' : 'ies'} ${active ? 'turned back on' : 'turned off'}` : ''}.${j.warning ? ` ${j.warning}` : ''}`);
+  }
+  const sites = d?.sites ?? { total: 0, active: 0 };
+  return (
+    <div className="rounded-2xl p-3.5 flex flex-col gap-2" style={glassPanel}>
+      <div className="flex items-center gap-2 text-sm font-medium" style={textPrimary}>
+        <span aria-hidden className="inline-block rounded-full" style={{ width: 8, height: 8, background: d == null ? '#8E8E93' : inactive ? '#8E8E93' : '#30D158' }} />
+        {d == null ? (err ? 'Status' : 'Loading…') : inactive ? 'Inactive' : 'Active'}
+      </div>
+      {err && <div className="text-xs" style={{ color: '#FF6961' }}>{err}</div>}
+      {inactive && d.customer.inactive_reason && <div className="text-xs" style={textSecondary}>{d.customer.inactive_reason}{d.customer.inactive_by ? ` · ${d.customer.inactive_by}` : ''}</div>}
+      {d && <div className="text-xs" style={textSecondary}>{sites.total ? `${sites.active} of ${sites.total} propert${sites.total === 1 ? 'y' : 'ies'} active` : 'No properties'}</div>}
+      {msg && <div className="text-xs" role="status" style={textPrimary}>{msg}</div>}
+      {d && !open && (
+        <button type="button" onClick={() => { setOpen(true); setAlsoSites(true); setMsg(null); }} className="rounded-xl px-3 py-2 text-xs font-semibold" style={glassAction}>
+          <span style={textPrimary}>{inactive ? 'Make active again' : 'Mark inactive'}</span>
+        </button>
+      )}
+      {d && open && (
+        <div className="flex flex-col gap-2">
+          {!inactive && <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} placeholder="Why? e.g. Contract ended" aria-label="Why is this customer inactive?" className="rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)' }} />}
+          {sites.total > 0 && (
+            <label className="flex items-start gap-2 text-xs" style={textPrimary}>
+              <input type="checkbox" checked={alsoSites} onChange={e => setAlsoSites(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>{inactive ? 'Also turn their inactive properties back on (not ones taken offline)' : `Also turn off their ${sites.active} active propert${sites.active === 1 ? 'y' : 'ies'} (billing stops, Gate Watch pauses)`}</span>
+            </label>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setOpen(false)} disabled={busy} className="flex-1 rounded-xl px-3 py-2 text-xs font-semibold" style={glassPanel}><span style={textSecondary}>Cancel</span></button>
+            <button type="button" onClick={() => void save(!!inactive)} disabled={busy || (!inactive && !reason.trim())} className="flex-1 rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: inactive ? '#1A7F37' : '#D70015', color: '#fff' }}>{busy ? 'Saving…' : inactive ? 'Make active' : 'Mark inactive'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CustomerSiteFinder() {
+  const { user } = useUser();
+  const isCorporate = ((user?.publicMetadata as Record<string, unknown> | undefined)?.org_tier) === 'corporate';
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -210,6 +276,7 @@ export default function CustomerSiteFinder() {
           {/* 3. Action Rail */}
           <div className="w-full lg:w-56 flex-shrink-0 flex flex-col gap-3">
             <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={textSecondary}>Actions</div>
+            {isCorporate && selectedItem.type === 'customer' && <CustomerStatusBox orgId={selectedItem.id} />}
 
             <button onClick={() => handleAction('open_record', selectedItem)} className="w-full rounded-2xl p-3.5 flex items-center gap-3 text-sm font-medium transition-colors hover:bg-white/5" style={glassAction}>
               <ChevronRight size={18} style={{ color: brandBlue }} />

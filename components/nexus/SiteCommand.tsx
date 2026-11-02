@@ -7,6 +7,7 @@
 // The same panel (SitePanel) is used on the Operations site page via SiteSystems.
 // 🔒 "Setup & keys" (vendor logins) renders ONLY for corporate users — and every
 // credential endpoint refuses non-corporate server-side. Never loosen this.
+// Status button (Active / Inactive / Take offline) is corporate-only too (systems/Decommission.tsx).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CSS, type Any, getJson, Sheet, useFlash, DOT, Dot, GREEN, RED, ORANGE, type SiteCtx } from '@/components/nexus/systems/shared';
 import { LiveTab } from '@/components/nexus/systems/LiveTab';
@@ -18,6 +19,7 @@ import { SetupTab } from '@/components/nexus/systems/SetupTab';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
+import { InactiveBanner, SiteStatusSheet, statusOf } from '@/components/nexus/systems/Decommission';
 import { todayET, etDateOf } from '@/lib/tz';
 
 type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
@@ -165,8 +167,14 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
   );
 }
 
-export function SiteCommand({ siteId, isCorporate, site, onBack }: { siteId: string; isCorporate: boolean; site?: Any; onBack?: () => void }) {
+export function SiteCommand({ siteId, isCorporate, site, onBack, onStatusChange }: { siteId: string; isCorporate: boolean; site?: Any; onBack?: () => void; onStatusChange?: (status: string) => void }) {
   const [setupReq, setSetupReq] = useState(0);
+  // Active / inactive / taking offline (corporate manages it; everyone sees the banner).
+  const [status, setStatus] = useState<string>(site?.status ?? 'active');
+  const [reason, setReason] = useState<string | null>(site?.inactive_reason ?? null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  useEffect(() => { setStatus(site?.status ?? 'active'); setReason(site?.inactive_reason ?? null); }, [site?.status, site?.inactive_reason]);
+  const st = statusOf(status);
   return (
     <div className="sy">
       <style>{CSS}</style>
@@ -176,9 +184,18 @@ export function SiteCommand({ siteId, isCorporate, site, onBack }: { siteId: str
           <h1>{site?.name || 'Property'}</h1>
           {(site?.address || site?.city) && <div className="sub">{[site.address, site.city, site.state].filter(Boolean).join(', ')}</div>}
         </div>
-        {isCorporate && <div className="sy-acts"><button type="button" className="sy-b dark" onClick={() => setSetupReq(n => n + 1)}>Setup &amp; keys</button></div>}
+        {isCorporate && <div className="sy-acts">
+          <button type="button" className="sy-b dark" onClick={() => setStatusOpen(true)} aria-label={`Property status: ${st.label}. Change`}><Dot c={st.dot} />{st.label}</button>
+          <button type="button" className="sy-b dark" onClick={() => setSetupReq(n => n + 1)}>Setup &amp; keys</button>
+        </div>}
       </header>
+      <InactiveBanner status={status} reason={reason} onManage={isCorporate ? () => setStatusOpen(true) : undefined} />
       <SitePanel siteId={siteId} isCorporate={isCorporate} setupRequest={setupReq} />
+      {statusOpen && isCorporate && (
+        <SiteStatusSheet siteId={siteId} siteName={site?.name} onClose={() => setStatusOpen(false)}
+          onChanged={(s, r) => { setStatus(s); setReason(r ?? null); onStatusChange?.(s); }}
+          openSetup={() => { setStatusOpen(false); setSetupReq(n => n + 1); }} />
+      )}
     </div>
   );
 }
