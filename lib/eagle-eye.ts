@@ -291,6 +291,38 @@ export async function eagleEyeRecordedMp4Url(token: string, baseHost: string, de
   } catch { return null }
 }
 
+/** Find the recording that covers `tsISO` (main stream, then preview — some cameras
+ * only keep the preview stream in the cloud). Falls back to the first recording
+ * after `tsISO`. `trace` collects what Eagle Eye answered (portal clip ?debug=1).
+ * The old eagleEyeRecordedMp4Url only asked main for a segment STARTING after ts,
+ * so on Marbella every timeline click came back "No recording". */
+export async function eagleEyeFindClip(token: string, baseHost: string, deviceId: string, tsISO: string, trace: EenLiveTrace[] = []): Promise<{ url: string; start: string; end: string | null; type: string } | null> {
+  const ts = Date.parse(tsISO) || Date.now() - 60_000
+  for (const type of ['main', 'preview'] as const) {
+    const t0 = Date.now()
+    try {
+      const qs = new URLSearchParams({ deviceId, type, mediaType: 'video', startTimestamp__gte: eenTime(ts - 15 * 60_000), include: 'mp4Url', pageSize: '100' })
+      const res = await fetch(`https://${baseHost}/api/v3.0/media?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) })
+      if (!res.ok) {
+        trace.push({ step: `media ${type}`, status: res.status, note: (await res.text().catch(() => '')).slice(0, 200), ms: Date.now() - t0 })
+        continue
+      }
+      const j = await res.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = ((j.results ?? j.data ?? []) as any[]).map(r => ({ start: String(r.startTimestamp ?? r.start ?? ''), end: (r.endTimestamp ?? r.end ?? null) as string | null, url: String(r.mp4Url ?? '') })).filter(r => r.start)
+      const withUrl = rows.filter(r => r.url).length
+      trace.push({ step: `media ${type}`, status: res.status, note: `${rows.length} rows, ${withUrl} with mp4Url${rows[0] ? `, first ${rows[0].start}` : ''}`, ms: Date.now() - t0 })
+      const covering = rows.find(r => r.url && Date.parse(r.start) <= ts && (!r.end || Date.parse(r.end) >= ts))
+      const after = rows.find(r => r.url && Date.parse(r.start) >= ts)
+      const pick = covering ?? after
+      if (pick) return { url: pick.url, start: pick.start, end: pick.end, type }
+    } catch (e) {
+      trace.push({ step: `media ${type}`, note: e instanceof Error ? e.name : 'error', ms: Date.now() - t0 })
+    }
+  }
+  return null
+}
+
 export interface EagleEyeSegment { start: string; end: string | null; mp4Url: string | null }
 
 /** EEN v3 wants ISO 8601 with milliseconds and a numeric offset ("…T17:47:01.146+00:00").
