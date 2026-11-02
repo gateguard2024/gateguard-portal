@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame } from '@/lib/eagle-eye'
+import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame, eagleEyeFullFrame } from '@/lib/eagle-eye'
+import { createHash } from 'crypto'
 import { getSiteBrivoToken, getOrgBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
 import { getQboAuth, qboApi } from '@/lib/qbo'
 
@@ -57,6 +58,22 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       results.push({ name: c.name, online: c.online, ms: Date.now() - t0, bytes: frame ? frame.length : 0, streams: !!frame })
     }
     return { cameras: results, streaming: results.filter(r => r.streams).length, total: results.length }
+  })
+
+  // Eagle Eye — is the picture FRESH? Two main-stream grabs 3 s apart per camera
+  // (what /camera-preview now serves) vs the cached preview. same_twice=true means
+  // the camera is handing back a frozen frame.
+  await probe('eagle_eye_fresh', async () => {
+    const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
+    const md5 = (b: Buffer | null) => b ? createHash('md5').update(b).digest('hex').slice(0, 8) : null
+    const first = await Promise.all(allCams.map(async c => { const t0 = Date.now(); const f = await eagleEyeFullFrame(token, baseHost, c.id).catch(() => null); return { c, f, ms: Date.now() - t0 } }))
+    await new Promise(r => setTimeout(r, 3000))
+    const cameras = await Promise.all(first.map(async ({ c, f, ms }) => {
+      const again = await eagleEyeFullFrame(token, baseHost, c.id).catch(() => null)
+      const prev = await eagleEyePreviewFrame(token, baseHost, c.id).catch(() => null)
+      return { name: c.name, ms, bytes: f?.length ?? 0, same_twice: !!f && md5(f) === md5(again), preview_bytes: prev?.length ?? 0 }
+    }))
+    return { cameras, fresh: cameras.filter(x => x.bytes && !x.same_twice).length, total: cameras.length }
   })
 
   // Brivo — SITE token vs ORG token, so we can see if it's a scope/creds issue
