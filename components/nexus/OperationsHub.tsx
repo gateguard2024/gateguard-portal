@@ -25,6 +25,7 @@ import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/si
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
 import CalendarViews from "@/components/nexus/CalendarViews";
+import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
@@ -292,13 +293,17 @@ const OH_CSS = `
 
 export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boolean; initialTab?: string; onBack?: () => void } = {}) {
   void embedded;
-  const [page, setPage] = useState<Tab>(initialTab && (TABS as readonly string[]).includes(initialTab) ? initialTab as Tab : "Dashboard");
+  // "Work Orders:new" = open on Work Orders with the New work order form already up
+  // (the Operations page's "New work order" button).
+  const startNew = initialTab === "Work Orders:new";
+  const startTab = startNew ? "Work Orders" : initialTab;
+  const [page, setPage] = useState<Tab>(startTab && (TABS as readonly string[]).includes(startTab) ? startTab as Tab : "Dashboard");
   const [jobs, setJobs] = useState<RealWO[]>([]);
   const [techs, setTechs] = useState<RealTech[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [woFilter, setWoFilter] = useState("open");
-  const [newOpen, setNewOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(startNew);
   const [toast, setToast] = useState<string | null>(null);
   const [reqCount, setReqCount] = useState(0);
   const [pmOverdue, setPmOverdue] = useState(0);
@@ -1843,6 +1848,205 @@ function Playbooks() {
 /* ── Job drawer: detail + money + checklist + parts + team chat + complete ─ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 // Customer sign-off pad (touch or mouse). Saves a PNG.
+/* ── Job texts: the two-way text thread with the customer (Twilio, /api/maintenance/[id]/texts) ── */
+type JobText = { id: string; direction: "in" | "out"; who: string; phone: string; body: string; kind: string; status: string | null; error: string | null; author_name: string | null; created_at: string; unread?: boolean };
+function JobTexts({ woId }: { woId: string }) {
+  const { user } = useUser();
+  const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === "corporate";
+  const [texts, setTexts] = useState<JobText[] | null>(null);
+  const [contacts, setContacts] = useState<{ key: string; label: string; name: string | null; phone: string }[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [to, setTo] = useState("contact");
+  const [other, setOther] = useState("");
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ t: string; ok: boolean } | null>(null);
+  const [newCount, setNewCount] = useState(0);
+  const [showUnmatched, setShowUnmatched] = useState(false);
+  const [unmatched, setUnmatched] = useState<{ id: string; phone: string; body: string; created_at: string }[] | null>(null);
+  const endRef = React.useRef<HTMLDivElement>(null);
+  const load = React.useCallback(async () => {
+    const r = await fetch(`/api/maintenance/${woId}/texts`, { cache: "no-store" }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r?.ok) { setErr(d?.error || "Couldn’t load texts."); setTexts(t => t ?? []); return; }
+    setErr(null); setTexts(d.texts ?? []); setContacts(d.contacts ?? []);
+    if (d.unread) setNewCount(n => n + d.unread);
+  }, [woId]);
+  useEffect(() => { void load(); const t = setInterval(() => { if (!document.hidden) void load(); }, 15000); return () => clearInterval(t); }, [load]);
+  // Default "to": the first contact on the site; "Someone else" only when the site has no cell numbers.
+  useEffect(() => {
+    if (texts == null) return;
+    if (!contacts.length) setTo("other");
+    else if (!contacts.some(c => c.key === to) && !(to === "other" && other.trim())) setTo(contacts[0].key);
+  }, [contacts, texts == null]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [texts?.length]);
+  async function send() {
+    const body = draft.trim(); if (!body || busy) return;
+    setBusy(true); setNote(null);
+    const r = await fetch(`/api/maintenance/${woId}/texts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", body, to, phone: to === "other" ? other : undefined }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    if (!r?.ok) { setNote({ t: d?.error || "It didn’t send. Try again.", ok: false }); return; }
+    setDraft(""); setNote({ t: d.warning || `Sent to ${d.sent_to}.`, ok: !d.warning }); void load();
+  }
+  async function loadUnmatched() {
+    const r = await fetch(`/api/maintenance/${woId}/texts?unmatched=1`, { cache: "no-store" }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setUnmatched(r?.ok ? (d.unmatched ?? []) : []);
+  }
+  async function claim(textId: string) {
+    const r = await fetch(`/api/maintenance/${woId}/texts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "claim", text_id: textId }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r?.ok) { setNote({ t: d?.error || "Couldn’t move that text.", ok: false }); return; }
+    setUnmatched(u => (u ?? []).filter(x => x.id !== textId)); void load();
+  }
+  const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const KIND: Record<string, string> = { update: "Update", status: "Auto text", manual: "" };
+  return (
+    <section style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08)", padding: 16 }} aria-label="Texts with the customer">
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 15, margin: 0 }}>Texts</h2>
+        {newCount > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fff", background: "#FF453A", borderRadius: 9, padding: "1px 7px" }}>{newCount} new</span>}
+        <span style={{ fontSize: 12.5, color: "#6E6E73" }}>Two-way with the customer. Their replies show up here and in Notes.</span>
+      </div>
+      {err && <div role="status" style={{ fontSize: 13, color: "#D70015", marginTop: 8 }}>{err}</div>}
+      <div style={{ marginTop: 10, maxHeight: 340, overflowY: "auto", display: "grid", gap: 8, padding: "4px 2px" }} aria-live="polite">
+        {texts == null ? <div style={{ fontSize: 13, color: "#6E6E73" }}>Loading…</div>
+          : !texts.length ? <div style={{ fontSize: 13, color: "#6E6E73" }}>No texts yet. Send one below — when they reply, it shows up here.</div>
+          : texts.map(t => <div key={t.id} style={{ display: "flex", justifyContent: t.direction === "out" ? "flex-end" : "flex-start" }}>
+            <div style={{ maxWidth: "78%" }}>
+              <div style={{ background: t.direction === "out" ? (t.status === "failed" ? "#FFECEC" : "#0071E3") : "#F0F0F3", color: t.direction === "out" && t.status !== "failed" ? "#fff" : "#1D1D1F", borderRadius: 16, padding: "8px 12px", fontSize: 14, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: t.unread ? "0 0 0 2px #FF453A" : undefined }}>{t.body}</div>
+              <div style={{ fontSize: 11.5, color: t.status === "failed" ? "#D70015" : "#8E8E93", marginTop: 3, textAlign: t.direction === "out" ? "right" : "left" }}>
+                {t.direction === "out" ? `${t.author_name ? `${t.author_name.split(" ")[0]} → ` : ""}${t.who}` : t.who} · {when(t.created_at)}{KIND[t.kind] ? ` · ${KIND[t.kind]}` : ""}{t.status === "failed" ? ` · Didn’t send: ${t.error ?? ""}` : ""}
+              </div>
+            </div>
+          </div>)}
+        <div ref={endRef} />
+      </div>
+      <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select value={to} onChange={e => setTo(e.target.value)} aria-label="Text who" style={{ height: 36, borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: "0 10px", fontSize: 14, background: "#fff" }}>
+            {contacts.map(c => <option key={c.key} value={c.key}>{c.label}{c.name ? ` · ${c.name}` : ""} ({c.phone})</option>)}
+            <option value="other">Someone else…</option>
+          </select>
+          {to === "other" && <input value={other} onChange={e => setOther(e.target.value)} inputMode="tel" placeholder="Their cell number" aria-label="Their cell number" style={{ height: 36, borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: "0 10px", fontSize: 14, flex: "1 1 160px" }} />}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send(); }} rows={2} placeholder="Type a text…" aria-label="Text message" style={{ flex: 1, borderRadius: 12, border: "1px solid rgba(0,0,0,.14)", padding: "8px 10px", fontSize: 14, fontFamily: "inherit", resize: "vertical" }} />
+          <button type="button" onClick={() => { void send(); }} disabled={busy || !draft.trim() || (to === "other" && !other.trim())} style={{ height: 36, padding: "0 16px", borderRadius: 10, border: 0, background: "#0071E3", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", opacity: busy || !draft.trim() ? 0.5 : 1 }}>{busy ? "Sending…" : "Send"}</button>
+        </div>
+        {draft.length > 300 && <div style={{ fontSize: 12, color: "#6E6E73" }}>{draft.length} letters — long texts arrive in a few parts.</div>}
+        {note && <div role="status" style={{ fontSize: 13, color: note.ok ? "#1A7F37" : "#D70015" }}>{note.t}</div>}
+      </div>
+      {isCorporate && <div style={{ marginTop: 10, borderTop: "1px solid rgba(0,0,0,.08)", paddingTop: 8 }}>
+        <button type="button" onClick={() => { setShowUnmatched(v => !v); if (!unmatched) void loadUnmatched(); }} aria-expanded={showUnmatched} style={{ background: "none", border: 0, padding: 0, color: "#0071E3", fontSize: 13, cursor: "pointer" }}>{showUnmatched ? "Hide" : "Show"} texts that didn’t match a job</button>
+        {showUnmatched && <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          {unmatched == null ? <div style={{ fontSize: 13, color: "#6E6E73" }}>Loading…</div>
+            : !unmatched.length ? <div style={{ fontSize: 13, color: "#6E6E73" }}>None in the last 30 days.</div>
+            : unmatched.map(u => <div key={u.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 10, background: "#F5F5F7" }}>
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14 }}>{u.body}</div><div style={{ fontSize: 12, color: "#6E6E73" }}>{u.phone} · {when(u.created_at)}</div></div>
+              <button type="button" onClick={() => { void claim(u.id); }} style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid rgba(0,0,0,.14)", background: "#fff", fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" }}>Move to this job</button>
+            </div>)}
+        </div>}
+      </div>}
+    </section>
+  );
+}
+
+/* ── Customer updates: pick a preset, edit the draft, choose who + how, send ───── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CustomerUpdates({ woId, wo, checklist, parts, onSent }: { woId: string; wo: any; checklist: any[]; parts: any[]; onSent: () => void }) {
+  const { user } = useUser();
+  const [preset, setPreset] = useState<string | null>(null);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [to, setTo] = useState<{ contact: boolean; pm: boolean }>({ contact: true, pm: false });
+  const [ch, setCh] = useState<{ sms: boolean; email: boolean }>({ sms: false, email: true });
+  const [extraEmail, setExtraEmail] = useState("");
+  const [extraPhone, setExtraPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const contact = { name: wo?.site_contact_name, phone: wo?.site_contact_phone, email: wo?.site_contact_email };
+  const pm = { name: wo?.site_pm_name, phone: wo?.site_pm_phone, email: wo?.site_pm_email };
+  const ctx: UpdateCtx = {
+    contactFirst: String((to.contact ? contact.name : to.pm ? pm.name : contact.name || pm.name) ?? "").trim().split(" ")[0] || null,
+    site: wo?.customer_name, woNumber: wo?.wo_number, title: wo?.title, date: wo?.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : null, tech: wo?.assignee_name,
+    doneSteps: (checklist ?? []).filter(c => c.is_complete || c.completed || c.done).map(c => String(c.title ?? "")).filter(Boolean).slice(0, 12),
+    parts: (parts ?? []).map(p => ({ name: String(p.name ?? "Part"), qty: Number(p.qty) || 1, status: p.supply_status ?? null, expected: p.expected_at ?? null })),
+    sender: user?.firstName ?? null,
+  };
+  // Switching who it goes to updates the greeting ("Hi Dana," → "Hi Pat,") if it is still the draft's.
+  useEffect(() => {
+    setBody(b => /^Hi [^,\n]{1,40},/.test(b) ? b.replace(/^Hi [^,\n]{1,40},/, `Hi ${ctx.contactFirst || "there"},`) : b);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to.contact, to.pm]);
+  function pick(key: string) {
+    const p = UPDATE_PRESETS.find(x => x.key === key); if (!p) return;
+    if (preset && body && !window.confirm("Replace what you've written with a new draft?")) return;
+    setPreset(key); setSubject(p.subject(ctx)); setBody(p.body(ctx)); setMsg(null);
+  }
+  const label = UPDATE_PRESETS.find(x => x.key === preset)?.label ?? "Customer update";
+  const blanks = blanksIn(`${ch.email ? subject : ""}\n${body}`);
+  const hasRecipient = to.contact || to.pm || !!extraEmail.trim() || !!extraPhone.trim();
+  const canSend = !!body.trim() && !blanks.length && (ch.sms || ch.email) && hasRecipient && !busy;
+  async function send() {
+    if (!canSend) return;
+    const where = [ch.sms ? "text" : null, ch.email ? "email" : null].filter(Boolean).join(" and ");
+    if (!window.confirm(`Send this ${label.toLowerCase()} by ${where}?`)) return;
+    setBusy(true); setMsg(null);
+    const r = await fetch(`/api/maintenance/${woId}/notify-customer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ custom: { preset, label, subject, message: body, channels: [ch.sms && "sms", ch.email && "email"].filter(Boolean), to: [to.contact && "contact", to.pm && "pm"].filter(Boolean), extra_email: extraEmail.trim() || undefined, extra_phone: extraPhone.trim() || undefined } }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    if (!r?.ok) { setMsg({ t: d?.error || "It didn’t send. Try again.", ok: false }); return; }
+    setMsg({ t: `Sent ✓ ${(d.sent ?? []).join("; ")}${d.failed?.length ? ` — but: ${d.failed.join("; ")}` : ""}. Saved in Notes.`, ok: !d.failed?.length });
+    setPreset(null); setBody(""); setSubject(""); onSent();
+  }
+  const pill = (on: boolean): React.CSSProperties => ({ height: 32, padding: "0 12px", borderRadius: 8, border: `1px solid ${on ? "#0071E3" : "rgba(0,0,0,.14)"}`, background: on ? "#0071E3" : "#fff", color: on ? "#fff" : "#1D1D1F", fontSize: 13, fontWeight: 500, cursor: "pointer" });
+  const who = (k: "contact" | "pm", c: { name?: string; phone?: string; email?: string }, title: string) => (
+    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 10, background: to[k] ? "#EEF4FF" : "#F5F5F7", cursor: "pointer", flex: "1 1 220px" }}>
+      <input type="checkbox" checked={to[k]} onChange={e => setTo({ ...to, [k]: e.target.checked })} style={{ marginTop: 3 }} />
+      <span style={{ fontSize: 13 }}><b style={{ fontWeight: 600 }}>{title}{c.name ? ` · ${c.name}` : ""}</b><br /><span style={{ color: "#6E6E73" }}>{[c.phone, c.email].filter(Boolean).join(" · ") || "No phone or email on the site"}</span></span>
+    </label>);
+  return (
+    <section id="jp-updates" style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08)", padding: 16, scrollMarginTop: 70 }} aria-label="Customer updates">
+      <h2 style={{ fontSize: 15, margin: 0 }}>Customer updates</h2>
+      <div style={{ fontSize: 13, color: "#6E6E73", marginTop: 2 }}>Pick one to get a draft filled in from this job. Change anything, then send it by text, email or both. Nothing goes out until you tap Send.</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }} role="group" aria-label="Update drafts">
+        {UPDATE_PRESETS.map(p => <button key={p.key} type="button" onClick={() => pick(p.key)} title={p.when} aria-pressed={preset === p.key} style={pill(preset === p.key)}>{p.label}</button>)}
+      </div>
+      {preset && <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#6E6E73", marginBottom: 4 }}>Send to</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {who("contact", contact, "Site contact")}
+            {who("pm", pm, "Property manager")}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <input value={extraEmail} onChange={e => setExtraEmail(e.target.value)} placeholder="Someone else’s email (optional)" aria-label="Extra email" style={{ height: 36, borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: "0 10px", fontSize: 14, flex: "1 1 220px" }} />
+            <input value={extraPhone} onChange={e => setExtraPhone(e.target.value)} placeholder="Someone else’s cell (optional)" inputMode="tel" aria-label="Extra phone" style={{ height: 36, borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: "0 10px", fontSize: 14, flex: "1 1 180px" }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#6E6E73" }}>Send by</span>
+          <button type="button" aria-pressed={ch.email} onClick={() => setCh({ ...ch, email: !ch.email })} style={pill(ch.email)}>Email</button>
+          <button type="button" aria-pressed={ch.sms} onClick={() => setCh({ ...ch, sms: !ch.sms })} style={pill(ch.sms)}>Text</button>
+          {ch.sms && body.length > 480 && <span style={{ fontSize: 12, color: "#B25000" }}>Long for a text ({body.length} letters) — it may arrive in a few parts.</span>}
+        </div>
+        {ch.email && <input value={subject} onChange={e => setSubject(e.target.value)} aria-label="Email subject" style={{ height: 38, borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: "0 10px", fontSize: 14, fontWeight: 600 }} />}
+        <textarea value={body} onChange={e => setBody(e.target.value)} aria-label="Message" rows={12} style={{ borderRadius: 10, border: "1px solid rgba(0,0,0,.14)", padding: 10, fontSize: 14, lineHeight: 1.5, fontFamily: "inherit", resize: "vertical" }} />
+        {blanks.length > 0 && <div style={{ fontSize: 13, color: "#B25000", background: "#FFF4E5", borderRadius: 10, padding: "8px 12px" }}>Fill in the parts in [square brackets] before sending: {blanks.slice(0, 4).map(b => b.replace(/[.\s]+$/, "")).join(" · ")}{blanks.length > 4 ? " …" : ""}. Delete any you don’t need.</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => { setPreset(null); setBody(""); setSubject(""); setMsg(null); }} style={{ ...pill(false) }}>Discard</button>
+          <button type="button" onClick={() => { navigator.clipboard?.writeText(ch.email ? `${subject}\n\n${body}` : body).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }} style={pill(false)}>{copied ? "Copied ✓" : "Copy"}</button>
+          <button type="button" onClick={send} disabled={!canSend} style={{ height: 32, padding: "0 16px", borderRadius: 8, border: 0, background: "#0071E3", color: "#fff", fontSize: 13, fontWeight: 600, cursor: canSend ? "pointer" : "default", opacity: canSend ? 1 : 0.5 }}>{busy ? "Sending…" : "Send"}</button>
+        </div>
+      </div>}
+      {msg && <div role="status" style={{ fontSize: 13, marginTop: 10, color: msg.ok ? "#1A7F37" : "#D70015" }}>{msg.t}</div>}
+    </section>
+  );
+}
+
 function SignOffPad({ onSave, onCancel, busy }: { onSave: (dataUrl: string) => void; onCancel: () => void; busy?: boolean }) {
   const ref = React.useRef<HTMLCanvasElement | null>(null);
   const drawing = React.useRef(false);
@@ -2525,7 +2729,11 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         <div style={{ minWidth: 0 }}>
           <div className="no">{wo.wo_number || "Work order"}{wo.job_type ? ` · ${wo.job_type}` : ""}</div>
           <h1>{wo.title || "Work order"}</h1>
-          <div className="sub">{wo.site_id || wo.customer_name ? <>{wo.customer_name || "Site"}{addr ? ` · ${addr}` : ""}</> : <button type="button" onClick={() => { setTab("Overview"); setSitePick(true); }} style={{ background: "none", border: 0, padding: 0, color: "#8EC1FF", font: "inherit", cursor: "pointer", textDecoration: "underline" }}>No site — add one</button>}</div>
+          <div className="sub" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>{wo.site_id ? <>{wo.customer_name || "Site"}{addr ? ` · ${addr}` : ""}</> : <>{wo.customer_name ? `${wo.customer_name} · ` : ""}No site yet</>}</span>
+            {/* Right under the title so it's easy to find: add or change the job's site. */}
+            <button type="button" onClick={() => { setTab("Overview"); setSitePick(true); setTimeout(() => document.getElementById("jp-site")?.scrollIntoView({ behavior: "smooth", block: "center" }), 80); }} style={{ height: 26, padding: "0 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,.3)", background: wo.site_id ? "rgba(255,255,255,.08)" : "#0A84FF", color: "#fff", font: "500 12.5px inherit", fontSize: 12.5, cursor: "pointer" }}>{wo.site_id ? "Change site" : "+ Add a site"}</button>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {wo.priority && <span className="jp-pill" style={/crit|urg/.test(String(wo.priority).toLowerCase()) ? { background: "#FFECEC", color: "#D70015" } : String(wo.priority).toLowerCase() === "high" ? { background: "#FFF4E5", color: "#B25000" } : { background: "rgba(255,255,255,.14)", color: "#fff" }}>{String(wo.priority)[0].toUpperCase() + String(wo.priority).slice(1)} priority</span>}
@@ -2573,7 +2781,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
           <a className="jp-q" href={phone ? `tel:${phone}` : undefined} aria-disabled={!phone} title={phone || "No phone on this site"}>Call{wo.site_contact_name ? ` ${String(wo.site_contact_name).split(" ")[0]}` : ""}</a>
           <a className="jp-q" href={phone ? `sms:${phone}` : undefined} aria-disabled={!phone}>Text</a>
           <a className="jp-q" href={addr ? `https://maps.google.com/?q=${encodeURIComponent(addr)}` : undefined} target="_blank" rel="noreferrer" aria-disabled={!addr}>Directions</a>
-          <button type="button" className="jp-q" onClick={() => setTab("Overview")}>Send customer an update</button>
+          <button type="button" className="jp-q" onClick={() => { setTab("Overview"); setTimeout(() => document.getElementById("jp-updates")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }}>Send customer an update</button>
           <button type="button" className="jp-q" onClick={toggleTimer} disabled={timerBusy} style={activeEntry ? { background: "#E8F6EC", borderColor: "rgba(36,138,61,.35)", color: "#1A7F37", fontVariantNumeric: "tabular-nums" } : undefined}>{activeEntry ? `● Stop timer · ${runLabel}` : "▶ Start timer"}</button>
           <button type="button" className="jp-q" onClick={() => { setTab("Activity"); setShowSign(true); }} style={signed ? { background: "#E8F6EC", borderColor: "rgba(36,138,61,.35)", color: "#1A7F37" } : undefined}>{signed ? "Customer signed ✓" : "Get customer signature"}</button>
           {wo.site_access_notes && <span className="jp-q" style={{ background: "#FFF4E5", borderColor: "rgba(245,158,11,.35)", color: "#B25000", cursor: "default" }} title={String(wo.site_access_notes)}>Access: {String(wo.site_access_notes).slice(0, 40)}{String(wo.site_access_notes).length > 40 ? "…" : ""}</span>}
@@ -2596,7 +2804,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
 
         {tab === "Overview" && (<>
         <Card>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+          <div id="jp-site" style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10, scrollMarginTop: 80 }}>
             <div style={{ flex: 1, minWidth: 200 }}><Small>Site</Small>
               <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{wo.site_id || wo.customer_name ? (wo.customer_name || "Site") : <span style={{ color: "#6E6E73", fontWeight: 400 }}>No site (general task)</span>}</div>
               {addr && <div style={{ fontSize: 12.5, color: "#6E6E73" }}>{addr}</div>}
@@ -2657,6 +2865,12 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
           </div>
           {smsMsg && !smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#248A3D" : "#D70015", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
+
+        {/* Two-way texts with the customer (Twilio) — replies land here. */}
+        <JobTexts woId={id} />
+
+        {/* Written customer updates — presets you edit, then choose to send (text / email). */}
+        <CustomerUpdates woId={id} wo={wo} checklist={checklist} parts={parts} onSent={() => load(true)} />
 
         {/* Crew — multiple techs/resources on one job (lead = primary assignee). */}
         <Card>

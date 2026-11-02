@@ -82,6 +82,8 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/integrations/quickbooks/webhook') ||
     // Stripe webhook — raw HTTP POST with Stripe-Signature header, no Clerk session
     pathname.startsWith('/api/billing/webhook') ||
+    // Twilio incoming-text webhook — verified via X-Twilio-Signature, no Clerk session
+    pathname.startsWith('/api/webhooks/twilio') ||
     // Clerk webhook — verified via Svix signature, no Clerk session
     pathname.startsWith('/api/webhooks/clerk') ||
     // Adobe Acrobat Sign webhook — verified via X-AdobeSign-ClientId echo, no Clerk session
