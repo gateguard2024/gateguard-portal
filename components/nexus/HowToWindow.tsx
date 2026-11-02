@@ -5,12 +5,20 @@
 // your place. Reads the same platform how-tos as the Help surface
 // (/api/kb/articles?category=Platform How-To). Position is remembered.
 import { useEffect, useRef, useState } from 'react'
+import { ALL_SETUP_GUIDES, setupGuideText } from '@/lib/setup-guides'
 
 type Article = { id: string; title: string; description: string | null; content: string | null; category: string }
 
 const POS_KEY = 'gg_howto_pos'
 
+// Setup steps for new properties and features (same text as Systems → Setup and Lexi).
+const SETUP_ARTICLES: Article[] = ALL_SETUP_GUIDES.map(g => ({ id: g.id, title: `Set up: ${g.title}`, description: g.what, content: setupGuideText(g), category: 'Setup' }))
+
 async function loadHowTos(): Promise<Article[]> {
+  return [...SETUP_ARTICLES, ...(await loadKbHowTos())]
+}
+
+async function loadKbHowTos(): Promise<Article[]> {
   try {
     const res = await fetch('/api/kb/articles?category=' + encodeURIComponent('Platform How-To'), { cache: 'no-store' })
     if (res.ok) {

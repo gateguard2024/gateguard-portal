@@ -3,7 +3,7 @@
 // SiteCommand — one property's systems (Systems tab → a location). Light Apple look.
 //   Status tiles: health · cameras · doors · uptime/faults · door events today
 //   Quick actions: unlock a door · reset a gate · visitor pass · report a fault · cameras
-//   Tabs: Live · Doors & gates · People · Activity · Faults · Network · Controllers
+//   Tabs: Live · Doors & gates · People · Activity · Faults · Network · Controllers · Setup (checklist + steps)
 // The same panel (SitePanel) is used on the Operations site page via SiteSystems.
 // 🔒 "Setup & keys" (vendor logins) renders ONLY for corporate users — and every
 // credential endpoint refuses non-corporate server-side. Never loosen this.
@@ -14,15 +14,17 @@ import { DoorsTab } from '@/components/nexus/systems/DoorsTab';
 import { PeopleTab } from '@/components/nexus/systems/PeopleTab';
 import { ActivityTab } from '@/components/nexus/systems/ActivityTab';
 import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
+import { SetupTab } from '@/components/nexus/systems/SetupTab';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
 import { todayET, etDateOf } from '@/lib/tz';
 
-type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers';
+type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' },
   { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
+  { id: 'setup', label: 'Setup' },
 ];
 type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number };
 
@@ -91,7 +93,8 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
   }, [tab, net, siteId]);
 
   const setRelayState = useCallback((id: string, ch: number, on: boolean) => setRelays(p => (p ?? []).map(r => String(r.id) === id && Number(r.channel ?? 0) === ch ? { ...r, on, ison: on } : r)), []);
-  const afterSetup = useCallback(() => { void loadCams(); void loadDoors(); void loadRelays(); void loadEvents(); setNet(undefined); }, [loadCams, loadDoors, loadRelays, loadEvents]);
+  const [setupRound, setSetupRound] = useState(0);
+  const afterSetup = useCallback(() => { setSetupRound(n => n + 1); void loadCams(); void loadDoors(); void loadRelays(); void loadEvents(); setNet(undefined); }, [loadCams, loadDoors, loadRelays, loadEvents]);
 
   // ── Tiles ──────────────────────────────────────────────────────────────────
   const camTotal = cams?.length ?? 0;
@@ -149,6 +152,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
         {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
         {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}
         {tab === 'controllers' && <SitePanels siteId={siteId} isCorporate={isCorporate} notify={notify} />}
+        {tab === 'setup' && <SetupTab key={setupRound} ctx={ctx} cams={cams} doors={doors} doorErr={doorErr} relays={relays} camMap={camMap} onGo={setTab} />}
       </div>
 
       {setup && isCorporate && (

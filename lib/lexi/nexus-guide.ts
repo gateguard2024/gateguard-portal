@@ -9,6 +9,8 @@
  * section here in the same commit. This is what makes Lexi the authority on
  * Nexus. Write it the way you'd explain it to a new hire.
  */
+import { ALL_SETUP_GUIDES, setupGuideText } from '@/lib/setup-guides'
+
 export type GuideSection = { id: string; title: string; where: string; keywords: string; text: string }
 
 export const NEXUS_MAP = `Nexus layout (bottom bar, left to right): My Day · Sales · Operations · [Lexi — the Nexus logo in the center] · Catalog · Systems · Events · Help · Admin (managers only). Design is hidden for now.
@@ -67,8 +69,8 @@ export const NEXUS_GUIDE: GuideSection[] = [
   },
   {
     id: 'systems', title: 'Systems (live equipment)', where: 'Systems tab, or a site',
-    keywords: 'systems live camera gate door open unlock relay reboot network unifi brivo eagle eye shelly offline incident',
-    text: `Systems shows each property's live equipment: Eagle Eye cameras, Brivo doors and gates (open a gate remotely if you have permission), UniFi network, and Shelly relays (power-cycle a gate). Faults and uptime log incidents. Device health on the Operations page comes from here. Credentials are set by Gate Guard corporate only.`,
+    keywords: 'systems live camera gate door open unlock relay reboot network unifi brivo eagle eye shelly offline incident setup checklist',
+    text: `Systems shows each property's live equipment: Eagle Eye cameras, Brivo doors and gates (open a gate remotely if you have permission), UniFi network, and Shelly relays (power-cycle a gate). Faults and uptime log incidents. Device health on the Operations page comes from here. Credentials are set by Gate Guard corporate only. The Setup tab on each property is a checklist of everything that can be connected there (Brivo, Eagle Eye, Edge box, Shelly, UniFi, door cameras, Gate Watch, the manager portal) with a green check when it works and simple steps for each.`,
   },
   {
     id: 'catalog', title: 'Catalog (products and prices)', where: 'Catalog tab',
@@ -105,6 +107,12 @@ export const NEXUS_GUIDE: GuideSection[] = [
     keywords: 'quickbooks qbo qb accounting books invoice sync payment customer match item product cash receivable payable aging profit loss p&l commission bill vendor connect disconnect',
     text: `Gate Guard's own QuickBooks company, for corporate users only. Open Admin → QuickBooks. 1) Connect: sign in to QuickBooks once (it stays connected about 100 days; reconnect when Nexus warns). 2) Settings: pick the date invoices start syncing from, the QuickBooks item to use when a line has no match, the income account for new items, where payments land, and (optional) the expense account for dealer commission bills. 3) Match customers: each property or client is linked to a QuickBooks customer — Auto-match links exact names, Create makes a new customer, or pick one from the list. 4) Match products: link catalog items to QuickBooks items (or Create). 5) Turn on automatic sync. Then: invoices sent from Nexus go to QuickBooks, payments (marked paid or paid by card/bank link) go to QuickBooks, payments and voids made in QuickBooks come back to Nexus, and invoices made in QuickBooks for linked customers show up in Nexus. It runs every 15 minutes (and right away when QuickBooks tells us something changed); "Sync now" runs it immediately. Problems (e.g. a customer not matched) are listed on the page with the reason. The Money section shows cash in the bank, money owed to us by age, bills we owe, and profit this month / last month / this year — Lexi can answer these too ("how much cash do we have?").`,
   },
+  // Setup steps (one source: lib/setup-guides.ts — also the Setup tab and the How-to button).
+  ...ALL_SETUP_GUIDES.map((g): GuideSection => ({
+    id: g.id, title: `Set up: ${g.title}`, where: g.where,
+    keywords: `${g.keywords} setup set up how to install connect add new site property feature`,
+    text: setupGuideText(g),
+  })),
 ]
 
 /** Best-matching guide sections for a question (simple keyword scoring). */

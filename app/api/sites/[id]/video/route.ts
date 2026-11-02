@@ -24,6 +24,9 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
+// Eagle Eye v3 event types we show (developer.eagleeyenetworks.com/docs/events).
+const EEN_EVENT_TYPES = ['een.motionDetectionEvent.v1', 'een.motionInRegionDetectionEvent.v1', 'een.lprPlateReadEvent.v1', 'een.loiterDetectionEvent.v1', 'een.tamperDetectionEvent.v1', 'een.objectLineCrossEvent.v1', 'een.objectIntrusionEvent.v1', 'een.deviceCloudStatusUpdateEvent.v1']
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
 export type VideoEvent = { key: string; provider: 'een' | 'edge'; cameraKey: string; cameraName: string; label: string; kind: string; start: string; end: string | null; plate: string | null; score: number | null; edgeId: string | null; hasClip: boolean }
@@ -98,10 +101,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const a = await een(siteId)
       if (!a) return
       try {
-        const [cams, evs] = await Promise.all([
-          listEagleEyeCameras(a.token, a.baseHost).catch(() => []),
-          listEagleEyeEvents(a.token, a.baseHost, { start: new Date(start), end: new Date(end), cameraId: camera ? camera.slice(4) : undefined }),
-        ])
+        // Eagle Eye's documented pattern is one camera (actor) + explicit event types per
+        // request, so ask camera by camera (6 at a time) instead of one site-wide call.
+        const cams = await listEagleEyeCameras(a.token, a.baseHost).catch(() => [] as { id: string; name: string }[])
+        const ids = camera ? [camera.slice(4)] : cams.map(c => c.id).slice(0, 40)
+        const evs: Awaited<ReturnType<typeof listEagleEyeEvents>> = []
+        const fails: string[] = []
+        let k = 0
+        await Promise.all(Array.from({ length: Math.min(6, ids.length) }, async () => {
+          while (k < ids.length) {
+            const id = ids[k++]
+            try { evs.push(...await listEagleEyeEvents(a.token, a.baseHost, { start: new Date(start), end: new Date(end), cameraId: id, types: EEN_EVENT_TYPES })) }
+            catch (e) { fails.push(e instanceof Error ? e.message : 'failed') }
+          }
+        }))
+        if (fails.length && fails.length === ids.length) throw new Error(fails[0])
         const names = new Map(cams.map(c => [c.id, c.name]))
         for (const e of evs) {
           if (!e.when || !e.cameraId) continue
