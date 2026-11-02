@@ -17,11 +17,14 @@
  *     speech (Web Speech API), so there's no extra cost or account. Read-aloud toggle too.
  *   • Phase 3: "I noticed…" list (/api/lexi/nudges) with Ask / Open / Later, and the
  *     weekday morning-brief email switch + "Send me one now" (/api/lexi/brief).
+ *   • Nightly review: "Close out today · plan tomorrow" card + full-screen review
+ *     (EveningReview.tsx, /api/lexi/evening). Opens from the evening text via ?review=evening.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { T, FONT } from '@/components/nexus/tasks/shared'
 import { BrainPanel, RecordingPanel } from '@/components/nexus/lexi/LexiPanels'
 import { LexiChart, type LexiChartData } from '@/components/nexus/lexi/LexiChart'
+import { EveningCard, EveningReview } from '@/components/nexus/lexi/EveningReview'
 
 type Card = { kind: string; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
 type RevertPayload = { operation: 'delete' | 'update'; table: string; id: string; data?: Record<string, unknown> }
@@ -174,6 +177,17 @@ export function LexiSurface() {
   const [showAllNudges, setShowAllNudges] = useState(false)
   const [mailMsg, setMailMsg] = useState<string | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  // The nightly text links to /?tab=lexi&review=evening — open the review straight away.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search)
+      if (p.get('review') !== 'evening') return
+      p.delete('review'); const qs = p.toString()
+      window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
+      setReviewOpen(true)
+    } catch { /* file:// previews */ }
+  }, [])
   const recRef = useRef<{ stop: () => void } | null>(null)
   // ── Voice (Phase 4) ─────────────────────────────────────────────────────────
   const [voice, setVoice] = useState(false)
@@ -516,6 +530,8 @@ export function LexiSurface() {
       </div>
     </section>}
 
+    {msgs.length === 0 && brief && !brief.error && <EveningCard onOpen={() => setReviewOpen(true)} />}
+
     <section className="lx-chat" aria-label="Chat with Lexi">
       <div className="lx-thread">
         {msgs.length === 0 && <div className="lx-empty"><b>What can I do for you?</b>Ask about deals, jobs, sites, your inbox or how to use Nexus — or tell me to make a task, a work order, a lead or a follow-up.</div>}
@@ -586,6 +602,7 @@ export function LexiSurface() {
     </section>
     <div className="lx-note">Lexi can make mistakes. Small changes can be undone for 30 seconds; bigger ones always ask first.</div>
 
+    {reviewOpen && <EveningReview onClose={() => setReviewOpen(false)} onAsk={t => { setReviewOpen(false); void send(t) }} />}
     {panel === 'brain' && <BrainPanel onClose={() => setPanel(null)} />}
     {panel === 'recording' && <RecordingPanel canAct={(brief as { canAct?: boolean } | null)?.canAct !== false} onClose={() => setPanel(null)} />}
 

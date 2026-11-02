@@ -23,8 +23,9 @@ import { lexiMorningBrief } from '@/inngest/functions/lexi-morning-brief'
 import { eventsAutoSend } from '@/inngest/functions/events-auto-send'
 import { qboSync } from '@/inngest/functions/qbo-sync'
 import { gateWatch } from '@/inngest/functions/gate-watch'
+import { lexiEveningReview } from '@/inngest/functions/lexi-evening-review'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief, eventsAutoSend, qboSync, gateWatch],
+  functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief, eventsAutoSend, qboSync, gateWatch, lexiEveningReview],
 })
