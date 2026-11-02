@@ -58,7 +58,12 @@ async function een(siteId: string) {
 export async function siteVideo(siteId: string, sp: URLSearchParams, opts: SiteVideoOpts): Promise<{ status: number; body: unknown }> {
   const allow = opts.allow ?? (() => true)
   const view = sp.get('view') ?? 'cameras'
-  const edge = await getSiteEdge(siteId)
+  // Speed: an Eagle Eye timeline/events call never needs the Edge login, so only
+  // wait for it when the answer uses it (it's a vault read). Started now, in parallel.
+  const edgeP = getSiteEdge(siteId).catch(() => null)
+  const cam = sp.get('camera') ?? ''
+  const needsEdge = view === 'pass' || view === 'cameras' || !cam.startsWith('een:')
+  const edge = needsEdge ? await edgeP : null
   const passFor = (conn: EdgeConn) => ({ base: conn.baseUrl, deviceId: conn.deviceId, ...mintEdgePass(conn, { siteId, userId: opts.userId, scopes: ['live', 'vod', 'snapshot', 'events', 'export'], cameras: opts.edgeCameras ?? '*', ttlSec: 900 }) })
 
   if (view === 'pass') {
@@ -105,7 +110,8 @@ export async function siteVideo(siteId: string, sp: URLSearchParams, opts: SiteV
       try {
         // Eagle Eye's documented pattern is one camera (actor) + explicit event types per
         // request, so ask camera by camera (6 at a time) instead of one site-wide call.
-        const cams = await listEagleEyeCameras(a.token, a.baseHost).catch(() => [] as { id: string; name: string }[])
+        // One camera asked for (the viewer): skip the camera list — it only supplies names.
+        const cams = camera ? [] as { id: string; name: string }[] : await listEagleEyeCameras(a.token, a.baseHost).catch(() => [] as { id: string; name: string }[])
         const ids = camera ? [camera.slice(4)] : cams.map(c => c.id).filter(id => allow(`een:${id}`)).slice(0, 40)
         const evs: Awaited<ReturnType<typeof listEagleEyeEvents>> = []
         const fails: string[] = []

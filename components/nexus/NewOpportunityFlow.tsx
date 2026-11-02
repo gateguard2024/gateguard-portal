@@ -3,7 +3,8 @@
 // New Opportunity — guided glass flow.
 // Step 1: choose source (existing Lead or existing Customer).
 // Step 2: search + pick the record.
-// Step 3: the glass opportunity form (prefilled), then create.
+// Step 3: the opportunity form (prefilled), then create.
+// Light Apple sheet (white card on a soft dim), matching the other converted tabs.
 import { useEffect, useState } from 'react'
 
 type Source = 'lead' | 'customer' | 'blank'
@@ -59,13 +60,17 @@ const MRR_PER_UNIT = 10  // easy-start formula: $10/month/unit (refine later)
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div className="mb-1 text-[12px] font-medium" style={{ color: MUTED }}>{label}</div>
       {children}
     </label>
   )
 }
 
-const inputStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
+const TEXT = '#1D1D1F', TEXT2 = '#3A3A3C', MUTED = '#6E6E73', BLUE = '#0071E3', LINE = 'rgba(0,0,0,0.08)', BORDER = 'rgba(0,0,0,0.12)'
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif'
+const inputStyle = { background: '#FFFFFF', border: `1px solid ${BORDER}`, color: TEXT, borderRadius: 10, fontFamily: FONT } as const
+const INPUT = 'h-10 w-full px-3 text-[14px] outline-none focus:ring-2 focus:ring-[#0071E3]/30'
+const rowStyle = { background: '#FFFFFF', border: `1px solid ${LINE}`, borderRadius: 12 } as const
 
 export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }) {
   const [step, setStep] = useState<Step>('source')
@@ -242,58 +247,59 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
     : leads
 
   return (
-    <div className="fixed inset-0 z-[96] overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
-      <div className="mx-auto flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
-        style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-[96] flex items-center justify-center overflow-hidden px-4 py-6" style={{ background: 'rgba(0,0,0,0.32)' }}>
+      <div role="dialog" aria-modal="true" aria-label="New opportunity"
+        className="flex h-auto max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden"
+        style={{ background: '#FFFFFF', borderRadius: 16, boxShadow: '0 24px 70px rgba(0,0,0,0.28)', color: TEXT, fontFamily: FONT, letterSpacing: '-0.01em' }}>
+        <div className="flex items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${LINE}` }}>
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,163,255,0.82)' }}>New Opportunity</div>
-            <h2 className="mt-1 text-xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)' }}>
+            <div className="text-[12px] font-medium" style={{ color: MUTED }}>New opportunity</div>
+            <h2 className="mt-0.5 text-[17px] font-semibold" style={{ color: TEXT }}>
               {step === 'source' ? 'Where is this deal coming from?' : step === 'pick' ? (source === 'lead' ? 'Pick the lead' : 'Find the customer') : 'Opportunity details'}
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full text-sm" style={{ background: '#F2F2F7', color: TEXT2 }}>✕</button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {result && (
-            <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.12)', border: `1px solid ${result.ok ? 'rgba(0,230,153,0.35)' : 'rgba(255,77,77,0.35)'}`, color: result.ok ? '#00E699' : '#FF4D4D' }}>{result.message}</div>
+            <div role={result.ok ? 'status' : 'alert'} className="rounded-[10px] px-3 py-2.5 text-[13px]" style={{ background: result.ok ? '#E8F6EC' : '#FFECEC', color: result.ok ? '#1A7F37' : '#D70015' }}>{result.message}</div>
           )}
 
           {step === 'source' && !result && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {([['lead', 'From an existing Lead', 'Convert a lead you are already working into a deal.'], ['customer', 'From an existing Customer', 'Start a new deal for a customer you already serve.']] as const).map(([s, title, sub]) => (
-                <button key={s} type="button" onClick={() => chooseSource(s)} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,163,255,0.06)', border: '1px solid rgba(0,163,255,0.22)' }}>
-                  <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{title}</div>
-                  <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{sub}</div>
+              {([['lead', 'From an existing lead', 'Turn a lead you are already working into a deal.'], ['customer', 'From an existing customer', 'Start a new deal for a customer you already serve.']] as const).map(([s, title, sub]) => (
+                <button key={s} type="button" onClick={() => chooseSource(s)} className="p-4 text-left transition-shadow hover:shadow-[0_0_0_1px_rgba(0,113,227,0.35)]" style={rowStyle}>
+                  <div className="text-[14px] font-semibold" style={{ color: TEXT }}>{title}</div>
+                  <div className="mt-1 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>{sub}</div>
                 </button>
               ))}
-              <button type="button" onClick={() => chooseSource('blank')} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 sm:col-span-2" style={{ background: 'rgba(0,230,153,0.06)', border: '1px solid rgba(0,230,153,0.22)' }}>
-                <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Start from scratch</div>
-                <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>No lead or customer yet — just type the account and details.</div>
+              <button type="button" onClick={() => chooseSource('blank')} className="p-4 text-left transition-shadow hover:shadow-[0_0_0_1px_rgba(0,113,227,0.35)] sm:col-span-2" style={rowStyle}>
+                <div className="text-[14px] font-semibold" style={{ color: TEXT }}>Start from scratch</div>
+                <div className="mt-1 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>No lead or customer yet — just type the account and details.</div>
               </button>
             </div>
           )}
 
           {step === 'pick' && !result && (
             <div className="space-y-3">
-              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={source === 'lead' ? 'Filter your leads…' : 'Search customers, companies, or properties…'} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />
-              {picking && <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Searching…</div>}
+              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={source === 'lead' ? 'Filter your leads…' : 'Search customers, companies, or properties…'} aria-label="Search" className="h-10 w-full px-3 text-[14px] outline-none focus:ring-2 focus:ring-[#0071E3]/30" style={inputStyle} />
+              {picking && <div className="text-[13px]" style={{ color: MUTED }}>Searching…</div>}
               <div className="space-y-2">
                 {source === 'lead' && leadList.map(l => (
-                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
-                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.property_name || l.name || 'Lead'}</div>
-                    <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{[l.name, l.location, l.units ? `${l.units} units` : null].filter(Boolean).join(' · ') || 'Lead'}</div>
+                  <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full px-3 py-3 text-left transition-shadow hover:shadow-[0_0_0_1px_rgba(0,113,227,0.35)]" style={rowStyle}>
+                    <div className="text-[14px] font-semibold" style={{ color: TEXT }}>{l.property_name || l.name || 'Lead'}</div>
+                    <div className="mt-0.5 text-[12.5px]" style={{ color: MUTED }}>{[l.name, l.location, l.units ? `${l.units} units` : null].filter(Boolean).join(' · ') || 'Lead'}</div>
                   </button>
                 ))}
-                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.82)' }}>No leads match. Try a different name.</div>}
+                {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-[10px] px-3 py-3 text-[13px]" style={{ background: '#F5F5F7', color: MUTED }}>No leads match. Try a different name.</div>}
                 {source === 'customer' && results.map(r => (
-                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B' }}>
-                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{r.title}</div>
-                    <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{r.subtitle}</div>
+                  <button key={`${r.type}-${r.id}`} type="button" onClick={() => pickCustomer(r)} className="w-full px-3 py-3 text-left transition-shadow hover:shadow-[0_0_0_1px_rgba(0,113,227,0.35)]" style={rowStyle}>
+                    <div className="text-[14px] font-semibold" style={{ color: TEXT }}>{r.title}</div>
+                    <div className="mt-0.5 text-[12.5px]" style={{ color: MUTED }}>{r.subtitle}</div>
                   </button>
                 ))}
-                {source === 'customer' && query.trim().length < 2 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'linear-gradient(180deg,#22303f,#1a2532)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.82)' }}>Type at least 2 characters to search.</div>}
+                {source === 'customer' && query.trim().length < 2 && <div className="rounded-[10px] px-3 py-3 text-[13px]" style={{ background: '#F5F5F7', color: MUTED }}>Type at least 2 characters to search.</div>}
               </div>
             </div>
           )}
@@ -301,47 +307,47 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
           {step === 'form' && !result && (
             <div className="space-y-3">
               {selected && (
-                <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(0,163,255,0.08)', border: '1px solid rgba(0,163,255,0.28)' }}>
-                  <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: '#00A3FF' }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
-                  <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.label}</div>
-                  <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{selected.sublabel}</div>
+                <div className="rounded-[10px] px-3 py-2.5" style={{ background: '#EEF4FF' }}>
+                  <div className="text-[12px] font-medium" style={{ color: BLUE }}>{source === 'lead' ? 'From lead' : 'From customer'}</div>
+                  <div className="text-[14px] font-semibold" style={{ color: TEXT }}>{selected.label}</div>
+                  <div className="text-[12.5px]" style={{ color: MUTED }}>{selected.sublabel}</div>
                 </div>
               )}
               {!selected && (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Field label="Account / company"><input value={manualAccount} onChange={e => { setManualAccount(e.target.value); if (!name.trim()) setName(e.target.value ? `${e.target.value} — Opportunity` : '') }} placeholder="e.g. The Stratford" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
-                  <Field label="Contact (optional)"><input value={manualContact} onChange={e => setManualContact(e.target.value)} placeholder="Contact name" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Account / company"><input value={manualAccount} onChange={e => { setManualAccount(e.target.value); if (!name.trim()) setName(e.target.value ? `${e.target.value} — Opportunity` : '') }} placeholder="e.g. The Stratford" className={INPUT} style={inputStyle} /></Field>
+                  <Field label="Contact (optional)"><input value={manualContact} onChange={e => setManualContact(e.target.value)} placeholder="Contact name" className={INPUT} style={inputStyle} /></Field>
                 </div>
               )}
-              <Field label="Opportunity name"><input value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+              <Field label="Opportunity name"><input value={name} onChange={e => setName(e.target.value)} className={INPUT} style={inputStyle} /></Field>
               <Field label="Stage">
-                <select value={stage} onChange={e => setStage(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
-                  {STAGES.map(s => <option key={s.value} value={s.value} style={{ background: '#0b1424' }}>{s.label}</option>)}
+                <select value={stage} onChange={e => setStage(e.target.value)} className={INPUT} style={inputStyle}>
+                  {STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Units"><input value={units} onChange={e => onUnitsChange(e.target.value)} inputMode="numeric" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
-                <Field label={`Monthly $ (MRR · $${MRR_PER_UNIT}/unit)`}><input value={mrr} onChange={e => setMrr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Units"><input value={units} onChange={e => onUnitsChange(e.target.value)} inputMode="numeric" placeholder="0" className={INPUT} style={inputStyle} /></Field>
+                <Field label={`Monthly $ (MRR · $${MRR_PER_UNIT}/unit)`}><input value={mrr} onChange={e => setMrr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className={INPUT} style={inputStyle} /></Field>
               </div>
-              <Field label="One-time $ (optional)"><input value={value} onChange={e => setValue(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
-              <Field label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+              <Field label="One-time $ (optional)"><input value={value} onChange={e => setValue(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className={INPUT} style={inputStyle} /></Field>
+              <Field label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-3 py-2 text-[14px] outline-none focus:ring-2 focus:ring-[#0071E3]/30" style={inputStyle} /></Field>
             </div>
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 px-5 py-3" style={{ borderTop: `1px solid ${LINE}` }}>
           <button type="button" onClick={() => {
             if (result) { onClose(); return }
             if (step === 'form') { setStep(source === 'blank' ? 'source' : 'pick'); return }
             if (step === 'pick') { setStep('source'); return }
             onClose()
-          }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.7)' }}>
+          }} className="h-9 rounded-[10px] px-4 text-[13px] font-medium" style={{ background: '#FFFFFF', border: `1px solid ${BORDER}`, color: TEXT }}>
             {result ? 'Close' : step === 'source' ? 'Cancel' : 'Back'}
           </button>
           {result?.ok ? (
-            <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>Done</button>
+            <button type="button" onClick={onClose} className="h-9 rounded-[10px] px-4 text-[13px] font-semibold" style={{ background: BLUE, color: '#FFFFFF' }}>Done</button>
           ) : step === 'form' ? (
-            <button type="button" disabled={busy || !name.trim()} onClick={create} className="rounded-2xl px-4 py-2 text-xs font-semibold disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>{busy ? 'Creating…' : 'Create Opportunity'}</button>
+            <button type="button" disabled={busy || !name.trim()} onClick={create} className="h-9 rounded-[10px] px-4 text-[13px] font-semibold disabled:opacity-40" style={{ background: BLUE, color: '#FFFFFF' }}>{busy ? 'Creating…' : 'Create opportunity'}</button>
           ) : <span />}
         </div>
       </div>

@@ -33,6 +33,26 @@ const ZOOMS = [
 ] as const
 const SPEEDS = [0.5, 1, 2, 4, 8]
 
+// ── Timeline loading, fast ────────────────────────────────────────────────────
+// The day is fetched in 3-hour pieces, the piece you're looking at first, 3 at a
+// time, and each piece draws as soon as it lands (no waiting for the whole day).
+// Pieces that are fully in the past never change, so they're kept for the
+// session: reopening a camera, switching back, zooming or the 5-minute refresh
+// only re-asks for the newest piece.
+const CHUNK = 3 * HOUR
+type Seg = { start: string; end: string }
+type Piece = { segs: Seg[]; events: VEvent[]; err: string | null; at: number }
+const pieceCache = new Map<string, Piece>()
+const keepPiece = (k: string, p: Piece) => { pieceCache.set(k, p); if (pieceCache.size > 400) pieceCache.delete(pieceCache.keys().next().value as string) }
+const mergeSegs = (all: Seg[]) => {
+  const out: Seg[] = []
+  for (const s of all.slice().sort((a, b) => a.start.localeCompare(b.start))) {
+    const last = out[out.length - 1]
+    if (last && Date.parse(s.start) - Date.parse(last.end) <= 2000) { if (s.end > last.end) last.end = s.end } else out.push({ ...s })
+  }
+  return out
+}
+
 const fmtT = (ms: number, withDay = false, sec = true) => new Date(ms).toLocaleString(undefined, { ...(withDay ? { month: 'short', day: 'numeric' } : {}), hour: 'numeric', minute: '2-digit', ...(sec ? { second: '2-digit' } : {}) })
 const localDayStart = (ymd: string) => new Date(`${ymd}T00:00:00`).getTime()
 const ymdOf = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -60,9 +80,8 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
   const [zoom, setZoom] = useState<0 | 1 | 2>(1)
   const [panel, setPanel] = useState<'timeline' | 'events'>('timeline')
   const [show, setShow] = useState<Record<Group, boolean>>({ alert: true, detection: true, motion: true })
-  const [segs, setSegs] = useState<{ start: string; end: string }[] | null>(null)
-  const [events, setEvents] = useState<VEvent[] | null>(null)
-  const [tlErr, setTlErr] = useState<string | null>(null)
+  const [pieces, setPieces] = useState<Record<number, Piece>>({})
+  const [loadingPieces, setLoadingPieces] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const vref = useRef<HTMLVideoElement>(null)
   const stage = useRef<HTMLDivElement>(null)
@@ -72,24 +91,61 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
   const refresh = day ?? String(Math.floor(now / (5 * MIN)))
   const win = useMemo(() => day ? { start: localDayStart(day), end: Math.min(localDayStart(day) + 24 * HOUR, now) } : { start: now - 24 * HOUR, end: now }, [day, now])
 
+  // Where the person is looking — that piece loads first.
+  const focusRef = useRef<number>(startAt ?? Date.now())
   useEffect(() => {
     let alive = true
-    setTlErr(null)
-    const s = day ? localDayStart(day) : Date.now() - 24 * HOUR
-    const e = day ? Math.min(s + 24 * HOUR, Date.now()) : Date.now()
-    const q = `start=${encodeURIComponent(new Date(s).toISOString())}&end=${encodeURIComponent(new Date(e).toISOString())}&camera=${encodeURIComponent(cam.key)}`
-    void Promise.all([getJson(api.video(`view=timeline&${q}`)), getJson(api.video(`view=events&${q}`))]).then(([t, ev]) => {
-      if (!alive) return
-      setSegs(Array.isArray(t.data.segments) ? t.data.segments : [])
-      setTlErr(t.data.error || (!t.ok ? 'Timeline unavailable.' : null))
-      setEvents(Array.isArray(ev.data.events) ? ev.data.events : [])
-    })
+    const t0 = Date.now()
+    const s = day ? localDayStart(day) : t0 - 24 * HOUR
+    const e = day ? Math.min(s + 24 * HOUR, t0) : t0
+    const starts: number[] = []
+    for (let c = Math.floor(s / CHUNK) * CHUNK; c < e; c += CHUNK) starts.push(c)
+    const focus = Math.min(e, Math.max(s, focusRef.current))
+    starts.sort((a, b) => (a <= focus && focus < a + CHUNK ? -1 : b <= focus && focus < b + CHUNK ? 1 : b - a))
+    const keyOf = (c: number) => `${api.video('')}|${cam.key}|${c}`
+    const ready: Record<number, Piece> = {}
+    const todo: number[] = []
+    for (const c of starts) {
+      const hit = pieceCache.get(keyOf(c))
+      const growing = c + CHUNK > t0 - 10 * MIN            // still recording into it
+      if (hit) ready[c] = hit                               // show what we have right away
+      if (!hit || (growing && t0 - hit.at > 4 * MIN)) todo.push(c)
+    }
+    setPieces(ready); setLoadingPieces(todo.length)
+    let i = 0
+    const worker = async () => {
+      while (alive && i < todo.length) {
+        const c = todo[i++]
+        const q = `start=${encodeURIComponent(new Date(c).toISOString())}&end=${encodeURIComponent(new Date(Math.min(c + CHUNK, Date.now())).toISOString())}&camera=${encodeURIComponent(cam.key)}`
+        const [t, ev] = await Promise.all([getJson(api.video(`view=timeline&${q}`)), getJson(api.video(`view=events&${q}`))])
+        const piece: Piece = {
+          segs: Array.isArray(t.data.segments) ? t.data.segments : [],
+          events: Array.isArray(ev.data.events) ? ev.data.events : [],
+          err: t.data.error || (!t.ok ? 'Timeline unavailable.' : null),
+          at: Date.now(),
+        }
+        if (!piece.err && t.ok) keepPiece(keyOf(c), piece)   // never keep a failed answer
+        if (!alive) return
+        setPieces(p => ({ ...p, [c]: piece }))
+        setLoadingPieces(n => Math.max(0, n - 1))
+      }
+    }
+    void Promise.all([worker(), worker(), worker()])
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, cam.key, refresh])
-  useEffect(() => { setSegs(null); setEvents(null) }, [cam.key, day])
+  const loadedList = Object.values(pieces)
+  const segs = useMemo(() => (loadedList.length ? mergeSegs(loadedList.flatMap(p => p.segs)) : null), [pieces]) // eslint-disable-line react-hooks/exhaustive-deps
+  const events = useMemo(() => {
+    if (!loadedList.length) return null
+    const seen = new Map<string, VEvent>()
+    for (const p of loadedList) for (const ev of p.events) seen.set(ev.key, ev)
+    return [...seen.values()].sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
+  }, [pieces]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tlErr = loadedList.find(p => p.err)?.err ?? null
 
   const pos = mode === 'live' ? now : playAt + offset * 1000
+  focusRef.current = pos
   const playFrom = useCallback((ms: number) => {
     const t = Math.min(Date.now() - 2000, Math.max(0, ms))
     setErr(null); setMode('play'); setOffset(0); setPaused(false); setPlayAt(t)
@@ -250,6 +306,7 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
             )}
           </div>
           {tlErr && <div className="cv-note">{tlErr}</div>}
+          {loadingPieces > 0 && segs != null && <div className="cv-loading" role="status"><span className="spin" aria-hidden />Loading more of the day…</div>}
           {panel === 'timeline'
             ? <Timeline win={win} zoom={zoom} segs={segs} events={shownEvents} pos={pos} live={mode === 'live'} onSeek={playFrom} />
             : <EventList events={events == null ? null : shownEvents} edge={edge} pos={pos} onPlay={e => playFrom(Date.parse(e.start) - 5000)} />}
@@ -281,6 +338,21 @@ function Timeline({ win, zoom, segs, events, pos, live, onSeek }: { win: { start
     for (let t = Math.floor((win.end - off) / z.minor) * z.minor + off; t >= win.start; t -= z.minor) out.push({ t, major: (t - off) % z.major === 0 })
     return out
   }, [win.start, win.end, z])
+
+  // Only what's inside the window; motion marks that would touch on screen become one mark.
+  const inWin = useMemo(() => (segs ?? []).filter(g => Date.parse(g.end) >= win.start && Date.parse(g.start) <= win.end).map(g => ({ start: Math.max(win.start, Date.parse(g.start)), end: Math.min(win.end, Date.parse(g.end)) })), [segs, win.start, win.end])
+  const marks = useMemo(() => {
+    const gap = (3 / z.ppm) * MIN
+    const out: VEvent[] = []
+    let run: VEvent | null = null, runEnd = 0, n = 0
+    for (const e of events.filter(x => { const t = Date.parse(x.start); return t >= win.start && t <= win.end }).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))) {
+      if (groupOf(e.kind) !== 'motion') { out.push(e); continue }
+      const st = Date.parse(e.start), en = Math.max(st, Date.parse(e.end ?? e.start))
+      if (run && st - runEnd <= gap) { runEnd = Math.max(runEnd, en); n++; run = { ...(run as VEvent), end: new Date(runEnd).toISOString(), label: `Motion (${n})` }; out[out.length - 1] = run }
+      else { run = { ...e }; runEnd = en; n = 1; out.push(run) }
+    }
+    return out
+  }, [events, z, win.start, win.end])
 
   // Labels only where there's room for them.
   const labelled = useMemo(() => {
@@ -315,8 +387,8 @@ function Timeline({ win, zoom, segs, events, pos, live, onSeek }: { win: { start
           </div>
         ))}
         <div className="cv-track" />
-        {(segs ?? []).map((g, i) => { const a = yOf(Date.parse(g.end)), b = yOf(Date.parse(g.start)); return <span key={i} className="cv-rec" style={{ top: a, height: Math.max(1, b - a) }} /> })}
-        {events.map(e => {
+        {inWin.map((g, i) => { const a = yOf(g.end), b = yOf(g.start); return <span key={i} className="cv-rec" style={{ top: a, height: Math.max(1, b - a) }} /> })}
+        {marks.map(e => {
           const g = groupOf(e.kind); const a = yOf(Date.parse(e.end ?? e.start)), b = yOf(Date.parse(e.start))
           return (
             <button key={e.key} type="button" className={`cv-ev ${g}`} title={`${e.plate ? `Plate ${e.plate}` : e.label} · ${fmtT(Date.parse(e.start), true)}`}
@@ -326,7 +398,7 @@ function Timeline({ win, zoom, segs, events, pos, live, onSeek }: { win: { start
             </button>
           )
         })}
-        {segs && !segs.length && <div className="cv-none" style={{ top: PAD + 40 }}>No recordings in this range</div>}
+        {segs && !inWin.length && <div className="cv-none" style={{ top: PAD + 40 }}>No recordings in this range</div>}
         {segs == null && <div className="cv-none" style={{ top: PAD + 40 }}>Loading…</div>}
         {pos >= win.start && pos <= win.end && <div className="cv-head" style={{ top: posY }}><span>{live ? 'Live' : fmtT(pos)}</span></div>}
         {hover != null && <div className="cv-hov" style={{ top: yOf(hover) }}><span>{fmtT(hover, false)}</span></div>}
@@ -422,6 +494,9 @@ export const VIEWER_CSS = `
 .cv-gchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;border:1px solid ${LINE2};background:transparent;color:${SUB};font-weight:500;font-size:12px;font-family:inherit;cursor:pointer}
 .cv-gchip[aria-pressed=true]{background:rgba(255,255,255,.1);color:${INK}}
 .cv-zoom{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:${SUB}}
+.cv-loading{display:flex;align-items:center;gap:8px;margin:8px 12px 0;font-size:12px;color:${SUB}}
+.cv-loading .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:${ACC};animation:cvspin .8s linear infinite}
+@keyframes cvspin{to{transform:rotate(360deg)}}
 .cv-note{margin:8px 12px 0;font-size:12px;color:#FFB340;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);border-radius:8px;padding:6px 8px}
 .cv-tlscroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;position:relative}
 .cv-bar{position:relative;cursor:ns-resize;touch-action:none;user-select:none;outline:none}
