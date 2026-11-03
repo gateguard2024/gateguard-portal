@@ -59,6 +59,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
   const [relays, setRelays] = useState<Any[] | null>(null); const [relayErr, setRelayErr] = useState<string | null>(null);
   const [events, setEvents] = useState<Any[] | null>(null); const [eventErr, setEventErr] = useState<string | null>(null);
   const [net, setNet] = useState<Any | null | undefined>(undefined);
+  const [gateSum, setGateSum] = useState<Any | null>(null); // Gate Watch: the watched gates are THE gate count
   const [who, setWho] = useState('');
   const [faultReq, setFaultReq] = useState(0);
   const [guestReq, setGuestReq] = useState(0);
@@ -77,15 +78,16 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
     const r = await getJson(`/api/shelly/relays?site_id=${siteId}`);
     setRelays(Array.isArray(r.data.relays) ? r.data.relays : []); setRelayErr(r.ok ? null : (r.data.error || 'Relays unavailable.'));
   }, [siteId]);
+  const loadGates = useCallback(async () => { const r = await getJson(`/api/sites/${siteId}/gates`); setGateSum(r.ok ? (r.data.summary ?? null) : null); }, [siteId]);
   const loadEvents = useCallback(async () => {
     const r = await getJson(`/api/brivo/events?site_id=${siteId}`);
     setEvents(Array.isArray(r.data.events) ? r.data.events : []); setEventErr(r.ok ? null : (r.data.error || 'Door events unavailable.'));
   }, [siteId]);
 
   useEffect(() => {
-    setSummary(null); setCams(null); setDoors(null); setRelays(null); setEvents(null); setNet(undefined);
-    void loadSummary(); void loadCams(); void loadDoors(); void loadRelays(); void loadEvents();
-  }, [loadSummary, loadCams, loadDoors, loadRelays, loadEvents]);
+    setSummary(null); setCams(null); setDoors(null); setRelays(null); setEvents(null); setNet(undefined); setGateSum(null);
+    void loadSummary(); void loadCams(); void loadDoors(); void loadRelays(); void loadEvents(); void loadGates();
+  }, [loadSummary, loadCams, loadDoors, loadRelays, loadEvents, loadGates]);
   // Door events stay live (tiles + Activity tab): every 20s while the page is visible.
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) void loadEvents(); }, 20000); return () => clearInterval(t); }, [loadEvents]);
   // Network is only fetched when someone opens it.
@@ -111,7 +113,10 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
   const tiles: { l: string; v: string; s: string; dot?: string; color?: string; go?: Tab }[] = [
     { l: 'Health', v: health == null ? '—' : String(health), s: health == null ? 'Not enough data' : health >= 85 ? 'Good' : health >= 60 ? 'Keep an eye on it' : 'Needs attention', color: hColor, dot: health == null ? DOT.gray : health >= 85 ? DOT.green : health >= 60 ? DOT.orange : DOT.red, go: 'faults' },
     { l: 'Cameras', v: cams == null ? '—' : camTotal ? `${camTotal - camOff}/${camTotal}` : '—', s: cams == null ? 'Loading…' : !camTotal ? 'None connected' : camOff ? `${camOff} offline` : 'All online', dot: camOff ? DOT.orange : DOT.blue, go: 'live' },
-    { l: 'Doors & gates', v: doors == null ? '—' : String(doors.length), s: doors == null ? 'Loading…' : doorErr && !doors.length ? 'Brivo not connected' : 'From Brivo', dot: DOT.blue, go: 'doors' },
+    gateSum?.watched
+      // Gates = the ones Gate Watch is on for. Stuck open = down.
+      ? { l: 'Gates', v: `${gateSum.watched - gateSum.down}/${gateSum.watched}`, s: gateSum.down ? `${gateSum.down} down (stuck open)` : gateSum.up_pct != null ? `${gateSum.up_pct}% up · 30 days` : 'All up', color: gateSum.down ? RED : undefined, dot: gateSum.down ? DOT.red : DOT.green, go: 'doors' }
+      : { l: 'Doors & gates', v: doors == null ? '—' : String(doors.length), s: doors == null ? 'Loading…' : doorErr && !doors.length ? 'Brivo not connected' : 'From Brivo', dot: DOT.blue, go: 'doors' },
     { l: 'Uptime · 90 days', v: summary?.faults ? `${summary.faults.uptimePct}%` : '—', s: openFaults ? `${openFaults} open fault${openFaults === 1 ? '' : 's'}` : 'No open faults', dot: openFaults ? DOT.red : DOT.green, go: 'faults' },
     { l: 'Door events today', v: eventsToday == null ? '—' : String(eventsToday), s: eventErr && !(events ?? []).length ? 'Not available' : 'Live from Brivo', dot: DOT.blue, go: 'activity' },
   ];

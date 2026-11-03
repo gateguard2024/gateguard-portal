@@ -2,11 +2,15 @@
  * lib/gate-watch.ts — SERVER ONLY. Gate Watch: runs gate checks on a schedule,
  * keeps each gate's state, and raises / clears "gate left open" alerts.
  *
- * Schedule (driven by gate_watches.next_check_at, picked up every minute):
- *   open (or about to change)  → every 1 min   (so the time limit is accurate)
- *   closed                     → every 30 min  (cost; open time counts from when it's first SEEN open)
- *   unsure reading             → retry in 5 min
- *   can't see the gate         → every 30 min
+ * Schedule (driven by gate_watches.next_check_at, picked up every minute) — decided Nov 3 2026:
+ *   closed                       → every 30 min (30 min after its last check, so gates stay spread out)
+ *   a check sees it OPEN         → ONE recheck at (alert limit + 1 min), e.g. 6 min for a 5-min limit
+ *        recheck closed          → just a car passing: back to every 30 min, no alert
+ *        recheck open            → it's been open past the limit: alert (Fault + text + email + service request)
+ *        recheck open + vehicle  → look again in 1 min before alerting (busy gate)
+ *   left open (alerted/ticketed) → every 30 min until it closes (closing is confirmed 1 min later)
+ *   unsure reading               → retry in 5 min (or keep the open recheck time)
+ *   Check now                    → settles on one confident reading (≥80%); closed → back to every 30 min
  *
  * State rules:
  *   • A change of state needs TWO agreeing readings in a row (or one very sure
@@ -107,11 +111,70 @@ async function textAll(phones: string[], body: string): Promise<number> {
 /** Gate Guard's inbox gets every gate alert at every property; notify_emails adds people per gate. */
 export const GATE_ALWAYS_EMAIL = 'info@gateguard.co'
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
-async function emailAll(extra: string[] | null | undefined, subject: string, lines: string[], link: string): Promise<void> {
+async function emailAll(extra: string[] | null | undefined, subject: string, lines: string[], link: string): Promise<{ ok: boolean; to: string[]; error?: string }> {
   const to = [...new Set([GATE_ALWAYS_EMAIL, ...(extra ?? []).map(e => String(e).trim().toLowerCase()).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))])].slice(0, 6)
   const html = `<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:15px;color:#1D1D1F;line-height:1.5">${lines.map(l => `<p style="margin:0 0 10px">${esc(l)}</p>`).join('')}<p style="margin:16px 0 0"><a href="${esc(link)}" style="display:inline-block;background:#0071E3;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:600">Open the property</a></p><p style="margin:18px 0 0;font-size:12px;color:#6E6E73">Gate Watch · Gate Guard</p></div>`
   const r = await sendEmail({ to, subject, html })
   if (!r.success) console.error('[gate-watch] email failed:', r.error)
+  return { ok: r.success, to, error: r.error }
+}
+
+/** "Send test alert" in gate setup: a real email to the same people a left-open alert goes to. Writes nothing. */
+export async function sendGateTestEmail(g: Gate, siteName: string | null, who: string) {
+  return emailAll(g.notify_emails, `[Test] Gate Watch alert — ${siteName ?? 'Property'}: ${g.label}`, [
+    `This is a test from Gate Watch, sent by ${who}.`,
+    `If ${g.label} at ${siteName ?? 'the property'} is left open past its limit (${mins((g.threshold_sec ?? 300) * 1000)} min), this is who gets the alert email. A Fault and a service request are created at the same time.`,
+  ], `${APP_URL()}/?tab=systems&site=${g.site_id}`)
+}
+
+// ── Up / down time (gate_downtime, migration 216) ──────────────────────────
+/** DOWN = stuck open (alerted, or quietly left open while ticketed) until it reads closed.
+ * BLIND = Gate Watch can't see the gate — tracked separately, never counted as down.
+ * Never throws: a missing table (216 not run) or a failed write only logs. */
+async function openPeriod(g: Gate, kind: 'down' | 'blind', at: Date, extra: { incident_id?: string | null; ticketed?: boolean } = {}) {
+  const { error } = await sb().from('gate_downtime').insert({ gate_id: g.id, site_id: g.site_id, kind, started_at: at.toISOString(), incident_id: extra.incident_id ?? null, ticketed: !!extra.ticketed })
+  if (error && error.code !== '23505') console.error(`[gate-watch] ${kind} log failed:`, error.message)
+}
+async function closePeriod(g: Gate, kind: 'down' | 'blind', at: Date) {
+  const { error } = await sb().from('gate_downtime').update({ ended_at: at.toISOString() }).eq('gate_id', g.id).eq('kind', kind).is('ended_at', null)
+  if (error) console.error(`[gate-watch] ${kind} log close failed:`, error.message)
+}
+/** Record a state change. Call with the state before and after. */
+export async function recordDowntime(g: Gate, prev: string | null | undefined, next: string | null | undefined, at: Date, extra: { incident_id?: string | null; ticketed?: boolean } = {}) {
+  if (next === 'left_open' && prev !== 'left_open') await openPeriod(g, 'down', at, extra)
+  if (prev === 'left_open' && next === 'closed') await closePeriod(g, 'down', at)
+  if (next === 'blind' && prev !== 'blind') await openPeriod(g, 'blind', at)
+  if (prev === 'blind' && next !== 'blind') await closePeriod(g, 'blind', at)
+}
+
+export type GateUptime = { up_pct: number | null; down_count: number; down_ms: number; avg_down_ms: number | null; blind_ms: number; down_now: boolean; since: string }
+/** Up / down for each gate over the last `days` (from when the gate was added, if later). */
+export async function gateUptime(gates: Gate[], days = 30, now = new Date()): Promise<{ byGate: Record<string, GateUptime>; error?: string }> {
+  const byGate: Record<string, GateUptime> = {}
+  if (!gates.length) return { byGate }
+  const from = now.getTime() - days * 864e5
+  const { data, error } = await sb().from('gate_downtime').select('gate_id, kind, started_at, ended_at').in('gate_id', gates.map(g => g.id)).or(`ended_at.is.null,ended_at.gte.${new Date(from).toISOString()}`).limit(5000)
+  if (error) return { byGate, error: /gate_downtime/.test(error.message) ? 'needs migration 216' : error.message }
+  for (const g of gates) {
+    const start = Math.max(from, Date.parse(String(g.created_at ?? new Date(from).toISOString())))
+    const span = Math.max(0, now.getTime() - start)
+    let down = 0, blind = 0, count = 0, downNow = false
+    const durations: number[] = []
+    for (const r of (data ?? []).filter(x => x.gate_id === g.id)) {
+      const a = Math.max(start, Date.parse(r.started_at)), b = r.ended_at ? Date.parse(r.ended_at) : now.getTime()
+      if (b <= a) continue
+      if (r.kind === 'down') { down += b - a; count++; if (!r.ended_at) downNow = true; else durations.push(Date.parse(r.ended_at) - Date.parse(r.started_at)) }
+      else blind += b - a
+    }
+    const watched = span - blind
+    byGate[String(g.id)] = {
+      up_pct: watched > 60_000 ? Math.max(0, Math.min(100, Math.round((1 - down / watched) * 1000) / 10)) : null,
+      down_count: count, down_ms: down, blind_ms: blind, down_now: downNow,
+      avg_down_ms: durations.length ? Math.round(durations.reduce((x, y) => x + y, 0) / durations.length) : null,
+      since: new Date(start).toISOString(),
+    }
+  }
+  return { byGate }
 }
 
 // ── Service request ─────────────────────────────────────────────────────────
@@ -154,10 +217,22 @@ export async function ensureServiceRequest(g: Gate, siteName: string | null, ope
 // Cost (decided Nov 2 2026): a closed gate is checked every 30 minutes. As soon as a reading
 // says it's open, it's checked every minute until it closes, so the time limit, alerts and the
 // 5-minute service request run from when it was SEEN open. An unsure reading retries in 5 min.
-const NEXT = { open: 60, pending: 60, closed: 1800, unknown: 300, blind: 1800 }
+const NEXT = { closed: 1800, unknown: 300, blind: 1800, leftOpen: 1800, confirm: 60 }
+/** When to look next: open-ish gates get ONE recheck at limit + 1 min (from when first seen open). */
+export function nextCheckAt(g: Gate, patch: Gate, now: Date): string {
+  const thr = Math.max(60, Number(g.threshold_sec ?? 300)) * 1000
+  const st = (patch.state ?? g.state) as string
+  const pend = (patch.pending_state !== undefined ? patch.pending_state : g.pending_state) as string | null
+  const at = (ms: number) => new Date(Math.max(now.getTime() + 60_000, ms)).toISOString()
+  if (st === 'left_open') return pend === 'closed' ? at(now.getTime() + NEXT.confirm * 1000) : at(now.getTime() + NEXT.leftOpen * 1000)
+  if (st === 'open') return pend === 'closed' ? at(now.getTime() + NEXT.confirm * 1000) : at(Date.parse(String(patch.open_since ?? g.open_since ?? now.toISOString())) + thr + 60_000)
+  if (pend === 'open') return at(Date.parse(String(patch.pending_since ?? g.pending_since ?? now.toISOString())) + thr + 60_000)
+  if (pend === 'closed') return at(now.getTime() + NEXT.confirm * 1000)
+  return at(now.getTime() + NEXT.closed * 1000)
+}
 
 /** Decide the new state from one reading. Pure — exported for tests. */
-export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 'method' | 'vehicle'>, now: Date) {
+export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 'method' | 'vehicle'>, now: Date, opts: { manual?: boolean } = {}) {
   const patch: Gate = { last_checked_at: now.toISOString(), last_verdict: r.verdict, last_confidence: r.confidence, last_method: r.method }
   const settled: 'open' | 'closed' | null = g.state === 'open' || g.state === 'left_open' ? 'open' : g.state === 'closed' ? 'closed' : null
   let event: 'opened' | 'closed' | 'blind' | null = null
@@ -166,7 +241,8 @@ export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 
     const n = (g.unclear_count ?? 0) + 1
     patch.unclear_count = n
     if (n >= 10 && g.state !== 'blind' && g.state !== 'left_open') { patch.state = 'blind'; patch.state_since = now.toISOString(); event = 'blind' }
-    patch.next_check_at = new Date(now.getTime() + (n >= 10 ? NEXT.blind : g.state === 'open' || g.state === 'left_open' || g.pending_state === 'open' ? NEXT.open : NEXT.unknown) * 1000).toISOString()
+    const openish = g.state === 'open' || g.state === 'left_open' || g.pending_state === 'open'
+    patch.next_check_at = n >= 10 ? new Date(now.getTime() + NEXT.blind * 1000).toISOString() : openish ? nextCheckAt(g, patch, now) : new Date(now.getTime() + NEXT.unknown * 1000).toISOString()
     return { patch, event }
   }
   patch.unclear_count = 0
@@ -180,23 +256,24 @@ export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 
     const count = g.pending_state === seen ? (g.pending_count ?? 0) + 1 : 1
     const since = g.pending_state === seen && g.pending_since ? g.pending_since : now.toISOString()
     // First reading after setup (state unknown) settles on one confident answer.
-    if (count >= 2 || sure || (settled === null && r.confidence >= 80)) {
+    // Check now (a person asked) settles on one confident reading, so a repair resets right away.
+    if (count >= 2 || sure || (settled === null && r.confidence >= 80) || (opts.manual && r.confidence >= 80)) {
       patch.state = seen; patch.state_since = since; patch.pending_state = null; patch.pending_count = 0; patch.pending_since = null
       if (seen === 'open') { patch.open_since = since; event = 'opened' } else { patch.open_since = null; event = settled === 'open' ? 'closed' : null }
     } else { patch.pending_state = seen; patch.pending_count = count; patch.pending_since = since }
   }
-  const nowOpen = (patch.state ?? g.state) === 'open' || (patch.state ?? g.state) === 'left_open'
-  patch.next_check_at = new Date(now.getTime() + (nowOpen || patch.pending_state ? NEXT.open : NEXT.closed) * 1000).toISOString()
+  patch.next_check_at = nextCheckAt(g, patch, now)
   return { patch, event }
 }
 
 /** Run one check on one gate (frame given), save it, raise/clear alerts. */
-export async function checkAndApply(g: Gate, frame: Buffer, now = new Date()): Promise<{ result: CheckResult; state: string; alerted: boolean; cleared: boolean }> {
+export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), opts: { manual?: boolean } = {}): Promise<{ result: CheckResult; state: string; alerted: boolean; cleared: boolean; why?: string }> {
   const db = sb()
   const refs = await loadRefs(g.id)
   const settled = g.state === 'open' || g.state === 'left_open' ? 'open' : g.state === 'closed' ? 'closed' : null
   const result = await judgeGate(frame, gateInfo(g), refs, settled)
-  const { patch, event } = decide(g, result, now)
+  const { patch, event } = decide(g, result, now, opts)
+  let why: string | undefined
   patch.last_reason = result.reason
   patch.last_frame = (await sharp(result.crop).resize({ width: 360, height: 360, fit: 'inside' }).jpeg({ quality: 70 }).toBuffer()).toString('base64')
   let alerted = false, cleared = false
@@ -208,13 +285,18 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date()): P
     const openMs = now.getTime() - Date.parse(openSince)
     const limit = (g.threshold_sec ?? 300) * 1000
     const waitForVehicle = result.vehicle && openMs < limit * 2
-    const due = openMs >= limit && !waitForVehicle && !inHoldHours(g.hold_open_hours, now) && !(await managerHold(g, now))
+    const held = openMs >= limit && !waitForVehicle && (inHoldHours(g.hold_open_hours, now) || await managerHold(g, now))
+    const due = openMs >= limit && !waitForVehicle && !held
     const ticket = due ? await openGateTicket(g) : null
+    if (openMs >= limit && waitForVehicle) { why = 'vehicle in the gate — looking again in 1 min'; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
+    else if (held) { why = 'meant to be open right now (hold-open)'; patch.next_check_at = new Date(now.getTime() + NEXT.closed * 1000).toISOString() }
+    else if (openMs < limit) why = `open ${mins(openMs)} of ${mins(limit)} min — recheck at the limit`
     if (due && ticket) {
       // Already ticketed: mark it left open quietly — no Fault, text, email or new request — and
       // look again in 30 min instead of every minute.
       patch.state = 'left_open'; patch.alerted_at = now.toISOString()
       patch.next_check_at = new Date(now.getTime() + 1800e3).toISOString()
+      why = 'a service ticket is already open — no new alert until that work order is done'
     } else if (due) {
       const title = `Gate left open — ${g.label}`
       const description = `${g.label} has been open ${mins(openMs)} min (limit ${mins(limit)} min). Seen by Gate AI: ${result.reason}`
@@ -235,13 +317,15 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date()): P
         'Was the AI right? Open the property → Doors & gates → Gate Watch and tap Yes or No. It learns from your answer.',
       ], `${APP_URL()}/?tab=systems&site=${g.site_id}`)
       if (openMs >= SERVICE_REQUEST_AFTER_MS) await ensureServiceRequest(g, site?.name ?? null, openMs, result.reason)
-      alerted = true
+      // Limit under 5 min: come back at 5 min (+1) for the service request; otherwise every 30 min.
+      patch.next_check_at = new Date(openMs < SERVICE_REQUEST_AFTER_MS ? Date.parse(openSince) + SERVICE_REQUEST_AFTER_MS + 60e3 : now.getTime() + NEXT.leftOpen * 1000).toISOString()
+      alerted = true; why = 'alert sent'
     }
   }
   // Alert limit under 5 min: the request goes in once it reaches 5 min (checks run ~every minute).
-  if (state === 'left_open' && openSince && (g.threshold_sec ?? 300) * 1000 < SERVICE_REQUEST_AFTER_MS) {
+  if (state === 'left_open' && openSince && g.incident_id && (g.threshold_sec ?? 300) * 1000 < SERVICE_REQUEST_AFTER_MS) {
     const openMs = now.getTime() - Date.parse(openSince)
-    if (openMs >= SERVICE_REQUEST_AFTER_MS && openMs - 90_000 < SERVICE_REQUEST_AFTER_MS) {
+    if (openMs >= SERVICE_REQUEST_AFTER_MS) {   // ensureServiceRequest never makes a second one
       const { data: site } = await db.from('sites').select('name').eq('id', g.site_id).maybeSingle()
       await ensureServiceRequest(g, site?.name ?? null, openMs, result.reason)
     }
@@ -272,9 +356,11 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date()): P
 
   const { error } = await db.from('gate_watches').update(patch).eq('id', g.id)
   if (error) throw new Error(`Couldn’t save the gate state: ${error.message}`)
+  await recordDowntime(g, g.state, (patch.state ?? g.state) as string, now, { incident_id: (patch.incident_id ?? g.incident_id) as string | null, ticketed: !(patch.incident_id ?? g.incident_id) })
   const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: result.reason, ms: result.ms, state_after: patch.state ?? g.state })
   if (logErr) console.error('[gate-watch] check log failed:', logErr.message)
-  return { result, state: patch.state ?? g.state, alerted, cleared }
+  if (!why && (patch.state ?? g.state) === 'closed') why = 'closed — next look in 30 min'
+  return { result, state: patch.state ?? g.state, alerted, cleared, why }
 }
 
 /** The every-minute job: claim due gates, one picture per camera, check each gate. */
@@ -302,6 +388,7 @@ export async function runDueGates(limit = 40): Promise<{ checked: number; alerts
         try {
           if (!frame) {
             const n = (g.unclear_count ?? 0) + 1
+            if (n >= 10 && g.state !== 'left_open' && g.state !== 'blind') await recordDowntime(g, g.state, 'blind', now)
             const { error: uErr } = await db.from('gate_watches').update({ last_checked_at: now.toISOString(), last_verdict: 'error', last_reason: fErr ?? 'No picture', unclear_count: n, ...(n >= 10 && g.state !== 'left_open' ? { state: 'blind' } : {}), next_check_at: new Date(now.getTime() + (n < 10 && (g.state === 'open' || g.state === 'left_open') ? 60e3 : n >= 10 ? 1800e3 : 300e3)).toISOString() }).eq('id', g.id)
             if (uErr) errors.push(uErr.message)
             continue

@@ -4,7 +4,7 @@
  * state (Closed / Open 3 min / LEFT OPEN), the last close-up the AI looked at, and
  * "Wrong?" buttons that teach it. Setup: pick the camera, outline the gate on a
  * live picture, teach it what open and closed look like, test it.
- * Engine: lib/gate-ai.ts + lib/gate-watch.ts (closed every 30 min, open every minute).
+ * Engine: lib/gate-ai.ts + lib/gate-watch.ts (closed every 30 min; seen open → one recheck at limit + 1 min → alert).
  * Right? Yes / No on each reading teaches it (Yes = confirmed example, No = corrected example) and counts accuracy.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -39,11 +39,13 @@ const CSS = `
 @media (max-width:640px){.gw-grid2,.gw-refs{grid-template-columns:1fr}.gw-thumb{width:84px}.gw-test{flex-direction:column}.gw-test img{width:100%}}
 `
 
+/** 41 min · 2 h 5 min · 1 d 3 h */
+export const fmtDur = (ms: number) => { const m = Math.round(ms / 60e3); if (m < 60) return `${Math.max(1, m)} min`; const h = Math.floor(m / 60); if (h < 24) return `${h} h${m % 60 ? ` ${m % 60} min` : ''}`; return `${Math.floor(h / 24)} d${h % 24 ? ` ${h % 24} h` : ''}` }
 function statePill(g: Any) {
   const taughtOk = (g.taught?.open ?? 0) > 0 && (g.taught?.closed ?? 0) > 0
   if (!g.enabled) return <span className="gw-pill gray">Paused</span>
-  if (g.state === 'left_open' && !g.incident_id) return <span className="gw-pill orange" title="A service ticket is already open — alerts are paused until that work order is finished"><Dot c={DOT.orange} />Left open · ticket open</span>
-  if (g.state === 'left_open') return <span className="gw-pill red"><Dot c={DOT.red} />Left open · {forMin(g.open_since)} min</span>
+  if (g.state === 'left_open' && !g.incident_id) return <span className="gw-pill orange" title="A service ticket is already open — alerts are paused until that work order is finished"><Dot c={DOT.orange} />Down · ticket open</span>
+  if (g.state === 'left_open') return <span className="gw-pill red"><Dot c={DOT.red} />Down · open {forMin(g.open_since)} min</span>
   if (g.state === 'open') return <span className="gw-pill orange"><Dot c={DOT.orange} />Open · {forMin(g.open_since)} min</span>
   if (g.state === 'closed') return <span className="gw-pill green"><Dot c={DOT.green} />Closed</span>
   if (g.state === 'blind') return <span className="gw-pill orange">Can’t see the gate</span>
@@ -71,6 +73,7 @@ function shrinkPicture(file: File): Promise<string> {
 export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null }) {
   const { siteId, notify } = ctx
   const [gates, setGates] = useState<Any[] | null>(null)
+  const [summary, setSummary] = useState<Any | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [canSetup, setCanSetup] = useState(false)
   const [edit, setEdit] = useState<Any | 'new' | null>(null)
@@ -78,15 +81,15 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => {
     const r = await getJson(`/api/sites/${siteId}/gates`)
-    if (r.ok) { setGates(r.data.gates ?? []); setCanSetup(!!r.data.can_setup); setErr(null) } else { setGates([]); setErr(r.data.error || 'Gate Watch unavailable.') }
+    if (r.ok) { setGates(r.data.gates ?? []); setSummary(r.data.summary ?? null); setCanSetup(!!r.data.can_setup); setErr(null) } else { setGates([]); setErr(r.data.error || 'Gate Watch unavailable.') }
   }, [siteId])
   useEffect(() => { void load(); const t = setInterval(() => { if (!document.hidden) void load() }, 30_000); return () => clearInterval(t) }, [load])
 
-  async function act(g: Any, body: Any, okMsg: string) {
+  async function act(g: Any, body: Any, okMsg: string | ((d: Any) => string)) {
     setBusy(g.id)
     const r = await send(`/api/sites/${siteId}/gates`, 'POST', { id: g.id, ...body })
     setBusy(null)
-    if (r.ok) { notify(okMsg); void load() } else notify(r.data.error || 'Gate Watch didn’t accept that.', false)
+    if (r.ok) { notify(typeof okMsg === 'function' ? okMsg(r.data) : okMsg); void load() } else notify(r.data.error || 'Gate Watch didn’t accept that.', false)
     return r
   }
   const left = (gates ?? []).filter(g => g.state === 'left_open').length
@@ -95,8 +98,8 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
   return (
     <>
       <style>{CSS}</style>
-      <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Gate Watch (AI){left > 0 && <span className="gw-pill red">{left} left open</span>}</span>}
-        sub="Watches each gate camera and alerts when a gate stays open too long — no one has to look."
+      <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Gate Watch (AI){left > 0 && <span className="gw-pill red">{left} down</span>}</span>}
+        sub={summary?.watched ? `${summary.watched} gate${summary.watched === 1 ? '' : 's'} · ${summary.down ? `${summary.down} down` : 'all up'}${summary.up_pct != null ? ` · ${summary.up_pct}% up (30 days)` : ''}${summary.avg_down_ms != null ? ` · average ${fmtDur(summary.avg_down_ms)} down` : ''}${summary.blind ? ` · ${summary.blind} can’t be seen` : ''}` : 'Watches each gate camera and alerts when a gate stays open too long — no one has to look.'}
         right={canSetup ? <button type="button" className="sy-b pri sm" onClick={() => { setPresetCam(null); setEdit('new') }}>Add a gate</button> : undefined}>
         {err && <div style={{ marginBottom: 8 }}><Note tone="orange">{err}</Note></div>}
         {gates == null ? <div className="sy-empty">Loading…</div>
@@ -114,11 +117,12 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ fontSize: 14, fontWeight: 600 }}>{g.label}</span>{statePill(g)}</div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>{[g.camera_name, `alert after ${Math.round(g.threshold_sec / 60)} min`, g.last_checked_at ? `checked ${ago(g.last_checked_at)}${g.last_confidence != null ? ` · ${g.last_confidence}% sure` : ''}${g.last_method ? ` · ${METHOD[g.last_method] ?? g.last_method}` : ''}` : 'not checked yet'].filter(Boolean).join(' · ')}</div>
                   {g.last_reason && <div style={{ fontSize: 12, color: MUTED, marginTop: 2, fontStyle: 'italic' }}>“{g.last_reason}”</div>}
+                  {g.uptime && <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{g.uptime.up_pct != null ? `Up ${g.uptime.up_pct}%` : 'Up —'} · 30 days · {g.uptime.down_count ? `${g.uptime.down_count} time${g.uptime.down_count === 1 ? '' : 's'} down${g.uptime.avg_down_ms != null ? ` · average ${fmtDur(g.uptime.avg_down_ms)} down` : ''}` : 'never down'}{g.uptime.blind_ms > 60e3 ? ` · couldn’t see it ${fmtDur(g.uptime.blind_ms)}` : ''}</div>}
                   {(g.feedback?.right ?? 0) + (g.feedback?.wrong ?? 0) > 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Right {g.feedback.right} of {g.feedback.right + g.feedback.wrong} times you checked (30 days)</div>}
                   {!taughtOk && <div style={{ fontSize: 12, color: BLUE, marginTop: 4 }}>{canSetup ? 'Teach it one picture open and one closed to make it accurate.' : 'Not taught yet — ask your admin to finish setup.'}</div>}
                 </div>
                 <div className="sy-acts" style={{ justifyContent: 'flex-end' }}>
-                  <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'check_now' }, `${g.label} checked.`)}>{busy === g.id ? 'Checking…' : 'Check now'}</button>
+                  <button type="button" className="sy-b line sm" disabled={busy === g.id} onClick={() => act(g, { action: 'check_now' }, d => `${g.label}: ${String(d.verdict ?? '').toUpperCase() || 'checked'}${d.confidence != null ? ` (${d.confidence}% sure)` : ''}${d.alerted ? ' — alert sent' : d.why ? ` — ${d.why}` : ''}.`)}>{busy === g.id ? 'Checking…' : 'Check now'}</button>
                   {g.last_frame && (isOpen || g.state === 'closed') && (g.feedback?.rated
                     ? <span className="gw-pill gray" title="Someone already marked this reading">Marked</span>
                     : <span className="gw-ask" role="group" aria-label={`Is ${g.label} really ${isOpen ? 'open' : 'closed'}?`}>
@@ -278,7 +282,9 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
         <label><span className="sy-lbl">Alert if open longer than (minutes)</span><input className="sy-in" type="number" min={1} max={1440} value={f.threshold_min} onChange={e => setF({ ...f, threshold_min: Number(e.target.value) || 5 })} /></label>
         <label><span className="sy-lbl">Brivo door for this gate (optional)</span><select className="sy-in" value={f.brivo_door_id} onChange={e => setF({ ...f, brivo_door_id: e.target.value })}><option value="">None</option>{doors.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}</select></label>
         <label><span className="sy-lbl">Text these numbers when it’s left open</span><input className="sy-in" value={f.phones} onChange={e => setF({ ...f, phones: e.target.value })} placeholder="404-555-0100, 678-555-0199" /></label>
-        <label><span className="sy-lbl">Also email (info@gateguard.co always gets these)</span><input className="sy-in" type="text" inputMode="email" value={f.emails} onChange={e => setF({ ...f, emails: e.target.value })} placeholder="manager@property.com, owner@company.com" /></label>
+        <label><span className="sy-lbl">Also email (info@gateguard.co always gets these)</span><input className="sy-in" type="text" inputMode="email" value={f.emails} onChange={e => setF({ ...f, emails: e.target.value })} placeholder="manager@property.com, owner@company.com" />
+          {g?.id && <button type="button" className="sy-b line sm" style={{ marginTop: 6 }} disabled={!!busy} onClick={async e => { e.preventDefault(); setBusy('test-alert'); const r = await send(`/api/sites/${siteId}/gates`, 'POST', { action: 'test_alert', id: g.id }); setBusy(null); notify(r.ok ? `Test email sent to ${(r.data.sent_to ?? []).join(', ')}. (Save first if you just changed the emails.)` : (r.data.error || 'The test email didn’t send.'), r.ok) }}>{busy === 'test-alert' ? 'Sending…' : 'Send test email'}</button>}
+        </label>
       </div>
       <label><span className="sy-lbl">Anything that helps (optional)</span><input className="sy-in" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="e.g. Two panels, swings away from the camera; the left lane is the exit" /></label>
       <div>

@@ -16,6 +16,7 @@
  *                                                  example of the right state and fixes the gate's state
  *   confirm    { id }                            → "that was right": saves the last close-up as a confirmed
  *                                                  example of the current state
+ *   test_alert { id }                            → sends a real [Test] email to info@ + this gate's emails (setup rights)
  * Every Right / Wrong is logged (site_events 'gate_ai_feedback', once per reading) → accuracy on the list.
  * Seeing gates and giving feedback = the 'cameras' permission. Setting gates up = Gate Guard
  * corporate or the dealer's admin (and cameras permission).
@@ -27,14 +28,14 @@ import { getCurrentUser } from '@/lib/current-user'
 import { canOperate } from '@/lib/system-access'
 import { normalizeRole } from '@/lib/permissions'
 import { cropGate, signature, judgeGate } from '@/lib/gate-ai'
-import { checkAndApply, gateInfo, grabFrame, loadRefs } from '@/lib/gate-watch'
+import { checkAndApply, gateInfo, gateUptime, grabFrame, loadRefs, recordDowntime, sendGateTestEmail } from '@/lib/gate-watch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-const LIVE_COLS = 'id, site_id, camera_key, camera_name, label, gate_type, region, threshold_sec, enabled, brivo_door_id, hold_open_hours, notify_phones, notes, state, state_since, open_since, pending_state, pending_count, unclear_count, last_checked_at, last_verdict, last_confidence, last_method, last_reason, last_frame, incident_id, alerted_at, updated_at'
+const LIVE_COLS = 'id, site_id, camera_key, camera_name, label, gate_type, region, threshold_sec, enabled, brivo_door_id, hold_open_hours, notify_phones, notes, state, state_since, open_since, pending_state, pending_count, unclear_count, last_checked_at, last_verdict, last_confidence, last_method, last_reason, last_frame, incident_id, alerted_at, updated_at, created_at'
 const TYPES = ['swing', 'slide', 'barrier_arm', 'vertical_lift', 'other']
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
 
@@ -88,7 +89,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       if (m.checked_at) fb[id].rated.push(String(m.checked_at))
     }
   }
-  return NextResponse.json({ gates: (data ?? []).map(g => ({ ...g, taught: counts[g.id] ?? { open: 0, closed: 0 }, feedback: { right: fb[g.id]?.right ?? 0, wrong: fb[g.id]?.wrong ?? 0, rated: !!g.last_checked_at && (fb[g.id]?.rated ?? []).includes(String(g.last_checked_at)) } })), can_setup: a.setup })
+  // Up / down over 30 days (gate_downtime, 216). Gates = the ones Gate Watch is turned on for.
+  const up = await gateUptime((data ?? []) as Record<string, unknown>[], 30)
+  const list = (data ?? []).map(g => ({ ...g, taught: counts[g.id] ?? { open: 0, closed: 0 }, uptime: up.byGate[g.id] ?? null, feedback: { right: fb[g.id]?.right ?? 0, wrong: fb[g.id]?.wrong ?? 0, rated: !!g.last_checked_at && (fb[g.id]?.rated ?? []).includes(String(g.last_checked_at)) } }))
+  const on = list.filter(g => g.enabled)
+  const pcts = on.map(g => g.uptime?.up_pct).filter((x): x is number => typeof x === 'number')
+  const downs = on.map(g => g.uptime?.avg_down_ms).filter((x): x is number => typeof x === 'number')
+  const summary = {
+    watched: on.length,
+    down: on.filter(g => g.state === 'left_open').length,
+    blind: on.filter(g => g.state === 'blind').length,
+    up_pct: pcts.length ? Math.round((pcts.reduce((a, b) => a + b, 0) / pcts.length) * 10) / 10 : null,
+    down_count: on.reduce((a, g) => a + (g.uptime?.down_count ?? 0), 0),
+    avg_down_ms: downs.length ? Math.round(downs.reduce((a, b) => a + b, 0) / downs.length) : null,
+    days: 30, uptime_error: up.error ?? null,
+  }
+  return NextResponse.json({ gates: list, summary, can_setup: a.setup })
 }
 
 /** Was this reading already marked right/wrong? (one answer per reading) */
@@ -119,7 +135,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let b: Record<string, unknown>
   try { b = await req.json() } catch { return bad('Bad request') }
   const action = String(b.action ?? '')
-  const needSetup = ['snapshot', 'save', 'delete', 'teach', 'delete_ref'].includes(action)
+  const needSetup = ['snapshot', 'save', 'delete', 'teach', 'delete_ref', 'test_alert'].includes(action)
   if (needSetup && !a.setup) return bad('Only Gate Guard or your company admin can set up gates.', 403)
   const sbx = db()
 
@@ -220,17 +236,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (action === 'test' || action === 'check_now') {
       const g = await getGate(siteId, b.id); if (!g) return bad('Gate not found.', 404)
-      const { frame, error: fErr } = await grabFrame(siteId, g.camera_key)
+      const { frame, error: fErr, stale } = await grabFrame(siteId, g.camera_key)
       if (!frame) return bad(fErr ?? 'No picture from the camera.', 502)
       if (action === 'check_now') {
-        const r = await checkAndApply(g, frame)
+        // Check now (e.g. after a repair) settles on one confident reading and resets the schedule.
+        if (stale) return bad('Eagle Eye only gave an old stored picture, so this check was skipped. Try again in a minute.', 502)
+        const r = await checkAndApply(g, frame, new Date(), { manual: true })
         const { crop, sig, ...rest } = r.result; void sig
-        return NextResponse.json({ ...rest, state: r.state, alerted: r.alerted, cleared: r.cleared, image: crop.toString('base64') })
+        return NextResponse.json({ ...rest, state: r.state, alerted: r.alerted, cleared: r.cleared, why: r.why ?? null, image: crop.toString('base64') })
       }
       const settled = g.state === 'open' || g.state === 'left_open' ? 'open' : g.state === 'closed' ? 'closed' : null
       const r = await judgeGate(frame, gateInfo(g), await loadRefs(g.id), settled, { allowQuick: b.ai !== true })
       const { crop, sig, ...rest } = r; void sig
       return NextResponse.json({ ...rest, image: crop.toString('base64') })
+    }
+
+    if (action === 'test_alert') {
+      const g = await getGate(siteId, b.id); if (!g) return bad('Gate not found.', 404)
+      const { data: site } = await sbx.from('sites').select('name').eq('id', siteId).maybeSingle()
+      const r = await sendGateTestEmail(g, site?.name ?? null, a.user.name)
+      if (!r.ok) return bad(/RESEND_API_KEY/.test(r.error ?? '') ? 'Email isn’t set up (RESEND_API_KEY is missing in Vercel).' : `The email didn’t send: ${r.error ?? 'unknown error'}`, 502)
+      return NextResponse.json({ ok: true, sent_to: r.to })
     }
 
     if (action === 'confirm') {
@@ -263,7 +289,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await pruneRefs(g.id, correct)
       if (!teachOnly) { const lErr = await logFeedback(siteId, g, false, a.user.name); if (lErr) console.error('[gates] feedback log:', lErr) }
       const now = new Date().toISOString()
-      const patch: Record<string, unknown> = { pending_state: null, pending_count: 0, pending_since: null, unclear_count: 0, next_check_at: now }
+      const thrMs = Math.max(60, Number(g.threshold_sec ?? 300)) * 1000
+      // "No, it's closed" → back to every 30 min. "No, it's open" → keep the time it was first seen open, recheck at the limit.
+      const patch: Record<string, unknown> = { pending_state: null, pending_count: 0, pending_since: null, unclear_count: 0, next_check_at: new Date(Date.now() + 1800e3).toISOString() }
       if (correct === 'closed' && g.state !== 'closed') {
         patch.state = 'closed'; patch.state_since = now; patch.open_since = null; patch.alerted_at = null
         if (g.incident_id) {
@@ -272,10 +300,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           patch.incident_id = null
         }
       } else if (correct === 'open' && g.state !== 'open' && g.state !== 'left_open') {
-        patch.state = 'open'; patch.state_since = now; patch.open_since = now
+        const since = g.pending_state === 'open' && g.pending_since ? g.pending_since : now
+        patch.state = 'open'; patch.state_since = since; patch.open_since = since
+        patch.next_check_at = new Date(Math.max(Date.now() + 60e3, Date.parse(since) + thrMs + 60e3)).toISOString()
       }
       const { error: uErr } = await sbx.from('gate_watches').update(patch).eq('id', g.id)
       if (uErr) return bad(uErr.message, 500)
+      await recordDowntime(g, g.state, String(patch.state ?? g.state), new Date())
       return NextResponse.json({ ok: true, state: patch.state ?? g.state })
     }
 
