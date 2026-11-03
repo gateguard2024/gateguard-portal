@@ -466,10 +466,11 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 ## MIGRATION STATUS (as of Nov 2026)
 
-> ⚠️ **Numbering:** portal 200–204 and Nexus Resident (gatecard.co `v8.31-movein`) 200–207 both target the SAME Supabase project. Table names don't clash, but numbers do. Until the monorepo merges the folders, use the next number above BOTH ranges (next free: 215) — or switch to timestamped names.
+> ⚠️ **Numbering:** portal 200–204 and Nexus Resident (gatecard.co `v8.31-movein`) 200–207 both target the SAME Supabase project. Table names don't clash, but numbers do. Until the monorepo merges the folders, use the next number above BOTH ranges (next free: 216) — or switch to timestamped names.
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 215 | Gate Watch: allow `gate_watch_refs.source = 'confirmed'` ("Right? Yes" answers). Code falls back to 'feedback' until run | ⏳ run on beta then prod |
 | 214 | Gate Watch emails: `gate_watches.notify_emails text[]` (ALTER only). info@gateguard.co always gets alerts (in code) | ✅ beta (Nov 2 2026) · ⏳ prod |
 | 213 | Inactive + take offline: ALTER only — `sites.inactive_at/_reason/_by, last_service_date, decommission jsonb`; `organizations.inactive_*`; `site_assets.removed_at/_to/_by, removal_wo_id, removal_photo` | ✅ beta (Nov 2 2026) · ⏳ prod |
 | 212 | Job texts: `wo_texts` (two-way Twilio texts per work order, unique `twilio_sid`) + GRANT/RLS | ✅ beta (Nov 2 2026) · ⏳ prod |

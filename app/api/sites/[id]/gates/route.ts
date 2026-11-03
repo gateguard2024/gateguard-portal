@@ -239,7 +239,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!state) return bad('It hasn’t decided open or closed yet — use It’s open / It’s closed instead.')
       if (!g.last_frame) return bad('No recent picture to learn from — run a check first.')
       if (await alreadyRated(siteId, g)) return bad('This reading was already marked. Check again for a new one.', 409)
-      const { error } = await sbx.from('gate_watch_refs').insert({ gate_id: g.id, state, image: g.last_frame, sig: await signature(Buffer.from(g.last_frame, 'base64'), gateInfo(g).region), source: 'confirmed', created_by: a.user.name })
+      const ref = { gate_id: g.id, state, image: g.last_frame, sig: await signature(Buffer.from(g.last_frame, 'base64'), gateInfo(g).region), source: 'confirmed', created_by: a.user.name }
+      let { error } = await sbx.from('gate_watch_refs').insert(ref)
+      // Before migration 215 the table only allows 'setup' / 'feedback' — save it as feedback then.
+      if (error && /source_check/.test(error.message)) ({ error } = await sbx.from('gate_watch_refs').insert({ ...ref, source: 'feedback' }))
       if (error) return bad(error.message, 500)
       await pruneRefs(g.id, state)
       const lErr = await logFeedback(siteId, g, true, a.user.name)
