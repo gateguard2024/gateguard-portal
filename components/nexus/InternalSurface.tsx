@@ -15,7 +15,7 @@ import { AdminReportConsole, ADMIN_CSS } from '@/components/nexus/AdminReportCon
 import { CSS } from '@/components/nexus/systems/shared'
 import { QuickBooksPage } from '@/components/nexus/quickbooks/QuickBooksPage'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
-const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target } = require('lucide-react') as any
+const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target, Globe } = require('lucide-react') as any
 
 // ---- Tool windows still use the steel console look (landing is the light look) ----
 const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
@@ -23,7 +23,7 @@ const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%)
 const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
-type InternalPanel = 'quickbooks' | 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
+type InternalPanel = 'quickbooks' | 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'portals' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -124,6 +124,7 @@ export function InternalSurface() {
     { id: 'users-features', title: 'Users & features', subtitle: 'Add people, set roles, and choose what each company can use.', icon: Users },
     { id: 'dealer-onboarding', title: 'Dealer onboarding', subtitle: 'NDA, agreement, approval and go-live for each new dealer.', icon: UserCheck, badge: 'Corporate' },
     { id: 'integrations', title: 'Site logins', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly and UniFi.', icon: Key, badge: 'Corporate' },
+    { id: 'portals', title: 'Property portals', subtitle: 'Give a property its manager portal: web address, access code, cameras and gates.', icon: Globe, badge: 'Corporate' },
     { id: 'provisioning', title: 'Sites to set up', subtitle: 'Won deals waiting for a controller serial and Brivo programming.', icon: Server, badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing', subtitle: 'Floors, target prices, add-ons and new catalog lines.', icon: Tag, badge: 'Corporate' },
     ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Cash, who owes us, profit — plus invoice and payment sync.', icon: BookOpen, badge: 'Corporate' } as InternalCard] : []),
@@ -151,7 +152,7 @@ export function InternalSurface() {
 
       <div className="ad-sec"><h2>Admin tools</h2></div>
       <div className="ad-tools">
-        {cards.map(card => <ToolCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
+        {cards.map(card => <ToolCard key={card.id} card={card} onClick={() => card.id === 'portals' ? router.push('/admin/portals') : setActivePanel(card.id)} />)}
       </div>
     </section>
 
