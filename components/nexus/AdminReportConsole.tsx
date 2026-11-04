@@ -4,14 +4,12 @@
  * AdminReportConsole — the Admin landing "command center" report band.
  * Rolls up the admin's whole hierarchy from EXISTING tables via two real,
  * org-scoped endpoints: /api/nexus/admin/rollup (leads/opps/jobs + per-person)
- * and /api/nexus/operations/dashboard (fleet health + service load). Steel
- * console theme, hand-rolled SVG charts (no chart dependency). No placeholders.
+ * and /api/nexus/operations/dashboard (fleet health + service load).
+ * Light Apple look (same tokens + .sy CSS as Systems / Catalog / Events — the
+ * parent InternalSurface injects the CSS). Hand-rolled SVG, no chart library.
  */
 import { useEffect, useState } from 'react'
-
-const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
-const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
+import { BLUE, DOT, LINE, MUTED, TEXT, TEXT2 } from '@/components/nexus/systems/shared'
 
 type Rollup = {
   leads: { total: number; newThisWeek: number; trend: number[] }
@@ -29,9 +27,11 @@ type Ops = {
 }
 
 const money = (n: number) => n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${Math.round(n)}`
-const STATUS_COLOR: Record<string, string> = { open: '#00A3FF', scheduled: '#fbbf24', in_progress: '#00A3FF', new: '#8FD3EC', on_hold: '#f87171', assigned: '#00E699' }
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+// Job states that mean "something's wrong" get an orange dot; everything else is neutral.
+const STATUS_DOT: Record<string, string> = { stuck: DOT.orange, on_hold: DOT.orange, blocked: DOT.red }
 
-export function AdminReportConsole({ onOpenTab }: { onOpenTab?: (tab: string) => void }) {
+export function AdminReportConsole({ onOpenTab, onTeam }: { onOpenTab?: (tab: string) => void; onTeam?: (team: { members: number; orgs: number } | null) => void }) {
   const [r, setR] = useState<Rollup | null>(null)
   const [ops, setOps] = useState<Ops | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,59 +45,78 @@ export function AdminReportConsole({ onOpenTab }: { onOpenTab?: (tab: string) =>
       if (!alive) return
       // Coerce error-shaped / malformed responses to null so the nested reads
       // below (r.leads.total, ops.fleet.health) can't crash the console.
-      setR(rollup && rollup.leads && rollup.opps && rollup.jobs ? rollup : null)
+      const ok = rollup && rollup.leads && rollup.opps && rollup.jobs ? rollup as Rollup : null
+      setR(ok)
       setOps(opsData && opsData.fleet ? opsData : null)
       setLoading(false)
+      onTeam?.(ok?.team ?? null)
     })
     return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fin = r?.canViewFinancials ?? false
+  const dash = loading ? '…' : '—'
 
   return (
-    <div className="mb-6">
-      {/* Report band header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#2f4a63' }}>Command Center · Your Hierarchy</div>
-        <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: 'rgba(20,32,44,0.5)', border: '1px solid rgba(0,163,255,0.4)', color: '#00A3FF' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: loading ? '#fbbf24' : '#00E699', boxShadow: `0 0 8px ${loading ? '#fbbf24' : '#00E699'}` }} />
-          {loading ? 'Loading…' : `${r?.team.members ?? 0} people · ${r?.team.orgs ?? 0} orgs`}
-        </span>
+    <div style={{ marginBottom: 22 }}>
+      {/* KPI tiles — same shape as the Systems strip */}
+      <div className="sy-kpis ad-kpis">
+        <button type="button" className="sy-kpi" onClick={() => onOpenTab?.('opps')}>
+          <div className="l"><span className="sy-dot" style={{ background: DOT.blue }} />Leads</div>
+          <div className="ad-kv">
+            <div className="v">{r ? r.leads.total : dash}</div>
+            {r && <Spark trend={r.leads.trend} />}
+          </div>
+          <div className="s">{r ? `${r.leads.newThisWeek} new this week` : 'Sales'}</div>
+        </button>
+        <button type="button" className="sy-kpi" onClick={() => onOpenTab?.('opps')}>
+          <div className="l"><span className="sy-dot" style={{ background: DOT.blue }} />Opportunities</div>
+          <div className="v">{r ? r.opps.open : dash}</div>
+          <div className="s">{r ? (fin ? `${money(r.opps.openPipeline)} open · ${r.opps.wonThisMonth} won this month` : `${r.opps.wonThisMonth} won this month`) : 'Sales'}</div>
+        </button>
+        <button type="button" className="sy-kpi" onClick={() => onOpenTab?.('jobs')}>
+          <div className="l"><span className="sy-dot" style={{ background: DOT.blue }} />Open jobs</div>
+          <div className="v">{r ? r.jobs.open : dash}</div>
+          <div className="s">{r ? `${r.jobs.completedThisWeek} done this week${ops ? ` · ${ops.fleet.sitesActive}/${ops.fleet.sitesTotal} sites active` : ''}` : 'Operations'}</div>
+        </button>
+        <button type="button" className="sy-kpi" onClick={() => onOpenTab?.('systems')}>
+          <div className="l"><span className="sy-dot" style={{ background: ops ? (ops.fleet.health.offline ? DOT.red : ops.fleet.health.attention ? DOT.orange : DOT.green) : DOT.gray }} />Devices online</div>
+          <div className="v">{ops ? `${pct(ops.fleet.health)}%` : dash}</div>
+          <div className="s">{ops ? `${plural(ops.fleet.devicesTotal, 'device')} tracked${ops.response.avgResponseHours != null ? ` · ${ops.response.avgResponseHours} h avg response` : ''}` : 'Systems'}</div>
+        </button>
       </div>
 
-      {/* KPI tiles */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiSpark glyph="👥" label="Leads" value={r?.leads.total ?? 0} sub={`+${r?.leads.newThisWeek ?? 0} new this week`} subColor="#00E699" trend={r?.leads.trend ?? []} />
-        <Kpi glyph="🎯" label="Opportunities" value={r?.opps.open ?? 0} sub={fin ? `${money(r?.opps.openPipeline ?? 0)} open pipeline` : `${r?.opps.wonThisMonth ?? 0} won this month`} subColor="#00A3FF" foot={fin ? `${r?.opps.wonThisMonth ?? 0} won · ${money(r?.opps.wonThisMonthValue ?? 0)} this month` : undefined} />
-        <Kpi glyph="🔧" label="Jobs" value={r?.jobs.open ?? 0} sub={`${r?.jobs.completedThisWeek ?? 0} completed this week`} subColor="#fbbf24" foot={ops ? `${ops.fleet.sitesActive}/${ops.fleet.sitesTotal} sites active` : undefined} />
-        <Kpi glyph="📡" label="Fleet online" value={ops ? `${pct(ops.fleet.health)}%` : '—'} sub={ops ? `${ops.fleet.devicesTotal} devices tracked` : 'Operations feed'} subColor="#00A3FF" foot={ops && ops.response.avgResponseHours != null ? `${ops.response.avgResponseHours}h avg response` : undefined} />
-      </div>
-
-      {/* Charts row */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {/* Pipeline funnel */}
-        <div className="rounded-2xl p-3.5 lg:col-span-2" style={TILE_STYLE}>
-          <CardHead title="Pipeline by stage" right={fin ? money(r?.opps.openPipeline ?? 0) : `${r?.opps.open ?? 0} open`} onOpen={() => onOpenTab?.('opps')} />
-          <Funnel funnel={r?.opps.funnel ?? []} fin={fin} />
+      <div className="sy-split">
+        <div className="sy-card">
+          <div className="hd">
+            <div><h3>Pipeline by stage</h3><div className="s">{r ? (fin ? `${money(r.opps.openPipeline)} open in ${plural(r.opps.open, 'deal')}` : plural(r.opps.open, 'open deal')) : 'Open deals in your companies'}</div></div>
+            <button type="button" className="sy-b blue sm" onClick={() => onOpenTab?.('opps')}>Open Sales</button>
+          </div>
+          <div className="bd"><Funnel funnel={r?.opps.funnel ?? []} fin={fin} loading={loading} /></div>
         </div>
-        {/* Fleet health donut */}
-        <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-          <CardHead title="Fleet health" right={ops ? `${ops.fleet.devicesTotal}` : ''} onOpen={() => onOpenTab?.('systems')} />
-          <FleetDonut health={ops?.fleet.health ?? { online: 0, attention: 0, offline: 0 }} />
+        <div className="sy-card">
+          <div className="hd">
+            <div><h3>Device health</h3><div className="s">{ops ? `${plural(ops.fleet.devicesTotal, 'device')} at ${plural(ops.fleet.sitesTotal, 'site')}` : 'Cameras, gates, readers and intercoms'}</div></div>
+            <button type="button" className="sy-b blue sm" onClick={() => onOpenTab?.('systems')}>Open Systems</button>
+          </div>
+          <div className="bd"><FleetDonut health={ops?.fleet.health ?? { online: 0, attention: 0, offline: 0 }} loading={loading} /></div>
         </div>
       </div>
 
-      {/* Second charts row */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {/* Jobs by status */}
-        <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-          <CardHead title="Open jobs by status" right={`${r?.jobs.open ?? 0}`} onOpen={() => onOpenTab?.('jobs')} />
-          <StatusBars rows={r?.jobs.byStatus ?? []} />
+      <div className="sy-split ad-split2" style={{ marginTop: 14 }}>
+        <div className="sy-card">
+          <div className="hd">
+            <div><h3>Open jobs by status</h3><div className="s">{r ? plural(r.jobs.open, 'open job') : 'Operations'}</div></div>
+            <button type="button" className="sy-b blue sm" onClick={() => onOpenTab?.('jobs')}>Open Operations</button>
+          </div>
+          <div className="bd"><StatusBars rows={r?.jobs.byStatus ?? []} loading={loading} /></div>
         </div>
-        {/* Per-person breakdown */}
-        <div className="rounded-2xl p-3.5 lg:col-span-2" style={{ background: WELL, border: '1px solid #1E293B' }}>
-          <CardHead title="By team member" right={`${r?.people.length ?? 0} people`} />
-          <PeopleTable people={r?.people ?? []} fin={fin} loading={loading} />
+        <div className="sy-card">
+          <div className="hd">
+            <div><h3>By team member</h3><div className="s">{r ? plural(r.people.length, 'person', 'people') : 'Who owns what'}</div></div>
+          </div>
+          <div className="bd"><PeopleTable people={r?.people ?? []} fin={fin} loading={loading} /></div>
         </div>
       </div>
     </div>
@@ -106,97 +125,70 @@ export function AdminReportConsole({ onOpenTab }: { onOpenTab?: (tab: string) =>
 
 function pct(h: Fleet) { const t = h.online + h.attention + h.offline; return t ? Math.round((h.online / t) * 100) : 0 }
 
-function CardHead({ title, right, onOpen }: { title: string; right?: React.ReactNode; onOpen?: () => void }) {
-  return (
-    <div className="mb-2.5 flex items-center justify-between">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#00A3FF' }}>{title}</div>
-      {onOpen ? <button onClick={onOpen} className="text-[11px] font-semibold" style={{ color: '#8FD3EC' }}>{right ? <span className="mr-2" style={{ color: '#c3d3e2' }}>{right}</span> : null}Open →</button>
-        : right ? <span className="text-[11px] font-semibold" style={{ color: '#c3d3e2' }}>{right}</span> : null}
-    </div>
-  )
-}
-
-function Kpi({ glyph, value, label, sub, subColor, foot }: { glyph: string; value: string | number; label: string; sub: string; subColor: string; foot?: string }) {
-  return (
-    <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-      <div className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{glyph}</div>
-      <div className="mt-0.5 text-[26px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
-      <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
-      <div className="mt-1 text-[11px] font-semibold" style={{ color: subColor }}>{sub}</div>
-      {foot && <div className="mt-0.5 text-[9px]" style={{ color: '#00A3FF' }}>{foot}</div>}
-    </div>
-  )
-}
-
-function KpiSpark({ glyph, value, label, sub, subColor, trend }: { glyph: string; value: number; label: string; sub: string; subColor: string; trend: number[] }) {
-  // trend[0] = this week … reverse so the sparkline reads left(old)→right(now)
+function Spark({ trend }: { trend: number[] }) {
+  // trend[0] = this week … reverse so the line reads left (old) → right (now)
   const series = [...trend].reverse()
+  if (series.length < 2) return null
   const max = Math.max(1, ...series)
-  const w = 108, h = 26, step = series.length > 1 ? w / (series.length - 1) : w
-  const pts = series.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(' ')
+  const w = 76, h = 24, step = w / (series.length - 1)
+  const pts = series.map((v, i) => `${(i * step).toFixed(1)},${(2 + (h - 4) - (v / max) * (h - 4)).toFixed(1)}`).join(' ')
   return (
-    <div className="rounded-2xl p-3.5" style={TILE_STYLE}>
-      <div className="text-[15px]" aria-hidden style={{ color: '#00A3FF' }}>{glyph}</div>
-      <div className="mt-0.5 text-[26px] font-extrabold leading-none" style={{ color: '#eaf2fb' }}>{value}</div>
-      <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
-      <div className="mt-1 flex items-end justify-between gap-2">
-        <div className="text-[11px] font-semibold" style={{ color: subColor }}>{sub}</div>
-        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0" aria-hidden>
-          <polyline points={pts} fill="none" stroke="#00A3FF" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-      </div>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden style={{ flex: 'none' }}>
+      <polyline points={pts} fill="none" stroke={BLUE} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function Bar({ label, count, max, right, dot }: { label: string; count: number; max: number; right?: string; dot?: string }) {
+  return (
+    <div className="ad-bar">
+      <div className="lb">{dot && <span className="sy-dot" style={{ background: dot }} />}{label}</div>
+      <div className="tr"><div className="fl" style={{ width: count ? `${Math.max(2, (count / max) * 100)}%` : 0 }} /></div>
+      <div className="n">{count}</div>
+      {right != null && <div className="r">{right}</div>}
     </div>
   )
 }
 
-function Funnel({ funnel, fin }: { funnel: { key: string; label: string; count: number; value: number }[]; fin: boolean }) {
+function Funnel({ funnel, fin, loading }: { funnel: { key: string; label: string; count: number; value: number }[]; fin: boolean; loading: boolean }) {
+  if (loading) return <div className="sy-empty">Loading…</div>
+  if (funnel.every(f => f.count === 0)) return <div className="sy-empty">No open deals yet.</div>
   const max = Math.max(1, ...funnel.map(f => f.count))
-  if (funnel.every(f => f.count === 0)) return <Empty label="No open opportunities yet" />
-  return (
-    <div className="flex flex-col gap-1.5">
-      {funnel.map(f => (
-        <div key={f.key} className="flex items-center gap-2">
-          <div className="w-24 shrink-0 text-[11px]" style={{ color: '#c3d3e2' }}>{f.label}</div>
-          <div className="relative h-5 flex-1 overflow-hidden rounded-md" style={{ background: 'rgba(10,16,24,0.5)' }}>
-            <div className="h-full rounded-md" style={{ width: `${Math.max(3, (f.count / max) * 100)}%`, background: 'linear-gradient(90deg,#00A3FF,#00A3FF)' }} />
-          </div>
-          <div className="w-8 shrink-0 text-right text-[12px] font-bold" style={{ color: '#eaf2fb' }}>{f.count}</div>
-          {fin && <div className="w-12 shrink-0 text-right text-[10px]" style={{ color: '#00A3FF' }}>{money(f.value)}</div>}
-        </div>
-      ))}
-    </div>
-  )
+  return <div className="ad-bars">{funnel.map(f => <Bar key={f.key} label={f.label} count={f.count} max={max} right={fin ? money(f.value) : undefined} />)}</div>
 }
 
-function FleetDonut({ health }: { health: Fleet }) {
+function FleetDonut({ health, loading }: { health: Fleet; loading: boolean }) {
+  if (loading) return <div className="sy-empty">Loading…</div>
   const total = health.online + health.attention + health.offline
+  if (!total) return <div className="sy-empty">No devices tracked yet.</div>
   const segs = [
-    { v: health.online, c: '#00E699', label: 'Online' },
-    { v: health.attention, c: '#fbbf24', label: 'Attention' },
-    { v: health.offline, c: '#f87171', label: 'Offline' },
+    { v: health.online, c: DOT.green, label: 'Online' },
+    { v: health.attention, c: DOT.orange, label: 'Needs a look' },
+    { v: health.offline, c: DOT.red, label: 'Offline' },
   ]
-  const R = 34, C = 2 * Math.PI * R
+  const R = 36, C = 2 * Math.PI * R
   let offset = 0
   return (
-    <div className="flex items-center gap-4">
-      <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
-        <circle cx="46" cy="46" r={R} fill="none" stroke="#12202c" strokeWidth="11" />
-        {total > 0 && segs.map((s, i) => {
+    <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+      <svg width="96" height="96" viewBox="0 0 96 96" style={{ flex: 'none' }} role="img" aria-label={`${pct(health)}% online`}>
+        <circle cx="48" cy="48" r={R} fill="none" stroke="#EEF0F4" strokeWidth="9" />
+        {segs.map((s, i) => {
           if (s.v <= 0) return null
           const len = (s.v / total) * C
-          const el = <circle key={i} cx="46" cy="46" r={R} fill="none" stroke={s.c} strokeWidth="11" strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-offset} transform="rotate(-90 46 46)" strokeLinecap="butt" />
+          const gap = segs.filter(x => x.v > 0).length > 1 ? 2 : 0
+          const el = <circle key={i} cx="48" cy="48" r={R} fill="none" stroke={s.c} strokeWidth="9" strokeDasharray={`${Math.max(0, len - gap)} ${C - len + gap}`} strokeDashoffset={-offset} transform="rotate(-90 48 48)" />
           offset += len
           return el
         })}
-        <text x="46" y="43" textAnchor="middle" fontSize="18" fontWeight="700" fill="#eaf2fb">{pct(health)}%</text>
-        <text x="46" y="57" textAnchor="middle" fontSize="8" fill="#c3d3e2">online</text>
+        <text x="48" y="47" textAnchor="middle" fontSize="19" fontWeight="600" fill={TEXT} style={{ fontVariantNumeric: 'tabular-nums' }}>{pct(health)}%</text>
+        <text x="48" y="62" textAnchor="middle" fontSize="10" fill={MUTED}>online</text>
       </svg>
-      <div className="flex flex-col gap-1.5">
-        {segs.map((s, i) => (
-          <div key={i} className="flex items-center gap-2 text-[11px]">
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: s.c }} />
-            <span style={{ color: '#c3d3e2' }}>{s.label}</span>
-            <span className="ml-auto font-bold" style={{ color: '#eaf2fb' }}>{s.v}</span>
+      <div style={{ display: 'grid', gap: 8, flex: 1, minWidth: 0 }}>
+        {segs.map(s => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: TEXT2 }}>
+            <span className="sy-dot" style={{ background: s.c }} />
+            <span>{s.label}</span>
+            <span style={{ marginLeft: 'auto', fontWeight: 600, color: TEXT, fontVariantNumeric: 'tabular-nums' }}>{s.v}</span>
           </div>
         ))}
       </div>
@@ -204,53 +196,43 @@ function FleetDonut({ health }: { health: Fleet }) {
   )
 }
 
-function StatusBars({ rows }: { rows: { status: string; count: number }[] }) {
-  if (rows.length === 0) return <Empty label="No open jobs" />
+function StatusBars({ rows, loading }: { rows: { status: string; count: number }[]; loading: boolean }) {
+  if (loading) return <div className="sy-empty">Loading…</div>
+  if (rows.length === 0) return <div className="sy-empty">No open jobs.</div>
   const max = Math.max(1, ...rows.map(r => r.count))
   return (
-    <div className="flex flex-col gap-2">
+    <div className="ad-bars">
       {rows.slice(0, 6).map(r => {
-        const c = STATUS_COLOR[r.status] ?? '#00A3FF'
-        return (
-          <div key={r.status} className="flex items-center gap-2">
-            <div className="w-24 shrink-0 text-[11px] capitalize" style={{ color: '#c3d3e2' }}>{r.status.replace(/_/g, ' ')}</div>
-            <div className="relative h-4 flex-1 overflow-hidden rounded-md" style={{ background: 'rgba(10,16,24,0.5)' }}>
-              <div className="h-full rounded-md" style={{ width: `${Math.max(4, (r.count / max) * 100)}%`, background: c }} />
-            </div>
-            <div className="w-7 shrink-0 text-right text-[12px] font-bold" style={{ color: '#eaf2fb' }}>{r.count}</div>
-          </div>
-        )
+        const label = r.status.replace(/_/g, ' ')
+        return <Bar key={r.status} label={label.charAt(0).toUpperCase() + label.slice(1)} count={r.count} max={max} dot={STATUS_DOT[r.status]} />
       })}
     </div>
   )
 }
 
 function PeopleTable({ people, fin, loading }: { people: Rollup['people']; fin: boolean; loading: boolean }) {
-  if (loading) return <div className="py-6 text-center text-[12px]" style={{ color: '#00A3FF' }}>Loading team…</div>
-  if (people.length === 0) return <Empty label="No assigned records in your hierarchy yet" />
+  if (loading) return <div className="sy-empty">Loading team…</div>
+  if (people.length === 0) return <div className="sy-empty">No one in your companies owns a lead, deal or job yet.</div>
   return (
-    <div className="max-h-56 overflow-y-auto">
-      <table className="w-full text-[12px]">
+    <div className="ad-tbl">
+      <table>
         <thead>
-          <tr className="text-[9.5px] uppercase tracking-[0.06em]" style={{ color: '#00A3FF' }}>
-            <th className="py-1 pr-2 text-left font-medium">Person</th>
-            <th className="py-1 pr-2 text-left font-medium">Org</th>
-            <th className="py-1 pr-2 text-right font-medium">Leads</th>
-            {fin && <th className="py-1 pr-2 text-right font-medium">Pipeline</th>}
-            <th className="py-1 text-right font-medium">Jobs</th>
+          <tr>
+            <th>Person</th>
+            <th className="co">Company</th>
+            <th className="num">Leads</th>
+            {fin && <th className="num">Pipeline</th>}
+            <th className="num">Jobs</th>
           </tr>
         </thead>
         <tbody>
           {people.map((p, i) => (
-            <tr key={i} style={{ borderTop: '1px solid #1E293B' }}>
-              <td className="py-1.5 pr-2" style={{ color: '#eaf2fb' }}>
-                <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full align-middle text-[9px] font-bold" style={{ background: '#00A3FF', color: '#eaf2fb' }}>{initials(p.name)}</span>
-                {p.name}
-              </td>
-              <td className="py-1.5 pr-2" style={{ color: '#c3d3e2' }}>{p.org}</td>
-              <td className="py-1.5 pr-2 text-right" style={{ color: '#eaf2fb' }}>{p.leads}</td>
-              {fin && <td className="py-1.5 pr-2 text-right" style={{ color: '#eaf2fb' }}>{money(p.pipeline)}</td>}
-              <td className="py-1.5 text-right" style={{ color: '#eaf2fb' }}>{p.jobs}</td>
+            <tr key={i}>
+              <td><span className="ad-av">{initials(p.name)}</span>{p.name}</td>
+              <td className="co" style={{ color: MUTED }}>{p.org}</td>
+              <td className="num">{p.leads}</td>
+              {fin && <td className="num">{money(p.pipeline)}</td>}
+              <td className="num">{p.jobs}</td>
             </tr>
           ))}
         </tbody>
@@ -259,7 +241,39 @@ function PeopleTable({ people, fin, loading }: { people: Rollup['people']; fin: 
   )
 }
 
-function Empty({ label }: { label: string }) {
-  return <div className="rounded-xl px-3 py-6 text-center text-[11px]" style={{ color: '#00A3FF' }}>{label}</div>
-}
-function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?' }
+function initials(name: string) { return name.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?' }
+
+/** Extra CSS for the report band + admin tool tiles (on top of systems/shared CSS). */
+export const ADMIN_CSS = `
+.ad-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sy-kpi{transition:box-shadow .15s}
+button.sy-kpi:hover{box-shadow:0 0 0 1px rgba(0,113,227,.35),0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08)}
+.ad-kv{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.ad-bars{display:grid;gap:9px}
+.ad-bar{display:grid;grid-template-columns:120px minmax(0,1fr) 34px auto;align-items:center;gap:10px;font-size:13px}
+.ad-bar .lb{display:flex;align-items:center;gap:6px;color:${TEXT2};white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad-bar .tr{height:8px;border-radius:4px;background:#EEF0F4;overflow:hidden}
+.ad-bar .fl{height:100%;border-radius:4px;background:${BLUE}}
+.ad-bar .n{text-align:right;font-weight:600;color:${TEXT};font-variant-numeric:tabular-nums}
+.ad-bar .r{min-width:48px;text-align:right;color:${MUTED};font-variant-numeric:tabular-nums}
+.ad-tbl{max-height:260px;overflow:auto;margin:-4px 0}
+.ad-tbl table{width:100%;border-collapse:collapse;font-size:13px}
+.ad-tbl th{position:sticky;top:0;background:#fff;text-align:left;font-size:12px;font-weight:500;color:${MUTED};padding:4px 8px 8px 0;border-bottom:1px solid ${LINE}}
+.ad-tbl td{padding:8px 8px 8px 0;border-top:1px solid ${LINE};color:${TEXT};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.ad-tbl tr:first-child td{border-top:0}
+.ad-tbl .num{text-align:right;font-variant-numeric:tabular-nums;padding-right:0;padding-left:12px}
+.ad-av{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#EEF4FF;color:${BLUE};font-size:10px;font-weight:600;margin-right:8px;vertical-align:middle}
+.ad-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px}
+.ad-sec h2{margin:0;font-size:17px;font-weight:600;color:${TEXT}}
+.ad-sec .s{font-size:13px;color:${MUTED}}
+.ad-tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.ad-tool{display:flex;gap:12px;align-items:flex-start;text-align:left;background:#fff;border:0;border-radius:14px;box-shadow:0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08);padding:14px 16px;cursor:pointer;font:inherit;color:inherit;transition:box-shadow .15s}
+.ad-tool:hover{box-shadow:0 0 0 1px rgba(0,113,227,.35),0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08)}
+.ad-tool .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#EEF4FF;color:${BLUE};flex:none}
+.ad-tool .t{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:15px;font-weight:600}
+.ad-tool .m{font-size:13px;color:${MUTED};margin-top:3px;line-height:1.4}
+.ad-team{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:500}
+@media (min-width:1101px){.ad-split2{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}}
+@media (max-width:1100px){.ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.ad-tbl .co{display:none}.ad-tbl td{max-width:170px}.ad-bar{grid-template-columns:92px minmax(0,1fr) 28px auto}}
+`

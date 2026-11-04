@@ -52,7 +52,7 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Design', id: 'design' },
 ]
 
-const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs', 'lexi', 'catalog', 'events', 'systems']
+const LIGHT_TABS: NexusTabId[] = ['my-day', 'opps', 'jobs', 'lexi', 'catalog', 'events', 'systems', 'people']
 
 const NEXUS_VERSION = 'v2.4.0'
 // Pages converted to the new light look show the new version.

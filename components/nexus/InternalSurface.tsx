@@ -8,14 +8,16 @@ import { IntegrationsConsole } from '@/components/nexus/IntegrationsConsole'
 import { ProvisioningQueue } from '@/components/nexus/ProvisioningQueue'
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
-import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { PricingConsoleBody } from '@/components/admin/PricingConsoleBody'
 import { CostSheetBody } from '@/components/admin/CostSheetBody'
 import { AriaCapsBody } from '@/components/admin/AriaCapsBody'
-import { AdminReportConsole } from '@/components/nexus/AdminReportConsole'
+import { AdminReportConsole, ADMIN_CSS } from '@/components/nexus/AdminReportConsole'
+import { CSS } from '@/components/nexus/systems/shared'
 import { QuickBooksPage } from '@/components/nexus/quickbooks/QuickBooksPage'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
+const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target } = require('lucide-react') as any
 
-// ---- Console tokens (identical to Operations / Sales / My Day steel) ----
+// ---- Tool windows still use the steel console look (landing is the light look) ----
 const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
 const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
 const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
@@ -27,31 +29,20 @@ type InternalCard = {
   id: Exclude<InternalPanel, null>
   title: string
   subtitle: string
-  accent: string
-  glyph: NexusGlyphKind
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icon: any
   badge?: string
 }
 
-function SteelCard({ card, onClick }: { card: InternalCard; onClick: () => void }) {
+function ToolCard({ card, onClick }: { card: InternalCard; onClick: () => void }) {
+  const Icon = card.icon
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative flex min-h-[168px] flex-col overflow-hidden rounded-2xl p-4 text-left transition-transform duration-200 hover:-translate-y-1"
-      style={TILE_STYLE}
-    >
-      {card.badge && (
-        <div className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]" style={{ background: 'rgba(20,32,44,0.6)', border: `1px solid ${card.accent}55`, color: card.accent }}>{card.badge}</div>
-      )}
-      <NexusGlyphTile kind={card.glyph} color={card.accent} />
-      <div className="text-[15px] font-bold leading-tight" style={{ color: '#eaf2fb' }}>{card.title}</div>
-      <div className="mt-1.5 text-[12px] leading-relaxed" style={{ color: '#c3d3e2' }}>{card.subtitle}</div>
-      <div className="mt-auto pt-3" style={{ borderTop: '1px solid #1E293B' }}>
-        <div className="flex items-center gap-1.5 pt-2.5 text-[12.5px] font-semibold" style={{ color: card.accent }}>
-          <span>Open</span>
-          <span className="transition-transform duration-200 ease-out group-hover:translate-x-1" aria-hidden="true">→</span>
-        </div>
-      </div>
+    <button type="button" className="ad-tool" onClick={onClick}>
+      <span className="ic"><Icon size={18} strokeWidth={1.8} /></span>
+      <span style={{ minWidth: 0 }}>
+        <span className="t">{card.title}{card.badge && <span className="sy-pill">{card.badge}</span>}</span>
+        <span className="m" style={{ display: 'block' }}>{card.subtitle}</span>
+      </span>
     </button>
   )
 }
@@ -110,6 +101,7 @@ function InternalInfoPanel({ copy }: { copy: string }) {
 export function InternalSurface() {
   const router = useRouter()
   const [activePanel, setActivePanel] = useState<InternalPanel>(null)
+  const [team, setTeam] = useState<{ members: number; orgs: number } | null>(null)
   const { user } = useUser()
   // Cost is corporate-only — the card is hidden from everyone else, and the
   // /api/admin/costs route refuses non-corporate even if they reach it.
@@ -129,46 +121,39 @@ export function InternalSurface() {
   }, [])
 
   const cards: InternalCard[] = [
-    { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', accent: '#00A3FF', glyph: 'activity', badge: 'Build' },
-    { id: 'dealer-onboarding', title: 'Dealer Onboarding', subtitle: 'Track NDA, agreements, compliance, approval, and live dealer status.', accent: '#FBBF24', glyph: 'priority', badge: 'Corporate' },
-    { id: 'users-features', title: 'Users & Features', subtitle: 'Manage platform users, roles, feature access, and settings.', accent: '#00A3FF', glyph: 'pipeline', badge: 'Admin' },
-    { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', accent: '#00A3FF', glyph: 'job-open', badge: 'Corporate' },
-    { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', accent: '#7EE0A8', glyph: 'priority', badge: 'Corporate' },
-    { id: 'pricing', title: 'Pricing Console', subtitle: 'Floors, sweet-spot targets, add-on pricing, and new catalog line items.', accent: '#FBBF24', glyph: 'quote', badge: 'Corporate' },
-    ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Gate Guard’s books: cash, who owes us, profit — and invoice + payment sync.', accent: '#7EE0A8', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
-    ...(isCorporate ? [{ id: 'costs', title: 'Gate Guard Costs', subtitle: 'Our true monthly + hardware cost. Corporate only — never shown to dealers.', accent: '#F2637E', glyph: 'quote', badge: 'Corporate' } as InternalCard] : []),
-    ...(isCorporate ? [{ id: 'aria-caps', title: 'ARIA Save Caps', subtitle: 'Cap how many properties each dealer can save to the Intel DB per month.', accent: '#00A3FF', glyph: 'research', badge: 'Corporate' } as InternalCard] : []),
-    { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', accent: '#8FD3EC', glyph: 'research' },
-    { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', accent: '#7EE0A8', glyph: 'todo' },
+    { id: 'users-features', title: 'Users & features', subtitle: 'Add people, set roles, and choose what each company can use.', icon: Users },
+    { id: 'dealer-onboarding', title: 'Dealer onboarding', subtitle: 'NDA, agreement, approval and go-live for each new dealer.', icon: UserCheck, badge: 'Corporate' },
+    { id: 'integrations', title: 'Site logins', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly and UniFi.', icon: Key, badge: 'Corporate' },
+    { id: 'provisioning', title: 'Sites to set up', subtitle: 'Won deals waiting for a controller serial and Brivo programming.', icon: Server, badge: 'Corporate' },
+    { id: 'pricing', title: 'Pricing', subtitle: 'Floors, target prices, add-ons and new catalog lines.', icon: Tag, badge: 'Corporate' },
+    ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Cash, who owes us, profit — plus invoice and payment sync.', icon: BookOpen, badge: 'Corporate' } as InternalCard] : []),
+    ...(isCorporate ? [{ id: 'costs', title: 'Our costs', subtitle: 'What Gate Guard really pays each month and for hardware. Never shown to dealers.', icon: DollarSign, badge: 'Corporate' } as InternalCard] : []),
+    ...(isCorporate ? [{ id: 'aria-caps', title: 'ARIA save limits', subtitle: 'How many properties each dealer can save to Intel each month.', icon: Search, badge: 'Corporate' } as InternalCard] : []),
+    { id: 'tracker', title: 'Tracker', subtitle: 'Nexus build work, bugs and product tasks.', icon: ListChecks },
+    { id: 'playbooks', title: 'Playbooks', subtitle: 'How we do things: scripts, steps and procedures.', icon: FileText },
+    { id: 'training', title: 'Training', subtitle: 'Training, quests and scorecards for the team.', icon: Target },
   ]
-
   return (
-    <section className="mt-9 w-full max-w-5xl xl:max-w-none px-1">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#00A3FF' }}>Internal</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: '#eaf2fb' }}>What internal work are we managing?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>
-              Product tracking, platform settings, playbooks, dealer onboarding, and team training live here.
-            </p>
-          </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(20,32,44,0.5)', color: '#00A3FF', border: '1px solid rgba(0,163,255,0.4)' }}>Admin OS</div>
+    <>
+    <section className="sy">
+      <style>{CSS}{ADMIN_CSS}</style>
+      <header className="sy-hd">
+        <div>
+          <h1>Admin</h1>
+          <div className="sub">How your companies are doing, and the tools to run Nexus.</div>
         </div>
+        {team && <span className="ad-team"><span className="sy-dot" style={{ background: '#30D158' }} />{team.members} {team.members === 1 ? 'person' : 'people'} · {team.orgs} {team.orgs === 1 ? 'company' : 'companies'}</span>}
+      </header>
 
-        {/* Command-center report band — real rollup of leads / opportunities / jobs
-            + operations, scoped to the admin's whole hierarchy. */}
-        <AdminReportConsole onOpenTab={(tab) => window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: tab }))} />
+      {/* Command-center report band — real rollup of leads / opportunities / jobs
+          + operations, scoped to the admin's whole hierarchy. */}
+      <AdminReportConsole onTeam={setTeam} onOpenTab={(tab) => window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: tab }))} />
 
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#00A3FF' }}>Admin tools</div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {cards.map(card => <SteelCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
-        </div>
-
-        <div className="mt-5 text-[11px]" style={{ color: '#37485c' }}>
-          Internal stays simple: track product work, onboard dealers, manage users and features, find playbooks, or train the team.
-        </div>
+      <div className="ad-sec"><h2>Admin tools</h2></div>
+      <div className="ad-tools">
+        {cards.map(card => <ToolCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
       </div>
+    </section>
 
       {/* Corporate only in the UI; every /api/integrations/quickbooks route also refuses non-corporate. */}
       {activePanel === 'quickbooks' && isCorporate && (
@@ -261,6 +246,6 @@ export function InternalSurface() {
           <InternalInfoPanel copy="This board will guide internal and dealer teams through training, quests, scorecards, and enablement steps." />
         </InternalDetailShell>
       )}
-    </section>
+    </>
   )
 }
