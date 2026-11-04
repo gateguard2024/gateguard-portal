@@ -8,6 +8,7 @@
 // 🔒 "Setup & keys" (vendor logins) renders ONLY for corporate users — and every
 // credential endpoint refuses non-corporate server-side. Never loosen this.
 // Status button (Active / Inactive / Take offline) is corporate-only too (systems/Decommission.tsx).
+// "Property portal" (the manager's /portal/<address>: on/off, code, cameras, gates) is corporate-only (systems/PropertyPortal.tsx).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CSS, type Any, getJson, Sheet, useFlash, DOT, Dot, GREEN, RED, ORANGE, type SiteCtx } from '@/components/nexus/systems/shared';
 import { LiveTab } from '@/components/nexus/systems/LiveTab';
@@ -20,6 +21,7 @@ import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
 import { InactiveBanner, SiteStatusSheet, statusOf } from '@/components/nexus/systems/Decommission';
+import { PropertyPortalSetup } from '@/components/nexus/systems/PropertyPortal';
 import { todayET, etDateOf } from '@/lib/tz';
 
 type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
@@ -178,6 +180,8 @@ export function SiteCommand({ siteId, isCorporate, site, onBack, onStatusChange 
   const [status, setStatus] = useState<string>(site?.status ?? 'active');
   const [reason, setReason] = useState<string | null>(site?.inactive_reason ?? null);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
+  const [flash, notify] = useFlash();
   useEffect(() => { setStatus(site?.status ?? 'active'); setReason(site?.inactive_reason ?? null); }, [site?.status, site?.inactive_reason]);
   const st = statusOf(status);
   return (
@@ -191,6 +195,7 @@ export function SiteCommand({ siteId, isCorporate, site, onBack, onStatusChange 
         </div>
         {isCorporate && <div className="sy-acts">
           <button type="button" className="sy-b dark" onClick={() => setStatusOpen(true)} aria-label={`Property status: ${st.label}. Change`}><Dot c={st.dot} />{st.label}</button>
+          <button type="button" className="sy-b dark" onClick={() => setPortalOpen(true)}>Property portal</button>
           <button type="button" className="sy-b dark" onClick={() => setSetupReq(n => n + 1)}>Setup &amp; keys</button>
         </div>}
       </header>
@@ -201,6 +206,12 @@ export function SiteCommand({ siteId, isCorporate, site, onBack, onStatusChange 
           onChanged={(s, r) => { setStatus(s); setReason(r ?? null); onStatusChange?.(s); }}
           openSetup={() => { setStatusOpen(false); setSetupReq(n => n + 1); }} />
       )}
+      {portalOpen && isCorporate && (
+        <Sheet title="Property portal" sub={`${site?.name || 'This property'} — the portal its property manager signs in to. Corporate only.`} onClose={() => setPortalOpen(false)} width={640}>
+          <PropertyPortalSetup siteId={siteId} siteName={site?.name} notify={notify} />
+        </Sheet>
+      )}
+      {flash}
     </div>
   );
 }

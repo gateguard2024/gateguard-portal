@@ -14,6 +14,7 @@ import { AriaCapsBody } from '@/components/admin/AriaCapsBody'
 import { AdminReportConsole, ADMIN_CSS } from '@/components/nexus/AdminReportConsole'
 import { CSS } from '@/components/nexus/systems/shared'
 import { QuickBooksPage } from '@/components/nexus/quickbooks/QuickBooksPage'
+import { PortalsAdmin } from '@/components/nexus/systems/PropertyPortal'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
 const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target, Globe } = require('lucide-react') as any
 
@@ -111,6 +112,11 @@ export function InternalSurface() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const p = new URLSearchParams(window.location.search)
+    // ?portals=1 (the old /admin/portals page redirects here) opens Property portals.
+    if (p.get('portals') === '1') {
+      setActivePanel('portals'); p.delete('portals')
+      const q = p.toString(); window.history.replaceState({}, '', q ? `/?${q}` : '/'); return
+    }
     if (p.get('qb') !== '1') return
     const res = p.get('qbo')
     if (res) setQbNotice({ ok: res === 'connected', reason: p.get('qbreason') })
@@ -124,7 +130,7 @@ export function InternalSurface() {
     { id: 'users-features', title: 'Users & features', subtitle: 'Add people, set roles, and choose what each company can use.', icon: Users },
     { id: 'dealer-onboarding', title: 'Dealer onboarding', subtitle: 'NDA, agreement, approval and go-live for each new dealer.', icon: UserCheck, badge: 'Corporate' },
     { id: 'integrations', title: 'Site logins', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly and UniFi.', icon: Key, badge: 'Corporate' },
-    { id: 'portals', title: 'Property portals', subtitle: 'Give a property its manager portal: web address, access code, cameras and gates.', icon: Globe, badge: 'Corporate' },
+    ...(isCorporate ? [{ id: 'portals', title: 'Property portals', subtitle: 'Each property manager’s portal: turn it on, access code, cameras and gates.', icon: Globe, badge: 'Corporate' } as InternalCard] : []),
     { id: 'provisioning', title: 'Sites to set up', subtitle: 'Won deals waiting for a controller serial and Brivo programming.', icon: Server, badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing', subtitle: 'Floors, target prices, add-ons and new catalog lines.', icon: Tag, badge: 'Corporate' },
     ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Cash, who owes us, profit — plus invoice and payment sync.', icon: BookOpen, badge: 'Corporate' } as InternalCard] : []),
@@ -152,7 +158,7 @@ export function InternalSurface() {
 
       <div className="ad-sec"><h2>Admin tools</h2></div>
       <div className="ad-tools">
-        {cards.map(card => <ToolCard key={card.id} card={card} onClick={() => card.id === 'portals' ? router.push('/admin/portals') : setActivePanel(card.id)} />)}
+        {cards.map(card => <ToolCard key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
       </div>
     </section>
 
@@ -184,8 +190,13 @@ export function InternalSurface() {
         </InternalDetailShell>
       )}
 
+      {/* Corporate only in the UI; every /api/admin/portals route also refuses non-corporate. */}
+      {activePanel === 'portals' && isCorporate && (
+        <div className="sy"><PortalsAdmin onClose={() => setActivePanel(null)} /></div>
+      )}
+
       {activePanel === 'integrations' && (
-        <InternalDetailShell title="Site Integrations" subtitle="Corporate setup: connect each property's Brivo, Eagle Eye, Shelly & UniFi logins. Dealers operate doors/cameras at their sites but never see these credentials." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Customer Portals" onClick={() => router.push('/admin/portals')} /><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
+        <InternalDetailShell title="Site Integrations" subtitle="Corporate setup: connect each property's Brivo, Eagle Eye, Shelly & UniFi logins. Dealers operate doors/cameras at their sites but never see these credentials." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Property portals" onClick={() => setActivePanel('portals')} /><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
           <IntegrationsConsole />
         </InternalDetailShell>
       )}

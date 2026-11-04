@@ -20,15 +20,19 @@ function slugify(s: string): string {
     .slice(0, 60)
 }
 
-// GET /api/admin/portals — list every customer portal (corporate-only).
-export async function GET() {
+// GET /api/admin/portals[?site_id=] — list customer portals (corporate-only);
+// site_id narrows it to one property's portal (Systems → Property portal).
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
   if (!user.isCorporate) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { data, error } = await supabase
+  const siteId = req.nextUrl.searchParams.get('site_id')
+  let query = supabase
     .from('client_portals')
     .select('id, org_id, site_id, slug, login_type, modules, camera_ids, door_ids, branding, status, created_at, updated_at, sites(name, city, state)')
     .order('created_at', { ascending: false })
+  if (siteId) query = query.eq('site_id', siteId)
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ portals: data ?? [] })
