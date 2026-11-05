@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { verifyOAuthState } from '@/lib/oauth-state'
+import { writeSafe } from '@/lib/mail-fetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,18 +39,15 @@ export async function GET(req: NextRequest) {
 
   let userId: string
   let orgId: string | null = null
-  try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString())
-    userId = decoded.user_id
-    orgId = decoded.org_id ?? null
-    if (!userId) throw new Error('no user_id')
-  } catch {
-    return back('gmail_error=invalid_state')
-  }
+  const decoded = verifyOAuthState(state)
+  if (!decoded?.user_id) return back('gmail_error=invalid_state')
+  userId = String(decoded.user_id)
+  orgId = (decoded.org_id as string | null) ?? null
 
   // Exchange code → tokens.
   let refreshToken = ''
   let accessToken = ''
+  let grantedScope = ''
   try {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -68,6 +67,7 @@ export async function GET(req: NextRequest) {
     const data = (await tokenRes.json()) as { refresh_token?: string; access_token?: string; scope?: string }
     refreshToken = data.refresh_token ?? ''
     accessToken = data.access_token ?? ''
+    grantedScope = data.scope ?? ''
     if (!refreshToken) return back('gmail_error=no_refresh_token')
   } catch (err) {
     console.error('Gmail OAuth callback error:', err)
@@ -94,7 +94,6 @@ export async function GET(req: NextRequest) {
     .eq('display_name', email || 'Gmail')
     .maybeSingle()
 
-  const now = new Date().toISOString()
   const payload = {
     user_id: userId,
     org_id: orgId,
@@ -103,14 +102,18 @@ export async function GET(req: NextRequest) {
     is_active: true,
     oauth_refresh_token: refreshToken,
     oauth_access_token: accessToken || null,
-    oauth_scope: 'gmail.send gmail.readonly',
+    oauth_scope: grantedScope || 'gmail.send gmail.readonly',
     config: { from_address: email },
-    last_synced_at: now,
+    last_synced_at: null,
+    // Fresh login → start the live sync over and clear any old "reconnect" warning.
+    gmail_history_id: null,
+    last_error: null,
+    last_error_at: null,
   }
 
   const { error: upErr } = existing
-    ? await supabase.from('message_channels').update(payload).eq('id', existing.id)
-    : await supabase.from('message_channels').insert(payload)
+    ? await writeSafe((row) => supabase.from('message_channels').update(row).eq('id', existing.id), payload)
+    : await writeSafe((row) => supabase.from('message_channels').insert(row), payload)
 
   if (upErr) {
     console.error('Failed to store Gmail connector:', upErr)

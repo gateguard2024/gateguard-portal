@@ -21,7 +21,13 @@ export interface OutboundEmail {
   fromName?: string
   fromAddress?: string // the connector's own address; required for SMTP envelope
   cc?: string[]        // optional carbon-copy recipients
+  bcc?: string[]       // optional blind-copy recipients (Gmail only)
   attachments?: MailAttachment[]
+  // Reply threading (Gmail): keeps a reply in the same conversation for us AND the
+  // customer — Gmail needs the threadId, every mail app needs In-Reply-To/References.
+  gmailThreadId?: string
+  inReplyTo?: string   // RFC Message-ID of the message being answered, e.g. <abc@mail.gmail.com>
+  references?: string  // space-separated Message-IDs of the conversation so far
 }
 
 export interface SmtpConfig {
@@ -35,6 +41,7 @@ export interface SmtpConfig {
 export interface SendResult {
   ok: boolean
   externalId?: string // provider message id when available
+  threadId?: string   // provider thread id when available (Gmail)
   error?: string
 }
 
@@ -77,10 +84,16 @@ export async function sendViaSmtp(cfg: SmtpConfig, email: OutboundEmail): Promis
 // ─── Gmail (REST + OAuth refresh token) ────────────────────────────────────────
 // Exchanges the stored refresh token for a short-lived access token. Reuses the
 // same Google OAuth client as the Calendar integration (GOOGLE_CALENDAR_CLIENT_*).
+// Access tokens last ~1 hour; the live sync runs every minute, so keep them per
+// refresh token instead of asking Google for a new one each time.
+const tokenCache = new Map<string, { token: string; exp: number }>()
+
 export async function getGmailAccessToken(refreshToken: string): Promise<{ token?: string; error?: string }> {
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET
   if (!clientId || !clientSecret) return { error: 'Google OAuth not configured' }
+  const hit = tokenCache.get(refreshToken)
+  if (hit && hit.exp > Date.now()) return { token: hit.token }
   try {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -93,53 +106,79 @@ export async function getGmailAccessToken(refreshToken: string): Promise<{ token
       }).toString(),
     })
     if (!res.ok) return { error: `token refresh failed: ${await res.text()}` }
-    const data = (await res.json()) as { access_token?: string }
+    const data = (await res.json()) as { access_token?: string; expires_in?: number }
     if (!data.access_token) return { error: 'no access_token returned' }
+    tokenCache.set(refreshToken, { token: data.access_token, exp: Date.now() + Math.max(60, (data.expires_in ?? 3600) - 120) * 1000 })
     return { token: data.access_token }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'token refresh exception' }
   }
 }
 
+// True when Google says the saved login is no good any more (revoked, expired —
+// Google ends logins after 7 days while the OAuth app is in "Testing").
+export function isReconnectError(err?: string | null): boolean {
+  return !!err && /invalid_grant|invalid_token|unauthorized_client|Token has been expired or revoked|insufficient|PERMISSION_DENIED|401/i.test(err)
+}
+
+// RFC 2047 — a subject or name with accents / emoji / smart quotes must be encoded,
+// or it shows up as garbage in the customer's mail app.
+function encodeHeader(v: string): string {
+  // eslint-disable-next-line no-control-regex
+  return /^[\x00-\x7F]*$/.test(v) ? v : `=?UTF-8?B?${Buffer.from(v, 'utf8').toString('base64')}?=`
+}
+const stripHtml = (h: string) => h.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h\d)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\n{3,}/g, '\n\n').trim()
+
 // Builds an RFC 5322 message and base64url-encodes it for the Gmail API.
 function buildMime(email: OutboundEmail, fromAddress: string): string {
-  const from = email.fromName ? `${email.fromName} <${fromAddress}>` : fromAddress
+  const from = email.fromName ? `${encodeHeader(email.fromName)} <${fromAddress}>` : fromAddress
   const headers = [
     `From: ${from}`,
     `To: ${email.to}`,
   ]
   if (email.cc && email.cc.length) headers.push(`Cc: ${email.cc.join(', ')}`)
-  headers.push(`Subject: ${email.subject}`, 'MIME-Version: 1.0')
+  if (email.bcc && email.bcc.length) headers.push(`Bcc: ${email.bcc.join(', ')}`)
+  headers.push(`Subject: ${encodeHeader(email.subject)}`, 'MIME-Version: 1.0')
+  if (email.inReplyTo) headers.push(`In-Reply-To: ${email.inReplyTo}`)
+  if (email.references || email.inReplyTo) headers.push(`References: ${(email.references || email.inReplyTo)!.trim()}`)
 
   const wrap76 = (s: string) => s.replace(/(.{76})/g, '$1\r\n')
+  const b64 = (s: string) => wrap76(Buffer.from(s, 'utf8').toString('base64'))
   const atts = email.attachments ?? []
 
-  // No attachments → single part (base64-encode the body so UTF-8 survives intact).
-  if (atts.length === 0) {
-    const ct = email.html ? 'text/html' : 'text/plain'
-    const content = email.html ?? email.text ?? ''
-    headers.push(`Content-Type: ${ct}; charset="UTF-8"`, 'Content-Transfer-Encoding: base64')
-    const b64 = wrap76(Buffer.from(content, 'utf8').toString('base64'))
-    return Buffer.from(`${headers.join('\r\n')}\r\n\r\n${b64}`).toString('base64url')
+  // The readable body: HTML + a plain-text copy (multipart/alternative) so every mail
+  // app — and spam filters — get what they expect. Plain text only when there's no HTML.
+  const textPart = email.text ?? (email.html ? stripHtml(email.html) : '')
+  const altBoundary = 'ggalt_' + Math.random().toString(36).slice(2)
+  const bodyBlock = (): { ct: string; content: string } => {
+    if (!email.html) return { ct: 'text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64', content: b64(textPart) }
+    const inner =
+      `--${altBoundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(textPart)}\r\n` +
+      `--${altBoundary}\r\nContent-Type: text/html; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(email.html)}\r\n` +
+      `--${altBoundary}--`
+    return { ct: `multipart/alternative; boundary="${altBoundary}"`, content: inner }
   }
 
-  // Attachments → multipart/mixed. Body part first, then each file as base64.
+  // No attachments → just the body.
+  if (atts.length === 0) {
+    const b = bodyBlock()
+    headers.push(`Content-Type: ${b.ct}`)
+    return Buffer.from(`${headers.join('\r\n')}\r\n\r\n${b.content}`).toString('base64url')
+  }
+
+  // Attachments → multipart/mixed. Body first, then each file as base64.
   const boundary = 'ggmix_' + Math.random().toString(36).slice(2)
   headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
-  const bodyCt = email.html ? 'text/html' : 'text/plain'
-  const bodyContent = email.html ?? email.text ?? ''
-  const parts: string[] = []
-  parts.push(
-    `--${boundary}\r\nContent-Type: ${bodyCt}; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
-    wrap76(Buffer.from(bodyContent, 'utf8').toString('base64'))
-  )
+  const b = bodyBlock()
+  const parts: string[] = [`--${boundary}\r\nContent-Type: ${b.ct}\r\n\r\n${b.content}`]
   for (const a of atts) {
-    const b64 = a.isBase64 ? String(a.content) : Buffer.from(a.content as Buffer).toString('base64')
+    const data = a.isBase64 ? String(a.content) : Buffer.from(a.content as Buffer).toString('base64')
     const ct = a.contentType || 'application/octet-stream'
+    const name = encodeHeader(a.filename.replace(/["\r\n]/g, ''))
     parts.push(
-      `--${boundary}\r\nContent-Type: ${ct}; name="${a.filename}"\r\n` +
-      `Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${a.filename}"\r\n\r\n` +
-      wrap76(b64)
+      `--${boundary}\r\nContent-Type: ${ct}; name="${name}"\r\n` +
+      `Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${name}"\r\n\r\n` +
+      wrap76(data.replace(/\s/g, ''))
     )
   }
   const bodyAll = parts.join('\r\n') + `\r\n--${boundary}--`
@@ -157,11 +196,11 @@ export async function sendViaGmail(
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw: buildMime(email, fromAddress) }),
+      body: JSON.stringify({ raw: buildMime(email, fromAddress), ...(email.gmailThreadId ? { threadId: email.gmailThreadId } : {}) }),
     })
     if (!res.ok) return { ok: false, error: `Gmail send failed: ${await res.text()}` }
     const data = (await res.json()) as { id?: string; threadId?: string }
-    return { ok: true, externalId: data.id }
+    return { ok: true, externalId: data.id, threadId: data.threadId }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Gmail send exception' }
   }

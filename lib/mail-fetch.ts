@@ -1,49 +1,116 @@
 // lib/mail-fetch.ts
-// Inbound mail reader for the Nexus Messages connectors.
+// Live two-way Gmail sync for Nexus Mail.
 //
-// Currently implements Gmail (REST API + stored OAuth refresh token). IMAP for
-// generic SMTP mailboxes is a future addition — SMTP connectors are send-only today.
+// How it stays live:
+//   • First run (or after Google forgets where we were): a FULL sync — the last 30 days
+//     of Inbox + Sent + Starred (up to 400 messages, newest first), with each message's
+//     Gmail labels so read / archived / starred match Gmail exactly.
+//   • Every run after that: Gmail's history feed from the last historyId — only what
+//     changed (new mail, read/unread, archive, star, trash, deleted). Cheap enough to
+//     run every minute (Inngest `nexus-sync-mailboxes`) and whenever the inbox opens.
 //
-// fetchGmailInbox() pulls recent INBOX **and SENT** messages, dedupes by Gmail
-// message id, groups them into message_threads by Gmail threadId, inserts rows
-// with the correct direction, and recomputes each touched thread's
-// last_message_at + unread_count (so it works whether or not the 095 thread
-// triggers are present). After each sync it runs the CRM auto-matcher so new
-// conversations attach themselves to opportunities/customers (lib/email-match).
+// Thread state is always derived from its messages' labels:
+//   unread = inbound messages with UNREAD · archived = no message in INBOX ·
+//   starred = any STARRED · trashed = every message in TRASH · bulk = newsletters.
+// After each sync the CRM auto-matcher attaches new conversations to deals/customers.
+//
+// Works before migration 222 too: writes drop the new columns and retry.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getGmailAccessToken } from './mail-send'
+import { getGmailAccessToken, isReconnectError } from './mail-send'
 import { autoLinkThread } from './email-match'
 
+const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
+
 interface GmailHeader { name: string; value: string }
-interface GmailPart { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] }
-
-function headerValue(headers: GmailHeader[], name: string): string {
-  return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+interface GmailPart {
+  partId?: string
+  mimeType?: string
+  filename?: string
+  headers?: GmailHeader[]
+  body?: { data?: string; attachmentId?: string; size?: number }
+  parts?: GmailPart[]
+}
+interface GmailMessage {
+  id: string
+  threadId: string
+  labelIds?: string[]
+  snippet?: string
+  internalDate?: string
+  historyId?: string
+  payload?: GmailPart & { headers?: GmailHeader[] }
 }
 
-// Parse "Display Name <addr@x.com>" into its pieces.
-function parseAddress(raw: string): { name: string; address: string } {
-  const m = raw.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/)
+export interface MailAttachmentMeta {
+  name: string
+  mime_type: string
+  size: number
+  attachment_id: string
+  content_id?: string | null   // inline image (cid:…)
+  inline?: boolean
+}
+
+export interface FetchResult {
+  fetched: number              // new messages stored
+  updated?: number             // messages whose labels changed
+  removed?: number             // messages deleted in Gmail
+  mode?: 'full' | 'history' | 'search'
+  thread_ids?: string[]        // Nexus thread ids touched (search uses this)
+  error?: string
+  needs_reconnect?: boolean
+}
+
+// Columns added in migration 222 — dropped and retried if the DB doesn't have them yet.
+const NEW_COLS = new Set([
+  'gmail_history_id', 'last_error', 'last_error_at',
+  'snippet', 'last_direction', 'last_from_name', 'last_from_address', 'message_count', 'labels',
+  'is_archived', 'is_starred', 'is_trashed', 'is_bulk', 'has_attachments', 'snoozed_until',
+  'rfc_message_id', 'cc_addresses',
+])
+const isMissingCol = (e: { message?: string; code?: string } | null) =>
+  !!e && (e.code === 'PGRST204' || e.code === '42703' || /column|schema cache/i.test(e.message ?? ''))
+const strip = (row: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(row).filter(([k]) => !NEW_COLS.has(k)))
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Q = PromiseLike<{ data: any; error: any }>
+export async function writeSafe(run: (row: Record<string, unknown>) => Q, row: Record<string, unknown>) {
+  const r = await run(row)
+  if (r.error && isMissingCol(r.error)) return run(strip(row))
+  return r
+}
+
+// ─── small helpers ────────────────────────────────────────────────────────────
+function headerValue(headers: GmailHeader[] | undefined, name: string): string {
+  return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+}
+// RFC 2047 decode ("=?UTF-8?B?…?=" / "=?utf-8?Q?…?=") for names + subjects.
+function decodeWords(v: string): string {
+  return v.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_m, _cs, enc, txt) => {
+    try {
+      if (enc.toUpperCase() === 'B') return Buffer.from(txt, 'base64').toString('utf8')
+      return Buffer.from(txt.replace(/_/g, ' ').replace(/=([0-9A-F]{2})/gi, (_x: string, h: string) => String.fromCharCode(parseInt(h, 16))), 'latin1').toString('utf8')
+    } catch { return txt }
+  })
+}
+export function parseAddress(raw: string): { name: string; address: string } {
+  const v = decodeWords(raw)
+  const m = v.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/)
   if (m) return { name: m[1].trim(), address: m[2].trim() }
-  return { name: '', address: raw.trim() }
+  return { name: '', address: v.trim() }
 }
-
-// Parse a full To/Cc header ("A <a@x>, b@y, ...") into address objects.
-function parseAddressList(raw: string): { name: string; address: string }[] {
+export function parseAddressList(raw: string): { name: string; address: string }[] {
   if (!raw.trim()) return []
-  // Split on commas that are not inside quoted display names.
   const parts = raw.match(/(?:[^,"]|"[^"]*")+/g) ?? []
   return parts.map((p) => parseAddress(p)).filter((p) => p.address.includes('@'))
 }
+const decode = (data?: string) => (data ? Buffer.from(data, 'base64url').toString('utf8') : '')
 
-// Recursively pull the best text body out of a Gmail payload.
 function extractBody(payload: GmailPart | undefined): string {
   if (!payload) return ''
-  const decode = (data?: string) => (data ? Buffer.from(data, 'base64url').toString('utf8') : '')
-  if (payload.mimeType === 'text/plain' && payload.body?.data) return decode(payload.body.data)
+  if (payload.mimeType === 'text/plain' && payload.body?.data && !payload.filename) return decode(payload.body.data)
   if (payload.parts?.length) {
-    const plain = payload.parts.find((p) => p.mimeType === 'text/plain')
+    const plain = payload.parts.find((p) => p.mimeType === 'text/plain' && !p.filename)
     if (plain?.body?.data) return decode(plain.body.data)
     for (const p of payload.parts) {
       const nested = extractBody(p)
@@ -51,19 +118,15 @@ function extractBody(payload: GmailPart | undefined): string {
     }
   }
   if (payload.mimeType === 'text/html' && payload.body?.data) {
-    return decode(payload.body.data).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    return decode(payload.body.data).replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   }
   return ''
 }
-
-// Pull the raw HTML body (formatted) so the reader can show it as a real email,
-// not stripped text. Recurses into multipart/alternative + multipart/related.
 function extractHtml(payload: GmailPart | undefined): string {
   if (!payload) return ''
-  const decode = (data?: string) => (data ? Buffer.from(data, 'base64url').toString('utf8') : '')
-  if (payload.mimeType === 'text/html' && payload.body?.data) return decode(payload.body.data)
+  if (payload.mimeType === 'text/html' && payload.body?.data && !payload.filename) return decode(payload.body.data)
   if (payload.parts?.length) {
-    const htmlPart = payload.parts.find((p) => p.mimeType === 'text/html')
+    const htmlPart = payload.parts.find((p) => p.mimeType === 'text/html' && !p.filename)
     if (htmlPart?.body?.data) return decode(htmlPart.body.data)
     for (const p of payload.parts) {
       const nested = extractHtml(p)
@@ -72,200 +135,448 @@ function extractHtml(payload: GmailPart | undefined): string {
   }
   return ''
 }
+export function extractAttachments(payload: GmailPart | undefined, out: MailAttachmentMeta[] = []): MailAttachmentMeta[] {
+  if (!payload) return out
+  if (payload.body?.attachmentId && (payload.filename || payload.mimeType?.startsWith('image/'))) {
+    const cid = headerValue(payload.headers, 'Content-ID').replace(/[<>]/g, '') || null
+    const disp = headerValue(payload.headers, 'Content-Disposition').toLowerCase()
+    out.push({
+      name: payload.filename || `image.${(payload.mimeType ?? 'image/png').split('/')[1]}`,
+      mime_type: payload.mimeType ?? 'application/octet-stream',
+      size: payload.body.size ?? 0,
+      attachment_id: payload.body.attachmentId,
+      content_id: cid,
+      inline: !!cid && !disp.startsWith('attachment'),
+    })
+  }
+  for (const p of payload.parts ?? []) extractAttachments(p, out)
+  return out
+}
 
-export interface FetchResult { fetched: number; error?: string }
+// Newsletters, notifications, receipts → "Other". Real people → "Priority".
+const BULK_FROM = /(^|[._+-])(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer|news(letter)?|marketing|updates?|digest|info|hello|team|support|billing|receipts?|accounts?)@/i
+const BULK_LABELS = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS']
+export function looksBulk(headers: GmailHeader[] | undefined, fromAddress: string, labels: string[]): boolean {
+  if (labels.some((l) => BULK_LABELS.includes(l))) return true
+  if (headerValue(headers, 'List-Unsubscribe') || headerValue(headers, 'List-Id')) return true
+  const prec = headerValue(headers, 'Precedence').toLowerCase()
+  if (prec === 'bulk' || prec === 'list' || prec === 'junk') return true
+  const auto = headerValue(headers, 'Auto-Submitted').toLowerCase()
+  if (auto && auto !== 'no') return true
+  return /^(no-?reply|do-?not-?reply|notifications?|mailer-daemon)@/i.test(fromAddress) || (BULK_FROM.test(fromAddress) && /^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer|news(letter)?|marketing|digest)/i.test(fromAddress))
+}
 
+async function gget<T>(token: string, path: string): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`${GMAIL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (res.ok) return { ok: true, data: (await res.json()) as T }
+    if ((res.status === 429 || res.status >= 500) && attempt < 2) { await new Promise((r) => setTimeout(r, 400 * (attempt + 1))); continue }
+    return { ok: false, status: res.status, error: `Gmail ${res.status}: ${(await res.text()).slice(0, 300)}` }
+  }
+  return { ok: false, status: 0, error: 'Gmail unreachable' }
+}
+async function pmap<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const k = i++; out[k] = await fn(items[k]) }
+  }))
+  return out
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function noteChannel(supabase: SupabaseClient, channel: any, patch: Record<string, unknown>) {
+  const r = await writeSafe((row) => supabase.from('message_channels').update(row).eq('id', channel.id), patch)
+  if (r.error) console.error('mail sync: channel update failed', r.error.message)
+}
+
+// ─── storing one Gmail message ────────────────────────────────────────────────
+interface Ctx {
+  supabase: SupabaseClient
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  channel: any
+  selfAddress: string
+  touched: Set<string>                       // Nexus thread ids to recompute
+  newThreadAddrs: Map<string, Set<string>>   // thread → addresses for CRM matching
+  threadCache: Map<string, string>           // gmail threadId → Nexus thread id
+}
+
+async function findOrCreateThread(ctx: Ctx, gthread: string, subject: string, others: { name: string; address: string }[], from: { name: string; address: string }, at: string): Promise<string | null> {
+  const cached = ctx.threadCache.get(gthread)
+  if (cached) return cached
+  const { supabase, channel } = ctx
+  const lookup = async () => {
+    const { data } = await supabase.from('message_threads').select('id, participants')
+      .eq('channel_id', channel.id).eq('external_thread_id', gthread).order('created_at').limit(1).maybeSingle()
+    return data as { id: string; participants: unknown } | null
+  }
+  const found = await lookup()
+  if (found) {
+    const existing = Array.isArray(found.participants) ? (found.participants as { name?: string; address?: string }[]) : []
+    const known = new Set(existing.map((p) => String(p?.address ?? '').toLowerCase()))
+    const additions = others.filter((p) => !known.has(p.address.toLowerCase()))
+    if (additions.length) await supabase.from('message_threads').update({ participants: [...existing, ...additions] }).eq('id', found.id)
+    ctx.threadCache.set(gthread, found.id)
+    return found.id
+  }
+  const { data: created, error } = await writeSafe((row) => supabase.from('message_threads').insert(row).select('id').single(), {
+    user_id: channel.user_id,
+    org_id: channel.org_id,
+    channel_id: channel.id,
+    external_thread_id: gthread,
+    subject: subject || '(no subject)',
+    participants: others.length ? others : [{ name: from.name, address: from.address }],
+    last_message_at: at,
+  })
+  if (error) {
+    // Another sync made it a moment ago (unique index) → use that one.
+    if (error.code === '23505') { const again = await lookup(); if (again) { ctx.threadCache.set(gthread, again.id); return again.id } }
+    console.error('mail sync: thread insert failed', error.message)
+    return null
+  }
+  ctx.threadCache.set(gthread, created.id)
+  return created.id
+}
+
+async function storeMessage(ctx: Ctx, msg: GmailMessage): Promise<boolean> {
+  const { supabase, channel, selfAddress } = ctx
+  const headers = msg.payload?.headers ?? []
+  const labels = msg.labelIds ?? []
+  if (labels.includes('SPAM') || labels.includes('CHAT') || labels.includes('DRAFT')) return false
+  const from = parseAddress(headerValue(headers, 'From'))
+  const to = parseAddressList(headerValue(headers, 'To'))
+  const cc = parseAddressList(headerValue(headers, 'Cc'))
+  const subject = decodeWords(headerValue(headers, 'Subject'))
+  const dateHeader = headerValue(headers, 'Date')
+  const at = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString()
+    : dateHeader && !isNaN(Date.parse(dateHeader)) ? new Date(dateHeader).toISOString() : new Date().toISOString()
+  const isOutbound = labels.includes('SENT') || (!!selfAddress && from.address.toLowerCase() === selfAddress)
+  const others = [from, ...to, ...cc].filter((p) => p.address && p.address.toLowerCase() !== selfAddress)
+  const threadId = await findOrCreateThread(ctx, msg.threadId, subject, others, from, at)
+  if (!threadId) return false
+  const atts = extractAttachments(msg.payload)
+  const row = {
+    thread_id: threadId,
+    channel_id: channel.id,
+    external_message_id: msg.id,
+    direction: isOutbound ? 'outbound' : 'inbound',
+    source_type: 'gmail',
+    from_address: from.address || selfAddress || 'unknown',
+    from_name: from.name || null,
+    to_addresses: to.length ? to : [{ name: '', address: selfAddress }],
+    cc_addresses: cc,
+    subject: subject || null,
+    body: extractBody(msg.payload) || msg.snippet || '',
+    body_html: extractHtml(msg.payload) || null,
+    snippet: (msg.snippet ?? '').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').slice(0, 300) || null,
+    attachments: atts,
+    labels,
+    rfc_message_id: headerValue(headers, 'Message-ID') || headerValue(headers, 'Message-Id') || null,
+    is_bulk: !isOutbound && looksBulk(headers, from.address, labels),
+    status: isOutbound ? 'sent' : 'delivered',
+    sent_at: isOutbound ? at : null,
+    read_at: isOutbound || !labels.includes('UNREAD') ? at : null,
+    created_at: at,
+  }
+  const { error } = await writeSafe((r) => supabase.from('messages').insert(r), row)
+  if (error) {
+    if (error.code !== '23505') console.error('mail sync: message insert failed', error.message)
+    return false
+  }
+  ctx.touched.add(threadId)
+  const bag = ctx.newThreadAddrs.get(threadId) ?? new Set<string>()
+  for (const p of others) bag.add(p.address.toLowerCase())
+  ctx.newThreadAddrs.set(threadId, bag)
+  return true
+}
+
+// Our copy of a message we sent from Nexus (stored before Gmail gave it back).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function applyLabels(ctx: Ctx, rows: { id: string; thread_id: string; direction: string; read_at: string | null; created_at: string }[], labels: string[]) {
+  for (const r of rows) {
+    const patch: Record<string, unknown> = { labels }
+    if (r.direction === 'inbound') patch.read_at = labels.includes('UNREAD') ? null : (r.read_at ?? new Date().toISOString())
+    const { error } = await writeSafe((row) => ctx.supabase.from('messages').update(row).eq('id', r.id), patch)
+    if (error) console.error('mail sync: label update failed', error.message)
+    ctx.touched.add(r.thread_id)
+  }
+}
+
+// Re-derive a thread's list fields from its messages.
+export async function recomputeThread(supabase: SupabaseClient, threadId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let res: { data: any[] | null; error: any } = await supabase.from('messages')
+    .select('created_at, direction, read_at, labels, snippet, body, subject, from_name, from_address, attachments, is_bulk')
+    .eq('thread_id', threadId)
+  if (res.error && isMissingCol(res.error)) {
+    res = await supabase.from('messages').select('created_at, direction, read_at, body, subject, from_name, from_address, attachments').eq('thread_id', threadId)
+  }
+  if (res.error) { console.error('mail sync: recompute read failed', res.error.message); return }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const msgs = (res.data ?? []) as any[]
+  if (!msgs.length) {
+    // Every message was deleted in Gmail → the conversation is gone too.
+    await supabase.from('message_threads').delete().eq('id', threadId).not('external_thread_id', 'is', null)
+    return
+  }
+  msgs.sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+  const last = msgs[msgs.length - 1]
+  const lab = (m: { labels?: string[] }) => (Array.isArray(m.labels) ? m.labels : [])
+  const all = new Set<string>(msgs.flatMap(lab))
+  const inbound = msgs.filter((m) => m.direction === 'inbound')
+  const unread = inbound.filter((m) => !m.read_at).length
+  const hasLabels = msgs.some((m) => lab(m).length > 0)
+  // The conversation's name = the first email's subject, without "Re:" / "Fwd:".
+  const firstSubject = String(msgs.find((m) => m.subject)?.subject ?? '').replace(/^\s*((re|fwd?|aw|wg)\s*:\s*)+/i, '').trim()
+  const patch: Record<string, unknown> = {
+    ...(firstSubject ? { subject: firstSubject } : {}),
+    last_message_at: last.created_at,
+    unread_count: unread,
+    snippet: String(last.snippet || last.body || '').replace(/\s+/g, ' ').trim().slice(0, 240) || null,
+    last_direction: last.direction,
+    last_from_name: last.from_name ?? null,
+    last_from_address: last.from_address ?? null,
+    message_count: msgs.length,
+    labels: [...all],
+    has_attachments: msgs.some((m) => Array.isArray(m.attachments) && m.attachments.some((a: MailAttachmentMeta) => !a.inline)),
+    is_bulk: inbound.length > 0 && !msgs.some((m) => m.direction === 'outbound') && inbound.every((m) => m.is_bulk),
+  }
+  if (hasLabels) {
+    patch.is_archived = !all.has('INBOX')
+    patch.is_starred = all.has('STARRED')
+    patch.is_trashed = msgs.every((m) => lab(m).includes('TRASH'))
+  }
+  const { error } = await writeSafe((row) => supabase.from('message_threads').update(row).eq('id', threadId), patch)
+  if (error) console.error('mail sync: thread update failed', error.message)
+}
+
+async function fetchFull(token: string, id: string): Promise<GmailMessage | null> {
+  const r = await gget<GmailMessage>(token, `/messages/${id}?format=full`)
+  return r.ok ? r.data : null
+}
+
+async function storeIds(ctx: Ctx, token: string, ids: string[]): Promise<number> {
+  if (!ids.length) return 0
+  // Skip what we already have.
+  const have = new Set<string>()
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await ctx.supabase.from('messages').select('external_message_id')
+      .eq('channel_id', ctx.channel.id).in('external_message_id', ids.slice(i, i + 200))
+    for (const r of data ?? []) have.add((r as { external_message_id: string }).external_message_id)
+  }
+  const todo = ids.filter((id) => !have.has(id))
+  const results = await pmap(todo, 8, async (id) => {
+    const m = await fetchFull(token, id)
+    return m ? storeMessage(ctx, m) : false
+  })
+  return results.filter(Boolean).length
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function listIds(token: string, q: string, max: number): Promise<{ ids: { id: string; threadId: string }[]; error?: string; status?: number }> {
+  const ids: { id: string; threadId: string }[] = []
+  let page: string | undefined
+  while (ids.length < max) {
+    const r = await gget<{ messages?: { id: string; threadId: string }[]; nextPageToken?: string }>(
+      token, `/messages?q=${encodeURIComponent(q)}&maxResults=${Math.min(100, max - ids.length)}${page ? `&pageToken=${page}` : ''}`)
+    if (!r.ok) return { ids, error: r.error, status: r.status }
+    ids.push(...(r.data.messages ?? []))
+    page = r.data.nextPageToken
+    if (!page) break
+  }
+  return { ids }
+}
+
+// ─── the sync ─────────────────────────────────────────────────────────────────
 export async function fetchGmailInbox(
   supabase: SupabaseClient,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   channel: any,
-  opts: { maxResults?: number; query?: string } = {},
+  opts: { maxResults?: number; query?: string; full?: boolean } = {},
 ): Promise<FetchResult> {
   if (channel.channel_type !== 'gmail' || !channel.oauth_refresh_token) {
     return { fetched: 0, error: 'not a connected Gmail channel' }
   }
   const { token, error } = await getGmailAccessToken(channel.oauth_refresh_token)
-  if (!token) return { fetched: 0, error: error ?? 'no Gmail access token' }
+  if (!token) {
+    const needs = isReconnectError(error)
+    await noteChannel(supabase, channel, { last_error: needs ? 'Google ended the Gmail login — reconnect Gmail.' : (error ?? 'no Gmail access token'), last_error_at: new Date().toISOString() })
+    return { fetched: 0, error: error ?? 'no Gmail access token', needs_reconnect: needs }
+  }
 
-  // Inbox AND sent — sent mail must sync so it can auto-attach to CRM records.
-  const q = encodeURIComponent(opts.query ?? '(in:inbox OR in:sent) newer_than:7d')
-  const max = opts.maxResults ?? 40
-  const selfAddress: string = (channel.config?.from_address ?? '').toLowerCase()
+  const ctx: Ctx = {
+    supabase, channel,
+    selfAddress: String(channel.config?.from_address ?? channel.display_name ?? '').toLowerCase(),
+    touched: new Set(), newThreadAddrs: new Map(), threadCache: new Map(),
+  }
+  let fetched = 0, updated = 0, removed = 0
+  let mode: FetchResult['mode'] = 'history'
+  let newHistoryId: string | null = null
 
-  // 1) List recent message ids.
-  let ids: { id: string; threadId: string }[] = []
   try {
-    const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=${max}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    )
-    if (!listRes.ok) return { fetched: 0, error: `Gmail list failed: ${await listRes.text()}` }
-    const data = (await listRes.json()) as { messages?: { id: string; threadId: string }[] }
-    ids = data.messages ?? []
-  } catch (err) {
-    return { fetched: 0, error: err instanceof Error ? err.message : 'Gmail list exception' }
-  }
-  if (ids.length === 0) return { fetched: 0 }
-
-  // 2) Skip messages we already stored.
-  const candidateIds = ids.map((m) => m.id)
-  const { data: existing } = await supabase
-    .from('messages')
-    .select('external_message_id')
-    .eq('channel_id', channel.id)
-    .in('external_message_id', candidateIds)
-  const seen = new Set((existing ?? []).map((r: any) => r.external_message_id))
-  const toFetch = ids.filter((m) => !seen.has(m.id))
-  if (toFetch.length === 0) return { fetched: 0 }
-
-  const touchedThreads = new Set<string>()
-  const threadAddrs = new Map<string, Set<string>>() // dbThreadId → all non-self addresses seen
-  let fetched = 0
-
-  // 3) Fetch + store each new message.
-  for (const { id, threadId } of toFetch) {
-    try {
-      const msgRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      )
-      if (!msgRes.ok) continue
-      const msg = (await msgRes.json()) as {
-        threadId: string
-        labelIds?: string[]
-        snippet?: string
-        internalDate?: string
-        payload?: { headers?: GmailHeader[] } & GmailPart
-      }
-      const headers = msg.payload?.headers ?? []
-      const from = parseAddress(headerValue(headers, 'From'))
-      const toList = [
-        ...parseAddressList(headerValue(headers, 'To')),
-        ...parseAddressList(headerValue(headers, 'Cc')),
-      ]
-      const subject = headerValue(headers, 'Subject')
-      const dateHeader = headerValue(headers, 'Date')
-      const receivedAt = msg.internalDate
-        ? new Date(Number(msg.internalDate)).toISOString()
-        : dateHeader
-          ? new Date(dateHeader).toISOString()
-          : new Date().toISOString()
-      const body = extractBody(msg.payload) || msg.snippet || ''
-      const bodyHtml = extractHtml(msg.payload)
-
-      // Sent mail syncs too now — direction from Gmail labels (fallback: From = self).
-      const isOutbound =
-        (msg.labelIds ?? []).includes('SENT') ||
-        (!!selfAddress && from.address.toLowerCase() === selfAddress)
-
-      // Every address on the message except our own — participants + CRM matching.
-      const others = [from, ...toList].filter(
-        (p) => p.address && p.address.toLowerCase() !== selfAddress,
-      )
-
-      // Find or create the thread for this Gmail conversation.
-      const gthread = msg.threadId || threadId
-      let dbThreadId: string
-      const { data: thread } = await supabase
-        .from('message_threads')
-        .select('id, participants')
-        .eq('channel_id', channel.id)
-        .eq('external_thread_id', gthread)
-        .maybeSingle()
-      if (thread) {
-        dbThreadId = thread.id
-        // Union new addresses into the stored participants list.
-        const existing = Array.isArray(thread.participants) ? thread.participants : []
-        const known = new Set(existing.map((p: any) => String(p?.address ?? '').toLowerCase()))
-        const additions = others.filter((p) => !known.has(p.address.toLowerCase()))
-        if (additions.length) {
-          await supabase
-            .from('message_threads')
-            .update({ participants: [...existing, ...additions] })
-            .eq('id', dbThreadId)
+    if (opts.query) {
+      // Search all of Gmail — bring in what matches so it opens in Nexus.
+      mode = 'search'
+      const l = await listIds(token, opts.query, opts.maxResults ?? 50)
+      if (l.error) throw new Error(l.error)
+      fetched = await storeIds(ctx, token, l.ids.map((m) => m.id))
+      const gthreads = [...new Set(l.ids.map((m) => m.threadId))]
+      const { data } = gthreads.length
+        ? await supabase.from('message_threads').select('id').eq('channel_id', channel.id).in('external_thread_id', gthreads.slice(0, 200))
+        : { data: [] }
+      for (const t of data ?? []) ctx.touched.add((t as { id: string }).id)
+    } else {
+      let doFull = !!opts.full || !channel.gmail_history_id
+      if (!doFull) {
+        // Incremental: only what changed since last time.
+        const added: string[] = []
+        const labelNow = new Map<string, string[]>()   // message id → current labels
+        const deleted: string[] = []
+        let page: string | undefined
+        let pages = 0
+        while (pages++ < 10) {
+          const r = await gget<{
+            history?: {
+              messagesAdded?: { message: GmailMessage }[]
+              messagesDeleted?: { message: GmailMessage }[]
+              labelsAdded?: { message: GmailMessage }[]
+              labelsRemoved?: { message: GmailMessage }[]
+            }[]
+            historyId?: string
+            nextPageToken?: string
+          }>(token, `/history?startHistoryId=${channel.gmail_history_id}&maxResults=500${page ? `&pageToken=${page}` : ''}`)
+          if (!r.ok) {
+            if (r.status === 404) { doFull = true; break } // Google forgot that point → start over
+            throw new Error(r.error)
+          }
+          for (const h of r.data.history ?? []) {
+            for (const a of h.messagesAdded ?? []) { added.push(a.message.id); if (a.message.labelIds) labelNow.set(a.message.id, a.message.labelIds) }
+            for (const a of [...(h.labelsAdded ?? []), ...(h.labelsRemoved ?? [])]) if (a.message.labelIds) labelNow.set(a.message.id, a.message.labelIds)
+            for (const d of h.messagesDeleted ?? []) deleted.push(d.message.id)
+          }
+          newHistoryId = r.data.historyId ?? newHistoryId
+          page = r.data.nextPageToken
+          if (!page) break
         }
-      } else {
-        const { data: created, error: cErr } = await supabase
-          .from('message_threads')
-          .insert({
-            user_id: channel.user_id,
-            org_id: channel.org_id,
-            channel_id: channel.id,
-            external_thread_id: gthread,
-            subject: subject || '(no subject)',
-            participants: others.length ? others : [{ name: from.name, address: from.address }],
-            last_message_at: receivedAt,
-          })
-          .select('id')
-          .single()
-        if (cErr || !created) continue
-        dbThreadId = created.id
+        if (!doFull) {
+          const del = new Set(deleted)
+          const keep = (id: string) => !del.has(id)
+          // New mail (only messages that are in Inbox / Sent / Starred / Archived — not drafts or spam).
+          const wanted = added.filter((id) => keep(id) && !(labelNow.get(id) ?? []).some((l) => l === 'DRAFT' || l === 'SPAM' || l === 'CHAT'))
+          fetched = await storeIds(ctx, token, [...new Set(wanted)])
+          // Read / unread, archive, star, trash done in Gmail (or by us — same result).
+          const changed = [...labelNow.keys()].filter(keep)
+          for (let i = 0; i < changed.length; i += 200) {
+            const chunk = changed.slice(i, i + 200)
+            const { data } = await supabase.from('messages').select('id, thread_id, direction, read_at, created_at, external_message_id')
+              .eq('channel_id', channel.id).in('external_message_id', chunk)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const row of (data ?? []) as any[]) {
+              const labels = labelNow.get(row.external_message_id)
+              if (!labels) continue
+              if (labels.includes('SPAM')) { await supabase.from('messages').delete().eq('id', row.id); ctx.touched.add(row.thread_id); removed++; continue }
+              await applyLabels(ctx, [row], labels)
+              updated++
+            }
+          }
+          // Deleted forever in Gmail.
+          if (deleted.length) {
+            const { data } = await supabase.from('messages').select('id, thread_id').eq('channel_id', channel.id).in('external_message_id', deleted.slice(0, 500))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const row of (data ?? []) as any[]) {
+              await supabase.from('messages').delete().eq('id', row.id)
+              ctx.touched.add(row.thread_id)
+              removed++
+            }
+          }
+        }
       }
-
-      const { error: insErr } = await supabase.from('messages').insert({
-        thread_id: dbThreadId,
-        channel_id: channel.id,
-        external_message_id: id,
-        direction: isOutbound ? 'outbound' : 'inbound',
-        source_type: 'gmail',
-        from_address: from.address,
-        from_name: from.name || null,
-        to_addresses: toList.length
-          ? toList
-          : [{ name: '', address: channel.config?.from_address ?? '' }],
-        subject: subject || null,
-        body,
-        body_html: bodyHtml || null,
-        status: isOutbound ? 'sent' : 'delivered',
-        sent_at: isOutbound ? receivedAt : null,
-        created_at: receivedAt,
-      })
-      if (insErr) continue
-      touchedThreads.add(dbThreadId)
-      const bag = threadAddrs.get(dbThreadId) ?? new Set<string>()
-      for (const p of others) bag.add(p.address.toLowerCase())
-      threadAddrs.set(dbThreadId, bag)
-      fetched++
-    } catch {
-      /* skip this message, continue */
+      if (doFull) {
+        mode = 'full'
+        const prof = await gget<{ historyId?: string; emailAddress?: string }>(token, '/profile')
+        if (!prof.ok) throw new Error(prof.error)
+        newHistoryId = prof.data.historyId ?? null
+        if (prof.data.emailAddress && !ctx.selfAddress) ctx.selfAddress = prof.data.emailAddress.toLowerCase()
+        const max = opts.maxResults ?? 400
+        const l = await listIds(token, '(in:inbox OR in:sent OR is:starred) newer_than:30d', max)
+        if (l.error) throw new Error(l.error)
+        fetched = await storeIds(ctx, token, l.ids.map((m) => m.id))
+        // Bring every stored message's labels in line with Gmail (read, archived, starred…).
+        const { data: rows } = await supabase.from('messages').select('id, thread_id, direction, read_at, created_at, external_message_id')
+          .eq('channel_id', channel.id).not('external_message_id', 'is', null)
+          .gte('created_at', new Date(Date.now() - 45 * 86400_000).toISOString())
+          .order('created_at', { ascending: false }).limit(800)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const list = (rows ?? []) as any[]
+        await pmap(list, 10, async (row) => {
+          const r = await gget<GmailMessage>(token, `/messages/${row.external_message_id}?format=minimal`)
+          if (r.ok) { await applyLabels(ctx, [row], r.data.labelIds ?? []); updated++ }
+          else if (r.status === 404) { await supabase.from('messages').delete().eq('id', row.id); ctx.touched.add(row.thread_id); removed++ }
+        })
+      }
     }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Gmail sync failed'
+    const needs = isReconnectError(msg)
+    await noteChannel(supabase, channel, { last_error: needs ? 'Gmail needs to be reconnected.' : msg.slice(0, 500), last_error_at: new Date().toISOString() })
+    // Still recompute what we managed to store.
+    for (const tid of ctx.touched) await recomputeThread(supabase, tid)
+    return { fetched, updated, removed, mode, error: msg, needs_reconnect: needs }
   }
 
-  // 4) Recompute last_message_at + unread_count for touched threads (trigger-independent).
-  for (const tid of touchedThreads) {
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('created_at, direction, read_at')
-      .eq('thread_id', tid)
-    if (!msgs?.length) continue
-    const last = msgs.reduce((a: string, m: any) => (m.created_at > a ? m.created_at : a), msgs[0].created_at)
-    const unread = msgs.filter((m: any) => m.direction === 'inbound' && !m.read_at).length
-    await supabase
-      .from('message_threads')
-      .update({ last_message_at: last, unread_count: unread })
-      .eq('id', tid)
+  for (const tid of ctx.touched) await recomputeThread(supabase, tid)
+
+  // Attach new conversations to deals / customers by who's on them.
+  for (const [tid, addrs] of ctx.newThreadAddrs) {
+    try { await autoLinkThread(supabase, tid, [...addrs], ctx.selfAddress) } catch { /* best-effort */ }
   }
 
-  // 5) Auto-attach touched threads to opportunities/customers by contact email.
-  for (const [tid, addrs] of threadAddrs) {
-    try {
-      await autoLinkThread(supabase, tid, [...addrs], selfAddress)
-    } catch {
-      /* matching is best-effort — never fail the sync */
-    }
-  }
+  const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString(), last_error: null, last_error_at: null }
+  if (newHistoryId && mode !== 'search') patch.gmail_history_id = newHistoryId
+  await noteChannel(supabase, channel, patch)
 
-  await supabase
-    .from('message_channels')
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq('id', channel.id)
-
-  return { fetched }
+  return { fetched, updated, removed, mode, thread_ids: [...ctx.touched] }
 }
 
-// Backfill formatted HTML for messages stored before HTML capture existed, so
-// older emails also render as real letters instead of ugly plain-text + URL dumps.
+// ─── two-way actions (Nexus → Gmail) ──────────────────────────────────────────
+export function canModifyGmail(channel: { oauth_scope?: string | null }): boolean {
+  return /gmail\.modify|mail\.google\.com/.test(channel.oauth_scope ?? '')
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function backfillGmailHtml(supabase: any, channel: any, limit = 40): Promise<number> {
+export async function gmailThreadAction(channel: any, gthread: string, action: 'read' | 'unread' | 'archive' | 'inbox' | 'star' | 'unstar' | 'trash' | 'untrash'): Promise<{ ok: boolean; error?: string; needs_reconnect?: boolean }> {
+  if (!canModifyGmail(channel)) return { ok: false, needs_reconnect: true, error: 'Reconnect Gmail to keep Gmail in step.' }
+  const { token, error } = await getGmailAccessToken(channel.oauth_refresh_token)
+  if (!token) return { ok: false, error, needs_reconnect: isReconnectError(error) }
+  const mod: Record<string, { add?: string[]; remove?: string[] }> = {
+    read: { remove: ['UNREAD'] }, unread: { add: ['UNREAD'] },
+    archive: { remove: ['INBOX'] }, inbox: { add: ['INBOX'] },
+    star: { add: ['STARRED'] }, unstar: { remove: ['STARRED'] },
+  }
+  const url = action === 'trash' || action === 'untrash'
+    ? `${GMAIL}/threads/${gthread}/${action}`
+    : `${GMAIL}/threads/${gthread}/modify`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: action === 'trash' || action === 'untrash' ? undefined : JSON.stringify({ addLabelIds: mod[action].add ?? [], removeLabelIds: mod[action].remove ?? [] }),
+  })
+  if (!res.ok) { const t = await res.text(); return { ok: false, error: `Gmail ${res.status}: ${t.slice(0, 200)}`, needs_reconnect: res.status === 401 || res.status === 403 } }
+  return { ok: true }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function gmailAttachment(channel: any, messageId: string, attachmentId: string): Promise<{ data?: Buffer; error?: string }> {
+  const { token, error } = await getGmailAccessToken(channel.oauth_refresh_token)
+  if (!token) return { error }
+  const r = await gget<{ data?: string }>(token, `/messages/${messageId}/attachments/${attachmentId}`)
+  if (!r.ok) return { error: r.error }
+  return { data: Buffer.from(r.data.data ?? '', 'base64url') }
+}
+
+// Backfill formatted HTML for messages stored before HTML capture existed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function backfillGmailHtml(supabase: any, channel: any, limit = 20): Promise<number> {
   if (channel.channel_type !== 'gmail' || !channel.oauth_refresh_token) return 0
   const { token } = await getGmailAccessToken(channel.oauth_refresh_token)
   if (!token) return 0
@@ -274,18 +585,20 @@ export async function backfillGmailHtml(supabase: any, channel: any, limit = 40)
     .select('id, external_message_id')
     .eq('channel_id', channel.id)
     .is('body_html', null)
+    .eq('attachments', '[]')
     .order('created_at', { ascending: false })
     .limit(limit)
   let filled = 0
   for (const r of rows ?? []) {
     if (!r.external_message_id) continue
-    try {
-      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${r.external_message_id}?format=full`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) continue
-      const msg = await res.json() as { payload?: GmailPart }
-      const html = extractHtml(msg.payload)
-      if (html) { await supabase.from('messages').update({ body_html: html }).eq('id', r.id); filled++ }
-    } catch { /* skip */ }
+    const m = await fetchFull(token, r.external_message_id)
+    if (!m) continue
+    const html = extractHtml(m.payload)
+    const atts = extractAttachments(m.payload)
+    const patch: Record<string, unknown> = { attachments: atts }
+    if (html) patch.body_html = html
+    const { error } = await supabase.from('messages').update(patch).eq('id', r.id)
+    if (!error && html) filled++
   }
   return filled
 }

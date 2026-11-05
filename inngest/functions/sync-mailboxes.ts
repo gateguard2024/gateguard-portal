@@ -1,13 +1,13 @@
 /**
- * Nexus Mailbox Sync — Inngest Function
+ * Nexus Mailbox Sync — Inngest Function (live Gmail)
  *
  * Two triggers:
- *   • cron  "*\/10 * * * *"            — every 10 min, sync all active Gmail connectors
- *   • event "messages/mailbox.sync"    — on-demand sync (from the Refresh button),
- *                                         optionally scoped to { channel_id } or { user_id }
+ *   • cron  "* * * * *"               — every minute: each Gmail mailbox pulls only what
+ *                                        changed since last time (Gmail history feed)
+ *   • event "messages/mailbox.sync"    — on-demand, optionally scoped to { channel_id } or { user_id }
  *
- * Pulls recent inbound Gmail into message_threads / messages via fetchGmailInbox.
- * SMTP connectors are send-only today, so only channel_type='gmail' is synced.
+ * New mail, read/unread, archive, star, trash and deletes all come across (lib/mail-fetch).
+ * One run at a time so two syncs never race on the same mailbox.
  */
 
 import { inngest } from '../client'
@@ -18,10 +18,11 @@ export const syncMailboxes = inngest.createFunction(
   {
     id: 'nexus-sync-mailboxes',
     name: 'Nexus: Sync Email Mailboxes',
-    retries: 1,
-    timeouts: { finish: '120s' },
+    retries: 0,
+    concurrency: { limit: 1 },
+    timeouts: { finish: '240s' },
     triggers: [
-      { cron: '*/10 * * * *' },
+      { cron: 'TZ=America/New_York * * * * *' },
       { event: 'messages/mailbox.sync' },
     ],
   },
@@ -30,34 +31,40 @@ export const syncMailboxes = inngest.createFunction(
     const channelId: string | undefined = event?.data?.channel_id
     const userId: string | undefined = event?.data?.user_id
 
-    const result = await step.run('sync-gmail-channels', async () => {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      )
-
-      let query = supabase
-        .from('message_channels')
-        .select('*')
-        .eq('channel_type', 'gmail')
-        .eq('is_active', true)
+    const channels = await step.run('list-mailboxes', async () => {
+      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+      let query = supabase.from('message_channels').select('id, last_synced_at, gmail_history_id')
+        .eq('channel_type', 'gmail').eq('is_active', true).not('oauth_refresh_token', 'is', null)
       if (channelId) query = query.eq('id', channelId)
       else if (userId) query = query.eq('user_id', userId)
-
-      const { data: channels, error } = await query
-      if (error) return { error: error.message }
-      if (!channels?.length) return { channels: 0, fetched: 0 }
-
-      let totalFetched = 0
-      const perChannel: Record<string, number> = {}
-      for (const ch of channels) {
-        const res = await fetchGmailInbox(supabase, ch)
-        perChannel[ch.id] = res.fetched
-        totalFetched += res.fetched
+      let { data, error } = await query
+      if (error && /gmail_history_id|column/i.test(error.message)) {
+        // Before migration 222.
+        let q2 = supabase.from('message_channels').select('id, last_synced_at')
+          .eq('channel_type', 'gmail').eq('is_active', true).not('oauth_refresh_token', 'is', null)
+        if (channelId) q2 = q2.eq('id', channelId)
+        else if (userId) q2 = q2.eq('user_id', userId)
+        const r2 = await q2
+        data = r2.data as typeof data
+        error = r2.error
       }
-      return { channels: channels.length, fetched: totalFetched, perChannel }
+      if (error) throw new Error(error.message)
+      return (data ?? []).map((c: { id: string }) => c.id)
     })
 
-    return { ok: true, ...result }
+    const results: Record<string, unknown> = {}
+    // One step per mailbox: a slow or broken mailbox doesn't hold up the others.
+    for (const id of channels as string[]) {
+      results[id] = await step.run(`sync-${id}`, async () => {
+        const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+        const { data: ch, error } = await supabase.from('message_channels').select('*').eq('id', id).maybeSingle()
+        if (error || !ch) return { error: error?.message ?? 'gone' }
+        // The browser just synced it — skip this minute.
+        if (event?.name !== 'messages/mailbox.sync' && ch.gmail_history_id && ch.last_synced_at && Date.now() - Date.parse(ch.last_synced_at) < 30_000) return { skipped: true }
+        const r = await fetchGmailInbox(supabase, ch)
+        return { fetched: r.fetched, updated: r.updated ?? 0, removed: r.removed ?? 0, mode: r.mode, error: r.error ?? null }
+      })
+    }
+    return { ok: true, mailboxes: (channels as string[]).length, results }
   },
 )

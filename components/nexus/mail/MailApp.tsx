@@ -1,0 +1,518 @@
+'use client'
+/**
+ * Nexus Mail — the email screen.
+ * Live two-way Gmail (new mail within about a minute; read / archive / star / trash /
+ * delete both ways), Priority vs Other inbox, Waiting on you, snooze, undo send,
+ * Lexi summary + replies in your voice, and the customer's deals / properties / open
+ * jobs / unpaid invoices next to every email.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Star, Settings, RefreshCw, X, Loader2, ChevronDown } from 'lucide-react'
+import MailReader, { type ThreadAction } from './MailReader'
+import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
+import MailContext from './MailContext'
+import MailSettings from './MailSettings'
+import { FOLDERS, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, ArrowLeft, PanelRight } = require('lucide-react') as any
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const FOLDER_ICON: Record<Folder, any> = {
+  inbox: Inbox, other: Archive, needs_reply: ClockI, unread: MailOpen, starred: Star, snoozed: AlarmClock,
+  sent: Send, linked: Link2, archived: Archive, trash: Trash2, all: Inbox,
+}
+// Folders a conversation leaves when you do this to it.
+const LEAVES: Partial<Record<ThreadAction, Folder[]>> = {
+  archive: ['inbox', 'other', 'needs_reply', 'unread'], trash: ['inbox', 'other', 'needs_reply', 'unread', 'starred', 'sent', 'linked', 'archived', 'snoozed'],
+  untrash: ['trash'], inbox: ['archived', 'trash'], snooze: ['inbox', 'other', 'needs_reply', 'unread'], unsnooze: ['snoozed'],
+  read: ['unread'], unstar: ['starred'],
+}
+const PREF = 'gg_mail_prefs'
+const readPrefs = (): { context?: boolean } => { try { return JSON.parse(localStorage.getItem(PREF) ?? '{}') } catch { return {} } }
+const savePrefs = (p: { context?: boolean }) => { try { localStorage.setItem(PREF, JSON.stringify(p)) } catch { /* ignore */ } }
+
+type Outbox = { email: OutgoingEmail; seed: ComposerSeed; timer: ReturnType<typeof setTimeout>; until: number } | null
+
+export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 'inbox', initialThreadId = null }: { onClose?: () => void; closeLabel?: string; initialFolder?: Folder; initialThreadId?: string | null }) {
+  const [folder, setFolder] = useState<Folder>(initialFolder)
+  const [q, setQ] = useState('')
+  const [qLive, setQLive] = useState('')
+  const [gmailIds, setGmailIds] = useState<string[] | null>(null)   // "search all of Gmail" results
+  const [rows, setRows] = useState<ThreadRow[]>([])
+  const [counts, setCounts] = useState<Counts | null>(null)
+  const [nextBefore, setNextBefore] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [needsMigration, setNeedsMigration] = useState(false)
+  const [selId, setSelId] = useState<string | null>(initialThreadId)
+  const [accounts, setAccounts] = useState<Account[] | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [gmailSearching, setGmailSearching] = useState(false)
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
+  const [outbox, setOutbox] = useState<Outbox>(null)
+  const [compose, setCompose] = useState<ComposerSeed | null>(null)
+  const [composeFor, setComposeFor] = useState<{ mode: 'reply' | 'replyAll' | 'forward'; restore?: ComposerSeed } | null>(null)
+  const [readerKey, setReaderKey] = useState(0)
+  const [showContext, setShowContext] = useState(true)
+  const [settings, setSettings] = useState(false)
+  const [reconnectHint, setReconnectHint] = useState(false)
+  const [folderMenu, setFolderMenu] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const reqId = useRef(0)
+
+  useEffect(() => { setShowContext(readPrefs().context !== false) }, [])
+  useEffect(() => { const t = setTimeout(() => setQ(qLive.trim()), 250); return () => clearTimeout(t) }, [qLive])
+  useEffect(() => { setGmailIds(null) }, [q])
+
+  const flash = useCallback((text: string, undo?: () => void) => {
+    setToast({ text, undo })
+    window.setTimeout(() => setToast((t) => (t?.text === text ? null : t)), undo ? 6500 : 3200)
+  }, [])
+
+  // ── loading ───────────────────────────────────────────────────────────────
+  const load = useCallback(async (opts: { silent?: boolean; more?: boolean } = {}) => {
+    const id = ++reqId.current
+    if (!opts.silent && !opts.more) setLoading(true)
+    if (opts.more) setLoadingMore(true)
+    const p = new URLSearchParams({ folder, limit: '50' })
+    if (q) p.set('q', q)
+    if (gmailIds) p.set('ids', gmailIds.join(','))
+    if (opts.more && nextBefore) p.set('before', nextBefore)
+    const r = await api<{ conversations: ThreadRow[]; counts: Counts | null; next_before: string | null; needs_migration?: boolean }>(`/api/nexus/messages/threads?${p}`)
+    if (id !== reqId.current) return
+    setLoading(false); setLoadingMore(false)
+    if (!r.ok) { if (!opts.silent) flash(r.data.error ?? 'Could not load mail.'); return }
+    setNeedsMigration(!!r.data.needs_migration)
+    if (r.data.counts) setCounts(r.data.counts)
+    setNextBefore(r.data.next_before)
+    setRows((prev) => (opts.more ? [...prev, ...r.data.conversations.filter((c) => !prev.some((x) => x.id === c.id))] : r.data.conversations))
+  }, [folder, q, gmailIds, nextBefore, flash])
+
+  const loadRef = useRef(load)
+  loadRef.current = load
+  useEffect(() => { setNextBefore(null); void loadRef.current() }, [folder, q, gmailIds])
+
+  // ── live sync ─────────────────────────────────────────────────────────────
+  const sync = useCallback(async (manual = false) => {
+    if (manual) setSyncing(true)
+    const r = await api<{ fetched?: number; updated?: number; accounts?: Account[]; needs_reconnect?: boolean; error?: string }>('/api/nexus/messages/sync', { method: 'POST', json: manual ? { force: true } : {} })
+    if (manual) setSyncing(false)
+    if (r.data.accounts) setAccounts(r.data.accounts)
+    if (manual && r.data.error && !r.data.needs_reconnect) flash(`Gmail: ${r.data.error.slice(0, 120)}`)
+    if ((r.data.fetched ?? 0) > 0 || (r.data.updated ?? 0) > 0 || manual) void loadRef.current({ silent: true })
+  }, [flash])
+
+  useEffect(() => {
+    void api<{ accounts?: Account[] }>('/api/nexus/messages/sync').then((r) => setAccounts(r.data.accounts ?? []))
+    void sync()
+    // New mail shows up on its own: pull Gmail every 45 s, refresh the list every 15 s
+    // (the server also syncs every minute even when nobody has Nexus open).
+    const s = window.setInterval(() => { if (document.visibilityState === 'visible') void sync() }, 45_000)
+    const l = window.setInterval(() => { if (document.visibilityState === 'visible') void loadRef.current({ silent: true }) }, 15_000)
+    const onFocus = () => { void sync() }
+    window.addEventListener('focus', onFocus)
+    return () => { window.clearInterval(s); window.clearInterval(l); window.removeEventListener('focus', onFocus) }
+  }, [sync])
+
+  const account = accounts?.[0] ?? null
+  const selfEmail = (account?.email ?? '').toLowerCase()
+  const selected = rows.find((r) => r.id === selId) ?? null
+
+  // ── actions ───────────────────────────────────────────────────────────────
+  const patchRow = (id: string, patch: Partial<ThreadRow>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+
+  const act = useCallback(async (row: ThreadRow, action: ThreadAction, extra?: { until?: string }, quiet = false) => {
+    const leaves = LEAVES[action]?.includes(folder) && !gmailIds
+    const idx = rows.findIndex((r) => r.id === row.id)
+    const before = rows
+    // Optimistic.
+    const patch: Partial<ThreadRow> =
+      action === 'read' ? { unread: false, unread_count: 0 } : action === 'unread' ? { unread: true, unread_count: Math.max(1, row.unread_count) }
+      : action === 'star' ? { starred: true } : action === 'unstar' ? { starred: false }
+      : action === 'archive' ? { archived: true } : action === 'inbox' ? { archived: false, trashed: false }
+      : action === 'trash' ? { trashed: true } : action === 'untrash' ? { trashed: false }
+      : action === 'snooze' ? { snoozed_until: extra?.until ?? null } : { snoozed_until: null }
+    if (leaves) {
+      const next = rows.filter((r) => r.id !== row.id)
+      setRows(next)
+      if (selId === row.id) setSelId(next[Math.min(idx, next.length - 1)]?.id ?? null)
+    } else patchRow(row.id, patch)
+    if (action === 'read' || action === 'unread') setCounts((c) => c && { ...c, unread: Math.max(0, c.unread + (action === 'read' ? (row.unread ? -1 : 0) : 1)) })
+
+    const r = await api<{ ok?: boolean; gmail?: { ok: boolean; needs_reconnect?: boolean } }>(`/api/nexus/messages/threads/${row.id}`, { method: 'PATCH', json: { action, until: extra?.until } })
+    if (!r.ok) { setRows(before); flash(r.data.error ?? 'That didn’t work. Try again.'); return }
+    if (r.data.gmail?.needs_reconnect) setReconnectHint(true)
+    if (quiet) return
+    const undoOf: Partial<Record<ThreadAction, ThreadAction>> = { archive: 'inbox', trash: 'untrash', snooze: 'unsnooze' }
+    const label: Partial<Record<ThreadAction, string>> = { archive: 'Archived', trash: 'Moved to Trash', snooze: 'Snoozed', inbox: 'Moved to Inbox', untrash: 'Restored' }
+    if (label[action]) {
+      const u = undoOf[action]
+      flash(label[action]!, u ? () => { setRows(before); setSelId(row.id); void api(`/api/nexus/messages/threads/${row.id}`, { method: 'PATCH', json: { action: u } }) } : undefined)
+    }
+    void loadRef.current({ silent: true })
+  }, [folder, gmailIds, rows, selId, flash])
+
+  // Opened from My Day on one email → mark it read once it's loaded.
+  const firstOpen = useRef(initialThreadId)
+  useEffect(() => {
+    if (!firstOpen.current) return
+    const r = rows.find((x) => x.id === firstOpen.current)
+    if (r) { firstOpen.current = null; if (r.unread) void act(r, 'read', undefined, true) }
+  }, [rows, act])
+
+  const open = useCallback((row: ThreadRow) => {
+    setSelId(row.id)
+    if (row.unread) void act(row, 'read', undefined, true)
+  }, [act])
+
+  // ── sending (with Undo) ───────────────────────────────────────────────────
+  const reallySend = useCallback(async (email: OutgoingEmail, seed: ComposerSeed) => {
+    setOutbox(null)
+    const r = await api<{ ok?: boolean; thread_id?: string; error?: string }>('/api/nexus/messages/send', { method: 'POST', json: email })
+    if (!r.ok || r.data.ok === false) {
+      flash(`Didn’t send: ${(r.data.error ?? 'unknown error').slice(0, 140)}`)
+      if (seed.threadId) { setSelId(seed.threadId); setComposeFor({ mode: seed.mode === 'new' ? 'reply' : seed.mode, restore: seed }) }
+      else setCompose(seed)
+      return
+    }
+    flash('Sent')
+    if (seed.threadId) setReaderKey((k) => k + 1)
+    void loadRef.current({ silent: true })
+  }, [flash])
+
+  const queue = useCallback((email: OutgoingEmail, seed: ComposerSeed) => {
+    setCompose(null)
+    const timer = setTimeout(() => { void reallySend(email, seed) }, 6000)
+    setOutbox({ email, seed, timer, until: Date.now() + 6000 })
+  }, [reallySend])
+
+  const undoSend = () => {
+    if (!outbox) return
+    clearTimeout(outbox.timer)
+    const s = outbox.seed
+    setOutbox(null)
+    if (s.threadId) { setSelId(s.threadId); setComposeFor({ mode: s.mode === 'new' ? 'reply' : s.mode, restore: s }) }
+    else setCompose(s)
+  }
+  // Don't lose a queued email if the window closes: send it now.
+  useEffect(() => {
+    if (!outbox) return
+    const flush = () => { clearTimeout(outbox.timer); navigator.sendBeacon?.('/api/nexus/messages/send', new Blob([JSON.stringify(outbox.email)], { type: 'application/json' })) }
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  }, [outbox])
+  const [, tick] = useState(0)
+  useEffect(() => { if (!outbox) return; const t = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(t) }, [outbox])
+
+  const newEmail = useCallback(() => setCompose({ key: `new-${Date.now()}`, mode: 'new', to: '', subject: '' }), [])
+
+  const addTodo = async (row: ThreadRow) => {
+    const r = await api('/api/todos', { method: 'POST', json: { title: `Follow up: ${row.contact_name}${row.subject ? ' — ' + row.subject : ''}` } })
+    flash(r.ok ? 'Added to your to-dos' : 'Could not add the to-do')
+  }
+
+  const searchGmail = async () => {
+    if (!q) return
+    setGmailSearching(true)
+    const r = await api<{ thread_ids?: string[]; error?: string }>('/api/nexus/messages/sync', { method: 'POST', json: { query: q } })
+    setGmailSearching(false)
+    if (!r.ok && !r.data.thread_ids) { flash(r.data.error ?? 'Gmail search failed.'); return }
+    setGmailIds(r.data.thread_ids ?? [])
+  }
+
+  // ── keyboard ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        if (e.key === 'Escape' && el === searchRef.current) { setQLive(''); searchRef.current?.blur() }
+        return
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || settings || compose) return
+      const i = rows.findIndex((r) => r.id === selId)
+      const go = (k: number) => { const r = rows[Math.max(0, Math.min(rows.length - 1, k))]; if (r) { open(r); document.getElementById(`mail-row-${r.id}`)?.scrollIntoView({ block: 'nearest' }) } }
+      const sel = selected
+      switch (e.key) {
+        case 'j': case 'ArrowDown': e.preventDefault(); go(i < 0 ? 0 : i + 1); break
+        case 'k': case 'ArrowUp': e.preventDefault(); go(i < 0 ? 0 : i - 1); break
+        case 'c': e.preventDefault(); newEmail(); break
+        case '/': e.preventDefault(); searchRef.current?.focus(); break
+        case 'Escape': setSelId(null); break
+        case 'e': if (sel) { e.preventDefault(); void act(sel, sel.archived ? 'inbox' : 'archive') } break
+        case '#': if (sel) { e.preventDefault(); void act(sel, 'trash') } break
+        case 's': if (sel) { e.preventDefault(); void act(sel, sel.starred ? 'unstar' : 'star') } break
+        case 'u': if (sel) { e.preventDefault(); void act(sel, 'unread', undefined, true); setSelId(null) } break
+        case 'r': if (sel) { e.preventDefault(); setComposeFor({ mode: 'reply' }) } break
+        case 'a': if (sel) { e.preventDefault(); setComposeFor({ mode: 'replyAll' }) } break
+        case 'f': if (sel) { e.preventDefault(); setComposeFor({ mode: 'forward' }) } break
+        case 'h': if (sel) { e.preventDefault(); const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(8, 0, 0, 0); void act(sel, 'snooze', { until: t.toISOString() }) } break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [rows, selId, selected, open, act, newEmail, settings, compose])
+
+  // ── pieces ────────────────────────────────────────────────────────────────
+  const folderLabel = FOLDERS.find((f) => f.id === folder)?.label ?? 'Mail'
+  const countFor = (f: Folder) => (counts ? (f === 'inbox' ? counts.inbox : f === 'other' ? counts.other : f === 'needs_reply' ? counts.needs_reply : f === 'snoozed' ? counts.snoozed : f === 'unread' ? counts.unread : 0) : 0)
+  const syncLine = useMemo(() => {
+    if (!accounts) return { text: 'Checking…', bad: false }
+    if (!account) return { text: 'No email connected', bad: true }
+    if (account.last_error) return { text: account.last_error, bad: true }
+    return { text: `Live · synced ${ago(account.last_synced_at)}`, bad: false }
+  }, [accounts, account])
+
+  if (settings) return <Shell onClose={onClose} closeLabel={closeLabel}><MailSettings accounts={accounts ?? []} onBack={() => setSettings(false)} onChanged={() => { void sync(true) }} /></Shell>
+
+  const sidebar = (
+    <nav aria-label="Mail folders" style={{ width: 228, flexShrink: 0, background: M.side, borderRight: `1px solid ${M.line}`, flexDirection: 'column', minHeight: 0 }} className="hidden lg:flex">
+      <div style={{ padding: '14px 12px 8px' }}>
+        <button type="button" onClick={newEmail} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: M.blue, border: 0, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: M.font }}>
+          <PenSquare size={16} /> New email
+        </button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+        {FOLDERS.map((f, i) => {
+          const Icon = FOLDER_ICON[f.id]
+          const on = folder === f.id && !gmailIds
+          const c = countFor(f.id)
+          return (
+            <React.Fragment key={f.id}>
+              {(i === 3 || i === 6) && <div style={{ height: 1, background: M.line, margin: '8px 8px' }} />}
+              <button type="button" onClick={() => { setFolder(f.id); setGmailIds(null); setSelId(null) }} title={f.hint || undefined}
+                aria-current={on ? 'page' : undefined}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8, border: 0, cursor: 'pointer', background: on ? 'rgba(0,0,0,0.07)' : 'transparent', color: M.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 400, textAlign: 'left' }}>
+                <Icon size={16} style={{ color: on ? M.blue : M.ink3 }} />
+                <span style={{ flex: 1 }}>{f.label}</span>
+                {c > 0 && <span style={{ fontSize: 12, color: f.id === 'inbox' ? M.blue : M.ink3, fontWeight: f.id === 'inbox' ? 600 : 400 }}>{c}</span>}
+              </button>
+            </React.Fragment>
+          )
+        })}
+      </div>
+      <div style={{ padding: '10px 14px 14px', borderTop: `1px solid ${M.line}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 500, color: M.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account?.email ?? 'Email'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: syncLine.bad ? M.red : M.ink3, marginTop: 3 }}>
+          <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: syncLine.bad ? M.red : M.green, flexShrink: 0 }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{syncLine.text}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          {syncLine.bad
+            ? <a href="/api/nexus/messages/google/connect" style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', background: M.blue, borderRadius: 7, padding: '5px 10px', textDecoration: 'none' }}>{account ? 'Reconnect Gmail' : 'Connect Gmail'}</a>
+            : <button type="button" onClick={() => void sync(true)} style={sideBtn}>{syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh</button>}
+          <button type="button" onClick={() => setSettings(true)} style={sideBtn} aria-label="Mail settings"><Settings size={13} /> Settings</button>
+        </div>
+      </div>
+    </nav>
+  )
+
+  const list = (
+    <section aria-label={folderLabel} style={{ flexDirection: 'column', minHeight: 0, background: '#fff', borderRight: `1px solid ${M.line}` }} className={`${selected ? 'hidden lg:flex' : 'flex'} w-full lg:w-[380px] lg:flex-shrink-0`}>
+      <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${M.line}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          {/* phone: folder picker */}
+          <div className="lg:hidden" style={{ position: 'relative' }}>
+            <button type="button" onClick={() => setFolderMenu((o) => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 19, fontWeight: 600, color: M.ink, background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: M.font }}>
+              {gmailIds ? 'Gmail results' : folderLabel} <ChevronDown size={16} style={{ color: M.ink3 }} />
+            </button>
+            {folderMenu && (
+              <div role="menu" style={{ position: 'absolute', top: 30, left: 0, zIndex: 40, width: 240, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.16)', padding: 4 }}>
+                {FOLDERS.map((f) => (
+                  <button key={f.id} type="button" role="menuitem" onClick={() => { setFolder(f.id); setGmailIds(null); setFolderMenu(false) }} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '9px 12px', border: 0, background: folder === f.id ? 'rgba(0,0,0,0.05)' : 'none', borderRadius: 8, cursor: 'pointer', color: M.ink, fontFamily: M.font }}>
+                    {f.label}{countFor(f.id) > 0 && <span style={{ color: M.ink3 }}>{countFor(f.id)}</span>}
+                  </button>
+                ))}
+                <div style={{ height: 1, background: M.line, margin: 4 }} />
+                <button type="button" role="menuitem" onClick={() => { setFolderMenu(false); setSettings(true) }} style={{ width: '100%', textAlign: 'left', fontSize: 14, padding: '9px 12px', border: 0, background: 'none', cursor: 'pointer', color: M.ink, fontFamily: M.font }}>Settings</button>
+              </div>
+            )}
+          </div>
+          <h2 className="hidden lg:block" style={{ margin: 0, fontSize: 19, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em' }}>{gmailIds ? 'Gmail results' : folderLabel}</h2>
+          <span style={{ fontSize: 12, color: M.ink3 }}>{folder === 'inbox' && counts && !gmailIds ? `${counts.inbox} unread` : ''}</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+            <span className="flex lg:hidden" style={{ gap: 2 }}>
+              <button type="button" onClick={() => void sync(true)} aria-label="Refresh" style={iconBtn}>{syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}</button>
+              <button type="button" onClick={newEmail} aria-label="New email" style={{ ...iconBtn, color: M.blue }}><PenSquare size={17} /></button>
+              {onClose && <button type="button" onClick={onClose} aria-label={closeLabel} style={iconBtn}><X size={17} /></button>}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: M.side, borderRadius: 9, padding: '0 10px' }}>
+          <Search size={14} style={{ color: M.ink3, flexShrink: 0 }} />
+          <input ref={searchRef} value={qLive} onChange={(e) => setQLive(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void searchGmail() }}
+            placeholder="Search mail" aria-label="Search mail" style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13.5, padding: '8px 0', color: M.ink, fontFamily: M.font }} />
+          {qLive && <button type="button" aria-label="Clear search" onClick={() => setQLive('')} style={{ border: 0, background: 'none', color: M.ink3, cursor: 'pointer', display: 'inline-flex' }}><X size={14} /></button>}
+        </div>
+        {q && (
+          <button type="button" onClick={() => void searchGmail()} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: M.blue, background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: M.font }}>
+            {gmailSearching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />} {gmailIds ? `Showing all of Gmail for “${q}”` : `Search all of Gmail for “${q}” (older mail too)`}
+          </button>
+        )}
+      </div>
+
+      {needsMigration && <div style={banner}>Mail is running in basic mode until migration 222 is run.</div>}
+      {reconnectHint && account && (
+        <div style={banner}>Changes are saved here. <a href="/api/nexus/messages/google/connect" style={{ color: M.blue, fontWeight: 600 }}>Reconnect Gmail</a> once so they also show in Gmail.</div>
+      )}
+
+      <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {loading && rows.length === 0 ? (
+          <div style={{ padding: 30, textAlign: 'center', color: M.ink3 }}><Loader2 size={18} className="animate-spin" /></div>
+        ) : rows.length === 0 ? (
+          <EmptyState folder={folder} searching={!!q} hasAccount={!!account} accountsLoaded={!!accounts} onConnect={() => setSettings(true)} />
+        ) : rows.map((r) => (
+          <Row key={r.id} r={r} selected={r.id === selId} onOpen={() => open(r)}
+            onArchive={() => void act(r, r.archived ? 'inbox' : 'archive')}
+            onRead={() => void act(r, r.unread ? 'read' : 'unread', undefined, true)}
+            onStar={() => void act(r, r.starred ? 'unstar' : 'star', undefined, true)} />
+        ))}
+        {nextBefore && rows.length > 0 && (
+          <div style={{ padding: 14, textAlign: 'center' }}>
+            <button type="button" onClick={() => void load({ more: true })} style={sideBtn}>{loadingMore ? <Loader2 size={13} className="animate-spin" /> : null} Load more</button>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+
+  const reader = selected ? (
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', minHeight: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}>
+        <MailReader row={selected} selfEmail={selfEmail} channelId={account?.id ?? selected.channel_id} fromEmail={account?.email}
+          refreshKey={readerKey}
+          onAction={(a, x) => void act(selected, a, x)}
+          onBack={() => setSelId(null)}
+          onQueue={queue}
+          onTodo={() => void addTodo(selected)}
+          composeFor={composeFor} onComposed={() => setComposeFor(null)} />
+        <span className="hidden xl:block" style={{ position: 'absolute', top: 8, right: 12 }}>
+          <button type="button" onClick={() => { const v = !showContext; setShowContext(v); savePrefs({ context: v }) }}
+            aria-label={showContext ? 'Hide customer details' : 'Show customer details'} title={showContext ? 'Hide details' : 'Customer details'}
+            style={{ ...iconBtn, color: showContext ? M.blue : M.ink2 }}>
+            {PanelRight ? <PanelRight size={17} /> : <Sparkles size={17} />}
+          </button>
+        </span>
+      </div>
+      {showContext && (
+        <aside className="hidden xl:block" style={{ width: 300, flexShrink: 0, minHeight: 0 }} aria-label="Customer details">
+          <MailContext row={selected} onLinked={(p) => patchRow(selected.id, p)} onClose={() => { setShowContext(false); savePrefs({ context: false }) }} />
+        </aside>
+      )}
+    </div>
+  ) : (
+    <div className="hidden lg:flex" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', background: '#fff', color: M.ink3, flexDirection: 'column', gap: 8, fontFamily: M.font }}>
+      <Inbox size={34} style={{ color: M.ink4 }} />
+      <div style={{ fontSize: 15, fontWeight: 500, color: M.ink2 }}>{rows.length ? 'Pick an email' : 'Nothing here'}</div>
+      <div style={{ fontSize: 12.5 }}>j / k to move · c for a new email</div>
+    </div>
+  )
+
+  return (
+    <Shell onClose={onClose} closeLabel={closeLabel}>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0, fontFamily: M.font, color: M.ink, position: 'relative' }}>
+        {sidebar}
+        {list}
+        {reader}
+
+        {compose && (
+          <div style={{ position: 'absolute', right: 16, bottom: 16, width: 'min(600px, calc(100% - 32px))', height: 'min(560px, calc(100% - 32px))', zIndex: 50 }}>
+            <MailComposer seed={compose} channelId={account?.id ?? null} fromEmail={account?.email} onQueue={queue} onClose={() => setCompose(null)} />
+          </div>
+        )}
+
+        {(toast || outbox) && (
+          <div role="status" aria-live="polite" style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', zIndex: 60, display: 'flex', alignItems: 'center', gap: 14, background: '#1D1D1F', color: '#fff', borderRadius: 10, padding: '10px 16px', fontSize: 13.5, boxShadow: '0 10px 30px rgba(0,0,0,0.25)', fontFamily: M.font, maxWidth: 'calc(100% - 32px)' }}>
+            {outbox ? (
+              <>
+                <span>Sending in {Math.max(1, Math.ceil((outbox.until - Date.now()) / 1000))}…</span>
+                <button type="button" onClick={undoSend} style={toastBtn}>Undo</button>
+                <button type="button" onClick={() => { clearTimeout(outbox.timer); void reallySend(outbox.email, outbox.seed) }} style={{ ...toastBtn, color: 'rgba(255,255,255,0.7)' }}>Send now</button>
+              </>
+            ) : toast ? (
+              <>
+                <span>{toast.text}</span>
+                {toast.undo && <button type="button" onClick={() => { toast.undo!(); setToast(null) }} style={toastBtn}>Undo</button>}
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </Shell>
+  )
+}
+
+function Shell({ children, onClose, closeLabel }: { children: React.ReactNode; onClose?: () => void; closeLabel: string }) {
+  return (
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      {onClose && (
+        <div className="hidden lg:flex" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderBottom: `1px solid ${M.line}`, background: M.side, fontFamily: M.font }}>
+          <button type="button" onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: M.blue, background: 'none', border: 0, cursor: 'pointer', fontFamily: M.font }}>
+            <ArrowLeft size={15} /> {closeLabel}
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 600, color: M.ink2 }}>Mail</span>
+          <span style={{ width: 80 }} />
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+    </div>
+  )
+}
+
+function Row({ r, selected, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
+  const badge = r.linked_type ? RECORD_BADGE[r.linked_type] : null
+  const who = r.last_from_me ? `To: ${r.contact_name}` : r.contact_name
+  return (
+    <div id={`mail-row-${r.id}`} className="group" style={{ position: 'relative', borderBottom: `1px solid ${M.line}`, background: selected ? M.sel : '#fff' }}>
+      <button type="button" onClick={onOpen} aria-current={selected ? 'true' : undefined}
+        style={{ width: '100%', display: 'flex', gap: 10, padding: '11px 14px 11px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
+        <span aria-hidden style={{ width: 8, flexShrink: 0, paddingTop: 14 }}>{r.unread && <span style={{ display: 'block', width: 8, height: 8, borderRadius: 8, background: M.blue }} />}</span>
+        <span aria-hidden style={{ width: 34, height: 34, borderRadius: 34, background: `${tintFor(r.contact_name)}1A`, color: tintFor(r.contact_name), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{initials(r.contact_name)}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.unread ? 600 : 500, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{who}{r.message_count && r.message_count > 1 ? <span style={{ color: M.ink3, fontWeight: 400 }}> {r.message_count}</span> : null}</span>
+            <span style={{ fontSize: 12, color: r.unread ? M.blue : M.ink3, flexShrink: 0 }}>{r.snoozed_until ? `⏰ ${listTime(r.snoozed_until)}` : listTime(r.last_at)}</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: r.unread ? 600 : 400, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.subject}</span>
+            {r.has_attachments && <Paperclip size={12} style={{ color: M.ink3, flexShrink: 0 }} />}
+            {r.starred && <Star size={12} fill={M.star} style={{ color: M.star, flexShrink: 0 }} />}
+          </span>
+          <span style={{ fontSize: 12.5, color: M.ink3, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 } as React.CSSProperties}>{r.preview}</span>
+          {(badge || r.needs_reply) && (
+            <span style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+              {badge && <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: `${badge.color}14`, borderRadius: 5, padding: '1px 6px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>}
+            </span>
+          )}
+        </span>
+      </button>
+      <div className="hidden lg:group-hover:flex" style={{ position: 'absolute', right: 10, bottom: 8, gap: 2, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', padding: 2 }}>
+        <button type="button" title={r.archived ? 'Move to inbox' : 'Archive'} aria-label={r.archived ? 'Move to inbox' : 'Archive'} onClick={onArchive} style={iconBtnSm}>{r.archived ? <Inbox size={14} /> : <Archive size={14} />}</button>
+        <button type="button" title={r.unread ? 'Mark read' : 'Mark unread'} aria-label={r.unread ? 'Mark read' : 'Mark unread'} onClick={onRead} style={iconBtnSm}><MailOpen size={14} /></button>
+        <button type="button" title={r.starred ? 'Unstar' : 'Star'} aria-label={r.starred ? 'Unstar' : 'Star'} onClick={onStar} style={iconBtnSm}><Star size={14} fill={r.starred ? M.star : 'none'} style={{ color: r.starred ? M.star : undefined }} /></button>
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }: { folder: Folder; searching: boolean; hasAccount: boolean; accountsLoaded: boolean; onConnect: () => void }) {
+  if (accountsLoaded && !hasAccount) {
+    return (
+      <div style={{ padding: '40px 24px', textAlign: 'center', fontFamily: M.font }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: M.ink }}>Connect your email</div>
+        <div style={{ fontSize: 13, color: M.ink3, margin: '6px 0 14px', lineHeight: 1.5 }}>Bring your Gmail into Nexus. Everything stays in step with Gmail both ways.</div>
+        <button type="button" onClick={onConnect} style={{ fontSize: 13.5, fontWeight: 600, color: '#fff', background: M.blue, border: 0, borderRadius: 9, padding: '9px 16px', cursor: 'pointer' }}>Connect Gmail</button>
+      </div>
+    )
+  }
+  const text = searching ? 'No matches here. Press Enter to search all of Gmail.'
+    : folder === 'inbox' ? 'Inbox zero. Nice.' : folder === 'needs_reply' ? 'You’re caught up — nobody is waiting on you.'
+    : folder === 'snoozed' ? 'Nothing snoozed.' : 'Nothing here.'
+  return <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13.5, color: M.ink3, fontFamily: M.font }}>{text}</div>
+}
+
+const iconBtn: React.CSSProperties = { width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 0, background: 'transparent', color: M.ink2, cursor: 'pointer' }
+const iconBtnSm: React.CSSProperties = { ...iconBtn, width: 28, height: 28 }
+const sideBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: M.ink2, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontFamily: M.font }
+const toastBtn: React.CSSProperties = { fontSize: 13.5, fontWeight: 600, color: '#64B5FF', background: 'none', border: 0, cursor: 'pointer', padding: 0, fontFamily: M.font }
+const banner: React.CSSProperties = { padding: '8px 14px', fontSize: 12.5, color: M.ink2, background: '#FFF8E6', borderBottom: `1px solid ${M.line}`, fontFamily: M.font }

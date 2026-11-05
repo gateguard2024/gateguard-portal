@@ -8,7 +8,8 @@ import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { TasksSurface, addDays, fmtDue, localISO, type DueFilter, type Task } from '@/components/nexus/tasks/TasksSurface'
 import CalendarViews from '@/components/nexus/CalendarViews'
-import MessagesShell from '@/components/nexus/MessagesShell'
+import MailApp from '@/components/nexus/mail/MailApp'
+import type { ThreadRow } from '@/components/nexus/mail/mailShared'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
 import { SiteStatusModule } from '@/components/nexus/SiteStatusModule'
 import { NEXUS_BG } from '@/components/nexus/NexusBackdrop'
@@ -66,14 +67,6 @@ type MyDayCard = {
   actionLabel: string
   badge?: string
 }
-
-type MessageNote = {
-  id: string
-  text: string
-  createdAt: string
-}
-
-const MESSAGE_NOTE_KEY = 'nexus_my_day_message_notes'
 
 const LEAD_BAR_GRADIENTS = [
   'linear-gradient(90deg,#00A3FF,#00A3FF,#00A3FF)',
@@ -349,12 +342,22 @@ export function MyDaySurface() {
   const [showTopNoteBox, setShowTopNoteBox] = useState(false)
   const [relatedJobId, setRelatedJobId] = useState<string | null>(null)
   const [priorityOpen, setPriorityOpen] = useState(false)
-  const [messageNote, setMessageNote] = useState('')
-  const [messageNotes, setMessageNotes] = useState<MessageNote[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(localStorage.getItem(MESSAGE_NOTE_KEY) ?? '[]') as MessageNote[] } catch { return [] }
-  })
-  const [messageStatus, setMessageStatus] = useState<string | null>(null)
+  // Messages card = your real inbox (Priority), refreshed every minute.
+  const [inbox, setInbox] = useState<{ rows: ThreadRow[]; unread: number; loaded: boolean; error: boolean }>({ rows: [], unread: 0, loaded: false, error: false })
+  const [mailThreadId, setMailThreadId] = useState<string | null>(null)
+  const loadInbox = useCallback(async () => {
+    try {
+      const r = await fetch('/api/nexus/messages/threads?folder=inbox&limit=6', { cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setInbox((x) => ({ ...x, loaded: true, error: true })); return }
+      setInbox({ rows: Array.isArray(j.conversations) ? j.conversations : [], unread: j.counts?.inbox ?? 0, loaded: true, error: false })
+    } catch { setInbox((x) => ({ ...x, loaded: true, error: true })) }
+  }, [])
+  useEffect(() => {
+    void loadInbox()
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') void loadInbox() }, 60_000)
+    return () => window.clearInterval(t)
+  }, [loadInbox])
   const POPOUT_KEY = 'nexus_my_day_popouts'
   const [popouts, setPopouts] = useState<{ schedule: boolean; todos: boolean }>(() => {
     if (typeof window === 'undefined') return { schedule: true, todos: true }
@@ -421,7 +424,7 @@ export function MyDaySurface() {
   const nextEvent = todayEvents[0]
   const todoCount = summary?.counts?.today_todos ?? 0
   const workSignalCount = top10.length
-  const messageCount = messageNotes.length
+  const messageCount = inbox.unread
   const highCount = top10.filter(item => item.urgency === 'high').length
   const medCount  = top10.filter(item => item.urgency === 'medium').length
   const lowCount  = top10.filter(item => item.urgency === 'low').length
@@ -491,16 +494,6 @@ export function MyDaySurface() {
     }
   }
 
-  function saveMessageNote() {
-    const text = messageNote.trim()
-    if (!text) return
-    const nextNotes = [{ id: Date.now().toString(), text, createdAt: new Date().toISOString() }, ...messageNotes].slice(0, 8)
-    setMessageNotes(nextNotes)
-    localStorage.setItem(MESSAGE_NOTE_KEY, JSON.stringify(nextNotes))
-    setMessageNote('')
-    setMessageStatus('Message note saved for today.')
-  }
-
   function openSelectedRelated() {
     if (!selectedTopItem) { setTopActionMessage('Select an item first.'); return }
     if (selectedTopItem.type !== 'work_order') { setTopActionMessage('This type stays in My Day for now. Full related glass is coming next.'); return }
@@ -508,13 +501,13 @@ export function MyDaySurface() {
     setActivePanel(null)
   }
 
-  const openCard = (card: MyDayCard) => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }
+  const openCard = (card: MyDayCard) => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }
 
   const cards: MyDayCard[] = [
     { id: 'schedule', title: "Today's Schedule", subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : "See today's calendar, site visits, jobs, and appointments.", hex: '#00A3FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
     { id: 'top10', title: "Today's Priorities", subtitle: workSignalCount > 0 ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.` : 'Important work will appear here when Nexus finds it.', hex: '#3f7fb8', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : undefined, actionLabel: 'Open →' },
     { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Open this list to review and finish tasks.`, hex: '#00A3FF', glyph: 'todo', actionLabel: 'Open →' },
-    { id: 'messages', title: 'Messages', subtitle: 'Customer calls, emails, texts, and message notes that need attention.', hex: '#34D399', glyph: 'email', badge: messageCount > 0 ? `${messageCount}` : 'New', actionLabel: 'Open →' },
+    { id: 'messages', title: 'Messages', subtitle: 'Your email, live with Gmail — customers and deals right next to it.', hex: '#34D399', glyph: 'email', badge: messageCount > 0 ? `${messageCount}` : 'New', actionLabel: 'Open →' },
   ]
 
   if (relatedJobId) {
@@ -633,28 +626,35 @@ export function MyDaySurface() {
       {/* Site Status — role-scoped site overview (corporate: all + dealer filter; dealers: theirs) */}
       <SiteStatusModule />
 
-      {/* Messages board (your saved message notes) */}
+      {/* Messages — your real inbox (Priority) */}
       <div className="mb-6 overflow-hidden" style={CARD}>
         <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
-          <span className="text-[15px] font-semibold">Messages</span>
-          <button type="button" onClick={() => openCard(cards[3])} className="text-[13px] font-medium" style={{ color: L.blue }}>Open inbox</button>
+          <span className="text-[15px] font-semibold">Messages{inbox.unread > 0 && <span className="ml-2 text-[13px] font-medium" style={{ color: L.blue }}>{inbox.unread} unread</span>}</span>
+          <button type="button" onClick={() => { setMailThreadId(null); openCard(cards[3]) }} className="text-[13px] font-medium" style={{ color: L.blue }}>Open inbox</button>
         </div>
-        {messageNotes.length === 0 ? (
+        {!inbox.loaded ? (
+          <div className="px-[18px] py-6 text-center text-[13px]" style={{ color: L.ink3 }}>Loading…</div>
+        ) : inbox.rows.length === 0 ? (
           <div className="p-4">
-            <button type="button" onClick={() => openCard(cards[3])} className="w-full rounded-[10px] py-8 text-center text-[13px]" style={{ color: L.ink3, border: '1px dashed rgba(0,0,0,0.15)' }}>No messages yet — open the inbox to add one</button>
+            <button type="button" onClick={() => { setMailThreadId(null); openCard(cards[3]) }} className="w-full rounded-[10px] py-8 text-center text-[13px]" style={{ color: L.ink3, border: '1px dashed rgba(0,0,0,0.15)' }}>
+              {inbox.error ? 'Couldn’t load your email — open the inbox' : 'Inbox zero — nothing waiting. Open the inbox'}
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {messageNotes.slice(0, 6).map(note => (
-              <button key={note.id} type="button" onClick={() => openCard(cards[3])} className="px-[18px] py-3.5 text-left hover:bg-[#F7F8FA]" style={{ borderBottom: `1px solid ${L.line}`, borderRight: `1px solid ${L.line}` }}>
-                <div className="flex items-center gap-2 text-[13px] font-semibold">
-                  <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full" style={{ background: '#1C2B47', color: '#fff' }}>
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+          <div>
+            {inbox.rows.slice(0, 6).map((t) => (
+              <button key={t.id} type="button" onClick={() => { setMailThreadId(t.id); openCard(cards[3]) }} className="flex w-full items-center gap-3 px-[18px] py-3 text-left hover:bg-[#F7F8FA]" style={{ borderBottom: `1px solid ${L.line}` }}>
+                <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: t.unread ? L.blue : 'transparent' }} />
+                <span className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full text-[12px] font-semibold" style={{ background: 'rgba(0,113,227,0.10)', color: L.blue }}>
+                  {(t.contact_name || '?').replace(/<.*>/, '').split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="flex-1 truncate text-[13.5px]" style={{ fontWeight: t.unread ? 600 : 500, color: L.ink }}>{t.last_from_me ? `To: ${t.contact_name}` : t.contact_name}</span>
+                    <span className="flex-shrink-0 text-[11.5px]" style={{ color: t.unread ? L.blue : L.ink3 }}>{new Date(t.last_at).toDateString() === new Date().toDateString() ? new Date(t.last_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : new Date(t.last_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                   </span>
-                  Note
-                  <span className="ml-auto text-[11px] font-normal" style={{ color: L.ink3 }}>{new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                </div>
-                <div className="mt-1.5 line-clamp-2 text-[13px]" style={{ color: L.ink2 }}>{note.text}</div>
+                  <span className="block truncate text-[12.5px]" style={{ color: L.ink2 }}>{t.subject}<span style={{ color: L.ink3 }}> — {t.preview}</span></span>
+                </span>
               </button>
             ))}
           </div>
@@ -713,11 +713,13 @@ export function MyDaySurface() {
       {/* To-Dos opens the Tasks screen (board + list). TodoBoard.tsx is kept until Tasks is confirmed. */}
       {activePanel === 'todos' && <TasksSurface initialDue={tasksDue} initialTaskId={tasksTaskId} onClose={() => { setActivePanel(null); setTasksTaskId(null); void loadSummary(); }} />}
 
-      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => { setActivePanel(null); void loadSummary(); }}>
-        <div className="rounded-[1.4rem] p-4" style={{ background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
-        <MessagesShell />
+      {activePanel === 'messages' && (
+        <div className="fixed inset-0 z-[90] lg:p-4" style={{ background: 'rgba(0,0,0,0.32)' }}>
+          <div className="h-full w-full overflow-hidden lg:rounded-[14px]" style={{ background: '#fff', boxShadow: '0 30px 90px rgba(0,0,0,0.35)' }}>
+            <MailApp key={mailThreadId ?? 'inbox'} initialThreadId={mailThreadId} closeLabel="Back to My Day" onClose={() => { setActivePanel(null); setMailThreadId(null); void loadSummary(); void loadInbox() }} />
+          </div>
         </div>
-      </DetailShell>}
+      )}
 
       <AddEventModal open={addEventOpen} onClose={() => setAddEventOpen(false)} onSaved={loadSummary} />
     </section>
