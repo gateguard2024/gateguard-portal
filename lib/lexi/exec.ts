@@ -151,7 +151,7 @@ export const PROPOSE_PLAN_TOOL: Anthropic.Tool = {
 export const EXEC_TOOLS: Anthropic.Tool[] = [
   {
     name: 'company_pulse',
-    description: 'Gate Guard\'s business numbers right now: pipeline by stage (count + value), stalled deals, won / lost and win rate (last 90 days), average won deal, new leads (30 days) by source, open and completed jobs, active sites, and QuickBooks cash / money owed to us when connected. Use before any plan or strategy answer.',
+    description: 'Gate Guard\'s business numbers right now: pipeline by stage (count + value), stalled deals, won / lost and win rate (last 90 days), average won deal, new leads (30 days) by source, open and completed jobs, active sites, and QuickBooks book cash (not the live bank balance) / money owed to us when connected. Use before any plan or strategy answer.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -245,7 +245,7 @@ export async function companyPulse(ctx: LexiCtx): Promise<Row> {
     leads_30_days: { count: L.length, by_source: bySource },
     jobs: { open: openWos.count ?? null, completed_30_days: doneWos.count ?? null },
     active_sites: sites.count ?? null,
-    quickbooks: q ? { cash: money(q.cash?.total), owed_to_us: money(q.receivable?.total), owed_over_90_days: money(q.receivable?.over90), bills_we_owe: money(q.payable?.total) } : 'not connected or unavailable',
+    quickbooks: q ? { book_cash_in_quickbooks: money(q.cash?.total), book_cash_note: 'What QuickBooks has recorded in the bank accounts — NOT the live bank balance (QuickBooks doesn\'t share the bank feed balance). Say "QuickBooks shows", never "we have in the bank".', owed_to_us: money(q.receivable?.total), owed_over_90_days: money(q.receivable?.over90), bills_we_owe: money(q.payable?.total) } : 'not connected or unavailable',
     errors: [deals.error?.message, leads.error?.message].filter(Boolean),
   }
 }
@@ -663,7 +663,7 @@ const AUTO_CARDS: { key: string; name: string; unit?: string }[] = [
   { key: 'jobs_done', name: 'Jobs completed' },
   { key: 'jobs_old', name: 'Open jobs over 7 days' },
   { key: 'gates_down', name: 'Gates down (stuck open)' },
-  { key: 'cash', name: 'Cash in bank', unit: '$' },
+  { key: 'cash', name: 'Cash (QuickBooks book)', unit: '$' },
   { key: 'ar_90', name: 'Owed to us 90+ days', unit: '$' },
 ]
 const mondayOf = (ymdStr: string) => { const d = new Date(`${ymdStr}T12:00:00Z`); const dow = d.getUTCDay(); d.setUTCDate(d.getUTCDate() - ((dow + 6) % 7)); return d.toISOString().slice(0, 10) }
@@ -907,6 +907,7 @@ export async function runExecBrief(u: PortalUser, slot: BriefSlot, opts: { force
     system: `You are Lexi, Gate Guard's strategy-and-operations VP, writing Russel's ${SLOT_TITLE[slot].toLowerCase()} for ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })}.\n\n${EXEC_PROMPT}`,
     messages: [{ role: 'user', content: `${focus[slot]}
 
+Cash: the only cash number you have is QuickBooks' book balance — call it "QuickBooks shows $X", never the bank balance.
 Write it like a sharp VP briefing the CEO: plain words, specific names and numbers, no fluff, under 450 words. Format: short bold labels on their own line (like **Needs your call**), each followed by 1–4 short "- " bullets. No headings with #, no tables. Only use the data below — never invent. If a plan is waiting on him, name it and its certainty. Finish with **Help me build our EOS** and one or two short questions that fill the biggest gap in eos.gaps (one thing each, easy to answer in a sentence).
 
 Since the last brief: ${JSON.stringify(changes).slice(0, 6000)}
@@ -941,6 +942,12 @@ Include **What I'm working on** — 2–5 bullets from your work list with where
     const r = await sendEmail({ to: u.email, subject: `${SLOT_TITLE[slot]}: ${firstLine(text)}`, html: briefEmailHtml(SLOT_TITLE[slot], text, link) })
     emailed = r.success
     if (!r.success) console.error('[lexi/exec] brief email failed:', r.error)
+    // Copies (LEXI_BRIEF_CC, default sprabhu@gateguard.co): same brief, no "Answer Lexi" (the chat is Russel's).
+    const cc = briefCc().filter(e => e !== u.email.toLowerCase())
+    if (cc.length) {
+      const c = await sendEmail({ to: cc, subject: `${SLOT_TITLE[slot]}: ${firstLine(text)}`, html: briefEmailHtml(SLOT_TITLE[slot], text, null) })
+      if (!c.success) console.error('[lexi/exec] brief copy failed:', c.error)
+    }
   }
   const keep = Object.fromEntries(Object.entries(sent).filter(([k]) => k >= addDaysISO(day, -3)))
   await saveState(u.id, { ...(await getState(u.id)), lastBriefAt: new Date().toISOString(), lastBriefSlot: slot, briefs: { ...keep, [`${day}:${slot}`]: conv.id } })
@@ -951,7 +958,8 @@ function firstLine(md: string) {
   const l = md.split('\n').map(x => x.replace(/\*\*/g, '').replace(/^[-*]\s+/, '').trim()).find(x => x && !/:$/.test(x)) ?? ''
   return l.length > 70 ? `${l.slice(0, 68)}…` : l
 }
-function briefEmailHtml(title: string, md: string, link: string) {
+export const briefCc = () => (process.env.LEXI_BRIEF_CC ?? 'sprabhu@gateguard.co').split(',').map(x => x.trim().toLowerCase()).filter(x => /@/.test(x))
+function briefEmailHtml(title: string, md: string, link: string | null) {
   const inline = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
   const body = md.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     if (/^[-*•]\s+/.test(l)) return `<div style="margin:3px 0 3px 14px;font-size:14px;line-height:1.5;color:#1D1D1F">• ${inline(l.replace(/^[-*•]\s+/, ''))}</div>`
@@ -963,7 +971,7 @@ function briefEmailHtml(title: string, md: string, link: string) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
     <tr><td style="background:#0E1726;border-radius:16px 16px 0 0;padding:20px 24px"><div style="color:#8EC1FF;font-size:13px">Lexi</div><div style="color:#fff;font-size:22px;font-weight:600;margin-top:4px">${esc(title)}</div></td></tr>
     <tr><td style="background:#fff;padding:16px 24px 22px;border-radius:0 0 16px 16px">${body}
-      <div style="margin-top:20px"><a href="${esc(link)}" style="display:inline-block;background:#0071E3;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:12px">Answer Lexi</a></div>
-      <p style="margin:16px 0 0;font-size:12px;color:#8E8E93">Opens this brief as a chat in Lexi — reply there and she saves what you tell her.</p>
+      ${link ? `<div style="margin-top:20px"><a href="${esc(link)}" style="display:inline-block;background:#0071E3;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:12px">Answer Lexi</a></div>
+      <p style="margin:16px 0 0;font-size:12px;color:#8E8E93">Opens this brief as a chat in Lexi — reply there and she saves what you tell her.</p>` : `<p style="margin:16px 0 0;font-size:12px;color:#8E8E93">A copy of Russel’s brief from Lexi.</p>`}
     </td></tr></table></td></tr></table></body></html>`
 }
