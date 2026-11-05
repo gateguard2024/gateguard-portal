@@ -14,9 +14,10 @@ import { AriaCapsBody } from '@/components/admin/AriaCapsBody'
 import { AdminReportConsole, ADMIN_CSS } from '@/components/nexus/AdminReportConsole'
 import { CSS } from '@/components/nexus/systems/shared'
 import { QuickBooksPage } from '@/components/nexus/quickbooks/QuickBooksPage'
+import { FinancePage } from '@/components/nexus/finance/FinancePage'
 import { PortalsAdmin } from '@/components/nexus/systems/PropertyPortal'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
-const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target, Globe } = require('lucide-react') as any
+const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target, Globe, TrendingUp } = require('lucide-react') as any
 
 // ---- Tool windows still use the steel console look (landing is the light look) ----
 const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
@@ -24,7 +25,7 @@ const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%)
 const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
 const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
 
-type InternalPanel = 'quickbooks' | 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'portals' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
+type InternalPanel = 'quickbooks' | 'finance' |'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'portals' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -107,6 +108,8 @@ export function InternalSurface() {
   // Cost is corporate-only — the card is hidden from everyone else, and the
   // /api/admin/costs route refuses non-corporate even if they reach it.
   const isCorporate = (user?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === 'corporate'
+  // Finance: corporate admins only in the UI; every /api/finance route also needs the senior admin code.
+  const isFinanceAdmin = isCorporate && (user?.publicMetadata as { role?: string } | undefined)?.role === 'admin'
   // ?qb=1 (back from QuickBooks sign-in, or a Lexi link) opens the QuickBooks page.
   const [qbNotice, setQbNotice] = useState<{ ok: boolean; reason?: string | null } | null>(null)
   useEffect(() => {
@@ -134,6 +137,7 @@ export function InternalSurface() {
     { id: 'provisioning', title: 'Sites to set up', subtitle: 'Won deals waiting for a controller serial and Brivo programming.', icon: Server, badge: 'Corporate' },
     { id: 'pricing', title: 'Pricing', subtitle: 'Floors, target prices, add-ons and new catalog lines.', icon: Tag, badge: 'Corporate' },
     ...(isCorporate ? [{ id: 'quickbooks', title: 'QuickBooks', subtitle: 'Cash, who owes us, profit — plus invoice and payment sync.', icon: BookOpen, badge: 'Corporate' } as InternalCard] : []),
+    ...(isFinanceAdmin ? [{ id: 'finance', title: 'Finance', subtitle: 'Cash outlook, bills by due date and tight weeks ahead. Senior admin code required.', icon: TrendingUp, badge: 'Senior admin' } as InternalCard] : []),
     ...(isCorporate ? [{ id: 'costs', title: 'Our costs', subtitle: 'What Gate Guard really pays each month and for hardware. Never shown to dealers.', icon: DollarSign, badge: 'Corporate' } as InternalCard] : []),
     ...(isCorporate ? [{ id: 'aria-caps', title: 'ARIA save limits', subtitle: 'How many properties each dealer can save to Intel each month.', icon: Search, badge: 'Corporate' } as InternalCard] : []),
     { id: 'tracker', title: 'Tracker', subtitle: 'Nexus build work, bugs and product tasks.', icon: ListChecks },
@@ -165,6 +169,10 @@ export function InternalSurface() {
       {/* Corporate only in the UI; every /api/integrations/quickbooks route also refuses non-corporate. */}
       {activePanel === 'quickbooks' && isCorporate && (
         <QuickBooksPage notice={qbNotice} onClose={() => { setActivePanel(null); setQbNotice(null) }} />
+      )}
+
+      {activePanel === 'finance' && isFinanceAdmin && (
+        <FinancePage myEmail={user?.primaryEmailAddress?.emailAddress ?? ''} onClose={() => setActivePanel(null)} />
       )}
 
       {activePanel === 'tracker' && (
