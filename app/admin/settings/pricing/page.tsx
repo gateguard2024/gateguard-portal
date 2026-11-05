@@ -20,7 +20,7 @@ export default function PricingConsolePage() {
       <TopBar title="Pricing Console" />
       <div className="mx-auto w-full max-w-6xl px-6 py-5">
         {!isLoaded ? null : !isCorporate ? (
-          <div className="rounded-2xl border border-[#33465b] bg-[#151D2A] p-8 text-center text-sm" style={{ color: '#c3d3e2' }}>
+          <div className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm" style={{ color: '#6E6E73' }}>
             This page is restricted to Gate Guard corporate.
           </div>
         ) : (

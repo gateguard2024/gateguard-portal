@@ -13,7 +13,7 @@ type OrgRow = { id: string; name: string; tier: string | null; status: string; e
 type Counts = { users: number; techs: number; corporate: number; dealers: number; clients: number; unclassified: number }
 
 const TAB_LABEL: Record<Tab, string> = { people: 'Platform Users', techs: 'Field Techs', orgs: 'Organizations' }
-const TAB_COLOR: Record<Tab, string> = { people: '#00A3FF', techs: '#7EE0A8', orgs: '#00A3FF' }
+const TAB_COLOR: Record<Tab, string> = { people: '#0071E3', techs: '#1A7F37', orgs: '#0071E3' }
 
 function Pill({ text, color }: { text: string; color: string }) {
   return <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ background: `${color}1f`, border: `1px solid ${color}44`, color }}>{text}</span>
@@ -110,24 +110,24 @@ export function InternalUsersFeaturesBoard() {
   // Organization groups, in display order. Unclassified is surfaced (amber) so
   // orgs missing a proper org_tier can be spotted and fixed.
   const orgGroups: [string, OrgCategory, string][] = [
-    ['Corporate', 'corporate', '#FBBF24'],
-    ['Dealers & Partners', 'dealer', '#00A3FF'],
-    ['Clients', 'client', '#00A3FF'],
-    ['Unclassified — needs a tier', 'unclassified', '#F87171'],
+    ['Corporate', 'corporate', '#B25000'],
+    ['Dealers & Partners', 'dealer', '#0071E3'],
+    ['Clients', 'client', '#0071E3'],
+    ['Unclassified — needs a tier', 'unclassified', '#D70015'],
   ]
 
   return (
     <div className="space-y-4 pb-28">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add a person, then tap a platform user to set role &amp; access.</div>
+        <div className="text-[11px]" style={{ color: '#6E6E73' }}>Add a person, then tap a platform user to set role &amp; access.</div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={activateCorporate} disabled={activating} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.4)', color: 'rgba(0,163,255,0.96)' }} title="GateGuard staff only — sets your account to corporate admin (org_tier=corporate, role=admin). Idempotent.">
+          <button type="button" onClick={activateCorporate} disabled={activating} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,113,227,0.12)', border: '1px solid rgba(0,113,227,0.4)', color: 'rgba(0,113,227,0.96)' }} title="GateGuard staff only — sets your account to corporate admin (org_tier=corporate, role=admin). Idempotent.">
             {activating ? 'Activating…' : 'Activate corporate access'}
           </button>
-          <button type="button" onClick={syncLogins} disabled={syncing} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>
+          <button type="button" onClick={syncLogins} disabled={syncing} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>
             {syncing ? 'Syncing…' : 'Sync logins'}
           </button>
-          <button type="button" onClick={() => setShowAdd(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>+ Add Person</button>
+          <button type="button" onClick={() => setShowAdd(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: '#0071E3', color: 'white' }}>+ Add Person</button>
         </div>
       </div>
 
@@ -136,32 +136,32 @@ export function InternalUsersFeaturesBoard() {
           const c = TAB_COLOR[id]
           const active = tab === id
           return (
-            <button key={id} type="button" onClick={() => setTab(id)} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={id} type="button" onClick={() => setTab(id)} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : '#fff', border: active ? `1px solid ${c}66` : '1px solid rgba(0,0,0,0.08)' }}>
               <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: c }}>{TAB_LABEL[id]}</div>
-              <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{count}</div>
+              <div className="mt-1 text-lg font-semibold" style={{ color: '#1D1D1F' }}>{count}</div>
             </button>
           )
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)' }}>{message}</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>Loading…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>{message}</div>}
 
       {/* People — clickable into the glass editor */}
       {!loading && tab === 'people' && (
         users.length === 0
-          ? <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>No portal logins yet. Use “Sync logins” to pull existing accounts, or “+ Add Person”.</div>
+          ? <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>No portal logins yet. Use “Sync logins” to pull existing accounts, or “+ Add Person”.</div>
           : <div className="space-y-2">
               {users.map(u => {
                 const opening = userBusy && openUserId === u.id
                 return (
-                  <button key={u.id} type="button" onClick={() => openUser(u.id)} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', opacity: opening ? 0.6 : 1 }}>
+                  <button key={u.id} type="button" onClick={() => openUser(u.id)} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', opacity: opening ? 0.6 : 1 }}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{u.name}</div>
-                        <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{u.email ?? 'No email'}{u.org_name ? ` · ${u.org_name}` : ''}</div>
+                        <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>{u.name}</div>
+                        <div className="mt-1 text-[11px]" style={{ color: '#6E6E73' }}>{u.email ?? 'No email'}{u.org_name ? ` · ${u.org_name}` : ''}</div>
                       </div>
-                      <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{u.last_login_at ? `Active ${String(u.last_login_at).slice(0, 10)}` : 'Set access →'}</div>
+                      <div className="text-[10px]" style={{ color: '#6E6E73' }}>{u.last_login_at ? `Active ${String(u.last_login_at).slice(0, 10)}` : 'Set access →'}</div>
                     </div>
                   </button>
                 )
@@ -172,18 +172,18 @@ export function InternalUsersFeaturesBoard() {
       {/* Field techs — display */}
       {!loading && tab === 'techs' && (
         techs.length === 0
-          ? <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>No technicians yet. Use “+ Add Person”.</div>
+          ? <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>No technicians yet. Use “+ Add Person”.</div>
           : <div className="space-y-2">
               {techs.map(t => (
-                <div key={t.id} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div key={t.id} className="rounded-2xl px-3 py-3" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{t.name}</div>
-                      <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{t.email ?? 'No email'}{t.org_name ? ` · ${t.org_name}` : ''}</div>
+                      <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>{t.name}</div>
+                      <div className="mt-1 text-[11px]" style={{ color: '#6E6E73' }}>{t.email ?? 'No email'}{t.org_name ? ` · ${t.org_name}` : ''}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Pill text={t.employment_type} color="#7EE0A8" />
-                      <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{t.access === 'portal' ? (t.linked ? 'Login linked' : 'Invite sent') : t.access === 'field_code' ? 'Field code' : 'No login'}</span>
+                      <Pill text={t.employment_type} color="#1A7F37" />
+                      <span className="text-[10px]" style={{ color: '#6E6E73' }}>{t.access === 'portal' ? (t.linked ? 'Login linked' : 'Invite sent') : t.access === 'field_code' ? 'Field code' : 'No login'}</span>
                     </div>
                   </div>
                 </div>
@@ -201,14 +201,14 @@ export function InternalUsersFeaturesBoard() {
             <div key={label}>
               <div className="mb-1.5 text-[10px] uppercase tracking-[0.14em]" style={{ color: c }}>{label} · {list.length}</div>
               {list.length === 0
-                ? <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>None.</div>
+                ? <div className="text-[11px]" style={{ color: '#6E6E73' }}>None.</div>
                 : <div className="space-y-2">
                     {list.map(o => (
-                      <div key={o.id} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div key={o.id} className="rounded-2xl px-3 py-3" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{o.name}</div>
-                            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{(o.tier ?? '').replace(/_/g, ' ') || 'org'}{o.email ? ` · ${o.email}` : ''}</div>
+                            <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>{o.name}</div>
+                            <div className="mt-1 text-[11px]" style={{ color: '#6E6E73' }}>{(o.tier ?? '').replace(/_/g, ' ') || 'org'}{o.email ? ` · ${o.email}` : ''}</div>
                           </div>
                           <Pill text={o.status} color={c} />
                         </div>

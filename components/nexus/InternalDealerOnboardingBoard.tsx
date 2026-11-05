@@ -58,15 +58,18 @@ function label(bucket: Bucket) {
 }
 
 function color(bucket: Bucket) {
-  if (bucket === 'ready_to_approve') return '#7EE0A8'
-  if (bucket === 'live') return '#00A3FF'
-  if (bucket === 'agreement_signed') return '#7EE0A8'
-  if (bucket === 'needs_compliance') return '#F87171'
-  if (bucket === 'needs_nda' || bucket === 'needs_agreement') return '#FBBF24'
-  if (bucket === 'nda_sent') return '#00A3FF'
-  if (bucket === 'nda_signed') return '#00A3FF'
-  return '#64748B'
+  if (bucket === 'ready_to_approve') return '#1A7F37'
+  if (bucket === 'live') return '#0071E3'
+  if (bucket === 'agreement_signed') return '#1A7F37'
+  if (bucket === 'needs_compliance') return '#D70015'
+  if (bucket === 'needs_nda' || bucket === 'needs_agreement') return '#B25000'
+  if (bucket === 'nda_sent') return '#0071E3'
+  if (bucket === 'nda_signed') return '#0071E3'
+  return '#6E6E73'
 }
+
+// Vetting colours (lib/dealer-onboarding) are made for a dark background — darker shades read on white.
+const LIGHT_VET: Record<string, string> = { '#64748B': '#6E6E73', '#FBBF24': '#B25000', '#34D399': '#1A7F37', '#F87171': '#D70015' }
 
 function tierText(item: DealerItem) {
   return item.tier_label || item.org_tier || 'Partner'
@@ -217,30 +220,30 @@ export function InternalDealerOnboardingBoard() {
           const count = items.filter(item => item.bucket === nextBucket).length
           const active = bucket === nextBucket
           return (
-            <button key={nextBucket} type="button" onClick={() => { setBucket(nextBucket); setSelectedId(null); setActionMessage(null) }} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={nextBucket} type="button" onClick={() => { setBucket(nextBucket); setSelectedId(null); setActionMessage(null) }} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : '#fff', border: active ? `1px solid ${c}66` : '1px solid rgba(0,0,0,0.08)' }}>
               <div className="text-[9px] uppercase tracking-[0.12em]" style={{ color: c }}>{label(nextBucket)}</div>
-              <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{count}</div>
+              <div className="mt-1 text-lg font-semibold" style={{ color: '#1D1D1F' }}>{count}</div>
             </button>
           )
         })}
       </div>
 
-      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>Loading dealer onboarding…</div>}
-      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>{message}</div>}
-      {actionMessage && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.24)', color: '#FBBF24' }}>{actionMessage}</div>}
-      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.82)' }}>No {label(bucket).toLowerCase()} records right now.</div>}
+      {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>Loading dealer onboarding…</div>}
+      {message && <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>{message}</div>}
+      {actionMessage && <div className="rounded-2xl p-4 text-xs" style={{ background: '#FFF4E5', border: '1px solid rgba(178,80,0,0.18)', color: '#B25000' }}>{actionMessage}</div>}
+      {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>No {label(bucket).toLowerCase()} records right now.</div>}
 
       <div className="space-y-2">
         {shown.map(item => {
           const c = color(item.bucket)
           const active = selectedId === item.id
           return (
-            <button key={item.id} type="button" onClick={() => { setSelectedId(item.id); setActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={item.id} type="button" onClick={() => { setSelectedId(item.id); setActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : '#fff', border: active ? `1px solid ${c}66` : '1px solid rgba(0,0,0,0.08)' }}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
-                  <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{tierText(item)} • {item.contact_email || item.subtitle}</div>
-                  <div className="mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.22)', color: '#FBBF24' }}>Next: {item.next_action || label(item.bucket)}</div>
+                  <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>{item.title}</div>
+                  <div className="mt-1 text-[11px]" style={{ color: '#6E6E73' }}>{tierText(item)} • {item.contact_email || item.subtitle}</div>
+                  <div className="mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: '#FFF4E5', border: '1px solid rgba(178,80,0,0.18)', color: '#B25000' }}>Next: {item.next_action || label(item.bucket)}</div>
                 </div>
                 <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${c}1f`, border: `1px solid ${c}44`, color: c }}>{label(item.bucket)}</div>
               </div>
@@ -274,55 +277,56 @@ export function InternalDealerOnboardingBoard() {
       />
 
       {selected && (
-        <div className="rounded-3xl p-4" style={{ background: 'rgba(0,163,255,0.08)', border: '1px solid rgba(0,163,255,0.18)' }}>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#cfe0f0' }}>Selected Dealer Onboarding</div>
-          <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selected.title}</div>
-          <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{tierText(selected)} • {selected.contact_email || 'No contact email'}</div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(0,113,227,0.08)', border: '1px solid rgba(0,113,227,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#3A3A3C' }}>Selected Dealer Onboarding</div>
+          <div className="mt-1 text-lg font-semibold" style={{ color: '#1D1D1F' }}>{selected.title}</div>
+          <div className="mt-1 text-xs" style={{ color: '#6E6E73' }}>{tierText(selected)} • {selected.contact_email || 'No contact email'}</div>
 
-          <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.20)' }}>
-            <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#FBBF24' }}>Next Action</div>
-            <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{selected.next_action || label(selected.bucket)}</div>
+          <div className="mt-4 rounded-2xl p-3" style={{ background: '#FFF4E5', border: '1px solid rgba(178,80,0,0.18)' }}>
+            <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#B25000' }}>Next Action</div>
+            <div className="mt-1 text-sm font-semibold" style={{ color: '#1D1D1F' }}>{selected.next_action || label(selected.bucket)}</div>
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div>{selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#00A3FF' }}>Open final copy →</a>}</div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div>{selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#00A3FF' }}>Open final copy →</a>}</div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#6E6E73' }}>NDA</div><div className="mt-1 text-xs" style={{ color: '#6E6E73' }}>{selected.nda_status}</div>{selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#0071E3' }}>Open final copy →</a>}</div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#6E6E73' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: '#6E6E73' }}>{selected.agreement_status}</div>{selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#0071E3' }}>Open final copy →</a>}</div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#6E6E73' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: '#6E6E73' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
           </div>
 
           {/* Partner health — 8-stage spec layer: vetting, channel manager, reviews */}
-          <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="mt-4 rounded-2xl p-3" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}>
             <div className="flex items-center justify-between">
-              <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.82)' }}>Partner health</div>
-              <div className="text-[10px] font-semibold" style={{ color: '#00A3FF' }}>Stage {stageForBucket(selected.bucket).n} of 8 — {stageForBucket(selected.bucket).label}</div>
+              <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#6E6E73' }}>Partner health</div>
+              <div className="text-[10px] font-semibold" style={{ color: '#0071E3' }}>Stage {stageForBucket(selected.bucket).n} of 8 — {stageForBucket(selected.bucket).label}</div>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Vetting (stage 1) */}
               <div>
-                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Vetting</div>
+                <div className="mb-1 text-[10px]" style={{ color: '#6E6E73' }}>Vetting</div>
                 <div className="flex flex-wrap gap-1.5">
                   {VETTING_OPTIONS.map(opt => {
                     const on = (selected.vetting_status ?? 'not_started') === opt.value
-                    return <button key={opt.value} type="button" disabled={savingHealth} onClick={() => saveHealth(selected.id, { vetting_status: opt.value })} className="rounded-full px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50" style={{ background: on ? `${opt.color}26` : 'rgba(255,255,255,0.05)', border: `1px solid ${on ? opt.color + '66' : 'rgba(255,255,255,0.1)'}`, color: on ? opt.color : 'rgba(255,255,255,0.6)' }}>{opt.label}</button>
+                    const oc = LIGHT_VET[opt.color] ?? opt.color
+                    return <button key={opt.value} type="button" disabled={savingHealth} onClick={() => saveHealth(selected.id, { vetting_status: opt.value })} className="rounded-full px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50" style={{ background: on ? `${oc}1f` : '#F5F5F7', border: `1px solid ${on ? oc + '55' : 'rgba(0,0,0,0.08)'}`, color: on ? oc : '#6E6E73' }}>{opt.label}</button>
                   })}
                 </div>
               </div>
               {/* Channel manager (stage 2) */}
               <div>
-                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Channel Manager</div>
+                <div className="mb-1 text-[10px]" style={{ color: '#6E6E73' }}>Channel Manager</div>
                 <div className="flex gap-1.5">
-                  <input value={cmDraft} onChange={e => setCmDraft(e.target.value)} placeholder="Assign a manager" className="min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }} />
-                  <button type="button" disabled={savingHealth || cmDraft === (selected.channel_manager_name ?? '')} onClick={() => saveHealth(selected.id, { channel_manager_name: cmDraft.trim() })} className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(0,163,255,0.2)', border: '1px solid rgba(0,163,255,0.4)', color: '#cfe0f0' }}>Save</button>
+                  <input value={cmDraft} onChange={e => setCmDraft(e.target.value)} placeholder="Assign a manager" className="min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', color: '#1D1D1F' }} />
+                  <button type="button" disabled={savingHealth || cmDraft === (selected.channel_manager_name ?? '')} onClick={() => saveHealth(selected.id, { channel_manager_name: cmDraft.trim() })} className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(0,113,227,0.2)', border: '1px solid rgba(0,113,227,0.4)', color: '#3A3A3C' }}>Save</button>
                 </div>
               </div>
             </div>
             {/* 30/60/90 reviews (stage 8) — live dealers only */}
             {selected.bucket === 'live' && selected.reviews && selected.reviews.length > 0 && (
               <div className="mt-3">
-                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>30 / 60 / 90-day reviews</div>
+                <div className="mb-1 text-[10px]" style={{ color: '#6E6E73' }}>30 / 60 / 90-day reviews</div>
                 <div className="flex flex-wrap gap-1.5">
                   {selected.reviews.map(r => {
-                    const c = r.state === 'overdue' ? '#F87171' : r.state === 'due' ? '#FBBF24' : '#7EE0A8'
+                    const c = r.state === 'overdue' ? '#D70015' : r.state === 'due' ? '#B25000' : '#1A7F37'
                     const txt = r.state === 'overdue' ? 'overdue' : r.state === 'due' ? 'due now' : `due ${new Date(r.dueAt).toLocaleDateString()}`
                     return <span key={r.day} className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: `${c}22`, border: `1px solid ${c}55`, color: c }}>{r.day}-day · {txt}</span>
                   })}
@@ -332,20 +336,20 @@ export function InternalDealerOnboardingBoard() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{busy === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
-            {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #7EE0A8, #00A3FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
-            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #00A3FF, #00A3FF)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
-            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #7EE0A8, #00A3FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
+            {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: '#0071E3', color: 'white' }}>{busy === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
+            {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: '#0071E3', color: 'white' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
+            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: '#0071E3', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
+            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: '#0071E3', color: 'white' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
             {/* Upload buttons — for offline/pre-signed docs */}
             {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent' || selected.bucket === 'nda_signed') && !selected.nda_executed_cert_url && (
-              <button type="button" disabled={!!uploadingDoc} onClick={() => ndaFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{uploadingDoc === 'nda' ? 'Uploading…' : 'Upload Signed NDA ↑'}</button>
+              <button type="button" disabled={!!uploadingDoc} onClick={() => ndaFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,113,227,0.12)', border: '1px solid rgba(0,113,227,0.28)', color: '#0071E3' }}>{uploadingDoc === 'nda' ? 'Uploading…' : 'Upload Signed NDA ↑'}</button>
             )}
             {(selected.bucket === 'needs_agreement' || selected.bucket === 'agreement_signed') && !selected.agreement_executed_cert_url && (
-              <button type="button" disabled={!!uploadingDoc} onClick={() => agreementFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,163,255,0.12)', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>{uploadingDoc === 'agreement' ? 'Uploading…' : 'Upload Executed Agreement ↑'}</button>
+              <button type="button" disabled={!!uploadingDoc} onClick={() => agreementFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,113,227,0.12)', border: '1px solid rgba(0,113,227,0.28)', color: '#0071E3' }}>{uploadingDoc === 'agreement' ? 'Uploading…' : 'Upload Executed Agreement ↑'}</button>
             )}
-            {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.24)', color: '#7EE0A8' }}>Open Final NDA</a>}
-            {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,230,153,0.12)', border: '1px solid rgba(0,230,153,0.24)', color: '#7EE0A8' }}>Open Final Agreement</a>}
-            <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
+            {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.24)', color: '#1A7F37' }}>Open Final NDA</a>}
+            {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.24)', color: '#1A7F37' }}>Open Final Agreement</a>}
+            <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.08)', color: '#6E6E73' }}>Open Dealer</button>
           </div>
         </div>
       )}

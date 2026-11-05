@@ -19,21 +19,21 @@ export function ProvisioningQueue() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Loading provisioning queue…</div>
-  if (items.length === 0) return <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>Nothing waiting to provision. Won deals show up here automatically.</div>
+  if (loading) return <div style={{ fontSize: 13, color: '#6E6E73' }}>Loading provisioning queue…</div>
+  if (items.length === 0) return <div style={{ fontSize: 13, color: '#6E6E73' }}>Nothing waiting to provision. Won deals show up here automatically.</div>
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{items.length} site{items.length === 1 ? '' : 's'} won and waiting for a controller. Open one to enter the serial and program Brivo.</div>
+      <div style={{ fontSize: 12, color: '#6E6E73' }}>{items.length} site{items.length === 1 ? '' : 's'} won and waiting for a controller. Open one to enter the serial and program Brivo.</div>
       {items.map(it => (
-        <button key={it.panel_id} onClick={() => setOpenSite(it.site_id)} style={{ textAlign: 'left', cursor: 'pointer', background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
+        <button key={it.panel_id} onClick={() => setOpenSite(it.site_id)} style={{ textAlign: 'left', cursor: 'pointer', background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>{it.site_name}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.82)', marginTop: 2 }}>{[it.location, it.dealer_name].filter(Boolean).join(' · ') || '—'}</div>
-              {it.doors.length > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{it.doors.length} door{it.doors.length === 1 ? '' : 's'}: {it.doors.join(', ')}</div>}
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1D1D1F' }}>{it.site_name}</div>
+              <div style={{ fontSize: 11, color: '#6E6E73', marginTop: 2 }}>{[it.location, it.dealer_name].filter(Boolean).join(' · ') || '—'}</div>
+              {it.doors.length > 0 && <div style={{ fontSize: 11, color: '#6E6E73', marginTop: 3 }}>{it.doors.length} door{it.doors.length === 1 ? '' : 's'}: {it.doors.join(', ')}</div>}
             </div>
-            <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', color: it.dealer_confirmed ? '#7EE0A8' : '#fbbf24' }}>{it.dealer_confirmed ? 'Doors confirmed ✓' : 'Awaiting dealer'}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', color: it.dealer_confirmed ? '#1A7F37' : '#B25000' }}>{it.dealer_confirmed ? 'Doors confirmed ✓' : 'Awaiting dealer'}</span>
           </div>
         </button>
       ))}

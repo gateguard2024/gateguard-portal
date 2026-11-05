@@ -16,9 +16,9 @@ interface CostData { recurring: CostLine[]; parts: PartCost[]; dealer_cost_margi
 const money = (n: number) => '$' + n.toLocaleString()
 
 const panel: React.CSSProperties = {
-  background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))',
-  border: '1px solid rgba(139,92,246,0.16)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+  background: '#fff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  boxShadow: '0 1px 2px rgba(10,20,40,.06), 0 8px 24px rgba(10,20,40,.08)',
 }
 
 export function CostSheetBody() {
@@ -41,24 +41,24 @@ export function CostSheetBody() {
   if (error) {
     return (
       <div className="rounded-3xl p-4" style={panel}>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.62)' }}>{error}</p>
+        <p className="text-xs" style={{ color: '#6E6E73' }}>{error}</p>
       </div>
     )
   }
   if (!data) {
     return (
       <div className="rounded-3xl p-4" style={panel}>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>Loading cost model…</p>
+        <p className="text-xs" style={{ color: '#6E6E73' }}>Loading cost model…</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(255,77,77,0.32)' }}>
+      <div className="rounded-2xl px-4 py-3" style={{ background: '#FFECEC', border: '1px solid rgba(215,0,21,0.2)' }}>
         <div className="flex items-center gap-2">
-          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(255,77,77,0.22)', color: '#fecaca' }}>Corporate only</span>
-          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.66)' }}>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(215,0,21,0.1)', color: '#D70015' }}>Corporate only</span>
+          <span className="text-[11px]" style={{ color: '#6E6E73' }}>
             Gate Guard&apos;s true cost — never shown to dealers. Drives the calculators&apos; margin math.
           </span>
         </div>
@@ -66,13 +66,13 @@ export function CostSheetBody() {
 
       {/* Monthly recurring cost */}
       <div className="overflow-hidden rounded-3xl" style={panel}>
-        <div className="border-b px-4 py-3" style={{ borderColor: 'rgba(139,92,246,0.16)' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Monthly recurring cost</div>
-          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>What Gate Guard pays each month per line</div>
+        <div className="border-b px-4 py-3" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+          <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>Monthly recurring cost</div>
+          <div className="text-[11px]" style={{ color: '#6E6E73' }}>What Gate Guard pays each month per line</div>
         </div>
         <table className="w-full text-xs">
           <thead>
-            <tr style={{ color: 'rgba(196,181,253,0.7)' }}>
+            <tr style={{ color: '#6E6E73' }}>
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wider">Item</th>
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wider">Billed</th>
               <th className="px-4 py-2 text-right font-semibold uppercase tracking-wider">Cost</th>
@@ -80,10 +80,10 @@ export function CostSheetBody() {
           </thead>
           <tbody>
             {data.recurring.map(l => (
-              <tr key={l.name} style={{ borderTop: '1px solid rgba(139,92,246,0.10)' }}>
-                <td className="px-4 py-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.name}</td>
-                <td className="px-4 py-2" style={{ color: 'rgba(255,255,255,0.55)' }}>{l.unit}</td>
-                <td className="px-4 py-2 text-right font-semibold" style={{ color: '#a7f3d0' }}>{money(l.cost)}</td>
+              <tr key={l.name} style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                <td className="px-4 py-2 font-medium" style={{ color: '#1D1D1F' }}>{l.name}</td>
+                <td className="px-4 py-2" style={{ color: '#6E6E73' }}>{l.unit}</td>
+                <td className="px-4 py-2 text-right font-semibold" style={{ color: '#1A7F37' }}>{money(l.cost)}</td>
               </tr>
             ))}
           </tbody>
@@ -92,13 +92,13 @@ export function CostSheetBody() {
 
       {/* One-time install hardware */}
       <div className="overflow-hidden rounded-3xl" style={panel}>
-        <div className="border-b px-4 py-3" style={{ borderColor: 'rgba(139,92,246,0.16)' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>One-time install hardware</div>
-          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Part cost + install hours — feeds the install profit check</div>
+        <div className="border-b px-4 py-3" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+          <div className="text-sm font-semibold" style={{ color: '#1D1D1F' }}>One-time install hardware</div>
+          <div className="text-[11px]" style={{ color: '#6E6E73' }}>Part cost + install hours — feeds the install profit check</div>
         </div>
         <table className="w-full text-xs">
           <thead>
-            <tr style={{ color: 'rgba(196,181,253,0.7)' }}>
+            <tr style={{ color: '#6E6E73' }}>
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wider">Part</th>
               <th className="px-4 py-2 text-right font-semibold uppercase tracking-wider">Cost</th>
               <th className="px-4 py-2 text-right font-semibold uppercase tracking-wider">Install hrs</th>
@@ -106,10 +106,10 @@ export function CostSheetBody() {
           </thead>
           <tbody>
             {data.parts.map(p => (
-              <tr key={p.name} style={{ borderTop: '1px solid rgba(139,92,246,0.10)' }}>
-                <td className="px-4 py-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>{p.name}</td>
-                <td className="px-4 py-2 text-right font-semibold" style={{ color: '#a7f3d0' }}>{money(p.cost)}</td>
-                <td className="px-4 py-2 text-right" style={{ color: 'rgba(255,255,255,0.55)' }}>{p.hours ? `${p.hours}h` : '—'}</td>
+              <tr key={p.name} style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                <td className="px-4 py-2 font-medium" style={{ color: '#1D1D1F' }}>{p.name}</td>
+                <td className="px-4 py-2 text-right font-semibold" style={{ color: '#1A7F37' }}>{money(p.cost)}</td>
+                <td className="px-4 py-2 text-right" style={{ color: '#6E6E73' }}>{p.hours ? `${p.hours}h` : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -117,7 +117,7 @@ export function CostSheetBody() {
       </div>
 
       <div className="rounded-2xl px-4 py-3" style={panel}>
-        <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="text-[11px] leading-relaxed" style={{ color: '#6E6E73' }}>
           Next (step 4): make these editable and add the dealer waterfall — our cost + {Math.round(data.dealer_cost_margin * 100)}% margin = dealer cost, then suggested retail.
         </p>
       </div>

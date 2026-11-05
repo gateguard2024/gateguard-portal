@@ -129,6 +129,11 @@ export function InternalSurface() {
     window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
   }, [])
 
+  // Finance is a whole page in place of Admin (same look), not a pop-up over it.
+  if (activePanel === 'finance' && isFinanceAdmin) {
+    return <FinancePage myEmail={user?.primaryEmailAddress?.emailAddress ?? ''} onClose={() => setActivePanel(null)} />
+  }
+
   const cards: InternalCard[] = [
     { id: 'users-features', title: 'Users & features', subtitle: 'Add people, set roles, and choose what each company can use.', icon: Users },
     { id: 'dealer-onboarding', title: 'Dealer onboarding', subtitle: 'NDA, agreement, approval and go-live for each new dealer.', icon: UserCheck, badge: 'Corporate' },
@@ -169,10 +174,6 @@ export function InternalSurface() {
       {/* Corporate only in the UI; every /api/integrations/quickbooks route also refuses non-corporate. */}
       {activePanel === 'quickbooks' && isCorporate && (
         <QuickBooksPage notice={qbNotice} onClose={() => { setActivePanel(null); setQbNotice(null) }} />
-      )}
-
-      {activePanel === 'finance' && isFinanceAdmin && (
-        <FinancePage myEmail={user?.primaryEmailAddress?.emailAddress ?? ''} onClose={() => setActivePanel(null)} />
       )}
 
       {activePanel === 'tracker' && (

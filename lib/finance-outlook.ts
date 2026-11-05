@@ -14,7 +14,10 @@
  * Money out ("known"):
  *   - Open QuickBooks bills (Balance > 0) on their due date; already past due → today.
  *   - Payroll from finance_settings (amount per run + frequency + next date).
- *   - Recurring costs from finance_settings that aren't entered as bills ahead of time.
+ *   - Recurring money in / out from finance_recurring (Bank tab, migration 221). An out
+ *     item is skipped in a month where an open QuickBooks bill from the same payee is due,
+ *     so a vendor that sometimes sends a bill isn't counted twice. Before 221 runs, falls
+ *     back to finance_settings.recurring_costs (220).
  *   - Gate Guard's own open purchase orders (sent / confirmed / partial) at expected
  *     date + 30 days. Dealer POs are not ours and are left out.
  *
@@ -24,6 +27,7 @@
 import { getQboAuth, qboQuery } from '@/lib/qbo'
 import { overview } from '@/lib/qbo-reports'
 import { fdb } from '@/lib/finance-auth'
+import { listRules, normName, occurrences } from '@/lib/finance-bank'
 import { addDaysISO, daysBetween, todayET } from '@/lib/tz'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +42,7 @@ export interface CashItem {
   amount: number                  // + in, − out
   label: string
   source: 'qbo_bill' | 'qbo_invoice' | 'site_billing' | 'payroll' | 'recurring' | 'purchase_order'
+  recurring_id?: string
   certainty: Certainty
   tier?: Tier                     // money out only
   ref?: string                    // QuickBooks id / site id / PO id
@@ -54,6 +59,9 @@ export interface Outlook {
   cash_today: number
   cash_accounts: { name: string; balance: number }[]
   floor: number
+  receivable_total: number                  // all open customer invoices (QuickBooks)
+  payable_total: number                     // all open bills (QuickBooks)
+  recurring_count: number
   weeks: Bucket[]
   months: Bucket[]
   lowest_week: { label: string; balance: number } | null
@@ -214,13 +222,31 @@ export async function buildOutlook(refresh = false): Promise<{ ok: true; data: O
     for (const d of payrollDates(settings, today, horizonEnd)) items.push({ date: d, amount: -settings.payroll_amount, label: 'Payroll', source: 'payroll', certainty: 'known', tier: 'must_pay' })
   } else gaps.push('Payroll isn’t set up — add it in Settings.')
 
-  // Recurring costs
-  for (const c of settings.recurring_costs) {
-    for (let m = monthStartOf(today); m <= horizonEnd; m = addMonths(m, 1)) {
-      const d = onDay(m, c.day)
-      if (d >= today && d <= horizonEnd) items.push({ date: d, amount: -c.amount, label: c.name, source: 'recurring', certainty: 'known', tier: c.tier })
+  // Recurring money in / out
+  let recurringCount = 0
+  const rules = await listRules()
+  if (rules.ok) {
+    const billMonths = new Set(payPlan.map(b => `${normName(b.vendor)}|${b.due_date.slice(0, 7)}`))
+    for (const rule of rules.rules) {
+      recurringCount++
+      const payee = rule.match_key ? rule.match_key.slice(rule.match_key.indexOf(':') + 1) : normName(rule.name)
+      for (const d of occurrences(rule, today, horizonEnd)) {
+        if (rule.direction === 'out' && billMonths.has(`${payee}|${d.slice(0, 7)}`)) continue
+        items.push(rule.direction === 'in'
+          ? { date: d, amount: rule.amount, label: rule.name, source: 'recurring', certainty: 'expected', recurring_id: rule.id }
+          : { date: d, amount: -rule.amount, label: rule.name, source: 'recurring', certainty: 'known', tier: rule.tier, recurring_id: rule.id })
+      }
     }
-  }
+  } else if (rules.missing) {
+    gaps.push('Run migration 221 to use recurring items from bank transactions.')
+    for (const c of settings.recurring_costs) {
+      recurringCount++
+      for (let m = monthStartOf(today); m <= horizonEnd; m = addMonths(m, 1)) {
+        const d = onDay(m, c.day)
+        if (d >= today && d <= horizonEnd) items.push({ date: d, amount: -c.amount, label: c.name, source: 'recurring', certainty: 'known', tier: c.tier })
+      }
+    }
+  } else return { ok: false, error: rules.error }
 
   // Gate Guard's own open purchase orders
   const { data: corp } = await db.from('organizations').select('id').eq('org_tier', 'corporate').limit(1).maybeSingle()
@@ -275,6 +301,9 @@ export async function buildOutlook(refresh = false): Promise<{ ok: true; data: O
     data: {
       as_of: new Date().toISOString(), today,
       cash_today: ov.data.cash.total, cash_accounts: ov.data.cash.accounts, floor,
+      receivable_total: r2(invoices.rows.reduce((s, i) => s + (Number(i.Balance) || 0), 0)),
+      payable_total: r2(payPlan.reduce((s, b) => s + b.balance, 0)),
+      recurring_count: recurringCount,
       weeks, months,
       lowest_week: lw ? { label: lw.label, balance: lw.end_balance } : null,
       lowest_month: lm ? { label: lm.label, balance: lm.end_balance } : null,

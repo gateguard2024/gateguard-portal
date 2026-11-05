@@ -1,144 +1,118 @@
 'use client'
 /**
- * Finance — Gate Guard senior admins only (Admin → Finance). Behind a second,
+ * Finance — Gate Guard senior admins only (Admin → Finance). One page, laid out like a
+ * CFO / investor cash report, in the same light look as the rest of Admin
+ * (components/nexus/systems/shared: .sy styles, Card, Sheet). Behind a second,
  * per-person 6-digit code on top of corporate sign-in (lib/finance-auth.ts).
  *
- * Sections:
- *   Cash outlook  projected bank balance (13 weeks / 12 months) vs the cash floor,
- *                 what moves each period, how sure the numbers are
- *   Pay plan      open QuickBooks bills by due date with each vendor's tier
- *   Settings      cash floor, payroll, recurring costs, idle lock
- *   Codes         (owner only) who has a Finance code; set / reset / remove
+ * The report, top to bottom:
+ *   Headline numbers   cash today · lowest point · 13-week net · customers owe · we owe
+ *   Cash position      projected balance per week / month vs the cash floor
+ *   Cash flow statement  beginning cash → receipts → disbursements → ending cash, by period
+ *   Bills due · Recurring money in & out · Bank activity (last 90 days)
+ * Everything you change opens in a pop-up: a period's detail, bills + vendor tiers,
+ * recurring items, bank transactions (mark recurring / one-time), settings, codes.
  *
  * Every number comes from /api/finance/* — all of which re-check the code session.
- * Design: Admin · Finance page on the design canvas.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CSS, Card, Field, Note, Sheet, getJson, send, useFlash, BLUE, GREEN, LINE, MUTED, ORANGE, TEXT, TEXT2, DOT, type Any } from '@/components/nexus/systems/shared'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Row = Record<string, any>
-type Section = 'outlook' | 'payplan' | 'settings' | 'codes'
 type Tier = 'must_pay' | 'keeps_running' | 'flexible'
+type Freq = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly'
 
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, system-ui, sans-serif'
-const C = { bg: '#F5F5F7', card: '#FFFFFF', line: 'rgba(0,0,0,0.08)', ink: '#1D1D1F', sub: '#6E6E73', faint: '#86868B', blue: '#0071E3', blueSoft: 'rgba(0,113,227,0.08)', orange: '#A04A00', orangeBar: '#FF9500', orangeSoft: '#FFF7EB', red: '#C9341F', green: '#1A7F37' }
 const money = (n: unknown) => { const v = Number(n); return isFinite(v) ? v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) : '—' }
+const acct = (n: number) => (Math.abs(n) < 0.005 ? money(0) : n < 0 ? `(${money(-n)})` : money(n))   // accounting style: negatives in brackets
 const short = (n: number) => { const a = Math.abs(n); const s = a >= 1e6 ? `$${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`; return n < 0 ? `−${s}` : s }
-const dateLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-const TIER_LABEL: Record<Tier, string> = { must_pay: 'Must pay on time', keeps_running: 'Keeps sites running', flexible: 'Flexible' }
-const TIER_STYLE: Record<Tier, React.CSSProperties> = {
-  must_pay: { background: '#1D1D1F', color: '#fff' },
-  keeps_running: { background: 'rgba(0,113,227,0.12)', color: '#0058B0' },
-  flexible: { background: 'rgba(0,0,0,0.06)', color: '#3A3A3C' },
-}
+const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+const TIER: Record<Tier, string> = { must_pay: 'Must pay on time', keeps_running: 'Keeps sites running', flexible: 'Flexible' }
+const FREQ: Record<Freq, string> = { weekly: 'Every week', biweekly: 'Every other week', monthly: 'Every month', quarterly: 'Every 3 months', yearly: 'Every year' }
+const TYPE: Record<string, string> = { Purchase: 'Payment', Deposit: 'Deposit', Transfer: 'Transfer', SalesReceipt: 'Sale', BillPayment: 'Bill paid', Payment: 'Invoice paid' }
 
-async function api<T = Row>(path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; data: T & { error?: string; state?: string } }> {
-  try {
-    const r = await fetch(path, { ...init, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
-    const data = await r.json().catch(() => ({}))
-    return { ok: r.ok, status: r.status, data }
-  } catch (e) {
-    return { ok: false, status: 0, data: { error: e instanceof Error ? e.message : 'Network error' } as T & { error?: string } }
-  }
-}
+const FIN_CSS = `
+.fn-lock{max-width:420px;margin:32px auto;background:#fff;border-radius:16px;box-shadow:0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08);padding:28px 26px;display:grid;gap:16px;justify-items:center;text-align:center}
+.fn-lock .ic{width:48px;height:48px;border-radius:12px;background:${TEXT};display:flex;align-items:center;justify-content:center}
+.fn-lock h2{margin:0;font-size:20px;font-weight:600}
+.fn-code{width:100%;height:54px;border:1px solid rgba(0,0,0,.14);border-radius:12px;text-align:center;font:600 26px -apple-system,Inter,sans-serif;letter-spacing:.5em;padding-left:.5em;color:${TEXT}}
+.fn-code:focus{outline:2px solid ${BLUE};outline-offset:1px}
+.fn-rules{width:100%;text-align:left;border-top:1px solid ${LINE};padding-top:12px;display:grid;gap:5px;font-size:12.5px;color:${MUTED}}
+.fn-tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.fn-tbl th{font-size:12px;font-weight:500;color:${MUTED};text-align:left;padding:8px 10px;border-bottom:1px solid ${LINE};white-space:nowrap}
+.fn-tbl td{padding:8px 10px;border-bottom:1px solid rgba(0,0,0,.05);white-space:nowrap}
+.fn-tbl .r{text-align:right}
+.fn-tbl tr:last-child td{border-bottom:0}
+.fn-st th.r button{background:none;border:0;padding:0;font:inherit;color:${BLUE};cursor:pointer}
+.fn-st td:first-child,.fn-st th:first-child{position:sticky;left:0;background:#fff;z-index:1;min-width:210px}
+.fn-st .grp td{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:${MUTED};padding-top:14px;border-bottom:0}
+.fn-st .sub td:first-child{padding-left:22px;color:${TEXT2}}
+.fn-st .tot td{font-weight:600;border-top:1px solid rgba(0,0,0,.14)}
+.fn-st .key td{font-weight:600;background:#F7F8FA}
+.fn-st .key td:first-child{background:#F7F8FA}
+.fn-st .neg{color:${ORANGE}}
+.fn-wrap{overflow-x:auto}
+.fn-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:${MUTED}}
+.fn-legend span{display:inline-flex;align-items:center;gap:6px}
+.fn-sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.fn-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.fn-tag.must_pay{background:${TEXT};color:#fff}.fn-tag.keeps_running{background:#EEF4FF;color:#0058B0}.fn-tag.flexible{background:#F2F2F7;color:${TEXT2}}
+.fn-tag.in{background:#E8F6EC;color:${GREEN}}.fn-tag.out{background:#F2F2F7;color:${TEXT2}}
+.fn-tag.suggested{background:#FFF4E5;color:${ORANGE}}.fn-tag.recurring{background:#EEF4FF;color:#0058B0}.fn-tag.counted{background:#F2F2F7;color:${MUTED}}.fn-tag.one_time{background:#F2F2F7;color:${MUTED}}
+.fn-sel{height:30px;border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:0 8px;font:500 12.5px -apple-system,Inter,sans-serif;background:#fff;color:${TEXT}}
+.fn-unl{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:500}
+.fn-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fn-in{color:${GREEN}}
+@media (max-width:900px){.fn-two{grid-template-columns:1fr}}
+`
 
-// ── Small pieces ─────────────────────────────────────────────────────────────
-function Card({ title, right, children, pad = true }: { title?: string; right?: React.ReactNode; children: React.ReactNode; pad?: boolean }) {
-  return (
-    <section style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, minWidth: 0 }}>
-      {(title || right) && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px 0', flexWrap: 'wrap' }}><h2 style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: 0 }}>{title}</h2>{right}</div>}
-      <div style={pad ? { padding: 16 } : undefined}>{children}</div>
-    </section>
-  )
-}
-function Btn({ children, onClick, kind = 'primary', disabled, small, type = 'button' }: { children: React.ReactNode; onClick?: () => void; kind?: 'primary' | 'plain' | 'danger'; disabled?: boolean; small?: boolean; type?: 'button' | 'submit' }) {
-  const s = kind === 'primary' ? { background: C.blue, color: '#fff', border: `1px solid ${C.blue}` } : kind === 'danger' ? { background: '#fff', color: C.red, border: '1px solid rgba(201,52,31,0.35)' } : { background: '#fff', color: C.blue, border: `1px solid ${C.line}` }
-  return <button type={type} onClick={onClick} disabled={disabled} style={{ ...s, borderRadius: 10, minHeight: small ? 32 : 40, padding: small ? '0 10px' : '0 14px', fontSize: small ? 12.5 : 14, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, whiteSpace: 'nowrap', fontFamily: FONT }}>{children}</button>
-}
-function Note({ tone = 'gray', children }: { tone?: 'gray' | 'red' | 'green' | 'blue' | 'orange'; children: React.ReactNode }) {
-  const m = { gray: ['#F5F5F7', C.sub], red: ['#FDECEA', C.red], green: ['#E8F6EC', C.green], blue: [C.blueSoft, '#0058B0'], orange: [C.orangeSoft, C.orange] }[tone]
-  return <div role={tone === 'red' ? 'alert' : undefined} style={{ background: m[0], color: m[1], borderRadius: 10, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}>{children}</div>
-}
-function Tile({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
-  return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}><div style={{ fontSize: 12.5, color: C.sub }}>{label}</div><div style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: warn ? C.orange : C.ink, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{value}</div>{sub && <div style={{ fontSize: 12.5, color: C.sub, marginTop: 4 }}>{sub}</div>}</div>
-}
-const inputStyle: React.CSSProperties = { width: '100%', border: `1px solid rgba(0,0,0,0.14)`, borderRadius: 10, minHeight: 40, padding: '0 12px', fontSize: 14, color: C.ink, background: '#fff', fontFamily: FONT, boxSizing: 'border-box' }
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return <label style={{ display: 'block' }}><div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{label}</div>{children}{hint && <div style={{ fontSize: 12, color: C.sub, marginTop: 5, lineHeight: 1.4 }}>{hint}</div>}</label>
-}
-function TierTag({ tier }: { tier: Tier }) {
-  return <span style={{ ...TIER_STYLE[tier], display: 'inline-flex', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{TIER_LABEL[tier]}</span>
-}
-
-// ── Lock screen ──────────────────────────────────────────────────────────────
-function CodeBoxes({ onDone, busy, label }: { onDone: (code: string) => void; busy: boolean; label: string }) {
+// ── Lock card ────────────────────────────────────────────────────────────────
+function LockCard({ status, me, onChange }: { status: Any; me: string; onChange: () => void }) {
   const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const first = status.state === 'no_code' && status.owner
+  const canType = status.state === 'locked' || first
+  const submit = async () => {
+    setBusy(true); setMsg(null)
+    if (first) {
+      const r = await send('/api/finance/codes', 'POST', { email: me, code })
+      if (!r.ok) { setMsg(r.data.error ?? 'Couldn’t save your code.'); setBusy(false); return }
+    }
+    const r = await send('/api/finance/unlock', 'POST', { code })
+    setBusy(false)
+    if (r.ok) { onChange(); return }
+    setMsg(`${r.data.error ?? 'Couldn’t unlock.'}${typeof r.data.tries_left === 'number' ? ` ${r.data.tries_left} ${r.data.tries_left === 1 ? 'try' : 'tries'} left.` : ''}`)
+    setCode('')
+    if (r.status === 423) onChange()
+  }
+  const title = status.state === 'locked_out' ? 'Finance is locked for now' : first ? 'Set your Finance code' : status.state === 'no_code' ? 'You don’t have a Finance code' : 'Finance is locked'
+  const sub = status.state === 'locked_out' ? `Too many wrong tries. Try again after ${new Date(status.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`
+    : first ? 'You’re the owner. Pick a 6-digit code. You’ll enter it every time you open Finance, and then you can set codes for other senior admins.'
+      : status.state === 'no_code' ? 'Ask the owner to set one for you.'
+        : 'Enter your 6-digit senior admin code to see cash, bills and payroll.'
   return (
-    <form onSubmit={e => { e.preventDefault(); if (code.length === 6) onDone(code) }} style={{ display: 'grid', gap: 16, width: '100%' }}>
-      <label style={{ display: 'block' }}>
-        <span style={{ position: 'absolute', left: -9999 }}>{label}</span>
-        <input autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} aria-label={label}
-          style={{ ...inputStyle, minHeight: 56, fontSize: 28, fontWeight: 600, letterSpacing: '0.5em', textAlign: 'center', paddingLeft: '0.5em' }} />
-      </label>
-      <Btn type="submit" disabled={busy || code.length !== 6}>{busy ? 'Checking…' : label.startsWith('New') ? 'Save my code' : 'Unlock Finance'}</Btn>
+    <form className="fn-lock" onSubmit={e => { e.preventDefault(); if (code.length === 6) void submit() }}>
+      <span className="ic" aria-hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg></span>
+      <div><h2>{title}</h2><div style={{ color: MUTED, fontSize: 13, marginTop: 6, lineHeight: 1.45 }}>{sub}</div></div>
+      {canType && <>
+        <input className="fn-code" aria-label={first ? 'New 6-digit code' : '6-digit code'} autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+        <button type="submit" className="sy-b pri" style={{ width: '100%', height: 42 }} disabled={busy || code.length !== 6}>{busy ? 'Checking…' : first ? 'Save my code' : 'Unlock Finance'}</button>
+      </>}
+      {msg && <div style={{ width: '100%' }}><Note tone="red">{msg}</Note></div>}
+      <div className="fn-rules"><div>· Locks again after a few minutes without use.</div><div>· 5 wrong tries locks you out for 30 minutes.</div><div>· Every unlock and every change is logged.</div></div>
     </form>
   )
 }
 
-function LockScreen({ status, onUnlocked, me }: { status: Row; onUnlocked: () => void; me: string }) {
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ tone: 'red' | 'green' | 'gray'; text: string } | null>(null)
-  const firstCode = status.state === 'no_code' && status.owner
-  const submit = async (code: string) => {
-    setBusy(true); setMsg(null)
-    if (firstCode) {
-      const r = await api('/api/finance/codes', { method: 'POST', body: JSON.stringify({ email: me, code }) })
-      if (!r.ok) { setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t save your code.' }); setBusy(false); return }
-    }
-    const r = await api('/api/finance/unlock', { method: 'POST', body: JSON.stringify({ code }) })
-    setBusy(false)
-    if (r.ok) { onUnlocked(); return }
-    const left = (r.data as Row).tries_left
-    setMsg({ tone: 'red', text: `${r.data.error ?? 'Couldn’t unlock.'}${typeof left === 'number' ? ` ${left} ${left === 1 ? 'try' : 'tries'} left.` : ''}` })
-    if (r.status === 423) onUnlocked() // reload status to show the locked-out screen
-  }
-  const title = status.state === 'locked_out' ? 'Finance is locked for now' : firstCode ? 'Set your Finance code' : status.state === 'no_code' ? 'You don’t have a Finance code' : 'Finance is locked'
-  const sub = status.state === 'locked_out' ? `Too many wrong tries. Try again after ${new Date(status.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. The owner has been told in the Finance log.`
-    : firstCode ? 'You’re the owner. Pick a 6-digit code — you’ll use it every time you open Finance, and you can then set codes for other senior admins.'
-      : status.state === 'no_code' ? 'Ask the owner to set one for you. Finance needs it on top of your Nexus sign-in.'
-        : 'Enter your 6-digit senior admin code to see cash, bills and payroll.'
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 16px' }}>
-      <div style={{ background: C.card, borderRadius: 16, padding: '36px 32px', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 10px 30px -14px rgba(0,0,0,.22)', width: '100%', maxWidth: 420, display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center' }}>
-        <span aria-hidden style={{ width: 52, height: 52, borderRadius: 14, background: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-        </span>
-        <div><h2 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>{title}</h2><div style={{ color: C.sub, fontSize: 13, marginTop: 6, lineHeight: 1.45 }}>{sub}</div></div>
-        {(status.state === 'locked' || firstCode) && <CodeBoxes onDone={submit} busy={busy} label={firstCode ? 'New 6-digit code' : '6-digit code'} />}
-        {msg && <div style={{ width: '100%' }}><Note tone={msg.tone}>{msg.text}</Note></div>}
-        <div style={{ fontSize: 12.5, color: C.sub, textAlign: 'left', borderTop: `1px solid ${C.line}`, paddingTop: 14, display: 'grid', gap: 6, width: '100%' }}>
-          <div>· Locks again after 15 minutes without use (owner can change it).</div>
-          <div>· 5 wrong tries locks you out for 30 minutes.</div>
-          <div>· Every unlock and every change is logged.</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Cash outlook ─────────────────────────────────────────────────────────────
-function BarChart({ buckets, floor, monthly }: { buckets: Row[]; floor: number; monthly: boolean }) {
-  const W = 1000, H = 280, base = 240, top = 30, left = 52
+// ── Chart ────────────────────────────────────────────────────────────────────
+function CashChart({ buckets, floor, onPick }: { buckets: Any[]; floor: number; onPick: (i: number) => void }) {
+  const W = 1000, H = 260, base = 220, top = 26, left = 54
   const vals = buckets.map(b => Number(b.end_balance) || 0)
-  const max = Math.max(floor, ...vals, 1)
-  const min = Math.min(0, ...vals)
-  const span = max - min || 1
+  const max = Math.max(floor, ...vals, 1), min = Math.min(0, ...vals), span = max - min || 1
   const y = (v: number) => base - ((v - min) / span) * (base - top)
-  const slot = (W - left - 10) / buckets.length
-  const bw = Math.min(56, slot * 0.72)
+  const slot = (W - left - 10) / buckets.length, bw = Math.min(54, slot * 0.7)
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Projected balance by ${monthly ? 'month' : 'week'}, lowest ${money(Math.min(...vals))}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      <g fontFamily={FONT} fontSize="11" fill={C.sub}>
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Projected balance; lowest ${money(Math.min(...vals))}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <g fontFamily="-apple-system,Inter,sans-serif" fontSize="11" fill={MUTED}>
         <line x1={left} y1={y(0)} x2={W - 10} y2={y(0)} stroke="rgba(0,0,0,.15)" />
         <text x="0" y={y(max) + 4}>{short(max)}</text>
         {min < 0 && <text x="0" y={y(min) + 4}>{short(min)}</text>}
@@ -146,319 +120,479 @@ function BarChart({ buckets, floor, monthly }: { buckets: Row[]; floor: number; 
           const v = Number(b.end_balance) || 0
           const x = left + i * slot + (slot - bw) / 2
           const y0 = y(Math.max(v, 0)), y1 = y(Math.min(v, 0))
-          const label = monthly ? String(b.label).split(' ')[0] : String(b.label).replace('Week of ', '')
+          const low = b.below_floor || v < 0
           return (
-            <g key={b.start}>
-              <rect x={x} y={y0} width={bw} height={Math.max(1, y1 - y0)} rx="4" fill={b.below_floor || v < 0 ? C.orangeBar : C.blue}><title>{`${b.label}: ${money(v)}`}</title></rect>
-              {(b.below_floor || i === 0 || i === buckets.length - 1) && <text x={x + bw / 2} y={y0 - 6} textAnchor="middle" fill={b.below_floor ? C.orange : C.ink} fontWeight={b.below_floor ? 600 : 400}>{short(v)}</text>}
-              <text x={x + bw / 2} y={base + 22} textAnchor="middle">{label}</text>
+            <g key={b.start} onClick={() => onPick(i)} style={{ cursor: 'pointer' }}>
+              <rect x={x - 4} y={top} width={bw + 8} height={base - top} fill="transparent" />
+              <rect x={x} y={y0} width={bw} height={Math.max(1, y1 - y0)} rx="4" fill={low ? DOT.orange : BLUE}><title>{`${b.label}: ${money(v)}`}</title></rect>
+              {(low || i === 0 || i === buckets.length - 1) && <text x={x + bw / 2} y={y0 - 6} textAnchor="middle" fill={low ? ORANGE : TEXT} fontWeight={low ? 600 : 400}>{short(v)}</text>}
+              <text x={x + bw / 2} y={base + 20} textAnchor="middle">{String(b.label).replace('Week of ', '').replace(/ \d{4}$/, '')}</text>
             </g>
           )
         })}
-        {floor > 0 && <line x1={left} y1={y(floor)} x2={W - 10} y2={y(floor)} stroke={C.ink} strokeWidth="1.5" strokeDasharray="6 5" />}
+        {floor > 0 && <line x1={left} y1={y(floor)} x2={W - 10} y2={y(floor)} stroke={TEXT} strokeWidth="1.5" strokeDasharray="6 5" />}
       </g>
     </svg>
   )
 }
 
-function OutlookSection({ data, refresh, busy }: { data: Row; refresh: () => void; busy: boolean }) {
-  const [view, setView] = useState<'weeks' | 'months'>('weeks')
-  const buckets: Row[] = view === 'weeks' ? data.weeks : data.months
-  const lowest = view === 'weeks' ? data.lowest_week : data.lowest_month
-  const [pick, setPick] = useState<number | null>(null)
-  const idx = pick ?? Math.max(0, buckets.findIndex(b => lowest && b.label === lowest.label))
-  const sel = buckets[idx]
-  const weeksIn = (data.weeks as Row[]).reduce((s, w) => s + (Number(w.in) || 0), 0)
-  const weeksOut = (data.weeks as Row[]).reduce((s, w) => s + (Number(w.out) || 0), 0)
-  const below = buckets.filter(b => b.below_floor)
-  const share = data.share ?? {}
+// ── Cash flow statement ──────────────────────────────────────────────────────
+const RECEIPTS: [string, (i: Any) => boolean][] = [
+  ['Customer invoices', i => i.source === 'qbo_invoice'],
+  ['Monthly site billing', i => i.source === 'site_billing'],
+  ['Other recurring receipts', i => i.source === 'recurring' && i.amount > 0],
+]
+const DISBURSEMENTS: [string, (i: Any) => boolean][] = [
+  ['Payroll', i => i.source === 'payroll'],
+  ['Vendor bills', i => i.source === 'qbo_bill'],
+  ['Recurring costs', i => i.source === 'recurring' && i.amount < 0],
+  ['Purchase orders', i => i.source === 'purchase_order'],
+]
+function Statement({ buckets, cashToday, floor, onPick }: { buckets: Any[]; cashToday: number; floor: number; onPick: (i: number) => void }) {
+  const sum = (b: Any, f: (i: Any) => boolean) => (b.items as Any[]).filter(f).reduce((s, i) => s + Math.abs(i.amount), 0)
+  const begin = buckets.map((_, i) => (i === 0 ? cashToday : Number(buckets[i - 1].end_balance)))
+  const total = (row: (b: Any, i: number) => number) => buckets.reduce((s, b, i) => s + row(b, i), 0)
+  const line = (label: string, row: (b: Any, i: number) => number, cls = '', showTotal = true, neg = false) => (
+    <tr className={cls} key={label}>
+      <td>{label}</td>
+      {buckets.map((b, i) => { const v = row(b, i); return <td key={b.start} className={`r${v < 0 ? ' neg' : ''}`}>{v === 0 && cls === 'sub' ? '—' : neg ? acct(-v) : acct(v)}</td> })}
+      <td className="r" style={{ fontWeight: 600 }}>{showTotal ? (neg ? acct(-total(row)) : acct(total(row))) : ''}</td>
+    </tr>
+  )
+  const rIn = (b: Any) => (b.items as Any[]).filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0)
+  const rOut = (b: Any) => (b.items as Any[]).filter(i => i.amount < 0).reduce((s, i) => s - i.amount, 0)
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div role="group" aria-label="View" style={{ display: 'inline-flex', background: 'rgba(0,0,0,.05)', borderRadius: 9, padding: 2 }}>
-          {(['weeks', 'months'] as const).map(v => <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); setPick(null) }} style={{ border: 0, background: view === v ? '#fff' : 'transparent', boxShadow: view === v ? '0 1px 2px rgba(0,0,0,.12)' : 'none', fontFamily: FONT, fontSize: 13, fontWeight: view === v ? 600 : 500, minHeight: 32, padding: '0 12px', borderRadius: 7, color: C.ink, cursor: 'pointer' }}>{v === 'weeks' ? '13 weeks' : '12 months'}</button>)}
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ fontSize: 12, color: C.sub }}>From QuickBooks + Nexus · {new Date(data.as_of).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span><Btn kind="plain" small onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</Btn></div>
+    <div className="fn-wrap">
+      <table className="fn-tbl fn-st">
+        <thead><tr><th>{buckets.length > 12 ? 'Week beginning' : 'Month'}</th>{buckets.map((b, i) => <th key={b.start} className="r"><button type="button" onClick={() => onPick(i)} aria-label={`Details for ${b.label}`}>{String(b.label).replace('Week of ', '')}</button></th>)}<th className="r">Total</th></tr></thead>
+        <tbody>
+          {line('Beginning cash', (_, i) => begin[i], 'key', false)}
+          <tr className="grp"><td colSpan={buckets.length + 2}>Cash receipts</td></tr>
+          {RECEIPTS.map(([label, f]) => line(label, b => sum(b, f), 'sub'))}
+          {line('Total receipts', rIn, 'tot')}
+          <tr className="grp"><td colSpan={buckets.length + 2}>Cash disbursements</td></tr>
+          {DISBURSEMENTS.map(([label, f]) => line(label, b => sum(b, f), 'sub', true, true))}
+          {line('Total disbursements', rOut, 'tot', true, true)}
+          {line('Net cash flow', b => rIn(b) - rOut(b), 'tot')}
+          {line('Ending cash', b => Number(b.end_balance), 'key', false)}
+          {floor > 0 && line('Over / (under) cash floor', b => Number(b.end_balance) - floor, '', false)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Pop-ups ──────────────────────────────────────────────────────────────────
+function PeriodSheet({ b, onClose }: { b: Any; onClose: () => void }) {
+  const items = b.items as Any[]
+  return (
+    <Sheet title={b.label} sub={`Ends at ${money(b.end_balance)} · in ${money(b.in)} · out ${money(b.out)}`} onClose={onClose} width={720}>
+      {items.length === 0 ? <Note>Nothing moves in this period.</Note> : (
+        <div className="fn-wrap"><table className="fn-tbl">
+          <thead><tr><th>Date</th><th>Item</th><th>How sure</th><th className="r">Amount</th></tr></thead>
+          <tbody>{items.map((it, i) => (
+            <tr key={`${it.source}-${it.ref ?? it.recurring_id ?? i}-${it.date}`}>
+              <td>{day(it.date)}</td><td style={{ whiteSpace: 'normal' }}>{it.label}</td>
+              <td style={{ color: MUTED }}>{it.certainty === 'known' ? 'Known' : it.certainty === 'expected' ? 'Expected' : 'Estimate'}</td>
+              <td className={`r${it.amount > 0 ? ' fn-in' : ''}`}>{it.amount > 0 ? '+' : '−'}{money(Math.abs(it.amount))}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+    </Sheet>
+  )
+}
+
+function BillsSheet({ bills, onTier, onClose }: { bills: Any[]; onTier: (id: string, name: string, t: Tier) => void; onClose: () => void }) {
+  const [f, setF] = useState<Tier | 'all'>('all')
+  const shown = f === 'all' ? bills : bills.filter(b => b.tier === f)
+  return (
+    <Sheet title="Bills" sub="Open bills in QuickBooks, by due date. Set each vendor’s tier once; new bills from them follow it." onClose={onClose} width={860}>
+      <div className="sy-chips" role="group" aria-label="Filter by tier">
+        {(['all', 'must_pay', 'keeps_running', 'flexible'] as const).map(k => <button key={k} type="button" className="sy-chip" aria-pressed={f === k} onClick={() => setF(k)}>{k === 'all' ? `All ${bills.length}` : `${TIER[k]} ${bills.filter(b => b.tier === k).length}`}</button>)}
       </div>
-      {below.length > 0 && <Note tone="orange"><b>{below.length === 1 ? `Tight: ${below[0].label}` : `Tight: ${below.length} ${view === 'weeks' ? 'weeks' : 'months'} under your floor`}.</b> Lowest point {money(lowest?.balance)} ({lowest?.label}), {money(data.floor - (lowest?.balance ?? 0))} under your {money(data.floor)} floor.</Note>}
-      {data.floor <= 0 && <Note>Set a cash floor in Settings so tight weeks are flagged.</Note>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <Tile label="Cash today" value={money(data.cash_today)} sub={`${(data.cash_accounts ?? []).length} bank account${(data.cash_accounts ?? []).length === 1 ? '' : 's'} in QuickBooks`} />
-        <Tile label={`Lowest in ${view === 'weeks' ? '13 weeks' : '12 months'}`} value={money(lowest?.balance)} sub={lowest?.label} warn={!!lowest && data.floor > 0 && lowest.balance < data.floor} />
-        <Tile label="Coming in · 13 weeks" value={money(weeksIn)} />
-        <Tile label="Going out · 13 weeks" value={money(weeksOut)} />
+      {shown.length === 0 ? <Note>No open bills{f !== 'all' ? ' in this tier' : ''}.</Note> : (
+        <div className="fn-wrap"><table className="fn-tbl">
+          <thead><tr><th>Vendor</th><th>Bill</th><th>Due</th><th className="r">Amount</th><th>Tier</th></tr></thead>
+          <tbody>{shown.map(b => (
+            <tr key={b.qbo_id}>
+              <td style={{ fontWeight: 600 }}>{b.vendor}</td><td style={{ color: MUTED }}>{b.doc ?? '—'}</td>
+              <td style={{ color: b.overdue ? ORANGE : TEXT, fontWeight: b.overdue ? 600 : 400 }}>{day(b.due_date)}{b.overdue ? ` · ${-b.days_to_due} d late` : ''}</td>
+              <td className="r">{money(b.balance)}</td>
+              <td>{b.vendor_id ? <select className="fn-sel" aria-label={`Tier for ${b.vendor}`} value={b.tier} onChange={e => onTier(b.vendor_id, b.vendor, e.target.value as Tier)}>{(Object.keys(TIER) as Tier[]).map(t => <option key={t} value={t}>{TIER[t]}</option>)}</select> : <span className={`fn-tag ${b.tier}`}>{TIER[b.tier as Tier]}</span>}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+    </Sheet>
+  )
+}
+
+function RuleSheet({ title, sub, initial, direction, onSave, onClose }: { title: string; sub?: string; initial: Any; direction: 'in' | 'out' | null; onSave: (rule: Any) => Promise<string | null>; onClose: () => void }) {
+  const [r, setR] = useState<Any>({ tier: 'flexible', frequency: 'monthly', ...initial, direction: direction ?? initial.direction ?? 'out' })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const set = (k: string, v: unknown) => setR(p => ({ ...p, [k]: v }))
+  const save = async () => { setBusy(true); setErr(null); const e = await onSave({ ...r, amount: Number(r.amount) }); setBusy(false); if (e) setErr(e) }
+  return (
+    <Sheet title={title} sub={sub} onClose={onClose} width={520} locked={busy}>
+      <Field label="Name"><input className="sy-in" value={r.name ?? ''} onChange={e => set('name', e.target.value)} /></Field>
+      <div className="sy-grid2">
+        <Field label="Money in or out">{direction ? <div className="sy-in" style={{ display: 'flex', alignItems: 'center', color: MUTED }}>{direction === 'in' ? 'Money in' : 'Money out'}</div> : <select className="sy-in" value={r.direction} onChange={e => set('direction', e.target.value)}><option value="out">Money out</option><option value="in">Money in</option></select>}</Field>
+        <Field label="Amount each time"><input className="sy-in" type="number" min={0} step="0.01" value={r.amount ?? ''} onChange={e => set('amount', e.target.value)} /></Field>
+        <Field label="How often"><select className="sy-in" value={r.frequency} onChange={e => set('frequency', e.target.value)}>{(Object.keys(FREQ) as Freq[]).map(f => <option key={f} value={f}>{FREQ[f]}</option>)}</select></Field>
+        <Field label="Next time"><input className="sy-in" type="date" value={r.next_date ?? ''} onChange={e => set('next_date', e.target.value)} /></Field>
       </div>
-      <Card title={`Projected balance, end of each ${view === 'weeks' ? 'week' : 'month'}`} right={<span style={{ fontSize: 12.5, color: C.sub }}>Orange = under the floor · dashed line = floor</span>}>
-        <BarChart buckets={buckets} floor={data.floor} monthly={view === 'months'} />
-        <div role="group" aria-label="Pick a period" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-          {buckets.map((b, i) => <button key={b.start} type="button" aria-pressed={i === idx} onClick={() => setPick(i)} style={{ minHeight: 32, padding: '0 10px', borderRadius: 16, border: `1px solid ${i === idx ? C.ink : C.line}`, background: i === idx ? C.ink : '#fff', color: i === idx ? '#fff' : b.below_floor ? C.orange : '#3A3A3C', fontFamily: FONT, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>{view === 'weeks' ? String(b.label).replace('Week of ', '') : String(b.label).split(' ')[0]}</button>)}
+      {r.direction === 'out' && <Field label="Tier"><select className="sy-in" value={r.tier} onChange={e => set('tier', e.target.value)}>{(Object.keys(TIER) as Tier[]).map(t => <option key={t} value={t}>{TIER[t]}</option>)}</select></Field>}
+      {err && <Note tone="red">{err}</Note>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="button" className="sy-b line" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="sy-b pri" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
+    </Sheet>
+  )
+}
+
+function RecurringSheet({ rules, onEdit, onAdd, onStop, onClose }: { rules: Any[]; onEdit: (r: Any) => void; onAdd: () => void; onStop: (r: Any) => void; onClose: () => void }) {
+  const monthly = (r: Any) => r.amount * ({ weekly: 52 / 12, biweekly: 26 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 } as Record<string, number>)[r.frequency]
+  const out = rules.filter(r => r.direction === 'out'), inn = rules.filter(r => r.direction === 'in')
+  return (
+    <Sheet title="Recurring money in & out" sub={`About ${money(out.reduce((s, r) => s + monthly(r), 0))} a month out · ${money(inn.reduce((s, r) => s + monthly(r), 0))} a month in`} onClose={onClose} width={820}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}><div style={{ fontSize: 13, color: MUTED }}>Made from bank transactions or added by hand. Each one is in the cash outlook.</div><button type="button" className="sy-b pri sm" onClick={onAdd}>+ Add one</button></div>
+      {rules.length === 0 ? <Note>Nothing yet. Open Bank activity and mark the payments that repeat.</Note> : (
+        <div className="fn-wrap"><table className="fn-tbl">
+          <thead><tr><th>Name</th><th></th><th className="r">Amount</th><th>How often</th><th>Next</th><th>Tier</th><th></th></tr></thead>
+          <tbody>{rules.map(r => (
+            <tr key={r.id}>
+              <td style={{ fontWeight: 600 }}>{r.name}</td>
+              <td><span className={`fn-tag ${r.direction}`}>{r.direction === 'in' ? 'In' : 'Out'}</span></td>
+              <td className="r">{money(r.amount)}</td><td>{FREQ[r.frequency as Freq]}</td><td>{day(r.next_date)}</td>
+              <td>{r.direction === 'out' ? <span className={`fn-tag ${r.tier}`}>{TIER[r.tier as Tier]}</span> : '—'}</td>
+              <td className="r" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}><button type="button" className="sy-b blue sm" onClick={() => onEdit(r)}>Change</button><button type="button" className="sy-b warn sm" onClick={() => onStop(r)}>Stop</button></td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+    </Sheet>
+  )
+}
+
+function BankSheet({ bank, onRecurring, onOneTime, onClear, onClose, onRefresh, busy }: { bank: Any; onRecurring: (t: Any, s?: Any) => void; onOneTime: (keys: string[]) => void; onClear: (keys: string[]) => void; onClose: () => void; onRefresh: () => void; busy: boolean }) {
+  const [f, setF] = useState<'decide' | 'out' | 'in' | 'all'>('decide')
+  const [q, setQ] = useState('')
+  const txns: Any[] = bank.transactions ?? []
+  const sugByKey = useMemo(() => { const m = new Map<string, Any>(); for (const s of bank.suggestions ?? []) for (const k of s.txn_keys) m.set(k, s); return m }, [bank.suggestions])
+  const shown = txns.filter(t => (f === 'all' || (f === 'decide' ? (t.status === 'suggested' || t.status === 'open') : t.direction === f)) && (!q || `${t.name} ${t.memo ?? ''}`.toLowerCase().includes(q.toLowerCase())))
+  const undecided = txns.filter(t => t.status === 'suggested' || t.status === 'open').length
+  return (
+    <Sheet title="Bank activity" sub={`Last 90 days in ${(bank.accounts ?? []).map((a: Any) => a.name).join(', ') || 'your bank accounts'}, as recorded in QuickBooks`} onClose={onClose} width={980}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="sy-chips" role="group" aria-label="Show">
+          {([['decide', `To decide ${undecided}`], ['out', 'Money out'], ['in', 'Money in'], ['all', `All ${txns.length}`]] as const).map(([k, l]) => <button key={k} type="button" className="sy-chip" aria-pressed={f === k} onClick={() => setF(k)}>{l}</button>)}
         </div>
-      </Card>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
-        <Card title={sel ? `${sel.label} · ends at ${money(sel.end_balance)}` : 'Pick a period'} pad={false}>
-          {!sel || (sel.items ?? []).length === 0 ? <div style={{ padding: 16, color: C.sub, fontSize: 14 }}>Nothing moves in this period.</div> : (
-            <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
-              <thead><tr>{['Date', 'Item', 'How sure', 'Amount'].map((h, i) => <th key={h} style={{ textAlign: i === 3 ? 'right' : 'left', fontWeight: 500, color: C.sub, fontSize: 12, padding: '10px 14px', borderBottom: `1px solid ${C.line}` }}>{h}</th>)}</tr></thead>
-              <tbody>{(sel.items as Row[]).map((it, i) => (
-                <tr key={`${it.source}-${it.ref ?? i}-${it.date}`}>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid rgba(0,0,0,.055)`, whiteSpace: 'nowrap' }}>{dateLabel(it.date)}</td>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid rgba(0,0,0,.055)` }}>{it.label}</td>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid rgba(0,0,0,.055)`, color: C.sub, whiteSpace: 'nowrap' }}>{it.certainty === 'known' ? 'Known' : it.certainty === 'expected' ? 'Expected' : 'Estimate'}</td>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid rgba(0,0,0,.055)`, textAlign: 'right', whiteSpace: 'nowrap', color: it.amount < 0 ? C.ink : C.green }}>{it.amount < 0 ? '−' : '+'}{money(Math.abs(it.amount))}</td>
-                </tr>
-              ))}</tbody>
-            </table></div>
-          )}
-        </Card>
-        <Card title="How sure is this?">
-          {([['known', 'Known: bills, payroll, recurring costs, POs', '#0071E3'], ['expected', 'Expected: invoices not late yet, monthly site billing', '#5AA0EE'], ['estimated', 'Estimate: invoices already late (counted next week)', '#A9CCF5']] as const).map(([k, label, color]) => (
-            <div key={k} style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span>{label}</span><span style={{ fontWeight: 600 }}>{Math.round((Number(share[k]) || 0) * 100)}%</span></div>
-              <div style={{ height: 8, background: 'rgba(0,0,0,.06)', borderRadius: 4, marginTop: 6 }}><div style={{ height: '100%', width: `${Math.round((Number(share[k]) || 0) * 100)}%`, background: color, borderRadius: 4 }} /></div>
+        <label style={{ flex: '1 1 200px' }}><span className="sy-lbl" style={{ position: 'absolute', left: -9999 }}>Search</span><input className="sy-in" placeholder="Search payee or memo" value={q} onChange={e => setQ(e.target.value)} /></label>
+        <button type="button" className="sy-b line sm" onClick={onRefresh} disabled={busy}>{busy ? 'Reading…' : 'Refresh from QuickBooks'}</button>
+      </div>
+      {bank.truncated && <Note tone="orange">QuickBooks returned 1,000 of one kind of transaction — only those are shown.</Note>}
+      {(bank.suggestions ?? []).length > 0 && f === 'decide' && (
+        <Card title="Looks recurring" sub="Same payee, a steady amount, at a steady gap">
+          {(bank.suggestions as Any[]).map(s => (
+            <div key={s.match_key} className="sy-row">
+              <div className="main"><div className="t">{s.name}</div><div className="m">About {money(s.amount)} {FREQ[s.frequency as Freq].toLowerCase()} · seen {s.count} times · last {day(s.last_date)}</div></div>
+              <span className={`fn-tag ${s.direction}`}>{s.direction === 'in' ? 'In' : 'Out'}</span>
+              <button type="button" className="sy-b pri sm" onClick={() => { const t = txns.find(x => x.key === s.txn_keys[s.txn_keys.length - 1]); if (t) onRecurring(t, s) }}>Make recurring</button>
+              <button type="button" className="sy-b line sm" onClick={() => onOneTime(s.txn_keys)}>Not recurring</button>
             </div>
           ))}
-          {(data.left_out ?? []).length > 0 && <div style={{ fontSize: 13, color: C.sub, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}><b style={{ color: C.ink }}>Left out:</b> {(data.left_out as Row[]).length} invoice{(data.left_out as Row[]).length === 1 ? '' : 's'} over 60 days late ({money((data.left_out as Row[]).reduce((s, x) => s + x.amount, 0))}), e.g. {(data.left_out as Row[]).slice(0, 2).map(x => `${x.label} ${money(x.amount)}`).join(', ')}.</div>}
-          {(data.gaps ?? []).length > 0 && <div style={{ fontSize: 13, color: C.sub, marginTop: 10, display: 'grid', gap: 4 }}>{(data.gaps as string[]).map(g => <div key={g}>· {g}</div>)}</div>}
         </Card>
-      </div>
-    </div>
+      )}
+      {shown.length === 0 ? <Note>{f === 'decide' ? 'Nothing left to decide.' : 'No transactions match.'}</Note> : (
+        <div className="fn-wrap"><table className="fn-tbl">
+          <thead><tr><th>Date</th><th>Payee</th><th>Type</th><th className="r">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>{shown.map(t => (
+            <tr key={t.key}>
+              <td>{day(t.date)}</td>
+              <td style={{ whiteSpace: 'normal', minWidth: 200 }}><div style={{ fontWeight: 600 }}>{t.name}</div>{t.memo && <div style={{ fontSize: 12, color: MUTED }}>{t.memo}</div>}</td>
+              <td style={{ color: MUTED }}>{TYPE[t.type] ?? t.type}</td>
+              <td className={`r${t.direction === 'in' ? ' fn-in' : ''}`}>{t.direction === 'in' ? '+' : '−'}{money(t.amount)}</td>
+              <td>{t.status === 'counted' ? <span className="fn-tag counted" title="The outlook already counts this bill or invoice">{t.counted_by === 'bill' ? 'From a bill' : 'From an invoice'}</span>
+                : t.status === 'recurring' ? <span className="fn-tag recurring">Recurring</span>
+                  : t.status === 'one_time' ? <span className="fn-tag one_time">One-time</span>
+                    : t.status === 'suggested' ? <span className="fn-tag suggested">Looks recurring</span> : <span style={{ color: MUTED, fontSize: 12 }}>Not decided</span>}</td>
+              <td className="r">{t.markable && (t.status === 'open' || t.status === 'suggested') && <span style={{ display: 'inline-flex', gap: 6 }}><button type="button" className="sy-b blue sm" onClick={() => onRecurring(t, sugByKey.get(t.key))}>Recurring</button><button type="button" className="sy-b line sm" onClick={() => onOneTime([t.key])}>One-time</button></span>}
+                {t.status === 'one_time' && <button type="button" className="sy-b line sm" onClick={() => onClear([t.key])}>Undo</button>}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+      <div style={{ fontSize: 12, color: MUTED }}>Bill payments and invoice payments can’t be made recurring — the outlook already counts those bills and invoices. Card charges show up when the card is paid from the bank.</div>
+    </Sheet>
   )
 }
 
-// ── Pay plan (read-only list + vendor tier) ──────────────────────────────────
-function PayPlanSection({ data, onTier }: { data: Row; onTier: (vendorId: string, name: string, tier: Tier) => Promise<void> }) {
-  const [filter, setFilter] = useState<Tier | 'all'>('all')
-  const bills: Row[] = data.pay_plan ?? []
-  const shown = filter === 'all' ? bills : bills.filter(b => b.tier === filter)
-  const in28 = bills.filter(b => b.days_to_due <= 28)
-  const overdue = bills.filter(b => b.overdue)
-  const count = (t: Tier) => bills.filter(b => b.tier === t).length
-  return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <Tile label="Open bills" value={money(bills.reduce((s, b) => s + b.balance, 0))} sub={`${bills.length} in QuickBooks`} />
-        <Tile label="Due in the next 4 weeks" value={money(in28.reduce((s, b) => s + b.balance, 0))} sub={`${in28.length} bills`} />
-        <Tile label="Past due" value={money(overdue.reduce((s, b) => s + b.balance, 0))} sub={`${overdue.length} bills`} warn={overdue.length > 0} />
-      </div>
-      <Note tone="blue">Set each vendor’s tier once and new bills from that vendor follow it. Suggested pay dates come in the next update — for now this is the list in due-date order.</Note>
-      <Card pad={false}>
-        <div role="group" aria-label="Filter by tier" style={{ padding: '14px 16px', display: 'flex', gap: 8, flexWrap: 'wrap', borderBottom: `1px solid ${C.line}` }}>
-          {([['all', `All ${bills.length}`], ['must_pay', `Must pay on time ${count('must_pay')}`], ['keeps_running', `Keeps sites running ${count('keeps_running')}`], ['flexible', `Flexible ${count('flexible')}`]] as const).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} style={{ minHeight: 32, padding: '0 12px', borderRadius: 16, border: `1px solid ${filter === k ? C.ink : 'rgba(0,0,0,.12)'}`, background: filter === k ? C.ink : '#fff', color: filter === k ? '#fff' : '#3A3A3C', fontFamily: FONT, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>{label}</button>
-          ))}
-        </div>
-        {shown.length === 0 ? <div style={{ padding: 16, color: C.sub, fontSize: 14 }}>No open bills{filter !== 'all' ? ' in this tier' : ''}.</div> : (
-          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
-            <thead><tr>{['Vendor', 'Bill', 'Due', 'Amount', 'Tier'].map((h, i) => <th key={h} style={{ textAlign: i === 3 ? 'right' : 'left', fontWeight: 500, color: C.sub, fontSize: 12, padding: '10px 14px', borderBottom: `1px solid ${C.line}`, whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
-            <tbody>{shown.map(b => (
-              <tr key={b.qbo_id}>
-                <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', fontWeight: 600 }}>{b.vendor}</td>
-                <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', color: C.sub }}>{b.doc ?? '—'}</td>
-                <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', whiteSpace: 'nowrap', color: b.overdue ? C.orange : C.ink, fontWeight: b.overdue ? 600 : 400 }}>{dateLabel(b.due_date)}{b.overdue ? ` · ${-b.days_to_due} d late` : ''}</td>
-                <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', textAlign: 'right' }}>{money(b.balance)}</td>
-                <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)' }}>
-                  {b.vendor_id ? (
-                    <label><span style={{ position: 'absolute', left: -9999 }}>Tier for {b.vendor}</span>
-                      <select value={b.tier} onChange={e => void onTier(b.vendor_id, b.vendor, e.target.value as Tier)} style={{ ...inputStyle, minHeight: 32, width: 'auto', fontSize: 13 }}>
-                        {(Object.keys(TIER_LABEL) as Tier[]).map(t => <option key={t} value={t}>{TIER_LABEL[t]}</option>)}
-                      </select></label>
-                  ) : <TierTag tier={b.tier} />}
-                </td>
-              </tr>
-            ))}</tbody>
-          </table></div>
-        )}
-      </Card>
-    </div>
-  )
-}
-
-// ── Settings ─────────────────────────────────────────────────────────────────
-function SettingsSection({ onSaved }: { onSaved: () => void }) {
-  const [s, setS] = useState<Row | null>(null)
+function SettingsSheet({ onSaved, onClose }: { onSaved: () => void; onClose: () => void }) {
+  const [s, setS] = useState<Any | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [msg, setMsg] = useState<{ tone: 'green' | 'red'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
-  useEffect(() => { void (async () => { const r = await api('/api/finance/settings'); if (r.ok) setS((r.data as Row).settings); else setErr(r.data.error ?? 'Couldn’t load settings.') })() }, [])
-  if (err) return <Note tone="red">{err}</Note>
-  if (!s) return <div style={{ color: C.sub, fontSize: 14 }}>Loading…</div>
+  useEffect(() => { void (async () => { const r = await getJson('/api/finance/settings'); if (r.ok) setS(r.data.settings); else setErr(r.data.error ?? 'Couldn’t load settings.') })() }, [])
   const set = (k: string, v: unknown) => setS(p => ({ ...(p ?? {}), [k]: v }))
-  const costs: Row[] = s.recurring_costs ?? []
-  const setCost = (i: number, k: string, v: unknown) => set('recurring_costs', costs.map((c, j) => (j === i ? { ...c, [k]: v } : c)))
   const save = async () => {
-    setBusy(true); setMsg(null)
-    const r = await api('/api/finance/settings', { method: 'PUT', body: JSON.stringify({
-      cash_floor: Number(s.cash_floor) || 0, idle_minutes: Number(s.idle_minutes) || 15, collect_lag_days: Number(s.collect_lag_days) || 0,
-      payroll_amount: Number(s.payroll_amount) || 0, payroll_frequency: s.payroll_frequency, payroll_next_date: s.payroll_next_date || null,
-      recurring_costs: costs.filter(c => String(c.name ?? '').trim()).map(c => ({ name: c.name, amount: Number(c.amount) || 0, day: Number(c.day) || 1, tier: c.tier ?? 'flexible' })),
-    }) })
+    if (!s) return
+    setBusy(true); setErr(null)
+    const r = await send('/api/finance/settings', 'PUT', { cash_floor: Number(s.cash_floor) || 0, idle_minutes: Number(s.idle_minutes) || 15, collect_lag_days: Number(s.collect_lag_days) || 0, payroll_amount: Number(s.payroll_amount) || 0, payroll_frequency: s.payroll_frequency, payroll_next_date: s.payroll_next_date || null })
     setBusy(false)
-    if (r.ok) { setMsg({ tone: 'green', text: 'Saved. The outlook is updated.' }); onSaved() } else setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t save.' })
+    if (r.ok) { onSaved(); onClose() } else setErr(r.data.error ?? 'Couldn’t save.')
   }
   return (
-    <div style={{ display: 'grid', gap: 16, maxWidth: 860 }}>
-      <Card title="Cash floor & lock">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-          <Field label="Cash floor" hint="Weeks that end below this show in orange."><input type="number" min={0} step={1000} value={s.cash_floor ?? 0} onChange={e => set('cash_floor', e.target.value)} style={inputStyle} /></Field>
-          <Field label="Lock after (minutes idle)" hint="5–60."><input type="number" min={5} max={60} value={s.idle_minutes ?? 15} onChange={e => set('idle_minutes', e.target.value)} style={inputStyle} /></Field>
-          <Field label="Days to collect monthly billing" hint="How long after the 1st site billing usually arrives."><input type="number" min={0} max={120} value={s.collect_lag_days ?? 15} onChange={e => set('collect_lag_days', e.target.value)} style={inputStyle} /></Field>
+    <Sheet title="Finance settings" sub="Every change is logged." onClose={onClose} width={620} locked={busy}>
+      {!s ? (err ? <Note tone="red">{err}</Note> : <div className="sy-empty">Loading…</div>) : <>
+        <div className="sy-grid2">
+          <Field label="Cash floor (weeks below it show in orange)"><input className="sy-in" type="number" min={0} step={1000} value={s.cash_floor ?? 0} onChange={e => set('cash_floor', e.target.value)} /></Field>
+          <Field label="Lock after this many idle minutes (5–60)"><input className="sy-in" type="number" min={5} max={60} value={s.idle_minutes ?? 15} onChange={e => set('idle_minutes', e.target.value)} /></Field>
+          <Field label="Days after the 1st site billing usually arrives"><input className="sy-in" type="number" min={0} max={120} value={s.collect_lag_days ?? 15} onChange={e => set('collect_lag_days', e.target.value)} /></Field>
         </div>
-      </Card>
-      <Card title="Payroll">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-          <Field label="Amount per run" hint="Include employer taxes."><input type="number" min={0} step={100} value={s.payroll_amount ?? 0} onChange={e => set('payroll_amount', e.target.value)} style={inputStyle} /></Field>
-          <Field label="How often"><select value={s.payroll_frequency ?? 'biweekly'} onChange={e => set('payroll_frequency', e.target.value)} style={inputStyle}><option value="weekly">Every week</option><option value="biweekly">Every other week</option><option value="semimonthly">15th and last day</option><option value="monthly">Once a month</option></select></Field>
-          <Field label="Next pay date"><input type="date" value={s.payroll_next_date ?? ''} onChange={e => set('payroll_next_date', e.target.value)} style={inputStyle} /></Field>
+        <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>Payroll</div>
+        <div className="sy-grid2">
+          <Field label="Amount per run (incl. employer taxes)"><input className="sy-in" type="number" min={0} step={100} value={s.payroll_amount ?? 0} onChange={e => set('payroll_amount', e.target.value)} /></Field>
+          <Field label="How often"><select className="sy-in" value={s.payroll_frequency ?? 'biweekly'} onChange={e => set('payroll_frequency', e.target.value)}><option value="weekly">Every week</option><option value="biweekly">Every other week</option><option value="semimonthly">15th and last day</option><option value="monthly">Once a month</option></select></Field>
+          <Field label="Next pay date"><input className="sy-in" type="date" value={s.payroll_next_date ?? ''} onChange={e => set('payroll_next_date', e.target.value)} /></Field>
         </div>
-      </Card>
-      <Card title="Recurring costs" right={<Btn kind="plain" small onClick={() => set('recurring_costs', [...costs, { name: '', amount: '', day: 1, tier: 'flexible' }])}>Add a cost</Btn>}>
-        <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Only costs that aren’t entered in QuickBooks as bills ahead of time (rent on autopay, card charges). Anything already a QuickBooks bill is counted from there.</div>
-        {costs.length === 0 ? <div style={{ color: C.sub, fontSize: 14 }}>None yet.</div> : costs.map((c, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 2fr) minmax(100px, 1fr) 90px minmax(150px, 1.4fr) auto', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <input aria-label="Name" placeholder="Name" value={c.name ?? ''} onChange={e => setCost(i, 'name', e.target.value)} style={inputStyle} />
-            <input aria-label="Monthly amount" type="number" min={0} placeholder="Amount" value={c.amount ?? ''} onChange={e => setCost(i, 'amount', e.target.value)} style={inputStyle} />
-            <input aria-label="Day of month" type="number" min={1} max={31} value={c.day ?? 1} onChange={e => setCost(i, 'day', e.target.value)} style={inputStyle} />
-            <select aria-label="Tier" value={c.tier ?? 'flexible'} onChange={e => setCost(i, 'tier', e.target.value)} style={inputStyle}>{(Object.keys(TIER_LABEL) as Tier[]).map(t => <option key={t} value={t}>{TIER_LABEL[t]}</option>)}</select>
-            <Btn kind="danger" small onClick={() => set('recurring_costs', costs.filter((_, j) => j !== i))}>Remove</Btn>
-          </div>
-        ))}
-      </Card>
-      {msg && <Note tone={msg.tone}>{msg.text}</Note>}
-      <div><Btn onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</Btn></div>
-    </div>
+        <Note>Rent, software and other repeating costs are set in <b>Recurring money in &amp; out</b>, or straight from Bank activity.</Note>
+        {err && <Note tone="red">{err}</Note>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="button" className="sy-b line" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="sy-b pri" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
+      </>}
+    </Sheet>
   )
 }
 
-// ── Codes (owner) ────────────────────────────────────────────────────────────
-function CodesSection({ me, onSelfReset }: { me: string; onSelfReset: () => void }) {
-  const [people, setPeople] = useState<Row[] | null>(null)
+function CodesSheet({ me, onSelfReset, onClose }: { me: string; onSelfReset: () => void; onClose: () => void }) {
+  const [people, setPeople] = useState<Any[] | null>(null)
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState<{ tone: 'green' | 'red'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
-  const load = useCallback(async () => { const r = await api('/api/finance/codes'); if (r.ok) setPeople((r.data as Row).people ?? []); else setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t load.' }) }, [])
+  const load = useCallback(async () => { const r = await getJson('/api/finance/codes'); if (r.ok) setPeople(r.data.people ?? []); else setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t load.' }) }, [])
   useEffect(() => { void load() }, [load])
   const save = async () => {
     setBusy(true); setMsg(null)
-    const r = await api('/api/finance/codes', { method: 'POST', body: JSON.stringify({ email, code }) })
+    const r = await send('/api/finance/codes', 'POST', { email, code })
     setBusy(false)
     if (!r.ok) { setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t save.' }); return }
-    const self = email.trim().toLowerCase() === me.toLowerCase()
-    setMsg({ tone: 'green', text: self ? 'Your code changed. Enter the new one.' : `Code saved for ${email}. Tell them in person or by phone — never by email or text.` })
-    setEmail(''); setCode('')
-    if (self) { onSelfReset(); return }
-    void load()
+    if (email.trim().toLowerCase() === me.toLowerCase()) { onSelfReset(); return }
+    setMsg({ tone: 'green', text: `Code saved for ${email}. Tell them in person or by phone — never by email or text.` }); setEmail(''); setCode(''); void load()
   }
   const remove = async (e: string) => {
     if (!window.confirm(`Remove Finance access for ${e}?`)) return
-    const r = await api('/api/finance/codes', { method: 'DELETE', body: JSON.stringify({ email: e }) })
+    const r = await send('/api/finance/codes', 'DELETE', { email: e })
     if (r.ok) void load(); else setMsg({ tone: 'red', text: r.data.error ?? 'Couldn’t remove.' })
   }
   return (
-    <div style={{ display: 'grid', gap: 16, maxWidth: 860 }}>
-      <Card title="Set or reset a code">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
-          <Field label="Their Nexus email" hint="Must be a Gate Guard corporate admin."><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></Field>
-          <Field label="6-digit code" hint="Resetting signs them out of Finance."><input inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} style={inputStyle} /></Field>
-          <div><Btn onClick={save} disabled={busy || !email.trim() || code.length !== 6}>{busy ? 'Saving…' : 'Save code'}</Btn></div>
-        </div>
-      </Card>
+    <Sheet title="Finance codes" sub="Only the owner sees this. Resetting someone’s code signs them out of Finance." onClose={onClose} width={720}>
+      <div className="sy-grid2">
+        <Field label="Their Nexus email (corporate admin)"><input className="sy-in" type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
+        <Field label="6-digit code"><input className="sy-in" inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} /></Field>
+      </div>
+      <div><button type="button" className="sy-b pri" onClick={save} disabled={busy || !email.trim() || code.length !== 6}>{busy ? 'Saving…' : 'Save code'}</button></div>
       {msg && <Note tone={msg.tone}>{msg.text}</Note>}
-      <Card title="Who can open Finance" pad={false}>
-        {!people ? <div style={{ padding: 16, color: C.sub, fontSize: 14 }}>Loading…</div> : people.length === 0 ? <div style={{ padding: 16, color: C.sub, fontSize: 14 }}>Nobody yet.</div> : (
-          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead><tr>{['Person', 'Status', 'Last unlock', ''].map(h => <th key={h} style={{ textAlign: 'left', fontWeight: 500, color: C.sub, fontSize: 12, padding: '10px 14px', borderBottom: `1px solid ${C.line}` }}>{h}</th>)}</tr></thead>
-            <tbody>{people.map(p => {
-              const lockedOut = p.locked_until && new Date(p.locked_until).getTime() > Date.now()
-              return (
-                <tr key={p.email}>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)' }}><div style={{ fontWeight: 600 }}>{p.name ?? p.email}</div><div style={{ color: C.sub }}>{p.email}</div></td>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', color: !p.active ? C.sub : lockedOut ? C.orange : C.ink }}>{!p.active ? 'Removed' : lockedOut ? 'Locked out (wrong tries)' : 'Active'}</td>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', color: C.sub }}>{p.last_unlock_at ? new Date(p.last_unlock_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never'}</td>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.055)', textAlign: 'right' }}>{p.active && p.email.toLowerCase() !== me.toLowerCase() && <Btn kind="danger" small onClick={() => remove(p.email)}>Remove</Btn>}</td>
-                </tr>
-              )
-            })}</tbody>
-          </table></div>
-        )}
-      </Card>
-    </div>
+      {!people ? <div className="sy-empty">Loading…</div> : people.map(p => {
+        const out = p.locked_until && new Date(p.locked_until).getTime() > Date.now()
+        return (
+          <div key={p.email} className="sy-row">
+            <div className="main"><div className="t">{p.name ?? p.email}</div><div className="m">{p.email} · {!p.active ? 'Removed' : out ? 'Locked out (wrong tries)' : 'Active'} · last unlock {p.last_unlock_at ? new Date(p.last_unlock_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never'}</div></div>
+            {p.active && p.email.toLowerCase() !== me.toLowerCase() && <button type="button" className="sy-b warn sm" onClick={() => remove(p.email)}>Remove</button>}
+          </div>
+        )
+      })}
+    </Sheet>
   )
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
+type Pop = { k: 'period'; i: number } | { k: 'bills' } | { k: 'recurring' } | { k: 'bank' } | { k: 'settings' } | { k: 'codes' }
+  | { k: 'rule'; mode: 'add' | 'edit' | 'from_txn'; initial: Any; txn?: Any; rule?: Any }
+
 export function FinancePage({ onClose, myEmail }: { onClose: () => void; myEmail: string }) {
-  const [status, setStatus] = useState<Row | null>(null)
+  const [flash, notify] = useFlash()
+  const [status, setStatus] = useState<Any | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [section, setSection] = useState<Section>('outlook')
-  const [outlook, setOutlook] = useState<Row | null>(null)
+  const [o, setO] = useState<Any | null>(null)
   const [oErr, setOErr] = useState<string | null>(null)
+  const [bank, setBank] = useState<Any | null>(null)
+  const [bankErr, setBankErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [view, setView] = useState<'weeks' | 'months'>('weeks')
+  const [pop, setPop] = useState<Pop | null>(null)
   const [now, setNow] = useState(Date.now())
 
   const loadStatus = useCallback(async () => {
-    const r = await api('/api/finance/session')
+    const r = await getJson('/api/finance/session')
     if (r.ok) { setStatus(r.data); setErr(null) } else { setStatus(null); setErr(r.status === 403 ? 'Finance is for Gate Guard senior admins only.' : r.data.error ?? 'Couldn’t check Finance.') }
   }, [])
-  const relock = useCallback(() => { setOutlook(null); void loadStatus() }, [loadStatus])
-  const loadOutlook = useCallback(async (refresh = false) => {
-    setBusy(true); setOErr(null)
-    const r = await api(`/api/finance/outlook${refresh ? '?refresh=1' : ''}`)
+  const relock = useCallback(() => { setO(null); setBank(null); setPop(null); void loadStatus() }, [loadStatus])
+  const loadAll = useCallback(async (refresh = false) => {
+    setBusy(true)
+    const qs = refresh ? '?refresh=1' : ''
+    const [a, b] = await Promise.all([getJson(`/api/finance/outlook${qs}`), getJson(`/api/finance/transactions${qs}`)])
     setBusy(false)
-    if (r.status === 401) { relock(); return }
-    if (r.ok) { setOutlook(r.data); void loadStatus() } else setOErr(r.data.error ?? 'Couldn’t build the outlook.')
+    if (a.status === 401 || b.status === 401) { relock(); return }
+    if (a.ok) { setO(a.data); setOErr(null) } else setOErr(a.data.error ?? 'Couldn’t build the outlook.')
+    if (b.ok) { setBank(b.data); setBankErr(null) } else setBankErr(b.data.error ?? 'Couldn’t read bank transactions.')
+    void loadStatus()
   }, [relock, loadStatus])
 
   useEffect(() => { void loadStatus() }, [loadStatus])
   const unlocked = status?.state === 'unlocked'
-  useEffect(() => { if (unlocked && !outlook) void loadOutlook() }, [unlocked]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Idle lock: when the server-side session would expire, show the lock screen.
+  useEffect(() => { if (unlocked && !o) void loadAll() }, [unlocked]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
   const expiresAt = unlocked ? new Date(status!.expires_at).getTime() : 0
   useEffect(() => { if (unlocked && expiresAt && now >= expiresAt) relock() }, [now, expiresAt, unlocked, relock])
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
 
-  const lockNow = async () => { await api('/api/finance/lock', { method: 'POST' }); relock() }
-  const setTier = async (vendorId: string, name: string, tier: Tier) => {
-    const r = await api('/api/finance/settings', { method: 'PUT', body: JSON.stringify({ vendor: { id: vendorId, name, tier } }) })
-    if (r.status === 401) { relock(); return }
-    if (r.ok) void loadOutlook(); else setOErr(r.data.error ?? 'Couldn’t save the tier.')
+  const act = async (path: string, method: string, body: Any, ok: string): Promise<string | null> => {
+    const r = await send(path, method, body)
+    if (r.status === 401) { relock(); return 'Finance locked.' }
+    if (!r.ok) return r.data.error ?? 'Couldn’t save.'
+    notify(ok); void loadAll()
+    return null
   }
+  const setTier = (id: string, name: string, tier: Tier) => { void act('/api/finance/settings', 'PUT', { vendor: { id, name, tier } }, `${name}: ${TIER[tier]}`).then(e => { if (e) notify(e, false) }) }
+  const oneTime = (keys: string[]) => { void act('/api/finance/transactions', 'POST', { action: 'not_recurring', txn_keys: keys }, keys.length > 1 ? 'Marked not recurring' : 'Marked one-time').then(e => { if (e) notify(e, false) }) }
+  const clear = (keys: string[]) => { void act('/api/finance/transactions', 'POST', { action: 'clear', txn_keys: keys }, 'Undone').then(e => { if (e) notify(e, false) }) }
+  const stop = (r: Any) => { if (!window.confirm(`Stop “${r.name}”? It leaves the outlook.`)) return; void act('/api/finance/transactions', 'POST', { action: 'stop_rule', id: r.id }, `Stopped ${r.name}`).then(e => { if (e) notify(e, false) }) }
+  const fromTxn = (t: Any, s?: Any) => setPop({ k: 'rule', mode: 'from_txn', txn: t, initial: { name: t.name, amount: s?.amount ?? t.amount, frequency: s?.frequency ?? 'monthly', next_date: s?.next_date ?? '', tier: 'flexible', direction: t.direction } })
+  const lockNow = async () => { await send('/api/finance/lock', 'POST'); relock() }
+
+  const buckets: Any[] = o ? (view === 'weeks' ? o.weeks : o.months) : []
+  const lowest = o ? (view === 'weeks' ? o.lowest_week : o.lowest_month) : null
+  const net13 = o ? (o.weeks as Any[]).reduce((s, w) => s + w.in - w.out, 0) : 0
+  const below = buckets.filter(b => b.below_floor)
   const minsLeft = unlocked ? Math.max(0, Math.ceil((expiresAt - now) / 60000)) : 0
-  const tabs = useMemo(() => [
-    { id: 'outlook' as const, label: 'Cash outlook' }, { id: 'payplan' as const, label: 'Pay plan' }, { id: 'settings' as const, label: 'Settings' },
-    ...(status?.owner ? [{ id: 'codes' as const, label: 'Codes' }] : []),
-  ], [status?.owner])
+  const asOf = o ? new Date(o.as_of).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''
+  const rules: Any[] = bank?.rules ?? []
+  const bills: Any[] = o?.pay_plan ?? []
+  const in28 = bills.filter(b => b.days_to_due <= 28)
+  const undecided = (bank?.transactions ?? []).filter((t: Any) => t.status === 'suggested' || t.status === 'open').length
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Finance" style={{ position: 'fixed', inset: 0, zIndex: 120, background: C.bg, overflowY: 'auto', fontFamily: FONT, color: C.ink, WebkitFontSmoothing: 'antialiased' }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'rgba(245,245,247,0.86)', backdropFilter: 'saturate(180%) blur(20px)', borderBottom: `1px solid ${C.line}` }}>
-        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '12px 16px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', color: C.blue, fontSize: 15, cursor: 'pointer', padding: 0, fontFamily: FONT }}>‹ Admin</button>
-            <div style={{ flex: 1 }} />
-            {unlocked && <span style={{ fontSize: 12.5, color: '#0058B0', background: C.blueSoft, borderRadius: 8, padding: '4px 8px', fontWeight: 600 }}>Unlocked · locks in {minsLeft} min</span>}
-            {unlocked && <Btn kind="plain" small onClick={lockNow}>Lock now</Btn>}
-          </div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.015em', margin: '6px 0 2px' }}>Finance</h1>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: unlocked ? 10 : 14 }}>Cash coming in and going out, and when to pay what. Senior admins only.</div>
-          {unlocked && (
-            <div role="tablist" aria-label="Finance sections" style={{ display: 'flex', gap: 22, overflowX: 'auto' }}>
-              {tabs.map(t => <button key={t.id} type="button" role="tab" aria-selected={section === t.id} onClick={() => setSection(t.id)} style={{ border: 'none', background: 'none', padding: '8px 0 10px', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: section === t.id ? C.ink : C.sub, borderBottom: `2px solid ${section === t.id ? C.blue : 'transparent'}`, whiteSpace: 'nowrap', fontFamily: FONT }}>{t.label}</button>)}
-            </div>
-          )}
+    <section className="sy">
+      <style>{CSS}{FIN_CSS}</style>
+      <header className="sy-hd">
+        <div>
+          <button type="button" className="sy-back" onClick={onClose}>‹ Admin</button>
+          <h1>Finance</h1>
+          <div className="sub">{unlocked && o ? `Cash report as of ${asOf} · QuickBooks + Nexus` : 'Cash coming in and going out, and when to pay what. Senior admins only.'}</div>
         </div>
-      </div>
-      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '20px 16px 60px', display: 'grid', gap: 16 }}>
-        {err ? <Note tone="red">{err}</Note> : !status ? <div style={{ color: C.sub, fontSize: 14 }}>Checking…</div> : !unlocked ? (
-          <LockScreen status={status} me={myEmail} onUnlocked={() => void loadStatus()} />
-        ) : section === 'settings' ? <SettingsSection onSaved={() => void loadOutlook(true)} />
-          : section === 'codes' ? <CodesSection me={myEmail} onSelfReset={relock} />
-            : oErr ? <Note tone="red">{oErr} <button type="button" onClick={() => loadOutlook(true)} style={{ color: C.blue, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Try again</button></Note>
-              : !outlook ? <div style={{ color: C.sub, fontSize: 14 }}>Reading QuickBooks and Nexus…</div>
-                : section === 'payplan' ? <PayPlanSection data={outlook} onTier={setTier} />
-                  : <OutlookSection data={outlook} refresh={() => loadOutlook(true)} busy={busy} />}
-      </main>
-    </div>
+        {unlocked && (
+          <div className="sy-acts">
+            <span className="fn-unl"><span className="sy-dot" style={{ background: DOT.green }} />Unlocked · {minsLeft} min</span>
+            <button type="button" className="sy-b dark" onClick={() => loadAll(true)} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+            <button type="button" className="sy-b dark" onClick={() => setPop({ k: 'settings' })}>Settings</button>
+            {status?.owner && <button type="button" className="sy-b dark" onClick={() => setPop({ k: 'codes' })}>Codes</button>}
+            <button type="button" className="sy-b dark" onClick={lockNow}>Lock</button>
+          </div>
+        )}
+      </header>
+
+      {err ? <Note tone="red">{err}</Note> : !status ? <div className="sy-empty">Checking…</div> : !unlocked ? (
+        <LockCard status={status} me={myEmail} onChange={() => void loadStatus()} />
+      ) : oErr ? <Note tone="red">{oErr} <button type="button" className="sy-b line sm" onClick={() => loadAll(true)}>Try again</button></Note>
+        : !o ? <div className="sy-empty">Reading QuickBooks and Nexus…</div> : (
+          <div className="sy-stack">
+            {/* Headline numbers */}
+            <div className="sy-kpis" style={{ marginBottom: 0 }}>
+              <div className="sy-kpi"><div className="l">Cash today</div><div className="v">{money(o.cash_today)}</div><div className="s">{(o.cash_accounts ?? []).length} bank account{(o.cash_accounts ?? []).length === 1 ? '' : 's'}</div></div>
+              <div className="sy-kpi"><div className="l">{o.floor > 0 && lowest && lowest.balance < o.floor && <span className="sy-dot" style={{ background: DOT.orange }} />}Lowest point · 13 weeks</div><div className="v" style={{ color: o.floor > 0 && o.lowest_week && o.lowest_week.balance < o.floor ? ORANGE : TEXT }}>{money(o.lowest_week?.balance)}</div><div className="s">{o.lowest_week?.label}</div></div>
+              <div className="sy-kpi"><div className="l">Net cash flow · 13 weeks</div><div className="v" style={{ color: net13 < 0 ? ORANGE : TEXT }}>{acct(net13)}</div><div className="s">In {money((o.weeks as Any[]).reduce((s, w) => s + w.in, 0))} · out {money((o.weeks as Any[]).reduce((s, w) => s + w.out, 0))}</div></div>
+              <div className="sy-kpi"><div className="l">Customers owe us</div><div className="v">{money(o.receivable_total)}</div><div className="s">{(o.left_out ?? []).length ? `${money((o.left_out as Any[]).reduce((s, x) => s + x.amount, 0))} is 60+ days late` : 'Open invoices'}</div></div>
+              <button type="button" className="sy-kpi" onClick={() => setPop({ k: 'bills' })}><div className="l">We owe (bills)</div><div className="v">{money(o.payable_total)}</div><div className="s">{money(in28.reduce((s, b) => s + b.balance, 0))} due in 4 weeks</div></button>
+            </div>
+
+            {below.length > 0 && <Note tone="orange"><b>{below.length === 1 ? `Tight: ${below[0].label}.` : `Tight: ${below.length} ${view} under your floor.`}</b> Lowest {money(lowest?.balance)} ({lowest?.label}), {money(o.floor - (lowest?.balance ?? 0))} under your {money(o.floor)} floor.</Note>}
+            {o.floor <= 0 && <Note>Set a cash floor in <button type="button" className="sy-b blue sm" onClick={() => setPop({ k: 'settings' })}>Settings</button> so tight weeks are flagged.</Note>}
+
+            {/* Cash position */}
+            <Card title="Cash position" sub={`Projected bank balance at the end of each ${view === 'weeks' ? 'week' : 'month'}. Click a bar for what moves.`}
+              right={<div className="sy-chips" role="group" aria-label="Period">{(['weeks', 'months'] as const).map(v => <button key={v} type="button" className="sy-chip" aria-pressed={view === v} onClick={() => setView(v)}>{v === 'weeks' ? '13 weeks' : '12 months'}</button>)}</div>}>
+              <CashChart buckets={buckets} floor={o.floor} onPick={i => setPop({ k: 'period', i })} />
+              <div className="fn-legend" style={{ marginTop: 8 }}><span><i className="fn-sw" style={{ background: BLUE }} />Above floor</span><span><i className="fn-sw" style={{ background: DOT.orange }} />Below floor</span>{o.floor > 0 && <span>— — Floor {money(o.floor)}</span>}</div>
+            </Card>
+
+            {/* Statement */}
+            <Card title={view === 'weeks' ? '13-week cash flow' : '12-month cash flow'} sub="Direct method · beginning cash plus receipts less disbursements. Click a column for detail.">
+              <Statement buckets={buckets} cashToday={o.cash_today} floor={o.floor} onPick={i => setPop({ k: 'period', i })} />
+            </Card>
+
+            <div className="fn-two">
+              {/* Bills due */}
+              <Card title="Bills due" sub={`${bills.length} open in QuickBooks · ${money(o.payable_total)}`} right={<button type="button" className="sy-b blue sm" onClick={() => setPop({ k: 'bills' })}>Manage</button>}>
+                {bills.length === 0 ? <div className="sy-empty">No open bills.</div> : bills.slice(0, 6).map(b => (
+                  <div key={b.qbo_id} className="sy-row">
+                    <div className="main"><div className="t">{b.vendor}</div><div className="m" style={{ color: b.overdue ? ORANGE : MUTED }}>{b.overdue ? `${-b.days_to_due} days late` : `Due ${day(b.due_date)}`}</div></div>
+                    <span className={`fn-tag ${b.tier}`}>{TIER[b.tier as Tier]}</span>
+                    <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' }}>{money(b.balance)}</div>
+                  </div>
+                ))}
+              </Card>
+
+              {/* Recurring */}
+              <Card title="Recurring money in & out" sub={`${rules.length} item${rules.length === 1 ? '' : 's'} in the outlook`} right={<button type="button" className="sy-b blue sm" onClick={() => setPop({ k: 'recurring' })} disabled={!bank}>Manage</button>}>
+                {bankErr && !bank ? <Note tone="orange">{bankErr}</Note> : rules.length === 0 ? <div className="sy-empty">None yet. Mark repeating payments in Bank activity.</div> : rules.slice(0, 6).map(r => (
+                  <div key={r.id} className="sy-row">
+                    <div className="main"><div className="t">{r.name}</div><div className="m">{FREQ[r.frequency as Freq]} · next {day(r.next_date)}</div></div>
+                    <span className={`fn-tag ${r.direction}`}>{r.direction === 'in' ? 'In' : 'Out'}</span>
+                    <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' }}>{money(r.amount)}</div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+
+            {/* Bank activity */}
+            <Card title="Bank activity · last 90 days" sub="Money in and out of your QuickBooks bank accounts. Mark what repeats so the outlook includes it." right={<button type="button" className="sy-b pri sm" onClick={() => setPop({ k: 'bank' })} disabled={!bank}>Review transactions</button>}>
+              {bankErr && !bank ? <Note tone="orange">{bankErr}</Note> : !bank ? <div className="sy-empty">Reading…</div> : (
+                <div className="sy-kpis" style={{ marginBottom: 0 }}>
+                  <div className="sy-kpi" style={{ boxShadow: 'none', background: '#F7F8FA' }}><div className="l">Money in</div><div className="v">{money((bank.transactions as Any[]).filter(t => t.direction === 'in').reduce((s, t) => s + t.amount, 0))}</div></div>
+                  <div className="sy-kpi" style={{ boxShadow: 'none', background: '#F7F8FA' }}><div className="l">Money out</div><div className="v">{money((bank.transactions as Any[]).filter(t => t.direction === 'out').reduce((s, t) => s + t.amount, 0))}</div></div>
+                  <div className="sy-kpi" style={{ boxShadow: 'none', background: '#F7F8FA' }}><div className="l">Transactions</div><div className="v">{(bank.transactions as Any[]).length}</div></div>
+                  <button type="button" className="sy-kpi" style={{ boxShadow: 'none', background: '#FFF4E5' }} onClick={() => setPop({ k: 'bank' })}><div className="l">Look recurring</div><div className="v" style={{ color: ORANGE }}>{(bank.suggestions ?? []).length}</div><div className="s">Review</div></button>
+                  <button type="button" className="sy-kpi" style={{ boxShadow: 'none', background: '#F7F8FA' }} onClick={() => setPop({ k: 'bank' })}><div className="l">Not decided</div><div className="v">{undecided}</div><div className="s">Review</div></button>
+                </div>
+              )}
+            </Card>
+
+            {/* What's not in it */}
+            {((o.gaps ?? []).length > 0 || (o.left_out ?? []).length > 0) && (
+              <Card title="Notes on this report">
+                <div style={{ display: 'grid', gap: 6, fontSize: 13, color: TEXT2 }}>
+                  <div>Sure-ness of the next 13 weeks: {Math.round((o.share?.known ?? 0) * 100)}% known (bills, payroll, recurring costs, POs), {Math.round((o.share?.expected ?? 0) * 100)}% expected (invoices not late yet, site billing, recurring receipts), {Math.round((o.share?.estimated ?? 0) * 100)}% estimate (late invoices, counted next week).</div>
+                  {(o.left_out ?? []).length > 0 && <div>Left out: {(o.left_out as Any[]).length} invoice{(o.left_out as Any[]).length === 1 ? '' : 's'} over 60 days late ({money((o.left_out as Any[]).reduce((s, x) => s + x.amount, 0))}).</div>}
+                  {(o.gaps as string[]).map(g => <div key={g}>{g}</div>)}
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
+
+      {pop?.k === 'period' && buckets[pop.i] && <PeriodSheet b={buckets[pop.i]} onClose={() => setPop(null)} />}
+      {pop?.k === 'bills' && <BillsSheet bills={bills} onTier={setTier} onClose={() => setPop(null)} />}
+      {pop?.k === 'recurring' && <RecurringSheet rules={rules} onClose={() => setPop(null)} onStop={stop}
+        onAdd={() => setPop({ k: 'rule', mode: 'add', initial: { frequency: 'monthly', direction: 'out', tier: 'flexible' } })}
+        onEdit={r => setPop({ k: 'rule', mode: 'edit', rule: r, initial: r })} />}
+      {pop?.k === 'bank' && bank && <BankSheet bank={bank} busy={busy} onClose={() => setPop(null)} onRefresh={() => loadAll(true)} onRecurring={fromTxn} onOneTime={oneTime} onClear={clear} />}
+      {pop?.k === 'settings' && <SettingsSheet onClose={() => setPop(null)} onSaved={() => { notify('Settings saved'); void loadAll(true) }} />}
+      {pop?.k === 'codes' && <CodesSheet me={myEmail} onClose={() => setPop(null)} onSelfReset={relock} />}
+      {pop?.k === 'rule' && (
+        <RuleSheet
+          title={pop.mode === 'edit' ? `Change ${pop.rule?.name}` : pop.mode === 'from_txn' ? 'Make recurring' : 'Add a recurring item'}
+          sub={pop.mode === 'from_txn' ? `From ${pop.txn?.name} · ${day(pop.txn?.date)} · ${money(pop.txn?.amount)}. Earlier payments to them link to it too.` : undefined}
+          initial={pop.initial}
+          direction={pop.mode === 'add' ? null : (pop.mode === 'edit' ? pop.rule?.direction : pop.txn?.direction)}
+          onClose={() => setPop(pop.mode === 'from_txn' ? { k: 'bank' } : { k: 'recurring' })}
+          onSave={async rule => {
+            const e = pop.mode === 'from_txn' ? await act('/api/finance/transactions', 'POST', { action: 'make_recurring', txn_key: pop.txn?.key, rule }, `${rule.name} is recurring`)
+              : pop.mode === 'edit' ? await act('/api/finance/transactions', 'POST', { action: 'update_rule', id: pop.rule?.id, rule }, `${rule.name} changed`)
+                : await act('/api/finance/transactions', 'POST', { action: 'add_rule', rule }, `${rule.name} added`)
+            if (!e) setPop(pop.mode === 'from_txn' ? { k: 'bank' } : { k: 'recurring' })
+            return e
+          }}
+        />
+      )}
+      {flash}
+    </section>
   )
 }
