@@ -1,6 +1,6 @@
 // Shared bits for Nexus Mail: types, look, small helpers, API calls.
 
-export type Folder = 'inbox' | 'other' | 'needs_reply' | 'unread' | 'starred' | 'snoozed' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
+export type Folder = 'all_inbox' | 'inbox' | 'other' | 'needs_reply' | 'unread' | 'starred' | 'snoozed' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
 
 export type Person = { name?: string | null; address?: string | null }
 
@@ -58,8 +58,8 @@ export type ThreadDetail = {
   }
   messages: MailMessage[]
 }
-export type Counts = { inbox: number; other: number; needs_reply: number; snoozed: number; unread: number }
-export type Account = { id: string; email: string; last_synced_at: string | null; last_error: string | null; can_modify: boolean; live: boolean }
+export type Counts = { all_inbox: number; inbox: number; other: number; needs_reply: number; snoozed: number; unread: number }
+export type Account = { id: string; email: string; last_synced_at: string | null; last_error: string | null; can_modify: boolean; live: boolean; gmail_inbox_unread?: number | null; checked_at?: string | null }
 
 // ── Look (Apple-grade: graphite on white, one blue, hairlines) ──────────────────
 export const M = {
@@ -78,15 +78,17 @@ export const M = {
   green: '#248A3D',
   orange: '#C93400',
   star: '#F5A623',
+  flag: '#FF9500',
   font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
 }
 
 export const FOLDERS: { id: Folder; label: string; hint: string }[] = [
-  { id: 'inbox', label: 'Priority', hint: 'People and customers' },
+  { id: 'all_inbox', label: 'Inbox', hint: 'Everything in your Gmail inbox' },
+  { id: 'inbox', label: 'Priority', hint: 'Just people and customers' },
   { id: 'other', label: 'Other', hint: 'Newsletters, receipts, notifications' },
   { id: 'needs_reply', label: 'Waiting on you', hint: 'They wrote last' },
   { id: 'unread', label: 'Unread', hint: '' },
-  { id: 'starred', label: 'Starred', hint: '' },
+  { id: 'starred', label: 'Flagged', hint: 'Flagged in Nexus = starred in Gmail' },
   { id: 'snoozed', label: 'Snoozed', hint: 'Comes back later' },
   { id: 'sent', label: 'Sent', hint: '' },
   { id: 'linked', label: 'Linked to records', hint: 'Deals, customers, jobs' },

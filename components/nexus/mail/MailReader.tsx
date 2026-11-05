@@ -1,10 +1,10 @@
 'use client'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Star, Trash2, Loader2, Download, ClipboardList, MoreHorizontal, X } from 'lucide-react'
+import { Trash2, Loader2, Download, ClipboardList, MoreHorizontal, X } from 'lucide-react'
 import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
 import { M, api, emailDoc, fileSize, fullTime, initials, personLabel, snoozeOptions, splitQuoted, splitQuotedText, tintFor, type MailMessage, type ThreadDetail, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Archive, ArrowLeft, Paperclip, Reply, ReplyAll, Forward, Sparkles, MailOpen, AlarmClock, Inbox } = require('lucide-react') as any
+const { Flag, Archive, ArrowLeft, Paperclip, Reply, ReplyAll, Forward, Sparkles, MailOpen, AlarmClock, Inbox } = require('lucide-react') as any
 
 export type ThreadAction = 'read' | 'unread' | 'archive' | 'inbox' | 'star' | 'unstar' | 'trash' | 'untrash' | 'snooze' | 'unsnooze'
 
@@ -203,7 +203,7 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
           : tb('Archive (e)', <Archive size={17} />, () => onAction('archive'))}
         {tb(trashed ? 'Restore' : 'Trash (#)', <Trash2 size={17} />, () => onAction(trashed ? 'untrash' : 'trash'))}
         {tb('Mark unread (u)', <MailOpen size={17} />, () => onAction('unread'))}
-        {tb(starred ? 'Unstar (s)' : 'Star (s)', <Star size={17} fill={starred ? M.star : 'none'} style={{ color: starred ? M.star : undefined }} />, () => onAction(starred ? 'unstar' : 'star'))}
+        {tb(starred ? 'Unflag (s)' : 'Flag (s)', <Flag size={17} fill={starred ? M.flag : 'none'} style={{ color: starred ? M.flag : undefined }} />, () => onAction(starred ? 'unstar' : 'star'))}
         <div style={{ position: 'relative' }}>
           {tb('Snooze (h)', <AlarmClock size={17} />, () => setSnoozeOpen((o) => !o))}
           {snoozeOpen && (
@@ -241,6 +241,7 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
             {trashed && <span style={{ ...chip, color: M.red }}>In Trash</span>}
             {t?.snoozed_until && <span style={chip}>Snoozed until {fullTime(t.snoozed_until)}</span>}
             {row.bulk && <span style={chip}>Newsletter / notification</span>}
+            {starred && <span style={{ ...chip, color: M.flag }}>Flagged</span>}
           </div>
         </div>
         {summary && (

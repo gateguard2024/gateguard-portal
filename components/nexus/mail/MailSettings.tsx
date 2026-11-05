@@ -1,15 +1,16 @@
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Mail, Plus, Trash2, RefreshCw, Send, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { M, ago, api, type Account } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft } = require('lucide-react') as any
+const { ArrowLeft, Bold, Italic, Link2, Image: ImageIcon } = require('lucide-react') as any
 
 type Channel = { id: string; channel_type: 'gmail' | 'smtp'; display_name: string; email: string | null; smtp_host: string | null; connected: boolean; last_synced_at: string | null }
 
 export default function MailSettings({ onBack, accounts, onChanged }: { onBack: () => void; accounts: Account[]; onChanged: () => void }) {
   const [channels, setChannels] = useState<Channel[] | null>(null)
   const [sig, setSig] = useState('')
+  const [sigLoaded, setSigLoaded] = useState(false)
   const [sigMsg, setSigMsg] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -22,7 +23,7 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
   }
   useEffect(() => {
     void load()
-    void api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => setSig(r.data.signature ?? ''))
+    void api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => { setSig(r.data.signature ?? ''); setSigLoaded(true) })
     // Back from Google with a result in the URL.
     const p = new URLSearchParams(window.location.search)
     if (p.get('gmail_connected')) setMsg('Gmail connected. Your mail is syncing now.')
@@ -62,7 +63,7 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
                   <div style={{ fontSize: 12, color: bad ? M.red : M.ink3, display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     {c.channel_type === 'smtp' ? `Send only · ${c.smtp_host}` : bad
                       ? <><AlertTriangle size={12} /> {h?.last_error ?? 'Not connected'}</>
-                      : <><CheckCircle2 size={12} style={{ color: M.green }} /> Live · synced {ago(h?.last_synced_at ?? c.last_synced_at)}{h && !h.can_modify ? ' · reconnect to sync read/archive back to Gmail' : ''}</>}
+                      : <><CheckCircle2 size={12} style={{ color: M.green }} /> Live · synced {ago(h?.last_synced_at ?? c.last_synced_at)}{h?.gmail_inbox_unread != null ? ` · Gmail inbox: ${h.gmail_inbox_unread} unread (checked ${ago(h.checked_at ?? null)})` : ''}{h && !h.can_modify ? ' · reconnect to sync read/archive back to Gmail' : ''}</>}
                   </div>
                 </div>
                 {c.channel_type === 'gmail' && (bad || (h && !h.can_modify)) && <a href="/api/nexus/messages/google/connect" style={{ ...primary, textDecoration: 'none' }}>Reconnect</a>}
@@ -97,26 +98,96 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
           )}
         </div>
 
-        <div style={box}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: M.ink, marginBottom: 4 }}>Signature</div>
-          <div style={{ fontSize: 12.5, color: M.ink3, marginBottom: 10 }}>Added to the bottom of every email you send from Nexus.</div>
-          <textarea value={sig} onChange={(e) => setSig(e.target.value)} rows={5} placeholder={'Russel Feldman\nCEO, Gate Guard\n(555) 123-4567'} style={{ ...inp, resize: 'vertical' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-            <button type="button" style={primary} onClick={async () => {
-              const r = await api('/api/nexus/messages/signature', { method: 'PUT', json: { signature: sig } })
-              setSigMsg(r.ok ? 'Saved' : (r.data.error ?? 'Could not save'))
-              setTimeout(() => setSigMsg(null), 2000)
-            }}>Save signature</button>
-            {sigMsg && <span style={{ fontSize: 12.5, color: M.ink3 }}>{sigMsg}</span>}
-          </div>
-        </div>
+        <SignatureEditor initial={sig} loaded={sigLoaded} onSave={async (html) => {
+          const r = await api('/api/nexus/messages/signature', { method: 'PUT', json: { signature: html } })
+          setSigMsg(r.ok ? 'Saved' : (r.data.error ?? 'Could not save'))
+          setTimeout(() => setSigMsg(null), 2500)
+        }} msg={sigMsg} />
 
         <div style={{ ...box, fontSize: 12.5, color: M.ink3, lineHeight: 1.6 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: M.ink, marginBottom: 6 }}>Keyboard shortcuts</div>
-          {[['c', 'New email'], ['j / k', 'Next / previous'], ['Enter', 'Open'], ['r / a / f', 'Reply / Reply all / Forward'], ['e', 'Archive'], ['#', 'Trash'], ['s', 'Star'], ['u', 'Mark unread'], ['h', 'Snooze'], ['/', 'Search'], ['⌘ Enter', 'Send'], ['Esc', 'Close']].map(([k, l]) => (
+          {[['c', 'New email'], ['j / k', 'Next / previous'], ['Enter', 'Open'], ['r / a / f', 'Reply / Reply all / Forward'], ['e', 'Archive'], ['#', 'Trash'], ['s', 'Flag'], ['x', 'Select'], ['Shift-click', 'Select a range'], ['u', 'Mark unread'], ['h', 'Snooze'], ['/', 'Search'], ['⌘ Enter', 'Send'], ['Esc', 'Close']].map(([k, l]) => (
             <div key={k} style={{ display: 'flex', gap: 10 }}><span style={{ width: 80, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: M.ink2 }}>{k}</span>{l}</div>
           ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Signature with formatting + a logo or photo. Pictures are shrunk in the browser
+// (max 320 px wide) and kept with the signature; they go out as inline images.
+const isHtml = (s: string) => /<\s*(img|div|p|br|table|span|a|b|strong|i|em|font)\b/i.test(s)
+const textToHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+
+function shrinkImage(file: File, maxW: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width)
+      const c = document.createElement('canvas')
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale)
+      const g = c.getContext('2d')!
+      const keepAlpha = /png|gif|webp/.test(file.type)
+      if (!keepAlpha) { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height) }
+      g.drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      resolve(c.toDataURL(keepAlpha ? 'image/png' : 'image/jpeg', 0.9))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Not a picture')) }
+    img.src = url
+  })
+}
+
+function SignatureEditor({ initial, loaded, onSave, msg }: { initial: string; loaded: boolean; onSave: (html: string) => Promise<void>; msg: string | null }) {
+  const ed = useRef<HTMLDivElement>(null)
+  const file = useRef<HTMLInputElement>(null)
+  const [width, setWidth] = useState(200)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => { if (loaded && ed.current) ed.current.innerHTML = isHtml(initial) ? initial : textToHtml(initial) }, [loaded, initial])
+  const cmd = (c: string, v?: string) => { ed.current?.focus(); document.execCommand(c, false, v) }
+  const addImage = async (f: File | undefined) => {
+    if (!f) return
+    setErr(null)
+    if (!/^image\/(png|jpe?g|gif|webp)$/.test(f.type)) { setErr('Use a PNG or JPG picture.'); return }
+    try {
+      const data = await shrinkImage(f, 320)
+      ed.current?.focus()
+      document.execCommand('insertHTML', false, `<img src="${data}" alt="Gate Guard" width="${width}" style="width:${width}px;max-width:100%;height:auto;display:block;margin:6px 0">`)
+    } catch { setErr('Could not read that picture.') }
+  }
+  const resizeImages = (w: number) => {
+    setWidth(w)
+    ed.current?.querySelectorAll('img').forEach((im) => { im.setAttribute('width', String(w)); (im as HTMLImageElement).style.width = `${w}px` })
+  }
+  const tool: React.CSSProperties = { width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, color: M.ink2, background: 'transparent', border: 0, cursor: 'pointer' }
+  const hasImg = !!ed.current?.querySelector('img')
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${M.line}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: M.ink, marginBottom: 4 }}>Signature</div>
+      <div style={{ fontSize: 12.5, color: M.ink3, marginBottom: 10 }}>Added to the bottom of every email you send from Nexus. Add your logo or photo with the picture button — or paste your signature from Gmail.</div>
+      <div style={{ border: `1px solid ${M.lineStrong}`, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '4px 6px', borderBottom: `1px solid ${M.line}`, background: '#FAFAFC', flexWrap: 'wrap' }}>
+          <button type="button" aria-label="Bold" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd('bold')} style={tool}><Bold size={15} /></button>
+          <button type="button" aria-label="Italic" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd('italic')} style={tool}><Italic size={15} /></button>
+          <button type="button" aria-label="Add link" title="Link" onMouseDown={(e) => e.preventDefault()} onClick={() => { const u = window.prompt('Link (https://…)'); if (u && /^(https?:|mailto:|tel:)/i.test(u)) cmd('createLink', u) }} style={tool}><Link2 size={15} /></button>
+          <button type="button" aria-label="Add logo or picture" title="Add logo or picture" onMouseDown={(e) => e.preventDefault()} onClick={() => file.current?.click()} style={{ ...tool, width: 'auto', padding: '0 9px', gap: 6, fontSize: 12.5 }}><ImageIcon size={15} /> Add logo / picture</button>
+          <input ref={file} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(e) => { void addImage(e.target.files?.[0]); e.target.value = '' }} />
+          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: M.ink3 }}>
+            Picture size
+            <input type="range" min={60} max={320} step={10} value={width} onChange={(e) => resizeImages(Number(e.target.value))} aria-label="Picture size" />
+          </label>
+        </div>
+        <div ref={ed} contentEditable suppressContentEditableWarning aria-label="Signature" data-has-img={hasImg ? '1' : '0'}
+          style={{ minHeight: 110, padding: '10px 12px', outline: 'none', fontSize: 14, lineHeight: 1.5, color: M.ink }} />
+      </div>
+      {err && <div role="alert" style={{ fontSize: 12.5, color: M.red, marginTop: 8 }}>{err}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+        <button type="button" disabled={busy} onClick={async () => { setBusy(true); await onSave(ed.current?.innerHTML ?? ''); setBusy(false) }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#fff', background: M.blue, border: 0, borderRadius: 8, padding: '7px 13px', cursor: 'pointer', fontFamily: M.font }}>{busy ? 'Saving…' : 'Save signature'}</button>
+        {msg && <span style={{ fontSize: 12.5, color: M.ink3 }}>{msg}</span>}
       </div>
     </div>
   )

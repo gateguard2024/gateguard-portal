@@ -378,13 +378,89 @@ async function listIds(token: string, q: string, max: number): Promise<{ ids: { 
   let page: string | undefined
   while (ids.length < max) {
     const r = await gget<{ messages?: { id: string; threadId: string }[]; nextPageToken?: string }>(
-      token, `/messages?q=${encodeURIComponent(q)}&maxResults=${Math.min(100, max - ids.length)}${page ? `&pageToken=${page}` : ''}`)
+      token, `/messages?q=${encodeURIComponent(q)}&maxResults=${Math.min(500, max - ids.length)}${page ? `&pageToken=${page}` : ''}`)
     if (!r.ok) return { ids, error: r.error, status: r.status }
     ids.push(...(r.data.messages ?? []))
     page = r.data.nextPageToken
     if (!page) break
   }
   return { ids }
+}
+
+// ─── reconcile: make every stored message match Gmail ─────────────────────────
+// Asks Gmail for the full lists of what's in the Inbox, unread, starred and in Trash
+// (cheap: ids only, 500 per call) and fixes any stored message that disagrees —
+// e.g. mail you read in Gmail weeks ago that still showed unread here.
+const SET_MAX = 3000
+async function reconcileLabels(ctx: Ctx, token: string): Promise<{ fixed: number; inbox_unread: number | null; at: string }> {
+  const at = new Date().toISOString()
+  const [inbox, unread, starred, trash, inboxUnread] = await Promise.all([
+    listIds(token, 'in:inbox', SET_MAX), listIds(token, 'is:unread -in:spam', SET_MAX),
+    listIds(token, 'is:starred', SET_MAX), listIds(token, 'in:trash', 1000),
+    listIds(token, 'in:inbox is:unread', SET_MAX),
+  ])
+  if (inbox.error || unread.error || starred.error || trash.error) return { fixed: 0, inbox_unread: null, at }
+  const sets = {
+    INBOX: { ids: new Set(inbox.ids.map((m) => m.id)), full: inbox.ids.length < SET_MAX },
+    UNREAD: { ids: new Set(unread.ids.map((m) => m.id)), full: unread.ids.length < SET_MAX },
+    STARRED: { ids: new Set(starred.ids.map((m) => m.id)), full: starred.ids.length < SET_MAX },
+    TRASH: { ids: new Set(trash.ids.map((m) => m.id)), full: trash.ids.length < 1000 },
+  }
+  // What each stored message should look like.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groups = new Map<string, { labels: string[]; read: boolean | null; ids: string[]; threads: string[] }>()
+  let fixed = 0
+  for (let page = 0; page < 15; page++) {
+    let r = await ctx.supabase.from('messages').select('id, thread_id, direction, read_at, labels, external_message_id')
+      .eq('channel_id', ctx.channel.id).not('external_message_id', 'is', null)
+      .order('created_at', { ascending: false }).range(page * 1000, page * 1000 + 999)
+    if (r.error && isMissingCol(r.error)) {
+      r = await ctx.supabase.from('messages').select('id, thread_id, direction, read_at, external_message_id')
+        .eq('channel_id', ctx.channel.id).not('external_message_id', 'is', null)
+        .order('created_at', { ascending: false }).range(page * 1000, page * 1000 + 999) as typeof r
+    }
+    if (r.error) break
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (r.data ?? []) as any[]
+    for (const row of rows) {
+      const gid = row.external_message_id as string
+      const cur: string[] = Array.isArray(row.labels) ? row.labels : []
+      const next = new Set(cur)
+      for (const [label, set] of Object.entries(sets)) {
+        if (set.ids.has(gid)) next.add(label)
+        else if (set.full) next.delete(label)
+      }
+      if (row.direction === 'outbound') next.add('SENT')
+      const nextArr = [...next].sort()
+      const labelsChanged = nextArr.join(',') !== [...cur].sort().join(',')
+      let read: boolean | null = null
+      if (row.direction === 'inbound') {
+        const shouldUnread = sets.UNREAD.ids.has(gid)
+        if (shouldUnread && row.read_at) read = false
+        else if (!shouldUnread && !row.read_at && sets.UNREAD.full) read = true
+      }
+      if (!labelsChanged && read === null) continue
+      const key = `${nextArr.join(',')}|${read}|${labelsChanged}`
+      const g = groups.get(key) ?? { labels: nextArr, read, ids: [], threads: [] }
+      g.ids.push(row.id); g.threads.push(row.thread_id)
+      ;(g as { changed?: boolean }).changed = labelsChanged
+      groups.set(key, g)
+    }
+    if (rows.length < 1000) break
+  }
+  for (const g of groups.values()) {
+    const patch: Record<string, unknown> = {}
+    if ((g as { changed?: boolean }).changed) patch.labels = g.labels
+    if (g.read === true) patch.read_at = at
+    if (g.read === false) patch.read_at = null
+    for (let i = 0; i < g.ids.length; i += 200) {
+      const { error } = await writeSafe((row) => ctx.supabase.from('messages').update(row).in('id', g.ids.slice(i, i + 200)), patch)
+      if (error) { console.error('mail reconcile: update failed', error.message); continue }
+    }
+    fixed += g.ids.length
+    for (const t of g.threads) ctx.touched.add(t)
+  }
+  return { fixed, inbox_unread: inboxUnread.error ? null : inboxUnread.ids.length, at }
 }
 
 // ─── the sync ─────────────────────────────────────────────────────────────────
@@ -412,6 +488,7 @@ export async function fetchGmailInbox(
   let fetched = 0, updated = 0, removed = 0
   let mode: FetchResult['mode'] = 'history'
   let newHistoryId: string | null = null
+  let reconcile: { fixed: number; inbox_unread: number | null; at: string } | null = null
 
   try {
     if (opts.query) {
@@ -491,6 +568,12 @@ export async function fetchGmailInbox(
           }
         }
       }
+      // Every 10 minutes, double-check read / archived / starred against Gmail itself
+      // (catches anything the history feed missed, and mail older than 30 days).
+      if (!doFull) {
+        const last = Date.parse(channel.config?.reconcile?.at ?? '') || 0
+        if (Date.now() - last > 10 * 60_000) { const rec = await reconcileLabels(ctx, token); updated += rec.fixed; reconcile = rec }
+      }
       if (doFull) {
         mode = 'full'
         const prof = await gget<{ historyId?: string; emailAddress?: string }>(token, '/profile')
@@ -501,18 +584,12 @@ export async function fetchGmailInbox(
         const l = await listIds(token, '(in:inbox OR in:sent OR is:starred) newer_than:30d', max)
         if (l.error) throw new Error(l.error)
         fetched = await storeIds(ctx, token, l.ids.map((m) => m.id))
-        // Bring every stored message's labels in line with Gmail (read, archived, starred…).
-        const { data: rows } = await supabase.from('messages').select('id, thread_id, direction, read_at, created_at, external_message_id')
-          .eq('channel_id', channel.id).not('external_message_id', 'is', null)
-          .gte('created_at', new Date(Date.now() - 45 * 86400_000).toISOString())
-          .order('created_at', { ascending: false }).limit(800)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const list = (rows ?? []) as any[]
-        await pmap(list, 10, async (row) => {
-          const r = await gget<GmailMessage>(token, `/messages/${row.external_message_id}?format=minimal`)
-          if (r.ok) { await applyLabels(ctx, [row], r.data.labelIds ?? []); updated++ }
-          else if (r.status === 404) { await supabase.from('messages').delete().eq('id', row.id); ctx.touched.add(row.thread_id); removed++ }
-        })
+        // Remember where Gmail is now, so even if this request is cut short the next
+        // run continues from here instead of starting over.
+        if (newHistoryId) await noteChannel(supabase, channel, { gmail_history_id: newHistoryId })
+        const rec = await reconcileLabels(ctx, token)
+        updated += rec.fixed
+        reconcile = rec
       }
     }
   } catch (err) {
@@ -524,7 +601,7 @@ export async function fetchGmailInbox(
     return { fetched, updated, removed, mode, error: msg, needs_reconnect: needs }
   }
 
-  for (const tid of ctx.touched) await recomputeThread(supabase, tid)
+  await pmap([...ctx.touched], 6, (tid) => recomputeThread(supabase, tid))
 
   // Attach new conversations to deals / customers by who's on them.
   for (const [tid, addrs] of ctx.newThreadAddrs) {
@@ -533,6 +610,7 @@ export async function fetchGmailInbox(
 
   const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString(), last_error: null, last_error_at: null }
   if (newHistoryId && mode !== 'search') patch.gmail_history_id = newHistoryId
+  if (reconcile) patch.config = { ...(channel.config ?? {}), reconcile }
   await noteChannel(supabase, channel, patch)
 
   return { fetched, updated, removed, mode, thread_ids: [...ctx.touched] }

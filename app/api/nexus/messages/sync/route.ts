@@ -21,6 +21,8 @@ function accountStatus(ch: any) {
     last_error: ch.last_error ?? null,
     can_modify: canModifyGmail(ch),
     live: !!ch.gmail_history_id,
+    gmail_inbox_unread: ch.config?.reconcile?.inbox_unread ?? null,
+    checked_at: ch.config?.reconcile?.at ?? null,
   }
 }
 

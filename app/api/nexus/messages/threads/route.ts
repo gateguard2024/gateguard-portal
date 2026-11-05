@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { FOLDERS, LIST_COLS, OLD_COLS, applyFolder, term, type Folder } from '@/lib/mail-folders'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,35 +12,6 @@ const supabase = createClient(
 )
 
 type UiChannel = 'call' | 'text' | 'email'
-export type Folder = 'inbox' | 'other' | 'unread' | 'needs_reply' | 'starred' | 'snoozed' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
-const FOLDERS: Folder[] = ['inbox', 'other', 'unread', 'needs_reply', 'starred', 'snoozed', 'sent', 'linked', 'archived', 'trash', 'all']
-
-const LINKED_OR = 'linked_type.not.is.null,linked_opportunity_id.not.is.null,linked_customer_org_id.not.is.null'
-const LIST_COLS = 'id, channel_id, subject, participants, last_message_at, unread_count, created_at, linked_type, linked_id, linked_label, linked_opportunity_id, linked_customer_org_id, snippet, last_direction, last_from_name, last_from_address, message_count, labels, is_archived, is_starred, is_trashed, is_bulk, has_attachments, snoozed_until'
-const OLD_COLS = 'id, channel_id, subject, participants, last_message_at, unread_count, created_at, linked_type, linked_id, linked_label'
-
-// Keep a search term from breaking the PostgREST filter syntax.
-const term = (q: string) => q.replace(/[,()*%\\:"]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyFolder(q: any, folder: Folder, nowIso: string) {
-  const notSnoozed = `snoozed_until.is.null,snoozed_until.lte.${nowIso}`
-  switch (folder) {
-    case 'inbox':       return q.eq('is_archived', false).eq('is_trashed', false).or(notSnoozed).or(`is_bulk.eq.false,${LINKED_OR}`)
-    case 'other':       return q.eq('is_archived', false).eq('is_trashed', false).or(notSnoozed).eq('is_bulk', true).is('linked_type', null).is('linked_opportunity_id', null).is('linked_customer_org_id', null)
-    case 'unread':      return q.eq('is_trashed', false).eq('is_archived', false).gt('unread_count', 0)
-    case 'needs_reply': return q.eq('is_trashed', false).eq('is_archived', false).eq('is_bulk', false).eq('last_direction', 'inbound').or(notSnoozed)
-                          .gte('last_message_at', new Date(Date.now() - 30 * 86400_000).toISOString())
-    case 'starred':     return q.eq('is_trashed', false).eq('is_starred', true)
-    case 'snoozed':     return q.eq('is_trashed', false).gt('snoozed_until', nowIso)
-    case 'sent':        return q.eq('is_trashed', false).or('labels.cs.{SENT},last_direction.eq.outbound')
-    case 'linked':      return q.eq('is_trashed', false).or(LINKED_OR)
-    case 'archived':    return q.eq('is_trashed', false).eq('is_archived', true)
-    case 'trash':       return q.eq('is_trashed', true)
-    default:            return q.eq('is_trashed', false)
-  }
-}
-
 function uiChannel(sourceType: string | null | undefined): UiChannel {
   if (sourceType === 'sms' || sourceType === 'twilio') return 'text'
   if (sourceType === 'phone') return 'call'
@@ -52,7 +24,7 @@ function uiChannel(sourceType: string | null | undefined): UiChannel {
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
   const sp = new URL(req.url).searchParams
-  const folder = (FOLDERS.includes(sp.get('folder') as Folder) ? sp.get('folder') : 'inbox') as Folder
+  const folder = (FOLDERS.includes(sp.get('folder') as Folder) ? sp.get('folder') : 'all_inbox') as Folder
   const q = term(sp.get('q') ?? '')
   const before = sp.get('before')
   const limit = Math.min(100, Math.max(5, Number(sp.get('limit')) || 50))
@@ -158,8 +130,8 @@ export async function GET(req: NextRequest) {
       const { count } = await qq
       return count ?? 0
     }
-    const [inbox, other, needs, snoozed, unread] = await Promise.all([c('inbox', true), c('other', true), c('needs_reply'), c('snoozed'), c('unread')])
-    counts = { inbox, other, needs_reply: needs, snoozed, unread }
+    const [all, inbox, other, needs, snoozed, unread] = await Promise.all([c('all_inbox', true), c('inbox', true), c('other', true), c('needs_reply'), c('snoozed'), c('unread')])
+    counts = { all_inbox: all, inbox, other, needs_reply: needs, snoozed, unread }
   }
 
   return NextResponse.json({

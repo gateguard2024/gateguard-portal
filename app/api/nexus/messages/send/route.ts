@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { sendViaSmtp, sendViaGmail, type OutboundEmail, type MailAttachment } from '@/lib/mail-send'
 import { recomputeThread, writeSafe, parseAddressList } from '@/lib/mail-fetch'
+import { signatureParts } from '@/lib/mail-signature'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -93,11 +94,10 @@ export async function POST(req: NextRequest) {
 
   // Append the user's saved signature (if any) to the outgoing message.
   const { data: sig } = await supabase.from('user_settings').select('email_signature').eq('user_id', user.id).maybeSingle()
-  const signature = (sig?.email_signature ?? '').trim()
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const textWithSig = signature ? `${text ?? ''}\n\n${signature}` : text
+  const sigParts = signatureParts(sig?.email_signature ?? '')
+  const textWithSig = sigParts.text ? `${text ?? ''}\n\n${sigParts.text}` : text
   const htmlWithSig = html
-    ? (signature ? `${html}<br><br><div style="color:#555">${esc(signature).replace(/\n/g, '<br>')}</div>` : html)
+    ? (sigParts.html ? `${html}<br><br><div class="gg-signature">${sigParts.html}</div>` : html)
     : undefined
 
   const email: OutboundEmail = {
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
     fromName: user.name,
     fromAddress,
     attachments: attachments.length ? attachments : undefined,
+    inline: htmlWithSig && sigParts.inline.length ? sigParts.inline : undefined,
     gmailThreadId: thread && !isForward ? thread.external_thread_id ?? undefined : undefined,
     inReplyTo,
     references,

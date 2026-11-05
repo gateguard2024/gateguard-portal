@@ -342,15 +342,15 @@ export function MyDaySurface() {
   const [showTopNoteBox, setShowTopNoteBox] = useState(false)
   const [relatedJobId, setRelatedJobId] = useState<string | null>(null)
   const [priorityOpen, setPriorityOpen] = useState(false)
-  // Messages card = your real inbox (Priority), refreshed every minute.
+  // Messages card = your real inbox, refreshed every minute.
   const [inbox, setInbox] = useState<{ rows: ThreadRow[]; unread: number; loaded: boolean; error: boolean }>({ rows: [], unread: 0, loaded: false, error: false })
   const [mailThreadId, setMailThreadId] = useState<string | null>(null)
   const loadInbox = useCallback(async () => {
     try {
-      const r = await fetch('/api/nexus/messages/threads?folder=inbox&limit=6', { cache: 'no-store' })
+      const r = await fetch('/api/nexus/messages/threads?folder=all_inbox&limit=6', { cache: 'no-store' })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setInbox((x) => ({ ...x, loaded: true, error: true })); return }
-      setInbox({ rows: Array.isArray(j.conversations) ? j.conversations : [], unread: j.counts?.inbox ?? 0, loaded: true, error: false })
+      setInbox({ rows: Array.isArray(j.conversations) ? j.conversations : [], unread: j.counts?.all_inbox ?? j.counts?.inbox ?? 0, loaded: true, error: false })
     } catch { setInbox((x) => ({ ...x, loaded: true, error: true })) }
   }, [])
   useEffect(() => {
@@ -626,7 +626,7 @@ export function MyDaySurface() {
       {/* Site Status — role-scoped site overview (corporate: all + dealer filter; dealers: theirs) */}
       <SiteStatusModule />
 
-      {/* Messages — your real inbox (Priority) */}
+      {/* Messages — your real inbox */}
       <div className="mb-6 overflow-hidden" style={CARD}>
         <div className="flex items-center justify-between px-[18px] py-3.5" style={{ borderBottom: `1px solid ${L.line}` }}>
           <span className="text-[15px] font-semibold">Messages{inbox.unread > 0 && <span className="ml-2 text-[13px] font-medium" style={{ color: L.blue }}>{inbox.unread} unread</span>}</span>

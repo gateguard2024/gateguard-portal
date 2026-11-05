@@ -23,6 +23,7 @@ export interface OutboundEmail {
   cc?: string[]        // optional carbon-copy recipients
   bcc?: string[]       // optional blind-copy recipients (Gmail only)
   attachments?: MailAttachment[]
+  inline?: { cid: string; contentType: string; content: string }[] // pictures shown in the body (signature logo), base64
   // Reply threading (Gmail): keeps a reply in the same conversation for us AND the
   // customer — Gmail needs the threadId, every mail app needs In-Reply-To/References.
   gmailThreadId?: string
@@ -159,9 +160,23 @@ function buildMime(email: OutboundEmail, fromAddress: string): string {
     return { ct: `multipart/alternative; boundary="${altBoundary}"`, content: inner }
   }
 
+  // Pictures in the body (e.g. signature logo) → multipart/related around the body.
+  const inl = email.inline ?? []
+  const relBoundary = 'ggrel_' + Math.random().toString(36).slice(2)
+  const plainBody = bodyBlock
+  const bodyWithInline = (): { ct: string; content: string } => {
+    const b = plainBody()
+    if (!inl.length || !email.html) return b
+    const parts = [`--${relBoundary}\r\nContent-Type: ${b.ct}\r\n\r\n${b.content}`]
+    for (const im of inl) {
+      parts.push(`--${relBoundary}\r\nContent-Type: ${im.contentType}\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <${im.cid}>\r\nContent-Disposition: inline\r\n\r\n${wrap76(im.content.replace(/\s/g, ''))}`)
+    }
+    return { ct: `multipart/related; boundary="${relBoundary}"`, content: parts.join('\r\n') + `\r\n--${relBoundary}--` }
+  }
+
   // No attachments → just the body.
   if (atts.length === 0) {
-    const b = bodyBlock()
+    const b = bodyWithInline()
     headers.push(`Content-Type: ${b.ct}`)
     return Buffer.from(`${headers.join('\r\n')}\r\n\r\n${b.content}`).toString('base64url')
   }
@@ -169,7 +184,7 @@ function buildMime(email: OutboundEmail, fromAddress: string): string {
   // Attachments → multipart/mixed. Body first, then each file as base64.
   const boundary = 'ggmix_' + Math.random().toString(36).slice(2)
   headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
-  const b = bodyBlock()
+  const b = bodyWithInline()
   const parts: string[] = [`--${boundary}\r\nContent-Type: ${b.ct}\r\n\r\n${b.content}`]
   for (const a of atts) {
     const data = a.isBase64 ? String(a.content) : Buffer.from(a.content as Buffer).toString('base64')

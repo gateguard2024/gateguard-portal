@@ -39,6 +39,11 @@ function readDraft(k: string): string {
 function writeDraft(k: string, html: string) {
   try { if (html && html !== '<br>') localStorage.setItem(draftKey(k), html); else localStorage.removeItem(draftKey(k)) } catch { /* private mode */ }
 }
+// The signature is added on send; show it under the box so you know it's there.
+let sigCache: Promise<string> | null = null
+const loadSignature = () => (sigCache ??= api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => r.data.signature ?? '').catch(() => ''))
+const sigIsHtml = (s: string) => /<\s*(img|div|p|br|table|span|a|b|strong|i|em|font)\b/i.test(s)
+
 export function clearDraft(k: string) { try { localStorage.removeItem(draftKey(k)) } catch { /* ignore */ } }
 
 export default function MailComposer({ seed, channelId, fromEmail, onQueue, onClose, compact }: {
@@ -60,6 +65,8 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
   const [aiNote, setAiNote] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [empty, setEmpty] = useState(true)
+  const [signature, setSignature] = useState('')
+  useEffect(() => { void loadSignature().then(setSignature) }, [])
   const ed = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -156,6 +163,10 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
         {empty && <div style={{ position: 'absolute', left: 14, top: 12, fontSize: 14, color: M.ink4, pointerEvents: 'none' }}>{seed.mode === 'forward' ? 'Add a note (optional)…' : 'Write your email…'}  ⌘↵ to send</div>}
         <div ref={ed} contentEditable suppressContentEditableWarning onInput={onInput} aria-label="Message"
           style={{ padding: '12px 14px', minHeight: compact ? 120 : 200, outline: 'none', fontSize: 14.5, lineHeight: 1.55, color: M.ink }} />
+        {signature && (
+          <div aria-label="Your signature" title="Added when you send — change it in Mail settings" style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, opacity: 0.6, fontSize: 13, color: M.ink2, pointerEvents: 'none' }}
+            {...(sigIsHtml(signature) ? { dangerouslySetInnerHTML: { __html: signature } } : { children: <span style={{ whiteSpace: 'pre-wrap' }}>{signature}</span> })} />
+        )}
         {seed.forwardHtml && <div style={{ margin: '0 14px 12px', padding: '8px 12px', borderLeft: `2px solid ${M.lineStrong}`, fontSize: 12.5, color: M.ink3 }}>The original email is added below your note.</div>}
       </div>
       {files.length > 0 && (

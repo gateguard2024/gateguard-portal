@@ -7,24 +7,24 @@
  * jobs / unpaid invoices next to every email.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Star, Settings, RefreshCw, X, Loader2, ChevronDown } from 'lucide-react'
+import { Search, Settings, RefreshCw, X, Loader2, ChevronDown, Check } from 'lucide-react'
 import MailReader, { type ThreadAction } from './MailReader'
 import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
 import MailContext from './MailContext'
 import MailSettings from './MailSettings'
 import { FOLDERS, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, ArrowLeft, PanelRight } = require('lucide-react') as any
+const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Sparkle: Star2, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const FOLDER_ICON: Record<Folder, any> = {
-  inbox: Inbox, other: Archive, needs_reply: ClockI, unread: MailOpen, starred: Star, snoozed: AlarmClock,
+  all_inbox: Inbox, inbox: Star2, other: Archive, needs_reply: ClockI, unread: MailOpen, starred: Flag, snoozed: AlarmClock,
   sent: Send, linked: Link2, archived: Archive, trash: Trash2, all: Inbox,
 }
 // Folders a conversation leaves when you do this to it.
 const LEAVES: Partial<Record<ThreadAction, Folder[]>> = {
-  archive: ['inbox', 'other', 'needs_reply', 'unread'], trash: ['inbox', 'other', 'needs_reply', 'unread', 'starred', 'sent', 'linked', 'archived', 'snoozed'],
-  untrash: ['trash'], inbox: ['archived', 'trash'], snooze: ['inbox', 'other', 'needs_reply', 'unread'], unsnooze: ['snoozed'],
+  archive: ['all_inbox', 'inbox', 'other', 'needs_reply', 'unread'], trash: ['all_inbox', 'inbox', 'other', 'needs_reply', 'unread', 'starred', 'sent', 'linked', 'archived', 'snoozed'],
+  untrash: ['trash'], inbox: ['archived', 'trash'], snooze: ['all_inbox', 'inbox', 'other', 'needs_reply', 'unread'], unsnooze: ['snoozed'],
   read: ['unread'], unstar: ['starred'],
 }
 const PREF = 'gg_mail_prefs'
@@ -33,7 +33,7 @@ const savePrefs = (p: { context?: boolean }) => { try { localStorage.setItem(PRE
 
 type Outbox = { email: OutgoingEmail; seed: ComposerSeed; timer: ReturnType<typeof setTimeout>; until: number } | null
 
-export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 'inbox', initialThreadId = null }: { onClose?: () => void; closeLabel?: string; initialFolder?: Folder; initialThreadId?: string | null }) {
+export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 'all_inbox', initialThreadId = null }: { onClose?: () => void; closeLabel?: string; initialFolder?: Folder; initialThreadId?: string | null }) {
   const [folder, setFolder] = useState<Folder>(initialFolder)
   const [q, setQ] = useState('')
   const [qLive, setQLive] = useState('')
@@ -57,6 +57,9 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
   const [settings, setSettings] = useState(false)
   const [reconnectHint, setReconnectHint] = useState(false)
   const [folderMenu, setFolderMenu] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [pickMode, setPickMode] = useState(false)
+  const lastPick = useRef<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const reqId = useRef(0)
@@ -64,6 +67,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
   useEffect(() => { setShowContext(readPrefs().context !== false) }, [])
   useEffect(() => { const t = setTimeout(() => setQ(qLive.trim()), 250); return () => clearTimeout(t) }, [qLive])
   useEffect(() => { setGmailIds(null) }, [q])
+  useEffect(() => { setPicked(new Set()); setPickMode(false) }, [folder, q, gmailIds])
 
   const flash = useCallback((text: string, undo?: () => void) => {
     setToast({ text, undo })
@@ -166,6 +170,45 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
     if (row.unread) void act(row, 'read', undefined, true)
   }, [act])
 
+  // ── select many ───────────────────────────────────────────────────────────
+  const togglePick = useCallback((id: string, shift: boolean) => {
+    setPicked((cur) => {
+      const n = new Set(cur)
+      if (shift && lastPick.current) {
+        const a = rows.findIndex((r) => r.id === lastPick.current), b = rows.findIndex((r) => r.id === id)
+        if (a >= 0 && b >= 0) { for (let i = Math.min(a, b); i <= Math.max(a, b); i++) n.add(rows[i].id); return n }
+      }
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+    lastPick.current = id
+  }, [rows])
+  const clearPick = () => { setPicked(new Set()); setPickMode(false) }
+  const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.id))
+
+  const bulk = useCallback(async (action: ThreadAction, opts: { all?: boolean } = {}) => {
+    const ids = opts.all ? rows.map((r) => r.id) : [...picked]
+    if (!ids.length && !opts.all) return
+    const before = rows
+    const patch: Partial<ThreadRow> = action === 'read' ? { unread: false, unread_count: 0 } : action === 'unread' ? { unread: true, unread_count: 1 } : action === 'star' ? { starred: true } : action === 'unstar' ? { starred: false } : {}
+    const leaves = LEAVES[action]?.includes(folder) && !gmailIds
+    setRows((rs) => (leaves ? rs.filter((r) => !ids.includes(r.id)) : rs.map((r) => (ids.includes(r.id) ? { ...r, ...patch } : r))))
+    if (leaves && selId && ids.includes(selId)) setSelId(null)
+    clearPick()
+    const r = await api<{ done?: number; failed?: number; more?: boolean; gmail?: { needs_reconnect?: boolean } }>('/api/nexus/messages/threads/bulk', {
+      method: 'POST', json: opts.all ? { folder, all: true, action } : { ids, action },
+    })
+    if (!r.ok && !r.data.done) { setRows(before); flash(r.data.error ?? 'That didn’t work. Try again.'); return }
+    if (r.data.gmail?.needs_reconnect) setReconnectHint(true)
+    const n = r.data.done ?? ids.length
+    const word: Partial<Record<ThreadAction, string>> = { read: 'marked read', unread: 'marked unread', star: 'flagged', unstar: 'unflagged', archive: 'archived', trash: 'moved to Trash', inbox: 'moved to Inbox', untrash: 'restored' }
+    const undoOf: Partial<Record<ThreadAction, ThreadAction>> = { archive: 'inbox', trash: 'untrash', read: 'unread', star: 'unstar' }
+    const u = undoOf[action]
+    flash(`${n} ${n === 1 ? 'email' : 'emails'} ${word[action] ?? 'done'}${r.data.more ? ' (more left — run it again)' : ''}`,
+      u && !opts.all ? () => { setRows(before); void api('/api/nexus/messages/threads/bulk', { method: 'POST', json: { ids, action: u } }).then(() => loadRef.current({ silent: true })) } : undefined)
+    void loadRef.current({ silent: true })
+  }, [rows, picked, folder, gmailIds, selId, flash])
+
   // ── sending (with Undo) ───────────────────────────────────────────────────
   const reallySend = useCallback(async (email: OutgoingEmail, seed: ComposerSeed) => {
     setOutbox(null)
@@ -238,7 +281,8 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         case 'k': case 'ArrowUp': e.preventDefault(); go(i < 0 ? 0 : i - 1); break
         case 'c': e.preventDefault(); newEmail(); break
         case '/': e.preventDefault(); searchRef.current?.focus(); break
-        case 'Escape': setSelId(null); break
+        case 'Escape': if (picked.size) clearPick(); else setSelId(null); break
+        case 'x': if (sel) { e.preventDefault(); togglePick(sel.id, e.shiftKey) } break
         case 'e': if (sel) { e.preventDefault(); void act(sel, sel.archived ? 'inbox' : 'archive') } break
         case '#': if (sel) { e.preventDefault(); void act(sel, 'trash') } break
         case 's': if (sel) { e.preventDefault(); void act(sel, sel.starred ? 'unstar' : 'star') } break
@@ -251,11 +295,11 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [rows, selId, selected, open, act, newEmail, settings, compose])
+  }, [rows, selId, selected, open, act, newEmail, settings, compose, picked, togglePick])
 
   // ── pieces ────────────────────────────────────────────────────────────────
   const folderLabel = FOLDERS.find((f) => f.id === folder)?.label ?? 'Mail'
-  const countFor = (f: Folder) => (counts ? (f === 'inbox' ? counts.inbox : f === 'other' ? counts.other : f === 'needs_reply' ? counts.needs_reply : f === 'snoozed' ? counts.snoozed : f === 'unread' ? counts.unread : 0) : 0)
+  const countFor = (f: Folder) => (counts ? (f === 'all_inbox' ? counts.all_inbox ?? 0 : f === 'inbox' ? counts.inbox : f === 'other' ? counts.other : f === 'needs_reply' ? counts.needs_reply : f === 'snoozed' ? counts.snoozed : f === 'unread' ? counts.unread : 0) : 0)
   const syncLine = useMemo(() => {
     if (!accounts) return { text: 'Checking…', bad: false }
     if (!account) return { text: 'No email connected', bad: true }
@@ -279,13 +323,13 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
           const c = countFor(f.id)
           return (
             <React.Fragment key={f.id}>
-              {(i === 3 || i === 6) && <div style={{ height: 1, background: M.line, margin: '8px 8px' }} />}
+              {(i === 4 || i === 7) && <div style={{ height: 1, background: M.line, margin: '8px 8px' }} />}
               <button type="button" onClick={() => { setFolder(f.id); setGmailIds(null); setSelId(null) }} title={f.hint || undefined}
                 aria-current={on ? 'page' : undefined}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8, border: 0, cursor: 'pointer', background: on ? 'rgba(0,0,0,0.07)' : 'transparent', color: M.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 400, textAlign: 'left' }}>
                 <Icon size={16} style={{ color: on ? M.blue : M.ink3 }} />
                 <span style={{ flex: 1 }}>{f.label}</span>
-                {c > 0 && <span style={{ fontSize: 12, color: f.id === 'inbox' ? M.blue : M.ink3, fontWeight: f.id === 'inbox' ? 600 : 400 }}>{c}</span>}
+                {c > 0 && <span style={{ fontSize: 12, color: f.id === 'all_inbox' ? M.blue : M.ink3, fontWeight: f.id === 'all_inbox' ? 600 : 400 }}>{c}</span>}
               </button>
             </React.Fragment>
           )
@@ -329,7 +373,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
             )}
           </div>
           <h2 className="hidden lg:block" style={{ margin: 0, fontSize: 19, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em' }}>{gmailIds ? 'Gmail results' : folderLabel}</h2>
-          <span style={{ fontSize: 12, color: M.ink3 }}>{folder === 'inbox' && counts && !gmailIds ? `${counts.inbox} unread` : ''}</span>
+          <span style={{ fontSize: 12, color: M.ink3 }}>{counts && !gmailIds && (folder === 'all_inbox' || folder === 'inbox' || folder === 'other') ? `${countFor(folder)} unread` : ''}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
             <span className="flex lg:hidden" style={{ gap: 2 }}>
               <button type="button" onClick={() => void sync(true)} aria-label="Refresh" style={iconBtn}>{syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}</button>
@@ -351,6 +395,32 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         )}
       </div>
 
+      {(picked.size > 0 || pickMode) ? (
+        <div role="toolbar" aria-label="Selected emails" style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '6px 10px', borderBottom: `1px solid ${M.line}`, background: '#F5F8FF', flexWrap: 'wrap' }}>
+          <button type="button" role="checkbox" aria-checked={allPicked} aria-label="Select all" onClick={() => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.id)))}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: M.ink, background: 'none', border: 0, padding: '5px 6px', cursor: 'pointer', fontFamily: M.font }}>
+            <span style={{ width: 18, height: 18, borderRadius: 18, border: allPicked ? 0 : `1.5px solid ${M.ink4}`, background: allPicked ? M.blue : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{allPicked && <Check size={12} strokeWidth={3} />}</span>
+            {picked.size ? `${picked.size} selected` : 'Select all'}
+          </button>
+          <span style={{ flex: 1 }} />
+          {picked.size > 0 && <>
+            <button type="button" title="Mark read" aria-label="Mark selected read" onClick={() => void bulk('read')} style={iconBtn}><MailOpen size={16} /></button>
+            <button type="button" title="Mark unread" aria-label="Mark selected unread" onClick={() => void bulk('unread')} style={iconBtn}><MailI size={16} /></button>
+            <button type="button" title="Flag" aria-label="Flag selected" onClick={() => void bulk(rows.filter((r) => picked.has(r.id)).every((r) => r.starred) ? 'unstar' : 'star')} style={iconBtn}><Flag size={16} /></button>
+            {folder === 'archived' || folder === 'trash'
+              ? <button type="button" title="Move to inbox" aria-label="Move selected to inbox" onClick={() => void bulk(folder === 'trash' ? 'untrash' : 'inbox')} style={iconBtn}><Inbox size={16} /></button>
+              : <button type="button" title="Archive" aria-label="Archive selected" onClick={() => void bulk('archive')} style={iconBtn}><Archive size={16} /></button>}
+            {folder !== 'trash' && <button type="button" title="Trash" aria-label="Trash selected" onClick={() => void bulk('trash')} style={iconBtn}><Trash2 size={16} /></button>}
+          </>}
+          <button type="button" onClick={clearPick} style={{ fontSize: 13, color: M.blue, background: 'none', border: 0, padding: '5px 8px', cursor: 'pointer', fontFamily: M.font }}>Done</button>
+        </div>
+      ) : rows.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 14px', borderBottom: `1px solid ${M.line}` }}>
+          <button type="button" onClick={() => setPickMode(true)} style={linkBtn}>Select</button>
+          {rows.some((r) => r.unread) && <button type="button" onClick={() => void bulk('read', { all: true })} style={linkBtn}><CheckCheck size={13} /> Mark all as read</button>}
+        </div>
+      )}
+
       {needsMigration && <div style={banner}>Mail is running in basic mode until migration 222 is run.</div>}
       {reconnectHint && account && (
         <div style={banner}>Changes are saved here. <a href="/api/nexus/messages/google/connect" style={{ color: M.blue, fontWeight: 600 }}>Reconnect Gmail</a> once so they also show in Gmail.</div>
@@ -362,7 +432,8 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         ) : rows.length === 0 ? (
           <EmptyState folder={folder} searching={!!q} hasAccount={!!account} accountsLoaded={!!accounts} onConnect={() => setSettings(true)} />
         ) : rows.map((r) => (
-          <Row key={r.id} r={r} selected={r.id === selId} onOpen={() => open(r)}
+          <Row key={r.id} r={r} selected={r.id === selId} checked={picked.has(r.id)} picking={picked.size > 0 || pickMode}
+            onCheck={(shift) => togglePick(r.id, shift)} onOpen={() => open(r)}
             onArchive={() => void act(r, r.archived ? 'inbox' : 'archive')}
             onRead={() => void act(r, r.unread ? 'read' : 'unread', undefined, true)}
             onStar={() => void act(r, r.starred ? 'unstar' : 'star', undefined, true)} />
@@ -459,15 +530,22 @@ function Shell({ children, onClose, closeLabel }: { children: React.ReactNode; o
   )
 }
 
-function Row({ r, selected, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
+function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; checked: boolean; picking: boolean; onCheck: (shift: boolean) => void; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
   const badge = r.linked_type ? RECORD_BADGE[r.linked_type] : null
   const who = r.last_from_me ? `To: ${r.contact_name}` : r.contact_name
   return (
-    <div id={`mail-row-${r.id}`} className="group" style={{ position: 'relative', borderBottom: `1px solid ${M.line}`, background: selected ? M.sel : '#fff' }}>
-      <button type="button" onClick={onOpen} aria-current={selected ? 'true' : undefined}
-        style={{ width: '100%', display: 'flex', gap: 10, padding: '11px 14px 11px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
-        <span aria-hidden style={{ width: 8, flexShrink: 0, paddingTop: 14 }}>{r.unread && <span style={{ display: 'block', width: 8, height: 8, borderRadius: 8, background: M.blue }} />}</span>
-        <span aria-hidden style={{ width: 34, height: 34, borderRadius: 34, background: `${tintFor(r.contact_name)}1A`, color: tintFor(r.contact_name), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{initials(r.contact_name)}</span>
+    <div id={`mail-row-${r.id}`} className="group" style={{ position: 'relative', display: 'flex', borderBottom: `1px solid ${M.line}`, background: checked ? 'rgba(0,113,227,0.06)' : selected ? M.sel : '#fff' }}>
+      <span aria-hidden style={{ width: 18, flexShrink: 0, paddingTop: 25, paddingLeft: 8 }}>{r.unread && <span style={{ display: 'block', width: 8, height: 8, borderRadius: 8, background: M.blue }} />}</span>
+      {/* Avatar doubles as the select box (tap it, or hover on a computer) */}
+      <button type="button" role="checkbox" aria-checked={checked} aria-label={`Select ${r.subject}`} onClick={(e) => onCheck(e.shiftKey)}
+        style={{ width: 34, height: 34, margin: '11px 0 0', borderRadius: 34, flexShrink: 0, border: 0, padding: 0, cursor: 'pointer', position: 'relative', background: 'transparent' }}>
+        <span className={picking || checked ? 'hidden' : 'flex lg:group-hover:hidden'} style={{ width: 34, height: 34, borderRadius: 34, background: `${tintFor(r.contact_name)}1A`, color: tintFor(r.contact_name), alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>{initials(r.contact_name)}</span>
+        <span className={picking || checked ? 'flex' : 'hidden lg:group-hover:flex'} style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: 20, height: 20, borderRadius: 20, border: checked ? 0 : `1.5px solid ${M.ink4}`, background: checked ? M.blue : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{checked && <Check size={13} strokeWidth={3} />}</span>
+        </span>
+      </button>
+      <button type="button" onClick={(e) => (picking || e.metaKey || e.ctrlKey || e.shiftKey ? onCheck(e.shiftKey) : onOpen())} aria-current={selected ? 'true' : undefined}
+        style={{ flex: 1, minWidth: 0, display: 'flex', gap: 10, padding: '11px 14px 11px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.unread ? 600 : 500, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{who}{r.message_count && r.message_count > 1 ? <span style={{ color: M.ink3, fontWeight: 400 }}> {r.message_count}</span> : null}</span>
@@ -476,21 +554,23 @@ function Row({ r, selected, onOpen, onArchive, onRead, onStar }: { r: ThreadRow;
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: r.unread ? 600 : 400, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.subject}</span>
             {r.has_attachments && <Paperclip size={12} style={{ color: M.ink3, flexShrink: 0 }} />}
-            {r.starred && <Star size={12} fill={M.star} style={{ color: M.star, flexShrink: 0 }} />}
+            {r.starred && <Flag size={12} fill={M.flag} style={{ color: M.flag, flexShrink: 0 }} aria-label="Flagged" />}
           </span>
           <span style={{ fontSize: 12.5, color: M.ink3, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 } as React.CSSProperties}>{r.preview}</span>
-          {(badge || r.needs_reply) && (
+          {badge && (
             <span style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
-              {badge && <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: `${badge.color}14`, borderRadius: 5, padding: '1px 6px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>}
+              <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: `${badge.color}14`, borderRadius: 5, padding: '1px 6px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>
             </span>
           )}
         </span>
       </button>
-      <div className="hidden lg:group-hover:flex" style={{ position: 'absolute', right: 10, bottom: 8, gap: 2, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', padding: 2 }}>
-        <button type="button" title={r.archived ? 'Move to inbox' : 'Archive'} aria-label={r.archived ? 'Move to inbox' : 'Archive'} onClick={onArchive} style={iconBtnSm}>{r.archived ? <Inbox size={14} /> : <Archive size={14} />}</button>
-        <button type="button" title={r.unread ? 'Mark read' : 'Mark unread'} aria-label={r.unread ? 'Mark read' : 'Mark unread'} onClick={onRead} style={iconBtnSm}><MailOpen size={14} /></button>
-        <button type="button" title={r.starred ? 'Unstar' : 'Star'} aria-label={r.starred ? 'Unstar' : 'Star'} onClick={onStar} style={iconBtnSm}><Star size={14} fill={r.starred ? M.star : 'none'} style={{ color: r.starred ? M.star : undefined }} /></button>
-      </div>
+      {!picking && (
+        <div className="hidden lg:group-hover:flex" style={{ position: 'absolute', right: 10, bottom: 8, gap: 2, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', padding: 2 }}>
+          <button type="button" title={r.archived ? 'Move to inbox' : 'Archive'} aria-label={r.archived ? 'Move to inbox' : 'Archive'} onClick={onArchive} style={iconBtnSm}>{r.archived ? <Inbox size={14} /> : <Archive size={14} />}</button>
+          <button type="button" title={r.unread ? 'Mark read' : 'Mark unread'} aria-label={r.unread ? 'Mark read' : 'Mark unread'} onClick={onRead} style={iconBtnSm}><MailOpen size={14} /></button>
+          <button type="button" title={r.starred ? 'Unflag' : 'Flag'} aria-label={r.starred ? 'Unflag' : 'Flag'} onClick={onStar} style={iconBtnSm}><Flag size={14} fill={r.starred ? M.flag : 'none'} style={{ color: r.starred ? M.flag : undefined }} /></button>
+        </div>
+      )}
     </div>
   )
 }
@@ -506,7 +586,7 @@ function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }
     )
   }
   const text = searching ? 'No matches here. Press Enter to search all of Gmail.'
-    : folder === 'inbox' ? 'Inbox zero. Nice.' : folder === 'needs_reply' ? 'You’re caught up — nobody is waiting on you.'
+    : folder === 'inbox' || folder === 'all_inbox' ? 'Inbox zero. Nice.' : folder === 'needs_reply' ? 'You’re caught up — nobody is waiting on you.'
     : folder === 'snoozed' ? 'Nothing snoozed.' : 'Nothing here.'
   return <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13.5, color: M.ink3, fontFamily: M.font }}>{text}</div>
 }
@@ -514,5 +594,6 @@ function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }
 const iconBtn: React.CSSProperties = { width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 0, background: 'transparent', color: M.ink2, cursor: 'pointer' }
 const iconBtnSm: React.CSSProperties = { ...iconBtn, width: 28, height: 28 }
 const sideBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: M.ink2, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontFamily: M.font }
+const linkBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: M.blue, background: 'none', border: 0, padding: '3px 0', cursor: 'pointer', fontFamily: M.font }
 const toastBtn: React.CSSProperties = { fontSize: 13.5, fontWeight: 600, color: '#64B5FF', background: 'none', border: 0, cursor: 'pointer', padding: 0, fontFamily: M.font }
 const banner: React.CSSProperties = { padding: '8px 14px', fontSize: 12.5, color: M.ink2, background: '#FFF8E6', borderBottom: `1px solid ${M.line}`, fontFamily: M.font }
