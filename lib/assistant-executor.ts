@@ -644,6 +644,12 @@ const ORG_COL: Record<string, string> = {
   opportunities: 'dealer_org_id',
   crm_activities: 'dealer_org_id',
   quotes: 'org_id',
+  // Executive Lexi saves to EOS right away with Undo (lib/lexi/exec.ts eosUpdate).
+  eos_vto: 'org_id',
+  eos_rocks: 'org_id',
+  eos_scorecard: 'org_id',
+  eos_issues: 'org_id',
+  eos_todos: 'org_id',
 }
 
 // Tool → [table, id arg] for tools that change an existing row.

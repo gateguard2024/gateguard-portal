@@ -32,9 +32,10 @@ import { READ_TOOLS, READ_TOOL_NAMES, TOOL_LABEL, lexiCtx, runReadTool, type Lex
 import { NEXUS_MAP } from '@/lib/lexi/nexus-guide'
 import { BRAIN_TOOLS, BRAIN_TOOL_NAMES, brainPrompt, loadBrain, runBrainTool } from '@/lib/lexi/brain'
 import { REPORT_TOOL, runReport, type LexiChart } from '@/lib/lexi/reports'
+import { EXEC_PROMPT, EXEC_TOOLS, EXEC_TOOL_LABEL, EXEC_TOOL_NAMES, execContext, isExec, runExecTool } from '@/lib/lexi/exec'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 120
+export const maxDuration = 180 // Executive Lexi may research several times before answering
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -42,9 +43,10 @@ const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPAB
 const MODEL = process.env.LEXI_MODEL || 'claude-sonnet-4-6'
 const FAST_MODEL = process.env.LEXI_FAST_MODEL || 'claude-haiku-4-5-20251001'
 const MAX_ROUNDS = 6
+const EXEC_ROUNDS = 9 // Executive Lexi researches before she plans
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function systemPrompt(name: string, role: string, brain: string, voice = false, company: { corporate: boolean; canAct: boolean } = { corporate: true, canAct: true }) {
+function systemPrompt(name: string, role: string, brain: string, voice = false, company: { corporate: boolean; canAct: boolean } = { corporate: true, canAct: true }, exec = '') {
   const now = new Date()
   return `You are Lexi, the AI assistant inside Nexus — Gate Guard's operating system for a gate, access-control and camera company that sells to apartment communities.
 You work for ${name} (${role})${company.corporate ? ' at Gate Guard' : ' at a Gate Guard dealer — you only see their company’s records, and Gate Guard’s shared product catalog'}. Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}.
@@ -65,9 +67,12 @@ How you work:
 - Reports: for "show me / chart / report" questions about pipeline, wins, or jobs, call run_report; the chart appears on screen, so just point out what stands out.
 - You can't yet send emails, text customers or place calls. If asked, say that's coming soon and offer what you can do now (draft the text, create a task).
 - Memory: when the user states a lasting preference or fact, or says "remember…", save it with remember (one fact per call). Company-wide facts (pricing, policies, scripts) go to the shared Brain only when they clearly mean the whole team. When they correct a saved fact, forget the old one and remember the new one.
-- Only discuss Gate Guard work. Be warm and confident, never chatty.${company.canAct ? '' : `
+- Only discuss Gate Guard work${exec ? ', the industry and how to grow the business' : ''}. Be warm and confident, never chatty.${company.canAct ? '' : `
 - This user has read-only Lexi: you can look things up and answer, but you can't create or change anything. If they ask you to, say their admin can turn on full Lexi, and tell them where to do it themselves in Nexus.`}${voice ? `
 - VOICE MODE: the user is talking to you hands-free and your reply is read out loud. Answer in 1–3 short spoken sentences. No lists, no markdown, no headings, no URLs or IDs. Say numbers and dates the way a person would ("about twelve thousand dollars", "this Tuesday"). The records you found are on their screen as cards — say "I put them on your screen" instead of reading them all. If you prepared an action that needs their OK, say in one sentence what it is; the app asks them to say confirm or skip.` : ''}
+${exec ? `
+
+${exec}` : ''}
 
 ── The Brain ──
 ${brain}`
@@ -118,10 +123,12 @@ export async function POST(req: NextRequest) {
   const voice = body?.voice === true
   if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
 
-  const [ctx, brain] = await Promise.all([lexiCtx(user), loadBrain(user)])
+  const exec = isExec(user)
+  const [ctx, brain, execNow] = await Promise.all([lexiCtx(user), loadBrain(user), exec ? execContext(user).catch(() => '') : Promise.resolve('')])
   if (brain.error) console.error('[lexi/chat] brain load failed:', brain.error)
   const brainText = brainPrompt(brain)
   const toolCtx = { user, scope: ctx.scope }
+  const execText = exec ? `${EXEC_PROMPT}\n\n── Plans and track record ──\n${execNow}` : ''
 
   // ── Conversation + history ────────────────────────────────────────────────
   let conversationId: string | null = typeof body?.conversationId === 'string' && UUID.test(body.conversationId) ? body.conversationId : null
@@ -168,12 +175,12 @@ export async function POST(req: NextRequest) {
       const charts: LexiChart[] = []
       let pending: Record<string, unknown> | null = null
       try {
-        for (let round = 0; round < MAX_ROUNDS; round++) {
+        for (let round = 0; round < (exec ? EXEC_ROUNDS : MAX_ROUNDS); round++) {
           const s = anthropic.messages.stream({
             model: MODEL,
-            max_tokens: 1500,
-            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice, { corporate: user.isCorporate, canAct }), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
-            tools: cachedTools([...READ_TOOLS.filter(t => t.name !== 'quickbooks_money' || user.isCorporate), REPORT_TOOL, ...BRAIN_TOOLS, ...(pending || !canAct ? [] : ACTION_TOOLS)]),
+            max_tokens: exec && !voice ? 3000 : 1500,
+            system: [{ type: 'text', text: systemPrompt(user.name, user.role, brainText, voice, { corporate: user.isCorporate, canAct }, execText), cache_control: EPHEMERAL }] as unknown as Anthropic.TextBlockParam[],
+            tools: cachedTools([...READ_TOOLS.filter(t => t.name !== 'quickbooks_money' || user.isCorporate), REPORT_TOOL, ...BRAIN_TOOLS, ...(exec ? EXEC_TOOLS : []), ...(pending || !canAct ? [] : ACTION_TOOLS)]),
             messages: cachedMessages(messages),
           })
           s.on('text', (d: string) => { fullText += d; send({ type: 'text', delta: d }) })
@@ -199,6 +206,11 @@ export async function POST(req: NextRequest) {
               const out = await runReport(args, ctx)
               if (out.chart) { charts.push(out.chart); send({ type: 'chart', chart: out.chart }) }
               results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(out.data).slice(0, 14000) })
+            } else if (exec && EXEC_TOOL_NAMES.has(block.name)) {
+              send({ type: 'tool', name: block.name, label: EXEC_TOOL_LABEL[block.name] ?? 'Working on it' })
+              const out = await runExecTool(block.name, args, ctx)
+              if (out.saved) { const ev = { revertPayload: null, ...out.saved }; did.push(ev); send({ type: 'did', ...ev }) }
+              results.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(out.data).slice(0, 16000) })
             } else if (BRAIN_TOOL_NAMES.has(block.name)) {
               send({ type: 'tool', name: block.name, label: block.name === 'remember' ? 'Saving to the Brain' : 'Updating the Brain' })
               const r = await runBrainTool(block.name, args, user)

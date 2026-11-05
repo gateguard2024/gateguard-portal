@@ -25,6 +25,7 @@ import { T, FONT } from '@/components/nexus/tasks/shared'
 import { BrainPanel, RecordingPanel } from '@/components/nexus/lexi/LexiPanels'
 import { LexiChart, type LexiChartData } from '@/components/nexus/lexi/LexiChart'
 import { EveningCard, EveningReview } from '@/components/nexus/lexi/EveningReview'
+import { ExecPlans } from '@/components/nexus/lexi/ExecPlans'
 
 type Card = { kind: string; id: string; title: string; sub?: string; href?: string; tone?: 'red' | 'orange' | 'green' | 'blue' }
 type RevertPayload = { operation: 'delete' | 'update'; table: string; id: string; data?: Record<string, unknown> }
@@ -178,10 +179,19 @@ export function LexiSurface() {
   const [mailMsg, setMailMsg] = useState<string | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
+  const loadConvRef = useRef<(id: string) => Promise<void>>(async () => {})
   // The nightly text links to /?tab=lexi&review=evening — open the review straight away.
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search)
+      // Executive Lexi briefs link to /?tab=lexi&conv=<id> — open that chat so he can answer it.
+      const conv = p.get('conv')
+      if (conv && /^[0-9a-f-]{36}$/i.test(conv)) {
+        void loadConvRef.current(conv)
+        p.delete('conv'); const q2 = p.toString()
+        window.history.replaceState({}, '', q2 ? `/?${q2}` : '/')
+        return
+      }
       if (p.get('review') !== 'evening') return
       p.delete('review'); const qs = p.toString()
       window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
@@ -431,6 +441,7 @@ export function LexiSurface() {
     const d = r ? await r.json().catch(() => ({})) : {}
     setConvs(Array.isArray(d?.conversations) ? d.conversations : [])
   }
+  loadConvRef.current = (id: string) => loadConv(id)
   async function loadConv(id: string) {
     setHistOpen(false)
     const r = await fetch(`/api/lexi/conversations?id=${id}`).catch(() => null)
@@ -501,6 +512,8 @@ export function LexiSurface() {
       </button>)}
     </div>}
 
+    {/* Executive Lexi: plans waiting for the CEO's OK (renders nothing for everyone else). */}
+    {msgs.length === 0 && <ExecPlans onAsk={t => void send(t)} onOpenConv={id => void loadConv(id)} />}
     {msgs.length === 0 && brief && !brief.error && <section className="lx-notice" aria-label="I noticed">
       <div className="hd2">
         <b>I noticed{nudges && nudges.length ? ` · ${nudges.length}` : ''}</b>

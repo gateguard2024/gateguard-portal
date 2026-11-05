@@ -117,6 +117,18 @@ export default function NexusHomeClient() {
 
   const goTab = useCallback((id: NexusTabId) => { setActiveTab(id); setNavNonce(n => n + 1) }, [])
 
+  // Usage: which areas people open (Executive Lexi's "what's used / not used"). At most once per area per 10 minutes.
+  useEffect(() => {
+    if (!user) return
+    try {
+      const k = `gg_usage_${activeTab}`
+      const last = Number(sessionStorage.getItem(k) || 0)
+      if (Date.now() - last < 10 * 60 * 1000) return
+      sessionStorage.setItem(k, String(Date.now()))
+    } catch { /* private mode — still send */ }
+    void fetch('/api/usage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ area: activeTab }), keepalive: true }).catch(() => {})
+  }, [activeTab, user])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)

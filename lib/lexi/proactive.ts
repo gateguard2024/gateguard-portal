@@ -18,6 +18,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { PortalUser } from '@/lib/current-user'
 import { lexiCtx, runReadTool, type LexiCtx } from '@/lib/lexi/tools'
 import { sendEmail } from '@/lib/email-sender'
+import { execBriefHtml, isExec } from '@/lib/lexi/exec'
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 const FAST_MODEL = process.env.LEXI_FAST_MODEL || 'claude-haiku-4-5-20251001'
@@ -111,6 +112,8 @@ export async function buildBriefEmail(u: PortalUser): Promise<{ subject: string;
   const first = u.name.split(' ')[0] || 'there'
   const intro = await writeIntro(first, counts, nudges)
   const base = APP_URL()
+  // Executive Lexi: plans waiting for the CEO's OK + market news (empty for everyone else).
+  const execHtml = await execBriefHtml(u, base).catch(() => '')
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
   const stat = (l: string, v: number, warn = false, last = false) => `<td style="padding:10px 12px;border-right:${last ? '0' : '1px solid #EEF0F4'};text-align:left;vertical-align:top"><div style="font-size:12px;color:#6E6E73">${l}</div><div style="font-size:22px;font-weight:600;color:${warn && v ? '#D70015' : '#1D1D1F'}">${v}</div></td>`
   const rows = nudges.slice(0, 8).map(n => `<tr><td style="padding:12px 0;border-top:1px solid #EEF0F4">
@@ -129,6 +132,7 @@ export async function buildBriefEmail(u: PortalUser): Promise<{ subject: string;
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F8FA;border-radius:12px;margin-bottom:8px"><tr>
         ${stat('Late jobs', counts.lateJobs, true)}${stat('Need a tech', counts.needTech)}${stat('Jobs today', counts.todayJobs)}${stat('Emails owed', counts.emailsOwed)}${stat('Quiet deals', counts.stalledDeals, false, true)}
       </tr></table>
+      ${execHtml}
       ${rows ? `<div style="font-size:13px;font-weight:600;color:#6E6E73;margin:18px 0 0">I noticed</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>` : `<p style="font-size:14px;color:#6E6E73">Nothing needs you right now.</p>`}
       <div style="margin-top:20px"><a href="${esc(base)}/?tab=lexi" style="display:inline-block;background:#0071E3;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:12px">Open Lexi</a></div>
       <p style="margin:20px 0 0;font-size:12px;color:#8E8E93">You get this because you turned on the morning brief in Lexi. Turn it off there anytime.</p>
@@ -141,6 +145,8 @@ export async function buildBriefEmail(u: PortalUser): Promise<{ subject: string;
 /** Build + send. force=true sends even if one already went out today (the "send me one now" button). */
 export async function sendMorningBrief(u: PortalUser, opts: { force?: boolean } = {}): Promise<{ ok: boolean; skipped?: string; error?: string }> {
   if (!u.email) return { ok: false, error: 'No email address on this account.' }
+  // Executive Lexi gets the 8am / 12pm / 5pm briefs instead of this 6:30 email.
+  if (isExec(u) && !opts.force) return { ok: true, skipped: 'gets the Executive Lexi briefs' }
   const today = dayStr()
   if (!opts.force) {
     const s = await getLexiSettings(u.id)
