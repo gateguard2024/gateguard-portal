@@ -429,10 +429,13 @@ export function FinancePage({ onClose, myEmail }: { onClose: () => void; myEmail
   const loadAll = useCallback(async (refresh = false) => {
     setBusy(true)
     const qs = refresh ? '?refresh=1' : ''
-    const [a, b] = await Promise.all([getJson(`/api/finance/outlook${qs}`), getJson(`/api/finance/transactions${qs}`)])
-    setBusy(false)
-    if (a.status === 401 || b.status === 401) { relock(); return }
+    // One after the other, not together: QuickBooks throttles a company that asks for too much at once.
+    const a = await getJson(`/api/finance/outlook${qs}`)
+    if (a.status === 401) { setBusy(false); relock(); return }
     if (a.ok) { setO(a.data); setOErr(null) } else setOErr(a.data.error ?? 'Couldn’t build the outlook.')
+    const b = await getJson(`/api/finance/transactions${qs}`)
+    setBusy(false)
+    if (b.status === 401) { relock(); return }
     if (b.ok) { setBank(b.data); setBankErr(null) } else setBankErr(b.data.error ?? 'Couldn’t read bank transactions.')
     void loadStatus()
   }, [relock, loadStatus])
@@ -496,7 +499,7 @@ export function FinancePage({ onClose, myEmail }: { onClose: () => void; myEmail
           <div className="sy-stack">
             {/* Headline numbers */}
             <div className="sy-kpis" style={{ marginBottom: 0 }}>
-              <div className="sy-kpi"><div className="l">Cash today</div><div className="v">{money(o.cash_today)}</div><div className="s">{(o.cash_accounts ?? []).length} bank account{(o.cash_accounts ?? []).length === 1 ? '' : 's'}</div></div>
+              <div className="sy-kpi" title="The balance booked in QuickBooks. The bank's own balance (QuickBooks Banking › Bank balance) isn't available to other apps."><div className="l">Cash in QuickBooks</div><div className="v">{money(o.cash_today)}</div><div className="s">Book balance · {(o.cash_accounts ?? []).length} bank account{(o.cash_accounts ?? []).length === 1 ? '' : 's'}</div></div>
               <div className="sy-kpi"><div className="l">{o.floor > 0 && lowest && lowest.balance < o.floor && <span className="sy-dot" style={{ background: DOT.orange }} />}Lowest point · 13 weeks</div><div className="v" style={{ color: o.floor > 0 && o.lowest_week && o.lowest_week.balance < o.floor ? ORANGE : TEXT }}>{money(o.lowest_week?.balance)}</div><div className="s">{o.lowest_week?.label}</div></div>
               <div className="sy-kpi"><div className="l">Net cash flow · 13 weeks</div><div className="v" style={{ color: net13 < 0 ? ORANGE : TEXT }}>{acct(net13)}</div><div className="s">In {money((o.weeks as Any[]).reduce((s, w) => s + w.in, 0))} · out {money((o.weeks as Any[]).reduce((s, w) => s + w.out, 0))}</div></div>
               <div className="sy-kpi"><div className="l">Customers owe us</div><div className="v">{money(o.receivable_total)}</div><div className="s">{(o.left_out ?? []).length ? `${money((o.left_out as Any[]).reduce((s, x) => s + x.amount, 0))} is 60+ days late` : 'Open invoices'}</div></div>

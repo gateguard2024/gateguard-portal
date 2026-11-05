@@ -19,11 +19,7 @@ import { PortalsAdmin } from '@/components/nexus/systems/PropertyPortal'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
 const { ListChecks, UserCheck, Users, Key, Server, Tag, BookOpen, DollarSign, Search, FileText, Target, Globe, TrendingUp } = require('lucide-react') as any
 
-// ---- Tool windows still use the steel console look (landing is the light look) ----
-const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE_BG = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
-const TILE_STYLE = { background: TILE_BG, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
-const WELL = 'linear-gradient(180deg,#22303f,#1a2532)'
+// ---- Tool windows use the same light look as the Admin landing (.sy styles from systems/shared) ----
 
 type InternalPanel = 'quickbooks' | 'finance' |'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'portals' | 'provisioning' | 'pricing' | 'costs' | 'aria-caps' | 'playbooks' | 'training' | null
 
@@ -50,42 +46,33 @@ function ToolCard({ card, onClick }: { card: InternalCard; onClick: () => void }
 }
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
-  const displayLabel = muted ? `${label} — Coming Soon` : label
+  const displayLabel = muted ? `${label} — coming soon` : label
   return (
-    <button
-      type="button"
-      onClick={muted ? undefined : onClick}
-      disabled={muted}
-      className="w-full rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-      style={muted
-        ? { background: '#1a2532', border: '1px solid #1E293B', color: '#00A3FF' }
-        : { background: '#1E293B', border: '1px solid rgba(0,163,255,0.32)', color: '#cfe0f0' }}
-      aria-label={displayLabel}
-      title={muted ? 'Coming soon' : displayLabel}
-    >
+    <button type="button" className="sy-b line sm" onClick={muted ? undefined : onClick} disabled={muted} aria-label={displayLabel} title={muted ? 'Coming soon' : displayLabel}>
       {displayLabel}
     </button>
   )
 }
 
+// A tool window: the same light, centered window as Property portals, wide enough for tables.
 function InternalDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
   return (
-    <div className="fixed inset-0 z-[90] overflow-hidden bg-black/70 px-4 py-4 backdrop-blur-sm sm:py-6">
-      <div
-        className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-6xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[1fr_260px]"
-        style={FRAME_STYLE}
-      >
-        <div className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(180deg,#1d2a39,#141d28)', border: '1px solid #1E293B', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-          <button type="button" onClick={onClose} className="mb-3 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold" style={{ background: '#22303f', border: '1px solid rgba(0,163,255,0.28)', color: '#00A3FF' }}>← Back to Internal</button>
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#00A3FF' }}>Internal</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: '#eaf2fb' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{subtitle}</p>
-          <div className="mt-5">{children}</div>
+    <div className="sy-sheet-bg" style={{ zIndex: 90 }} onClick={onClose}>
+      <div className="sy-sheet" role="dialog" aria-modal="true" aria-label={title} style={{ ['--w' as string]: '1180px', height: 'min(100%, 92dvh)' }} onClick={e => e.stopPropagation()}>
+        <div className="hd" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+            <button type="button" className="sy-b line sm" style={{ marginBottom: 8 }} onClick={onClose}>‹ Admin</button>
+            <h2>{title}</h2>
+            <div className="s" style={{ maxWidth: 720, lineHeight: 1.45 }}>{subtitle}</div>
+          </div>
+          {actions && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{actions}</div>}
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: WELL, border: '1px solid #1E293B', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-          <div className="text-sm font-semibold" style={{ color: '#eaf2fb' }}>Actions</div>
-          <div className="mt-4 space-y-2">{actions}</div>
-        </aside>
+        <div className="bd" style={{ background: '#F5F5F7', flex: 1, alignContent: 'start' }}>{children}</div>
       </div>
     </div>
   )
@@ -93,9 +80,9 @@ function InternalDetailShell({ title, subtitle, onClose, children, actions }: { 
 
 function InternalInfoPanel({ copy }: { copy: string }) {
   return (
-    <div className="rounded-2xl p-4" style={{ background: WELL, border: '1px solid #1E293B' }}>
-      <div className="text-sm font-semibold" style={{ color: '#eaf2fb' }}>Internal board</div>
-      <p className="mt-2 text-xs leading-relaxed" style={{ color: '#c3d3e2' }}>{copy}</p>
+    <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 2px rgba(10,20,40,.06), 0 8px 24px rgba(10,20,40,.08)' }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1F' }}>Coming soon</div>
+      <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.45, color: '#6E6E73' }}>{copy}</p>
     </div>
   )
 }

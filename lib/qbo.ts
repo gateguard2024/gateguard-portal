@@ -207,20 +207,55 @@ export async function getQboAuth(): Promise<QboAuth> {
   }
 }
 
-/** Low-level authenticated call to the QBO REST API. `path` starts with '/'. */
+// Intuit throttles each company: about 10 requests in flight at once (and 500 a minute).
+// Pages like Finance ask for a dozen things together, so keep at most QBO_MAX_INFLIGHT
+// going per server instance and wait + retry when Intuit answers 429 ThrottleExceeded.
+// (A throttled request was not processed, so retrying a write is safe.)
+const QBO_MAX_INFLIGHT = 4
+const QBO_429_RETRIES = 4
+let qboInflight = 0
+const qboWaiting: (() => void)[] = []
+async function qboSlot(): Promise<void> {
+  if (qboInflight < QBO_MAX_INFLIGHT) { qboInflight++; return }
+  await new Promise<void>(resolve => qboWaiting.push(resolve))
+  qboInflight++
+}
+function qboRelease() {
+  qboInflight--
+  const next = qboWaiting.shift()
+  if (next) next()
+}
+function retryAfterMs(res: Response, attempt: number): number {
+  const ra = Number(res.headers.get('retry-after'))
+  if (isFinite(ra) && ra > 0) return Math.min(ra * 1000, 10_000)
+  return Math.min(1000 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400)
+}
+
+/** Low-level authenticated call to the QBO REST API. `path` starts with '/'. Throttled + retried on 429. */
 export async function qboApi(
   auth: Extract<QboAuth, { ok: true }>, path: string, init?: RequestInit
 ): Promise<Response> {
   const url = `${qboApiBase(auth.environment)}/v3/company/${auth.realmId}${path}`
-  return fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${auth.token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
+  for (let attempt = 0; ; attempt++) {
+    await qboSlot()
+    let res: Response
+    try {
+      res = await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(init?.headers ?? {}),
+        },
+      })
+    } finally {
+      qboRelease()
+    }
+    if (res.status !== 429 || attempt >= QBO_429_RETRIES) return res
+    await res.text().catch(() => '')
+    await new Promise(r => setTimeout(r, retryAfterMs(res, attempt)))
+  }
 }
 
 /** Run a QBO SQL-ish query (e.g. "select * from Customer maxresults 1000"). */
@@ -247,7 +282,7 @@ export function qboFaultMessage(body: unknown, status?: number): { message: stri
 
 /**
  * JSON call to QuickBooks with the current minor version. Never throws:
- * returns { ok, data } or { ok:false, error, code, status }. Retries once on 429/5xx.
+ * returns { ok, data } or { ok:false, error, code, status }. Retries once on 5xx (429s are handled in qboApi).
  */
 export async function qboJson<T = any>( // eslint-disable-line @typescript-eslint/no-explicit-any
   auth: Extract<QboAuth, { ok: true }>, path: string, init?: { method?: string; body?: unknown }
@@ -257,7 +292,7 @@ export async function qboJson<T = any>( // eslint-disable-line @typescript-eslin
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response
     try {
-      res = await qboApi(auth, url, { method: init?.method ?? 'GET', ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}), signal: AbortSignal.timeout(20000) })
+      res = await qboApi(auth, url, { method: init?.method ?? 'GET', ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}), signal: AbortSignal.timeout(45000) })
     } catch (e) {
       if (attempt === 0) continue
       return { ok: false, error: e instanceof Error ? e.message : 'Couldn’t reach QuickBooks', code: null, status: 0 }
@@ -266,7 +301,7 @@ export async function qboJson<T = any>( // eslint-disable-line @typescript-eslin
     let body: unknown = text
     try { body = text ? JSON.parse(text) : {} } catch { /* not JSON */ }
     if (res.ok) return { ok: true, data: body as T }
-    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await new Promise(r => setTimeout(r, 1200)); continue }
+    if (res.status >= 500 && attempt === 0) { await new Promise(r => setTimeout(r, 1200)); continue } // 429s are already waited out in qboApi
     const f = qboFaultMessage(body, res.status)
     return { ok: false, error: f.message, code: f.code, status: res.status }
   }

@@ -11,9 +11,11 @@
 import { useEffect, useState } from 'react'
 import { BLUE, DOT, LINE, MUTED, TEXT, TEXT2 } from '@/components/nexus/systems/shared'
 
+type LeadRow = { id: string; name: string; contact: string | null; source: string | null; stage: string | null; owner: string | null; created_at: string | null }
+type DealRow = { id: string; name: string; account: string | null; stage: string; amount: number; date: string | null }
 type Rollup = {
-  leads: { total: number; newThisWeek: number; trend: number[] }
-  opps: { open: number; openPipeline: number; wonThisMonth: number; wonThisMonthValue: number; funnel: { key: string; label: string; count: number; value: number }[] }
+  leads: { total: number; newThisWeek: number; trend: number[]; newThisMonth?: number; newLastMonth?: number; recent?: LeadRow[] }
+  opps: { open: number; openPipeline: number; wonThisMonth: number; wonThisMonthValue: number; wonLastMonth?: number; wonLastMonthValue?: number; funnel: { key: string; label: string; count: number; value: number }[]; openList?: DealRow[]; wins?: DealRow[] }
   jobs: { open: number; completedThisWeek: number; byStatus: { status: string; count: number }[] }
   team: { members: number; orgs: number }
   people: { name: string; org: string; leads: number; pipeline: number; jobs: number }[]
@@ -87,6 +89,8 @@ export function AdminReportConsole({ onOpenTab, onTeam }: { onOpenTab?: (tab: st
         </button>
       </div>
 
+      <SalesReport r={r} fin={fin} loading={loading} onOpenTab={onOpenTab} />
+
       <div className="sy-split">
         <div className="sy-card">
           <div className="hd">
@@ -117,6 +121,78 @@ export function AdminReportConsole({ onOpenTab, onTeam }: { onOpenTab?: (tab: st
             <div><h3>By team member</h3><div className="s">{r ? plural(r.people.length, 'person', 'people') : 'Who owns what'}</div></div>
           </div>
           <div className="bd"><PeopleTable people={r?.people ?? []} fin={fin} loading={loading} /></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Sales: leads, open deals and wins, this month vs last ───────────────────
+const shortDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '')
+function vsLast(now: number, last: number, asMoney = false) {
+  if (!last && !now) return 'Same as last month'
+  const fmt = (n: number) => (asMoney ? money(n) : String(n))
+  if (!last) return `Up from ${fmt(0)} last month`
+  const d = Math.round(((now - last) / last) * 100)
+  return `${d >= 0 ? 'Up' : 'Down'} ${Math.abs(d)}% · ${fmt(last)} last month`
+}
+// Open a deal's window in Sales (SalesSurface reads ?deal=), or the leads list (?hub=leads).
+function openInSales(onOpenTab: ((tab: string) => void) | undefined, param: string) {
+  const url = new URL(window.location.href)
+  const [k, v] = param.split('=')
+  url.searchParams.set(k, v)
+  window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`)
+  onOpenTab?.('opps')
+}
+function SalesReport({ r, fin, loading, onOpenTab }: { r: Rollup | null; fin: boolean; loading: boolean; onOpenTab?: (tab: string) => void }) {
+  const leads = r?.leads.recent ?? []
+  const open = r?.opps.openList ?? []
+  const wins = r?.opps.wins ?? []
+  const empty = (t: string) => <div style={{ fontSize: 13, color: MUTED, padding: '6px 0' }}>{loading ? 'Loading…' : t}</div>
+  return (
+    <div className="sy-card" style={{ marginBottom: 14 }}>
+      <div className="hd">
+        <div><h3>Sales</h3><div className="s">Leads, open deals and closed deals across your companies</div></div>
+        <button type="button" className="sy-b blue sm" onClick={() => onOpenTab?.('opps')}>Open Sales</button>
+      </div>
+      <div className="bd">
+        <div className="ad-sstats">
+          <div><div className="k">New leads this month</div><div className="n">{r ? r.leads.newThisMonth ?? 0 : '…'}</div><div className="m">{r ? vsLast(r.leads.newThisMonth ?? 0, r.leads.newLastMonth ?? 0) : ''}</div></div>
+          <div><div className="k">Open deals</div><div className="n">{r ? r.opps.open : '…'}</div><div className="m">{r ? (fin ? `${money(r.opps.openPipeline)} in pipeline` : 'In the pipeline') : ''}</div></div>
+          <div><div className="k">Closed (won) this month</div><div className="n">{r ? r.opps.wonThisMonth : '…'}</div><div className="m">{r ? vsLast(r.opps.wonThisMonth, r.opps.wonLastMonth ?? 0) : ''}</div></div>
+          {fin && <div><div className="k">Won value this month</div><div className="n">{r ? money(r.opps.wonThisMonthValue) : '…'}</div><div className="m">{r ? vsLast(r.opps.wonThisMonthValue, r.opps.wonLastMonthValue ?? 0, true) : ''}</div></div>}
+        </div>
+        <div className="ad-slists">
+          <div>
+            <div className="ad-sh"><span className="sy-dot" style={{ background: DOT.blue }} />Newest leads</div>
+            {leads.length === 0 ? empty('No open leads.') : leads.map(l => (
+              <button key={l.id} type="button" className="ad-srow" onClick={() => openInSales(onOpenTab, 'hub=leads')}>
+                <span className="t">{l.name}</span>
+                <span className="m">{[l.contact, l.source, l.owner].filter(Boolean).join(' · ') || 'Unassigned'}</span>
+                <span className="r">{shortDay(l.created_at)}</span>
+              </button>
+            ))}
+          </div>
+          <div>
+            <div className="ad-sh"><span className="sy-dot" style={{ background: DOT.orange }} />{fin ? 'Biggest open deals' : 'Open deals'}</div>
+            {open.length === 0 ? empty('No open deals.') : open.map(d => (
+              <button key={d.id} type="button" className="ad-srow" onClick={() => openInSales(onOpenTab, `deal=${d.id}`)}>
+                <span className="t">{d.name}</span>
+                <span className="m">{[d.stage, d.account && d.account !== d.name ? d.account : null].filter(Boolean).join(' · ')}</span>
+                <span className="r">{fin ? money(d.amount) : shortDay(d.date)}</span>
+              </button>
+            ))}
+          </div>
+          <div>
+            <div className="ad-sh"><span className="sy-dot" style={{ background: DOT.green }} />Closed deals (won)</div>
+            {wins.length === 0 ? empty('No closed deals yet.') : wins.map(d => (
+              <button key={d.id} type="button" className="ad-srow" onClick={() => openInSales(onOpenTab, `deal=${d.id}`)}>
+                <span className="t">{d.name}</span>
+                <span className="m">{`Won ${shortDay(d.date)}`}{d.account && d.account !== d.name ? ` · ${d.account}` : ''}</span>
+                <span className="r">{fin ? money(d.amount) : ''}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -245,6 +321,19 @@ function initials(name: string) { return name.split(/[\s@.]+/).filter(Boolean).s
 
 /** Extra CSS for the report band + admin tool tiles (on top of systems/shared CSS). */
 export const ADMIN_CSS = `
+.ad-sstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.ad-sstats>div{background:#F7F8FA;border-radius:10px;padding:12px 14px}
+.ad-sstats .k{font-size:12.5px;color:${MUTED}}
+.ad-sstats .n{font-size:24px;font-weight:600;letter-spacing:-.02em;color:${TEXT};margin-top:2px;font-variant-numeric:tabular-nums}
+.ad-sstats .m{font-size:12px;color:${MUTED};margin-top:2px}
+.ad-slists{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.ad-sh{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:${MUTED};padding-bottom:6px;border-bottom:1px solid ${LINE}}
+.ad-srow{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid ${LINE};padding:9px 2px;cursor:pointer;font:inherit;min-height:44px}
+.ad-srow:hover{background:#F7F8FA}
+.ad-srow .t{font-size:13.5px;font-weight:600;color:${TEXT};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ad-srow .m{grid-column:1;font-size:12px;color:${MUTED};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ad-srow .r{grid-column:2;grid-row:1 / span 2;align-self:center;font-size:13px;font-weight:600;color:${TEXT2};font-variant-numeric:tabular-nums}
+@media (max-width:900px){.ad-slists{grid-template-columns:1fr}}
 .ad-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
 .sy-kpi{transition:box-shadow .15s}
 button.sy-kpi:hover{box-shadow:0 0 0 1px rgba(0,113,227,.35),0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08)}

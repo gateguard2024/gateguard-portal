@@ -162,7 +162,10 @@ export function SalesSurface() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const hub = params.get('hub'); if (hub === 'leads' || hub === 'opps') { if (hub === 'leads') setLeadsHub(true); else setOppsHub(true); params.delete('hub'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/') }
-  }, [])
+    // ?deal=<id> (e.g. from the Admin Sales report) opens that deal's window.
+    const deal = params.get('deal')
+    if (deal && /^[0-9a-f-]{36}$/i.test(deal)) { params.delete('deal'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/'); void openLifecycle(deal) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const grouped = opp.grouped ?? {}
   const stageRecords = (k: string): OppRow[] => grouped[k]?.records ?? []

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { addDaysISO, etDateOf, etMidnight, etTimeOf, todayET } from '@/lib/tz'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,22 +34,6 @@ type DayEvent = {
   reason?: string | null
 }
 
-function ymd(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function startOfDayIso(date: Date): string {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
-}
-
-function endOfDayIso(date: Date): string {
-  const d = new Date(date)
-  d.setHours(23, 59, 59, 999)
-  return d.toISOString()
-}
-
 function scorePriority(priority?: string | null): number {
   const value = String(priority ?? '').toLowerCase()
   if (value === 'urgent') return 25
@@ -76,19 +61,19 @@ async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>,
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const now = new Date()
-    const today = ymd(now)
-    const weekEnd = new Date(now)
-    weekEnd.setDate(weekEnd.getDate() + 7)
-    const weekEndDate = ymd(weekEnd)
+    // "Today" is the Eastern-time day (the server runs in UTC — after 7–8pm ET that used to be tomorrow).
+    const today = todayET()
+    const weekEndDate = addDaysISO(today, 7)
+    const dayStart = etMidnight(today).toISOString()
+    const dayEnd = etMidnight(addDaysISO(today, 1)).toISOString()
 
     const [calendarRows, overdueTodos, todayTodos, todayWos, todayCrm, todayTracker, settingsRow] = await Promise.all([
       safe(
         supabase
           .from('calendar_events')
           .select('id, title, start_time, end_time, status, org_id')
-          .gte('start_time', startOfDayIso(now))
-          .lte('start_time', endOfDayIso(now))
+          .gte('start_time', dayStart)
+          .lt('start_time', dayEnd)
           .neq('status', 'cancelled')
           .order('start_time', { ascending: true }),
         [] as Array<Record<string, any>>
@@ -99,6 +84,7 @@ export async function GET() {
           .select('id, title, due_date, status, priority, created_by, assigned_to')
           .lt('due_date', today)
           .in('status', ['open', 'in_progress'])
+          .or(`created_by.eq.${user.id},assigned_to.eq.${user.id}`)
           .limit(20),
         [] as Array<Record<string, any>>
       ),
@@ -107,7 +93,8 @@ export async function GET() {
           .from('todos')
           .select('id, title, due_date, status, priority, created_by, assigned_to')
           .eq('due_date', today)
-          .in('status', ['open', 'in_progress']),
+          .in('status', ['open', 'in_progress'])
+          .or(`created_by.eq.${user.id},assigned_to.eq.${user.id}`),
         [] as Array<Record<string, any>>
       ),
       safe(
@@ -115,15 +102,15 @@ export async function GET() {
           .from('work_orders')
           .select('id, title, scheduled_date, scheduled_time, status, priority, org_id')
           .eq('scheduled_date', today)
-          .in('status', ['open', 'assigned', 'in_progress']),
+          .in('status', ['open', 'assigned', 'scheduled', 'in_progress']),
         [] as Array<Record<string, any>>
       ),
       safe(
         supabase
           .from('crm_activities')
           .select('id, subject, due_at, completed_at, opportunity_id, dealer_org_id')
-          .gte('due_at', startOfDayIso(now))
-          .lte('due_at', endOfDayIso(now))
+          .gte('due_at', dayStart)
+          .lt('due_at', dayEnd)
           .is('completed_at', null),
         [] as Array<Record<string, any>>
       ),
@@ -152,8 +139,9 @@ export async function GET() {
       ? todayTracker
       : todayTracker.filter(row => row.owner_user_id === user.id || row.org_id === user.org_id)
 
-    // Multi-tenant scope: todos by owner, CRM follow-ups by dealer org (service-role bypasses RLS).
-    const scopeTodo = (rows: Array<Record<string, any>>) => user.isCorporate ? rows : rows.filter(r => r.created_by === user.id || r.assigned_to === user.id)
+    // To-dos are personal for everyone — corporate included (it used to show the whole company's
+    // overdue to-dos here). CRM follow-ups by dealer org (service-role bypasses RLS).
+    const scopeTodo = (rows: Array<Record<string, any>>) => rows.filter(r => r.created_by === user.id || r.assigned_to === user.id)
     const scopedOverdue = scopeTodo(overdueTodos)
     const scopedTodayTodos = scopeTodo(todayTodos)
     const scopedCrm = user.isCorporate ? todayCrm : todayCrm.filter(r => r.dealer_org_id === user.org_id)
@@ -164,8 +152,8 @@ export async function GET() {
         type: 'nexus_event',
         title: row.title ?? 'Nexus Event',
         starts_at: row.start_time ?? null,
-        date: row.start_time ? String(row.start_time).split('T')[0] : today,
-        time: row.start_time ? String(row.start_time).split('T')[1]?.slice(0, 5) : null,
+        date: row.start_time ? etDateOf(row.start_time) : today,
+        time: row.start_time ? etTimeOf(row.start_time) : null,
       })),
       ...scopedWos.map(row => ({
         id: String(row.id),
@@ -180,21 +168,12 @@ export async function GET() {
         type: 'crm_activity',
         title: row.subject ?? 'CRM Follow-Up',
         starts_at: row.due_at ?? null,
-        date: row.due_at ? String(row.due_at).split('T')[0] : today,
-        time: row.due_at ? String(row.due_at).split('T')[1]?.slice(0, 5) : null,
+        date: row.due_at ? etDateOf(row.due_at) : today,
+        time: row.due_at ? etTimeOf(row.due_at) : null,
         link: row.opportunity_id ? `/crm/opportunities/${row.opportunity_id}` : '/crm',
       })),
-      // Overdue to-dos roll forward into today's schedule and keep appearing until done.
-      ...scopedOverdue.map(row => ({
-        id: `todo-${row.id}`,
-        type: 'todo',
-        title: row.title ?? 'Overdue To-Do',
-        date: row.due_date ?? today,
-        time: null,
-        overdue: true,
-        reason: 'Overdue',
-        link: '/todos',
-      })),
+      // Overdue to-dos are NOT on today's schedule (the calendar doesn't show them either) —
+      // they stay in Top 10 and the Tasks card ("Now").
     ].sort((a, b) => `${a.date ?? ''}T${a.time ?? '00:00'}`.localeCompare(`${b.date ?? ''}T${b.time ?? '00:00'}`))
 
     const topPool: TopItem[] = [
@@ -212,7 +191,7 @@ export async function GET() {
       }),
       ...scopedCrm.map(row => {
         const score = 70
-        return { id: String(row.id), type: 'crm_activity' as const, title: row.subject ?? 'CRM follow-up', reason: 'Follow-up due today', urgency: urgency(score), score, date: row.due_at ? String(row.due_at).split('T')[0] : null, time: row.due_at ? String(row.due_at).split('T')[1]?.slice(0, 5) : null, link: row.opportunity_id ? `/crm/opportunities/${row.opportunity_id}` : '/crm' }
+        return { id: String(row.id), type: 'crm_activity' as const, title: row.subject ?? 'CRM follow-up', reason: 'Follow-up due today', urgency: urgency(score), score, date: row.due_at ? etDateOf(row.due_at) : null, time: row.due_at ? etTimeOf(row.due_at) : null, link: row.opportunity_id ? `/crm/opportunities/${row.opportunity_id}` : '/crm' }
       }),
       ...scopedTracker.map(row => {
         const score = 65 + scorePriority(row.priority)
