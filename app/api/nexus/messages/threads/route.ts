@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { prettyPhone } from '@/lib/ringcentral'
 import { FOLDERS, LIST_COLS, OLD_COLS, applyFolder, term, type Folder } from '@/lib/mail-folders'
 
 export const dynamic = 'force-dynamic'
@@ -91,11 +92,12 @@ export async function GET(req: NextRequest) {
     const last = lastByThread.get(t.id)
     const lastDir = t.last_direction ?? last?.direction ?? null
     const lastFromSelf = lastDir === 'outbound'
-    const name = (!lastFromSelf && t.last_from_name) || other.name || (!lastFromSelf && t.last_from_address) || other.address || 'Unknown'
+    const nameRaw = (!lastFromSelf && t.last_from_name) || other.name || (!lastFromSelf && t.last_from_address) || other.address || 'Unknown'
+    const name = /^\+\d{8,15}$/.test(nameRaw) ? prettyPhone(nameRaw) : nameRaw
     const snoozedActive = !!t.snoozed_until && t.snoozed_until > nowIso
     return {
       id: t.id,
-      channel: uiChannel(last?.source_type),
+      channel: String(t.external_thread_id ?? '').startsWith('rc:') ? 'text' : uiChannel(last?.source_type),
       contact_name: name,
       contact_address: other.address || t.last_from_address || null,
       participants: parts,

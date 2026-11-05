@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/current-user'
 import { sendViaSmtp, sendViaGmail, type OutboundEmail, type MailAttachment } from '@/lib/mail-send'
 import { recomputeThread, writeSafe, parseAddressList } from '@/lib/mail-fetch'
 import { signatureParts } from '@/lib/mail-signature'
+import { isRingCentral, rcSendText, e164, prettyPhone } from '@/lib/ringcentral'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,6 +41,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { channel_id, text, html, thread_id, linked_wo_id, linked_quote_id } = body ?? {}
+  if (body?.channel_id && (body?.kind === 'text' || /^[+\d(][\d\s().-]{6,}$/.test(String(body?.to ?? '').trim()))) {
+    const r = await sendText(user, body)
+    return NextResponse.json(r.body, { status: r.status })
+  }
   const to = addrList(body?.to)
   const cc = addrList(body?.cc)
   const bcc = addrList(body?.bcc)
@@ -203,4 +208,49 @@ export async function POST(req: NextRequest) {
     )
   }
   return NextResponse.json({ ok: true, thread_id: threadId, message_id: msg.id, external_id: result.externalId })
+}
+
+// ── Texts (RingCentral) ───────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function sendText(user: any, body: any): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { data: channel } = await supabase.from('message_channels').select('*').eq('id', body.channel_id).eq('user_id', user.id).maybeSingle()
+  if (!channel || !isRingCentral(channel)) return { status: 404, body: { error: 'Connect RingCentral in Mail settings to send texts.' } }
+  const text = String(body?.text ?? '').trim()
+  if (!text) return { status: 400, body: { error: 'Write something first.' } }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let thread: any = null
+  if (body.thread_id) {
+    const { data: t } = await supabase.from('message_threads').select('*').eq('id', body.thread_id).maybeSingle()
+    if (!t || t.user_id !== user.id) return { status: 404, body: { error: 'Conversation not found.' } }
+    thread = t
+  }
+  const to = e164(String(body.to ?? '')) ?? e164(String(thread?.external_thread_id ?? '').replace(/^rc:/, ''))
+  if (!to) return { status: 400, body: { error: 'That phone number doesn’t look right.' } }
+  const sent = await rcSendText(channel, to, text)
+  if (!sent.ok) return { status: 502, body: { ok: false, error: sent.error } }
+
+  const key = `rc:${to}`
+  let threadId: string | null = thread?.external_thread_id === key ? thread.id : null
+  if (!threadId) {
+    const { data: t } = await supabase.from('message_threads').select('id').eq('channel_id', channel.id).eq('external_thread_id', key).maybeSingle()
+    threadId = t?.id ?? null
+  }
+  if (!threadId) {
+    const { data: t, error } = await writeSafe((row) => supabase.from('message_threads').insert(row).select('id').single(), {
+      user_id: user.id, org_id: channel.org_id ?? user.org_id, channel_id: channel.id, external_thread_id: key,
+      subject: `Texts & calls · ${prettyPhone(to)}`, participants: [{ name: '', address: to }], last_message_at: new Date().toISOString(),
+    })
+    if (error) return { status: 200, body: { ok: true, warning: error.message } }
+    threadId = t.id
+  }
+  const at = sent.created ?? new Date().toISOString()
+  const { error } = await writeSafe((row) => supabase.from('messages').insert(row), {
+    thread_id: threadId, channel_id: channel.id, external_message_id: `rc:msg:${sent.id}`,
+    direction: 'outbound', source_type: 'sms', from_address: sent.from ?? 'me', from_name: user.name,
+    to_addresses: [{ name: '', address: to }], body: text, snippet: text.slice(0, 240), labels: ['INBOX', 'SENT'],
+    status: 'sent', sent_at: at, read_at: at, created_at: at,
+  })
+  if (error && error.code !== '23505') return { status: 200, body: { ok: true, thread_id: threadId, warning: error.message } }
+  await recomputeThread(supabase, threadId!)
+  return { status: 200, body: { ok: true, thread_id: threadId } }
 }

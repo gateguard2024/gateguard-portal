@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { fetchGmailInbox, canModifyGmail, backfillGmailHtml } from '@/lib/mail-fetch'
+import { isRingCentral, syncRingCentral } from '@/lib/ringcentral'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -14,8 +15,15 @@ const supabase = createClient(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function accountStatus(ch: any) {
+  if (isRingCentral(ch)) {
+    return {
+      id: ch.id, provider: 'ringcentral', email: ch.display_name, last_synced_at: ch.last_synced_at ?? null,
+      last_error: ch.last_error ?? null, can_modify: true, live: !!ch.config?.rc_msg_sync, sms_from: ch.config?.sms_from ?? null,
+    }
+  }
   return {
     id: ch.id,
+    provider: 'gmail',
     email: ch.config?.from_address ?? ch.display_name,
     last_synced_at: ch.last_synced_at ?? null,
     last_error: ch.last_error ?? null,
@@ -26,13 +34,16 @@ function accountStatus(ch: any) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const usable = (c: any) => (c.channel_type === 'gmail' && !!c.oauth_refresh_token) || isRingCentral(c)
+
 // GET /api/nexus/messages/sync → the signed-in user's Gmail accounts + health.
 export async function GET() {
   const user = await getCurrentUser()
   const { data, error } = await supabase.from('message_channels').select('*')
-    .eq('user_id', user.id).eq('channel_type', 'gmail').eq('is_active', true)
+    .eq('user_id', user.id).in('channel_type', ['gmail', 'phone']).eq('is_active', true)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ accounts: (data ?? []).filter((c) => c.oauth_refresh_token).map(accountStatus) })
+  return NextResponse.json({ accounts: (data ?? []).filter(usable).map(accountStatus) })
 }
 
 // POST /api/nexus/messages/sync   { channel_id?, query?, full?, force? }
@@ -50,11 +61,11 @@ export async function POST(req: NextRequest) {
   const query: string | undefined = typeof body?.query === 'string' && body.query.trim() ? body.query.trim().slice(0, 300) : undefined
 
   let q = supabase.from('message_channels').select('*')
-    .eq('user_id', user.id).eq('channel_type', 'gmail').eq('is_active', true)
+    .eq('user_id', user.id).in('channel_type', ['gmail', 'phone']).eq('is_active', true)
   if (channelId) q = q.eq('id', channelId)
   const { data: channels, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const live = (channels ?? []).filter((c) => c.oauth_refresh_token)
+  const live = (channels ?? []).filter(usable).filter((c) => !query || c.channel_type === 'gmail')
   if (!live.length) return NextResponse.json({ ok: true, channels: 0, fetched: 0, accounts: [] })
 
   let fetched = 0, updated = 0
@@ -63,6 +74,14 @@ export async function POST(req: NextRequest) {
   const threadIds: string[] = []
   for (const ch of live) {
     const recent = ch.last_synced_at && Date.now() - Date.parse(ch.last_synced_at) < 20_000
+    if (isRingCentral(ch)) {
+      if (recent && !body?.force) continue
+      const rr = await syncRingCentral(supabase, ch)
+      fetched += rr.fetched; updated += rr.updated
+      if (rr.needs_reconnect) needsReconnect = true
+      if (rr.error && !firstError) firstError = `RingCentral: ${rr.error}`
+      continue
+    }
     if (recent && !query && !body?.full && !body?.force && ch.gmail_history_id) continue
     // A first (full) sync from the browser stays small so the screen isn't kept waiting;
     // the minute cron fills in the rest.
@@ -79,12 +98,12 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: after } = await supabase.from('message_channels').select('*')
-    .eq('user_id', user.id).eq('channel_type', 'gmail').eq('is_active', true)
+    .eq('user_id', user.id).in('channel_type', ['gmail', 'phone']).eq('is_active', true)
   return NextResponse.json(
     {
       ok: !firstError, channels: live.length, fetched, updated, error: firstError,
       needs_reconnect: needsReconnect, thread_ids: query ? threadIds : undefined,
-      accounts: (after ?? []).filter((c) => c.oauth_refresh_token).map(accountStatus),
+      accounts: (after ?? []).filter(usable).map(accountStatus),
     },
     { status: firstError && !fetched ? 502 : 200 },
   )

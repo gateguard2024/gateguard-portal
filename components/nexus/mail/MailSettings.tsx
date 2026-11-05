@@ -98,6 +98,8 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
           )}
         </div>
 
+        <RingCentralCard onChanged={onChanged} />
+
         <SignatureEditor initial={sig} loaded={sigLoaded} onSave={async (html) => {
           const r = await api('/api/nexus/messages/signature', { method: 'PUT', json: { signature: html } })
           setSigMsg(r.ok ? 'Saved' : (r.data.error ?? 'Could not save'))
@@ -189,6 +191,76 @@ function SignatureEditor({ initial, loaded, onSave, msg }: { initial: string; lo
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#fff', background: M.blue, border: 0, borderRadius: 8, padding: '7px 13px', cursor: 'pointer', fontFamily: M.font }}>{busy ? 'Saving…' : 'Save signature'}</button>
         {msg && <span style={{ fontSize: 12.5, color: M.ink3 }}>{msg}</span>}
       </div>
+    </div>
+  )
+}
+
+// RingCentral: texts, calls and voicemail from your RingCentral number, in this inbox.
+type RcState = { app_ready: boolean; connected: boolean; channel: null | { id: string; name: string | null; extension: string | null; numbers: { number: string; sms: boolean; label: string }[]; sms_from: string | null; last_synced_at: string | null; last_error: string | null } }
+function RingCentralCard({ onChanged }: { onChanged: () => void }) {
+  const [st, setSt] = useState<RcState | null>(null)
+  const [jwt, setJwt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+  const load = async () => { const r = await api<RcState>('/api/nexus/messages/ringcentral'); if (r.ok) setSt(r.data) }
+  useEffect(() => { void load() }, [])
+  const connect = async () => {
+    setBusy(true); setMsg(null)
+    const r = await api<{ ok?: boolean; name?: string; fetched?: number; warning?: string | null }>('/api/nexus/messages/ringcentral', { method: 'POST', json: { jwt } })
+    setBusy(false)
+    if (!r.ok) { setMsg(r.data.error ?? 'Could not connect.'); return }
+    setJwt(''); setOpen(false)
+    setMsg(`Connected as ${r.data.name}. ${r.data.fetched ?? 0} texts and calls brought in.${r.data.warning ? ` (${r.data.warning})` : ''}`)
+    await load(); onChanged()
+  }
+  const pretty = (n: string) => { const m = n.match(/^\+1(\d{3})(\d{3})(\d{4})$/); return m ? `(${m[1]}) ${m[2]}-${m[3]}` : n }
+  const ch = st?.channel
+  const box: React.CSSProperties = { background: '#fff', border: `1px solid ${M.line}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  return (
+    <div style={box}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: M.ink }}>RingCentral — texts &amp; calls</div>
+        {ch && <button type="button" onClick={() => setOpen((o) => !o)} style={{ fontSize: 12.5, color: M.blue, background: 'none', border: 0, cursor: 'pointer' }}>{open ? 'Cancel' : 'Replace login'}</button>}
+      </div>
+      {!st ? <Loader2 size={16} className="animate-spin" style={{ color: M.ink3 }} /> : ch ? (
+        <>
+          <div style={{ fontSize: 13, color: ch.last_error ? M.red : M.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {ch.last_error ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} style={{ color: M.green }} />}
+            {ch.last_error ?? `${ch.name ?? 'Connected'}${ch.extension ? ` · ext ${ch.extension}` : ''} · synced ${ago(ch.last_synced_at)}`}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: M.ink2, flexWrap: 'wrap' }}>
+            Text from
+            <select value={ch.sms_from ?? ''} onChange={async (e) => { const r = await api('/api/nexus/messages/ringcentral', { method: 'POST', json: { sms_from: e.target.value } }); setMsg(r.ok ? 'Saved.' : (r.data.error ?? 'Could not save')); await load(); onChanged() }}
+              style={{ fontSize: 13, padding: '6px 8px', borderRadius: 8, border: `1px solid ${M.lineStrong}`, fontFamily: M.font }}>
+              {!ch.sms_from && <option value="">Pick a number…</option>}
+              {ch.numbers.filter((n) => n.sms).map((n) => <option key={n.number} value={n.number}>{pretty(n.number)}{n.label ? ` — ${n.label}` : ''}</option>)}
+            </select>
+            {ch.numbers.filter((n) => n.sms).length === 0 && <span style={{ color: M.orange }}>None of your RingCentral numbers can send texts yet (ask RingCentral to turn on SMS / register the number for texting).</span>}
+          </label>
+        </>
+      ) : null}
+      {st && (!ch || open) && (
+        st.app_ready ? (
+          <div style={{ marginTop: ch ? 12 : 4 }}>
+            <ol style={{ margin: '0 0 10px 18px', padding: 0, fontSize: 12.5, color: M.ink2, lineHeight: 1.6 }}>
+              <li>Go to <a href="https://developers.ringcentral.com/console" target="_blank" rel="noreferrer" style={{ color: M.blue }}>developers.ringcentral.com</a> and sign in with your RingCentral login.</li>
+              <li>Open <b>Credentials</b> → <b>Create JWT</b>, allow it for the Gate Guard Nexus app, and copy it.</li>
+              <li>Paste it here.</li>
+            </ol>
+            <textarea value={jwt} onChange={(e) => setJwt(e.target.value)} rows={3} placeholder="eyJ…" aria-label="RingCentral JWT"
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: 12.5, padding: '8px 10px', borderRadius: 8, border: `1px solid ${M.lineStrong}`, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
+            <button type="button" onClick={() => void connect()} disabled={busy || !jwt.trim()} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#fff', background: M.blue, border: 0, borderRadius: 8, padding: '7px 13px', cursor: 'pointer', opacity: busy || !jwt.trim() ? 0.6 : 1, fontFamily: M.font }}>
+              {busy ? <Loader2 size={13} className="animate-spin" /> : null} Connect RingCentral
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: M.ink2, lineHeight: 1.6, marginTop: 4 }}>
+            Almost ready — Gate Guard’s RingCentral app needs to be added once. In Vercel set <code>RINGCENTRAL_CLIENT_ID</code> and <code>RINGCENTRAL_CLIENT_SECRET</code> (and <code>CREDENTIALS_ENC_KEY</code> if it isn’t set), then come back here.
+          </div>
+        )
+      )}
+      {msg && <div role="status" style={{ fontSize: 12.5, color: M.ink2, marginTop: 8 }}>{msg}</div>}
     </div>
   )
 }

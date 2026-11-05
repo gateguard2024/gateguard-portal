@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Building2, Wrench, FileText, Search, Loader2, ExternalLink } from 'lucide-react'
 import { M, RECORD_BADGE, api, initials, tintFor, type ThreadRow } from './mailShared'
+import { prettyPhone } from './MailText'
 
 type Ctx = {
   people: { name: string | null; address: string }[]
@@ -86,7 +87,9 @@ export default function MailContext({ row, onLinked, onClose }: { row: ThreadRow
         {onClose && <button type="button" aria-label="Hide details" onClick={onClose} style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, border: 0, background: 'none', color: M.ink3, cursor: 'pointer', borderRadius: 6 }}><X size={14} /></button>}
         <span aria-hidden style={{ width: 44, height: 44, borderRadius: 44, background: `${tintFor(who)}1A`, color: tintFor(who), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 600 }}>{initials(who)}</span>
         <div style={{ fontSize: 15, fontWeight: 600, color: M.ink, marginTop: 8 }}>{who}</div>
-        {email && <a href={`mailto:${email}`} style={{ fontSize: 12.5, color: M.ink3, textDecoration: 'none', wordBreak: 'break-all' }}>{email}</a>}
+        {email && (/^\+\d{8,15}$/.test(email)
+          ? <a href={`tel:${email}`} style={{ fontSize: 12.5, color: M.ink3, textDecoration: 'none' }}>{prettyPhone(email)}</a>
+          : <a href={`mailto:${email}`} style={{ fontSize: 12.5, color: M.ink3, textDecoration: 'none', wordBreak: 'break-all' }}>{email}</a>)}
         {ctx && ctx.people.length > 1 && <div style={{ fontSize: 12, color: M.ink3, marginTop: 6 }}>+ {ctx.people.length - 1} more on this email</div>}
         {ctx && ctx.other_threads > 0 && <div style={{ fontSize: 12, color: M.ink3, marginTop: 4 }}>{ctx.other_threads} other conversation{ctx.other_threads === 1 ? '' : 's'} with them</div>}
       </div>

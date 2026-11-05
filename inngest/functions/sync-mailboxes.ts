@@ -13,6 +13,7 @@
 import { inngest } from '../client'
 import { createClient } from '@supabase/supabase-js'
 import { fetchGmailInbox } from '@/lib/mail-fetch'
+import { isRingCentral, syncRingCentral } from '@/lib/ringcentral'
 
 export const syncMailboxes = inngest.createFunction(
   {
@@ -35,6 +36,12 @@ export const syncMailboxes = inngest.createFunction(
       const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       let query = supabase.from('message_channels').select('id, last_synced_at, gmail_history_id')
         .eq('channel_type', 'gmail').eq('is_active', true).not('oauth_refresh_token', 'is', null)
+      // RingCentral texts + calls ride the same minute.
+      let rcq = supabase.from('message_channels').select('id, config').eq('channel_type', 'phone').eq('is_active', true)
+      if (channelId) rcq = rcq.eq('id', channelId)
+      else if (userId) rcq = rcq.eq('user_id', userId)
+      const { data: rcRows } = await rcq
+      const rcIds = (rcRows ?? []).filter((c: { config?: { provider?: string } }) => c.config?.provider === 'ringcentral').map((c: { id: string }) => c.id)
       if (channelId) query = query.eq('id', channelId)
       else if (userId) query = query.eq('user_id', userId)
       let { data, error } = await query
@@ -49,7 +56,7 @@ export const syncMailboxes = inngest.createFunction(
         error = r2.error
       }
       if (error) throw new Error(error.message)
-      return (data ?? []).map((c: { id: string }) => c.id)
+      return [...(data ?? []).map((c: { id: string }) => c.id), ...rcIds]
     })
 
     const results: Record<string, unknown> = {}
@@ -60,6 +67,11 @@ export const syncMailboxes = inngest.createFunction(
         const { data: ch, error } = await supabase.from('message_channels').select('*').eq('id', id).maybeSingle()
         if (error || !ch) return { error: error?.message ?? 'gone' }
         // The browser just synced it — skip this minute.
+        if (isRingCentral(ch)) {
+          if (event?.name !== 'messages/mailbox.sync' && ch.last_synced_at && Date.now() - Date.parse(ch.last_synced_at) < 30_000) return { skipped: true }
+          const rr = await syncRingCentral(supabase, ch)
+          return { fetched: rr.fetched, updated: rr.updated, error: rr.error ?? null, provider: 'ringcentral' }
+        }
         if (event?.name !== 'messages/mailbox.sync' && ch.gmail_history_id && ch.last_synced_at && Date.now() - Date.parse(ch.last_synced_at) < 30_000) return { skipped: true }
         const r = await fetchGmailInbox(supabase, ch)
         return { fetched: r.fetched, updated: r.updated ?? 0, removed: r.removed ?? 0, mode: r.mode, error: r.error ?? null }

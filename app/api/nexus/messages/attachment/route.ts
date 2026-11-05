@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { gmailAttachment } from '@/lib/mail-fetch'
+import { isRingCentral, rcFile } from '@/lib/ringcentral'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -10,7 +11,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 
 // Only these open in the browser; anything else (HTML, SVG, scripts, Office files…)
 // always downloads, so an attachment can never run code on the Nexus site.
-const VIEWABLE = /^(image\/(png|jpe?g|gif|webp|heic|bmp)|application\/pdf|text\/plain|video\/mp4|audio\/(mpeg|mp4|wav))$/i
+const VIEWABLE = /^(image\/(png|jpe?g|gif|webp|heic|bmp)|application\/pdf|text\/plain|video\/mp4|audio\/(mpeg|mp3|mp4|wav|x-wav))$/i
 
 // GET /api/nexus/messages/attachment?m=<message id>&a=<gmail attachment id>[&inline=1]
 // Streams one attachment straight from Gmail. Only the mailbox owner can get it.
@@ -28,10 +29,12 @@ export async function GET(req: NextRequest) {
   const meta = ((Array.isArray(msg.attachments) ? msg.attachments : []) as { attachment_id: string; name: string; mime_type: string }[]).find((a) => a.attachment_id === aid)
   if (!meta) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
   const { data: ch } = await supabase.from('message_channels').select('*').eq('id', msg.channel_id).maybeSingle()
-  if (!ch?.oauth_refresh_token || ch.user_id !== user.id) return NextResponse.json({ error: 'Mailbox not connected.' }, { status: 409 })
+  if (!ch || (!ch.oauth_refresh_token && !isRingCentral(ch)) || ch.user_id !== user.id) return NextResponse.json({ error: 'Mailbox not connected.' }, { status: 409 })
 
-  const r = await gmailAttachment(ch, msg.external_message_id, aid)
-  if (!r.data) return NextResponse.json({ error: r.error ?? 'Could not get the file from Gmail.' }, { status: 502 })
+  // RingCentral voicemail / MMS picture, or a Gmail attachment.
+  const rcUri = (meta as { rc_uri?: string }).rc_uri
+  const r = rcUri ? await rcFile(ch, rcUri) : await gmailAttachment(ch, msg.external_message_id, aid)
+  if (!r.data) return NextResponse.json({ error: r.error ?? 'Could not get the file.' }, { status: 502 })
 
   const viewable = VIEWABLE.test(meta.mime_type)
   const inline = sp.get('inline') === '1' && viewable

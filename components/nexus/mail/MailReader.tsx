@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2, Loader2, Download, ClipboardList, MoreHorizontal, X } from 'lucide-react'
 import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
+import { ChatView, TextBox, prettyPhone } from './MailText'
 import { M, api, emailDoc, fileSize, fullTime, initials, personLabel, snoozeOptions, splitQuoted, splitQuotedText, tintFor, type MailMessage, type ThreadDetail, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Flag, Archive, ArrowLeft, Paperclip, Reply, ReplyAll, Forward, Sparkles, MailOpen, AlarmClock, Inbox } = require('lucide-react') as any
@@ -185,6 +186,7 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
     setSummary(r.ok && r.data.text ? r.data.text : (r.data.error ?? 'Lexi could not read this one.'))
   }
 
+  const isText = row.channel === 'text'
   const t = detail?.thread
   const starred = t?.starred ?? row.starred
   const archived = t?.archived ?? row.archived
@@ -235,7 +237,8 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ padding: '18px 20px 10px' }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em', lineHeight: 1.3 }}>{t?.subject ?? row.subject}</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em', lineHeight: 1.3 }}>{isText ? row.contact_name : (t?.subject ?? row.subject)}</h2>
+          {isText && row.contact_address && <div style={{ fontSize: 13, color: M.ink3, marginTop: 3 }}>{prettyPhone(row.contact_address)} · Texts &amp; calls (RingCentral)</div>}
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {archived && !trashed && <span style={chip}>Archived</span>}
             {trashed && <span style={{ ...chip, color: M.red }}>In Trash</span>}
@@ -253,8 +256,9 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
         )}
         {loadErr && <div role="alert" style={{ padding: 20, fontSize: 13.5, color: M.red }}>{loadErr}</div>}
         {!detail && !loadErr && <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={18} className="animate-spin" /></div>}
-        <div style={{ borderTop: `1px solid ${M.line}` }}>
-          {detail?.messages.map((m) => (
+        {isText && detail && <div style={{ borderTop: `1px solid ${M.line}` }}><ChatView messages={detail.messages} /></div>}
+        <div style={{ borderTop: `1px solid ${M.line}`, display: isText ? 'none' : undefined }}>
+          {!isText && detail?.messages.map((m) => (
             <MessageCard key={m.id} m={m} selfEmail={selfEmail} expanded={open.has(m.id)}
               onToggle={() => setOpen((s) => { const n = new Set(s); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n })}
               onReply={(mode, mm) => startReply(mode, mm)} />
@@ -264,6 +268,8 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
           {seed ? (
             <MailComposer compact seed={seed} channelId={channelId ?? row.channel_id} fromEmail={fromEmail}
               onQueue={(e, s) => { setSeed(null); onQueue(e, s) }} onClose={() => setSeed(null)} />
+          ) : detail && isText ? (
+            <TextBox channelId={row.channel_id} threadId={row.id} onSent={() => void load(true)} />
           ) : detail && row.channel === 'email' ? (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => startReply('reply')} style={replyBtn}><Reply size={15} /> Reply</button>

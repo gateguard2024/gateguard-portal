@@ -1,9 +1,9 @@
 // lib/mail-folders.ts — which conversations belong in each Nexus Mail folder.
-export type Folder = 'all_inbox' | 'inbox' | 'other' | 'unread' | 'needs_reply' | 'starred' | 'snoozed' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
-export const FOLDERS: Folder[] = ['all_inbox', 'inbox', 'other', 'unread', 'needs_reply', 'starred', 'snoozed', 'sent', 'linked', 'archived', 'trash', 'all']
+export type Folder = 'all_inbox' | 'inbox' | 'other' | 'unread' | 'needs_reply' | 'starred' | 'snoozed' | 'phone' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
+export const FOLDERS: Folder[] = ['all_inbox', 'inbox', 'other', 'unread', 'needs_reply', 'starred', 'snoozed', 'phone', 'sent', 'linked', 'archived', 'trash', 'all']
 
 export const LINKED_OR = 'linked_type.not.is.null,linked_opportunity_id.not.is.null,linked_customer_org_id.not.is.null'
-export const LIST_COLS = 'id, channel_id, subject, participants, last_message_at, unread_count, created_at, linked_type, linked_id, linked_label, linked_opportunity_id, linked_customer_org_id, snippet, last_direction, last_from_name, last_from_address, message_count, labels, is_archived, is_starred, is_trashed, is_bulk, has_attachments, snoozed_until'
+export const LIST_COLS = 'id, channel_id, external_thread_id, subject, participants, last_message_at, unread_count, created_at, linked_type, linked_id, linked_label, linked_opportunity_id, linked_customer_org_id, snippet, last_direction, last_from_name, last_from_address, message_count, labels, is_archived, is_starred, is_trashed, is_bulk, has_attachments, snoozed_until'
 export const OLD_COLS = 'id, channel_id, subject, participants, last_message_at, unread_count, created_at, linked_type, linked_id, linked_label'
 
 // Keep a search term from breaking the PostgREST filter syntax.
@@ -20,6 +20,7 @@ export function applyFolder(q: any, folder: Folder, nowIso: string) {
     case 'needs_reply': return q.eq('is_trashed', false).eq('is_archived', false).eq('is_bulk', false).eq('last_direction', 'inbound').or(notSnoozed)
                           .gte('last_message_at', new Date(Date.now() - 30 * 86400_000).toISOString())
     case 'starred':     return q.eq('is_trashed', false).eq('is_starred', true)
+    case 'phone':       return q.eq('is_trashed', false).like('external_thread_id', 'rc:%')
     case 'snoozed':     return q.eq('is_trashed', false).gt('snoozed_until', nowIso)
     case 'sent':        return q.eq('is_trashed', false).or('labels.cs.{SENT},last_direction.eq.outbound')
     case 'linked':      return q.eq('is_trashed', false).or(LINKED_OR)

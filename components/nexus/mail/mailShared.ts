@@ -1,6 +1,6 @@
 // Shared bits for Nexus Mail: types, look, small helpers, API calls.
 
-export type Folder = 'all_inbox' | 'inbox' | 'other' | 'needs_reply' | 'unread' | 'starred' | 'snoozed' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
+export type Folder = 'all_inbox' | 'inbox' | 'other' | 'needs_reply' | 'unread' | 'starred' | 'snoozed' | 'phone' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
 
 export type Person = { name?: string | null; address?: string | null }
 
@@ -59,7 +59,7 @@ export type ThreadDetail = {
   messages: MailMessage[]
 }
 export type Counts = { all_inbox: number; inbox: number; other: number; needs_reply: number; snoozed: number; unread: number }
-export type Account = { id: string; email: string; last_synced_at: string | null; last_error: string | null; can_modify: boolean; live: boolean; gmail_inbox_unread?: number | null; checked_at?: string | null }
+export type Account = { id: string; email: string; last_synced_at: string | null; last_error: string | null; can_modify: boolean; live: boolean; gmail_inbox_unread?: number | null; checked_at?: string | null; provider?: 'gmail' | 'ringcentral'; sms_from?: string | null }
 
 // ── Look (Apple-grade: graphite on white, one blue, hairlines) ──────────────────
 export const M = {
@@ -90,6 +90,7 @@ export const FOLDERS: { id: Folder; label: string; hint: string }[] = [
   { id: 'unread', label: 'Unread', hint: '' },
   { id: 'starred', label: 'Flagged', hint: 'Flagged in Nexus = starred in Gmail' },
   { id: 'snoozed', label: 'Snoozed', hint: 'Comes back later' },
+  { id: 'phone', label: 'Texts & calls', hint: 'Your RingCentral number' },
   { id: 'sent', label: 'Sent', hint: '' },
   { id: 'linked', label: 'Linked to records', hint: 'Deals, customers, jobs' },
   { id: 'archived', label: 'Archived', hint: '' },

@@ -21,7 +21,8 @@ function sanitize(row: any) {
     email: cfg.from_address ?? cfg.email ?? cfg.user ?? null,
     smtp_host: cfg.host ?? null,
     smtp_port: cfg.port ?? null,
-    connected: row.channel_type === 'gmail' ? !!row.oauth_refresh_token : !!cfg.host,
+    connected: row.channel_type === 'gmail' ? !!row.oauth_refresh_token : cfg.provider === 'ringcentral' ? !!cfg.jwt_enc : !!cfg.host,
+    provider: cfg.provider ?? row.channel_type,
     last_synced_at: row.last_synced_at,
     created_at: row.created_at,
   }

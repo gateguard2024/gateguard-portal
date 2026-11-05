@@ -12,14 +12,15 @@ import MailReader, { type ThreadAction } from './MailReader'
 import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
 import MailContext from './MailContext'
 import MailSettings from './MailSettings'
+import { NewTextModal } from './MailText'
 import { FOLDERS, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Sparkle: Star2, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
+const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Sparkle: Star2, Phone: PhoneI, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const FOLDER_ICON: Record<Folder, any> = {
   all_inbox: Inbox, inbox: Star2, other: Archive, needs_reply: ClockI, unread: MailOpen, starred: Flag, snoozed: AlarmClock,
-  sent: Send, linked: Link2, archived: Archive, trash: Trash2, all: Inbox,
+  phone: PhoneI, sent: Send, linked: Link2, archived: Archive, trash: Trash2, all: Inbox,
 }
 // Folders a conversation leaves when you do this to it.
 const LEAVES: Partial<Record<ThreadAction, Folder[]>> = {
@@ -59,6 +60,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
   const [folderMenu, setFolderMenu] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [pickMode, setPickMode] = useState(false)
+  const [newText, setNewText] = useState(false)
   const lastPick = useRef<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -119,7 +121,9 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
     return () => { window.clearInterval(s); window.clearInterval(l); window.removeEventListener('focus', onFocus) }
   }, [sync])
 
-  const account = accounts?.[0] ?? null
+  const account = accounts?.find((a) => a.provider !== 'ringcentral') ?? null
+  const rcAccount = accounts?.find((a) => a.provider === 'ringcentral') ?? null
+  const folders = FOLDERS.filter((f) => f.id !== 'phone' || rcAccount)
   const selfEmail = (account?.email ?? '').toLowerCase()
   const selected = rows.find((r) => r.id === selId) ?? null
 
@@ -315,9 +319,14 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         <button type="button" onClick={newEmail} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: M.blue, border: 0, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: M.font }}>
           <PenSquare size={16} /> New email
         </button>
+        {rcAccount && (
+          <button type="button" onClick={() => setNewText(true)} style={{ width: '100%', marginTop: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13.5, fontWeight: 500, color: M.blue, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', fontFamily: M.font }}>
+            <PhoneI size={15} /> New text
+          </button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
-        {FOLDERS.map((f, i) => {
+        {folders.map((f, i) => {
           const Icon = FOLDER_ICON[f.id]
           const on = folder === f.id && !gmailIds
           const c = countFor(f.id)
@@ -341,6 +350,12 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
           <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: syncLine.bad ? M.red : M.green, flexShrink: 0 }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{syncLine.text}</span>
         </div>
+        {rcAccount && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: rcAccount.last_error ? M.red : M.ink3, marginTop: 3 }}>
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: rcAccount.last_error ? M.red : M.green, flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rcAccount.last_error ? `RingCentral: ${rcAccount.last_error}` : `RingCentral · synced ${ago(rcAccount.last_synced_at)}`}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
           {syncLine.bad
             ? <a href="/api/nexus/messages/google/connect" style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', background: M.blue, borderRadius: 7, padding: '5px 10px', textDecoration: 'none' }}>{account ? 'Reconnect Gmail' : 'Connect Gmail'}</a>
@@ -362,7 +377,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
             </button>
             {folderMenu && (
               <div role="menu" style={{ position: 'absolute', top: 30, left: 0, zIndex: 40, width: 240, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.16)', padding: 4 }}>
-                {FOLDERS.map((f) => (
+                {folders.map((f) => (
                   <button key={f.id} type="button" role="menuitem" onClick={() => { setFolder(f.id); setGmailIds(null); setFolderMenu(false) }} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '9px 12px', border: 0, background: folder === f.id ? 'rgba(0,0,0,0.05)' : 'none', borderRadius: 8, cursor: 'pointer', color: M.ink, fontFamily: M.font }}>
                     {f.label}{countFor(f.id) > 0 && <span style={{ color: M.ink3 }}>{countFor(f.id)}</span>}
                   </button>
@@ -486,6 +501,13 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         {list}
         {reader}
 
+        {newText && (
+          <div style={{ position: 'absolute', right: 16, bottom: 16, width: 'min(440px, calc(100% - 32px))', zIndex: 50 }}>
+            <NewTextModal channelId={rcAccount?.id ?? null} fromNumber={rcAccount?.sms_from} onClose={() => setNewText(false)}
+              onSent={(id) => { flash('Text sent'); void loadRef.current({ silent: true }).then(() => { if (id) setSelId(id) }) }} />
+          </div>
+        )}
+
         {compose && (
           <div style={{ position: 'absolute', right: 16, bottom: 16, width: 'min(600px, calc(100% - 32px))', height: 'min(560px, calc(100% - 32px))', zIndex: 50 }}>
             <MailComposer seed={compose} channelId={account?.id ?? null} fromEmail={account?.email} onQueue={queue} onClose={() => setCompose(null)} />
@@ -553,6 +575,7 @@ function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: r.unread ? 600 : 400, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.subject}</span>
+            {r.channel === 'text' && <PhoneI size={12} style={{ color: M.green, flexShrink: 0 }} aria-label="Text or call" />}
             {r.has_attachments && <Paperclip size={12} style={{ color: M.ink3, flexShrink: 0 }} />}
             {r.starred && <Flag size={12} fill={M.flag} style={{ color: M.flag, flexShrink: 0 }} aria-label="Flagged" />}
           </span>

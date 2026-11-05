@@ -2,6 +2,7 @@
 // here AND in Gmail. Used by one-at-a-time (threads/[id]) and select-many (threads/bulk).
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { recomputeThread, gmailThreadAction } from '@/lib/mail-fetch'
+import { isRingCentral, rcSetRead } from '@/lib/ringcentral'
 
 export type Action = 'read' | 'unread' | 'archive' | 'inbox' | 'star' | 'unstar' | 'trash' | 'untrash' | 'snooze' | 'unsnooze'
 export const ACTIONS: Action[] = ['read', 'unread', 'archive', 'inbox', 'star', 'unstar', 'trash', 'untrash', 'snooze', 'unsnooze']
@@ -82,6 +83,14 @@ export async function applyThreadAction(supabase: SupabaseClient, thread: any, a
         channels?.set(thread.channel_id, ch)
       }
       if (ch?.channel_type === 'gmail' && ch.oauth_refresh_token) gmail = await gmailThreadAction(ch, thread.external_thread_id, action)
+      else if (isRingCentral(ch) && (action === 'read' || action === 'unread')) {
+        // Texts / voicemails: same read state in the RingCentral app.
+        const { data: ms } = await supabase.from('messages').select('external_message_id').eq('thread_id', thread.id).eq('direction', 'inbound').like('external_message_id', 'rc:msg:%')
+          .order('created_at', { ascending: false }).limit(action === 'unread' ? 1 : 50)
+        const ids = (ms ?? []).map((m: { external_message_id: string }) => m.external_message_id.slice('rc:msg:'.length))
+        const r = await rcSetRead(ch, ids, action === 'read')
+        gmail = { ok: r.ok, error: r.error }
+      }
     }
     return { ok: true, gmail }
 }
