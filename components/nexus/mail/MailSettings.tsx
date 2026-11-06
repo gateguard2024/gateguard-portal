@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Mail, Plus, Trash2, RefreshCw, Send, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { M, ago, api, type Account } from './mailShared'
+import { resetSignatureCache } from './MailComposer'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Bold, Italic, Link2, Image: ImageIcon } = require('lucide-react') as any
 
@@ -102,6 +103,7 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
 
         <SignatureEditor initial={sig} loaded={sigLoaded} onSave={async (html) => {
           const r = await api('/api/nexus/messages/signature', { method: 'PUT', json: { signature: html } })
+          if (r.ok) resetSignatureCache()
           setSigMsg(r.ok ? 'Saved' : (r.data.error ?? 'Could not save'))
           setTimeout(() => setSigMsg(null), 2500)
         }} msg={sigMsg} />
@@ -142,7 +144,7 @@ function shrinkImage(file: File, maxW: number): Promise<string> {
   })
 }
 
-function SignatureEditor({ initial, loaded, onSave, msg }: { initial: string; loaded: boolean; onSave: (html: string) => Promise<void>; msg: string | null }) {
+export function SignatureEditor({ initial, loaded, onSave, msg }: { initial: string; loaded: boolean; onSave: (html: string) => Promise<void>; msg: string | null }) {
   const ed = useRef<HTMLDivElement>(null)
   const file = useRef<HTMLInputElement>(null)
   const [width, setWidth] = useState(200)

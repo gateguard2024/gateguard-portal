@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { X, Send, Loader2 } from 'lucide-react'
 import { M, api, fileSize, fileToBase64 } from './mailShared'
+import { SignatureEditor } from './MailSettings'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Paperclip, Bold, Italic, Underline, List, Link2, Sparkles } = require('lucide-react') as any
 
@@ -42,6 +43,8 @@ function writeDraft(k: string, html: string) {
 // The signature is added on send; show it under the box so you know it's there.
 let sigCache: Promise<string> | null = null
 const loadSignature = () => (sigCache ??= api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => r.data.signature ?? '').catch(() => ''))
+// Settings saved a new signature → the next composer reads it fresh.
+export function resetSignatureCache() { sigCache = null }
 const sigIsHtml = (s: string) => /<\s*(img|div|p|br|table|span|a|b|strong|i|em|font)\b/i.test(s)
 
 export function clearDraft(k: string) { try { localStorage.removeItem(draftKey(k)) } catch { /* ignore */ } }
@@ -66,7 +69,17 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
   const [aiBusy, setAiBusy] = useState(false)
   const [empty, setEmpty] = useState(true)
   const [signature, setSignature] = useState('')
-  useEffect(() => { void loadSignature().then(setSignature) }, [])
+  const [sigReady, setSigReady] = useState(false)
+  const [sigEdit, setSigEdit] = useState(false)
+  const [sigMsg, setSigMsg] = useState<string | null>(null)
+  useEffect(() => { void loadSignature().then((s) => { setSignature(s); setSigReady(true) }) }, [])
+  const saveSignature = async (html: string) => {
+    const clean = html.replace(/<br\s*\/?>|&nbsp;|\s/gi, '') ? html : ''
+    const r = await api<{ error?: string }>('/api/nexus/messages/signature', { method: 'PUT', json: { signature: clean } })
+    if (!r.ok) { setSigMsg(r.data.error ?? 'Could not save'); return }
+    sigCache = Promise.resolve(clean)
+    setSignature(clean); setSigEdit(false); setSigMsg(null)
+  }
   const ed = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -164,8 +177,25 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
         <div ref={ed} contentEditable suppressContentEditableWarning onInput={onInput} aria-label="Message"
           style={{ padding: '12px 14px', minHeight: compact ? 120 : 200, outline: 'none', fontSize: 14.5, lineHeight: 1.55, color: M.ink }} />
         {signature && (
-          <div aria-label="Your signature" title="Added when you send — change it in Mail settings" style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, opacity: 0.6, fontSize: 13, color: M.ink2, pointerEvents: 'none' }}
-            {...(sigIsHtml(signature) ? { dangerouslySetInnerHTML: { __html: signature } } : { children: <span style={{ whiteSpace: 'pre-wrap' }}>{signature}</span> })} />
+          <div style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, position: 'relative' }}>
+            <div aria-label="Your signature" title="Added when you send" style={{ opacity: 0.7, fontSize: 13, color: M.ink2, pointerEvents: 'none' }}
+              {...(sigIsHtml(signature) ? { dangerouslySetInnerHTML: { __html: signature } } : { children: <span style={{ whiteSpace: 'pre-wrap' }}>{signature}</span> })} />
+            <button type="button" onClick={() => setSigEdit(true)} style={{ position: 'absolute', top: 6, right: 0, fontSize: 12, color: M.blue, background: '#fff', border: 0, cursor: 'pointer', padding: '2px 4px' }}>Edit signature</button>
+          </div>
+        )}
+        {!signature && sigReady && (
+          <div style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: M.ink3 }}>
+            No signature yet.
+            <button type="button" onClick={() => setSigEdit(true)} style={{ fontSize: 12.5, fontWeight: 600, color: M.blue, background: 'none', border: 0, cursor: 'pointer', padding: 0 }}>+ Add signature</button>
+          </div>
+        )}
+        {sigEdit && (
+          <div role="dialog" aria-modal="true" aria-label="Signature" onClick={() => setSigEdit(false)} style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(8,13,22,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 620, maxHeight: '90dvh', overflowY: 'auto', position: 'relative' }}>
+              <button type="button" aria-label="Close signature" onClick={() => setSigEdit(false)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 1, border: 0, background: M.side, borderRadius: 8, width: 28, height: 28, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: M.ink2 }}><X size={15} /></button>
+              <SignatureEditor initial={signature} loaded onSave={saveSignature} msg={sigMsg} />
+            </div>
+          </div>
         )}
         {seed.forwardHtml && <div style={{ margin: '0 14px 12px', padding: '8px 12px', borderLeft: `2px solid ${M.lineStrong}`, fontSize: 12.5, color: M.ink3 }}>The original email is added below your note.</div>}
       </div>

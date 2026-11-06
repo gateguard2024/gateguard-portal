@@ -1,421 +1,405 @@
 'use client'
 
 /**
- * LeadsHub — the tactical-steel Leads cockpit (CRMX layout).
- * KPI row + Identified/Contacted/Sent-Info donut, an editable + scrolling
- * Lead Analysis table (sizing carries to the opportunity on convert), and a
- * bottom row: stacked Enter New Lead / Work Existing Lead + two scrolling
- * typed follow-up columns (call/email/visit/task). Full Lead + Opportunity
- * windows open over it. Conversion is real — computed from leads that carry a
- * real opportunity_id (converted) over the full worked set.
- * Reads /api/nexus/opps/leads-dashboard + workbench.
+ * LeadsHub — Nexus Leads (same navy frame + light sheet as Nexus Mail).
+ *
+ * Built to beat HubSpot / Pipedrive / Close at the things that matter for Gate Guard:
+ *   • Every lead is scored 0–100 (size, reachability, stage, how recently touched) with
+ *     the reasons shown, so you work the right ones first.
+ *   • Every lead shows its NEXT STEP — and leads with none (or overdue) are called out.
+ *   • Speed to lead, pipeline $/mo and conversion at the top.
+ *   • Views: Hot, No next step, Overdue, New, Stale, by stage, Mine.
+ *   • List or Board (drag a card to change stage, or onto "Deal" to convert).
+ *   • Lead panel: call / email / text, log a call in two taps, follow-up chips,
+ *     sizing → est. MRR, timeline, their emails from Nexus Mail, ARIA research.
+ * Reads /api/nexus/leads; actions go through /api/nexus/opps/lead-window/[id].
  */
-import { useCallback, useEffect, useState } from 'react'
-import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
-import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
-import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Plus, X, Loader2, Phone, Mail, Filter, RefreshCw } from 'lucide-react'
+import { M, N } from '@/components/nexus/mail/mailShared'
+import { LeadPanel } from '@/components/nexus/leads/LeadPanel'
+import { NewLeadModal } from '@/components/nexus/leads/NewLeadModal'
 import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
+import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowLeft, Flame, Clock: ClockI, AlarmClock, Sparkles, Users: UsersI, Inbox, Snowflake, LayoutList, LayoutGrid, UserCheck, Send, Target, TrendingUp: Trend } = require('lucide-react') as any
 
-type AnalysisRow = { id: string; name: string; lead_type: string | null; units: number | null; entry_points: number | null; cameras: number | null; mrr: number | null; pcr: number | null }
-type FollowUp = { id: string; type: 'call' | 'email' | 'visit' | 'task'; title: string; lead: string | null; due: string | null }
-type Dash = {
-  kpis?: { newLeadIds: number; leadsVisited: number; leadsCount: number; conversionPct: number }
-  breakdown?: { identified: number; contacted: number; sentInfo: number }
-  analysis?: AnalysisRow[]
-  followupsToday?: FollowUp[]
-  followupsWeek?: FollowUp[]
+export type LeadRow = {
+  id: string; name: string; company: string | null; property: string | null; contact: string | null; title: string | null
+  email: string | null; phone: string | null; location: string | null; stage: string | null; bucket: 'identified' | 'contacted' | 'sent_info'
+  source: string | null; lead_type: string | null; units: number | null; cameras: number | null; entry_points: number | null; mrr: number | null
+  owner_id: string | null; owner: string | null; created_at: string; last_touch: string | null; touches: number
+  next_step: { title: string; due: string; kind: string } | null; overdue: boolean; score: number; why: string[]; researched: boolean
 }
-type WbLead = { id: string; contact_name?: string | null; company_name?: string | null; stage?: string | null; location?: string | null; source?: string | null; updated_at?: string | null }
+type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'identified' | 'contacted' | 'sent_info' | 'stale', number>
+type Kpis = { open: number; new_week: number; speed_hours: number | null; due_today: number; pipeline_mrr: number; conversion_pct: number; converted_90: number }
+type View = keyof Counts
 
-const FRAME_STYLE = { background: 'linear-gradient(135deg,rgba(25,200,245,0.06),rgba(107,126,255,0.05)), linear-gradient(180deg,rgba(26,36,54,0.80),rgba(15,22,36,0.84))', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 26px 54px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 2px rgba(0,0,0,0.4)' } as const
-const TILE = 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))'
-const TILE_STYLE = { background: TILE, border: '1px solid #1E293B', boxShadow: '0 14px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)' } as const
-const CELL_INPUT = { background: '#0f1a26', border: '1px solid rgba(0,163,255,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', width: 74, fontSize: 12, outline: 'none' } as const
+const VIEWS: { id: View; label: string; color: string; icon: unknown; hint: string }[] = [
+  { id: 'all', label: 'All open leads', color: '#4A8CFF', icon: Inbox, hint: '' },
+  { id: 'hot', label: 'Hot', color: '#FF6B3D', icon: Flame, hint: 'Score 70+' },
+  { id: 'overdue', label: 'Overdue', color: '#F04438', icon: AlarmClock, hint: 'Follow-up date has passed' },
+  { id: 'no_next', label: 'No next step', color: '#F5A524', icon: Target, hint: 'Nothing scheduled — set one' },
+  { id: 'new', label: 'New (14 days)', color: '#22C1EE', icon: Sparkles, hint: '' },
+  { id: 'mine', label: 'Mine', color: '#A78BFA', icon: UserCheck, hint: 'Assigned to you' },
+  { id: 'identified', label: 'Not contacted yet', color: '#94A3B8', icon: UsersI, hint: '' },
+  { id: 'contacted', label: 'Contacted', color: '#38BDF8', icon: Phone, hint: '' },
+  { id: 'sent_info', label: 'Info sent', color: '#34D399', icon: Send, hint: '' },
+  { id: 'stale', label: 'Gone quiet (14+ days)', color: '#8FA3B8', icon: Snowflake, hint: '' },
+]
+const STAGES: { id: LeadRow['bucket']; label: string; color: string; set: string }[] = [
+  { id: 'identified', label: 'Identified', color: '#94A3B8', set: 'new' },
+  { id: 'contacted', label: 'Contacted', color: '#38BDF8', set: 'contacted' },
+  { id: 'sent_info', label: 'Info sent', color: '#34D399', set: 'proposal' },
+]
+type Sort = 'score' | 'next' | 'recent' | 'mrr' | 'name'
 
-const LEAD_TYPES = ['MDU', 'SFH', 'Commercial', 'Mixed-Use', 'Gated', 'HOA']
-const FU_STYLE: Record<FollowUp['type'], { fg: string; bg: string; label: string }> = {
-  call: { fg: '#00A3FF', bg: 'rgba(0,163,255,0.16)', label: 'Call' },
-  email: { fg: '#00A3FF', bg: 'rgba(0,163,255,0.16)', label: 'Email' },
-  visit: { fg: '#00E699', bg: 'rgba(0,230,153,0.16)', label: 'Visit' },
-  task: { fg: '#c3d3e2', bg: 'rgba(148,163,184,0.16)', label: 'Task' },
+export const money = (n: number | null | undefined) => n == null ? '—' : n >= 1000 ? `$${(Math.round(n / 100) / 10).toLocaleString()}k` : `$${Math.round(n).toLocaleString()}`
+export const scoreColor = (s: number) => (s >= 70 ? '#FF6B3D' : s >= 40 ? '#F5A524' : '#8FA3B8')
+export const scoreLabel = (s: number) => (s >= 70 ? 'Hot' : s >= 40 ? 'Warm' : 'Cold')
+export function ago(iso: string | null): string {
+  if (!iso) return 'never'
+  const d = Math.floor((Date.now() - Date.parse(iso)) / 86400_000)
+  if (d <= 0) { const h = Math.floor((Date.now() - Date.parse(iso)) / 3600_000); return h <= 0 ? 'just now' : `${h}h ago` }
+  return d === 1 ? 'yesterday' : `${d}d ago`
 }
-
-function money(n: number | null | undefined): string {
-  if (n == null) return '—'
-  if (n >= 1000) return `$${(Math.round(n / 100) / 10).toLocaleString()}k`.replace('.0k', 'k')
-  return `$${Math.round(n).toLocaleString()}`
+export function dueText(due: string): string {
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const d = new Date(`${due}T00:00:00`)
+  const diff = Math.round((d.getTime() - t.getTime()) / 86400_000)
+  if (diff === 0) return 'today'
+  if (diff === 1) return 'tomorrow'
+  if (diff === -1) return 'yesterday'
+  if (diff < 0) return `${-diff} days late`
+  if (diff < 7) return d.toLocaleDateString([], { weekday: 'short' })
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
-function initials(name?: string | null): string {
-  const n = (name || '?').trim()
-  return n.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || '?'
-}
-function relTime(iso?: string | null): string {
-  if (!iso) return ''
-  const ms = Date.now() - new Date(iso).getTime()
-  const h = Math.floor(ms / 3.6e6)
-  if (h < 1) return 'now'
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
-function dueLabel(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(`${iso}T00:00:00`)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  if (d.getTime() === today.getTime()) return 'Today'
-  return d.toLocaleDateString([], { weekday: 'short' })
-}
+const TINTS = ['#4A8CFF', '#10B981', '#F97316', '#8B5CF6', '#06B6D4', '#EC4899', '#EAB308', '#64748B']
+export const tint = (s: string) => TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % TINTS.length]
+export const initials = (s: string | null | undefined) => (s || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?'
 
 export function LeadsHub({ onClose }: { onClose: () => void }) {
-  const [dash, setDash] = useState<Dash>({})
+  const [rows, setRows] = useState<LeadRow[]>([])
+  const [counts, setCounts] = useState<Counts | null>(null)
+  const [kpis, setKpis] = useState<Kpis | null>(null)
+  const [me, setMe] = useState<string | null>(null)
+  const [canReassign, setCanReassign] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<unknown | null>(null)
-  const [oppData, setOppData] = useState<unknown | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [view, setView] = useState<View>('all')
+  const [q, setQ] = useState('')
+  const [sort, setSort] = useState<Sort>('score')
+  const [layout, setLayout] = useState<'list' | 'board'>('list')
+  const [selId, setSelId] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
-  const [work, setWork] = useState<string | null>(null)
-  const [edit, setEdit] = useState<{ id: string; field: keyof AnalysisRow; value: string } | null>(null)
-  const [savingCell, setSavingCell] = useState(false)
+  const [oppData, setOppData] = useState<unknown | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  const loadDash = useCallback(async () => {
-    setLoading(true)
+  useEffect(() => { try { const v = localStorage.getItem('gg_leads_layout'); if (v === 'board' || v === 'list') setLayout(v) } catch { /* ignore */ } }, [])
+  const saveLayout = (l: 'list' | 'board') => { setLayout(l); try { localStorage.setItem('gg_leads_layout', l) } catch { /* ignore */ } }
+  const flash = (t: string) => { setToast(t); window.setTimeout(() => setToast((x) => (x === t ? null : x)), 3000) }
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
-      const r = await fetch('/api/nexus/opps/leads-dashboard', { cache: 'no-store' })
+      const r = await fetch('/api/nexus/leads', { cache: 'no-store' })
       const d = await r.json().catch(() => ({}))
-      setDash(d && typeof d === 'object' ? d : {})
+      if (!r.ok) { setErr(d?.error ?? 'Could not load leads.'); return }
+      setErr(null)
+      setRows(Array.isArray(d.leads) ? d.leads : [])
+      setCounts(d.counts ?? null); setKpis(d.kpis ?? null); setMe(d.me ?? null); setCanReassign(!!d.can_reassign)
     } finally { setLoading(false) }
   }, [])
-  useEffect(() => { void loadDash() }, [loadDash])
+  useEffect(() => { void load() }, [load])
 
-  async function openLead(id: string) {
-    const r = await fetch(`/api/nexus/opps/lead-window/${id}`, { cache: 'no-store' })
-    const d = await r.json().catch(() => null)
-    if (d) setSelected(d)
-  }
-  async function openOpportunity(id: string) {
-    const r = await fetch(`/api/nexus/opps/opportunity-window/${id}`, { cache: 'no-store' })
-    const d = await r.json().catch(() => null)
-    if (d) { setSelected(null); setOppData(d) }
-  }
-  async function refreshSelected() {
-    await loadDash()
-    const cur = selected as { lead?: { id?: string } } | null
-    const id = cur?.lead?.id
-    if (id) { const r = await fetch(`/api/nexus/opps/lead-window/${id}`, { cache: 'no-store' }); const d = await r.json().catch(() => null); if (d) setSelected(d) }
-  }
+  const filtered = useMemo(() => {
+    const now = Date.now()
+    const t = q.trim().toLowerCase()
+    let list = rows.filter((l) => {
+      switch (view) {
+        case 'mine': return l.owner_id === me
+        case 'new': return now - Date.parse(l.created_at) <= 14 * 86400_000
+        case 'hot': return l.score >= 70
+        case 'no_next': return !l.next_step
+        case 'overdue': return l.overdue
+        case 'identified': case 'contacted': case 'sent_info': return l.bucket === view
+        case 'stale': return l.last_touch ? now - Date.parse(l.last_touch) > 14 * 86400_000 : now - Date.parse(l.created_at) > 14 * 86400_000
+        default: return true
+      }
+    })
+    if (t) list = list.filter((l) => [l.name, l.company, l.contact, l.email, l.phone, l.location, l.source, l.owner].some((v) => String(v ?? '').toLowerCase().includes(t)))
+    const by: Record<Sort, (a: LeadRow, b: LeadRow) => number> = {
+      score: (a, b) => b.score - a.score,
+      next: (a, b) => (a.next_step?.due ?? '9999').localeCompare(b.next_step?.due ?? '9999'),
+      recent: (a, b) => (b.last_touch ?? b.created_at).localeCompare(a.last_touch ?? a.created_at),
+      mrr: (a, b) => (b.mrr ?? 0) - (a.mrr ?? 0),
+      name: (a, b) => a.name.localeCompare(b.name),
+    }
+    return [...list].sort(by[sort])
+  }, [rows, view, q, sort, me])
 
-  const FIELD_TO_BODY: Record<string, string> = { lead_type: 'lead_type', units: 'unit_count', entry_points: 'entry_points', cameras: 'cameras', mrr: 'mrr', pcr: 'pcr' }
-  // Quick calc: MRR = Units × $10 + Cams × $100
-  const mrrCalc = (r: { units: number | null; cameras: number | null }) => (r.units != null || r.cameras != null) ? (r.units ?? 0) * 10 + (r.cameras ?? 0) * 100 : null
-  // EMC (expected monthly commission) = MRR × 10%
-  const emcCalc = (r: AnalysisRow) => { const m = r.mrr ?? mrrCalc(r); return m != null ? Math.round(m * 0.10 * 100) / 100 : null }
-  async function saveCell() {
-    if (!edit) return
-    const { id, field, value } = edit
-    setEdit(null); setSavingCell(true)
-    const numify = (v: string, dec = false) => { const n = dec ? parseFloat(v) : parseInt(v, 10); return isNaN(n) ? null : n }
-    const cur = (dash.analysis ?? []).find(r => r.id === id)
-    const next: AnalysisRow = { ...(cur ?? { id, name: '', lead_type: null, units: null, entry_points: null, cameras: null, mrr: null, pcr: null }) }
-    if (field === 'lead_type') next.lead_type = value || null
-    else if (field === 'mrr') next.mrr = numify(value, true)
-    else if (field === 'pcr') next.pcr = numify(value, true)
-    else if (field === 'units') next.units = numify(value)
-    else if (field === 'entry_points') next.entry_points = numify(value)
-    else if (field === 'cameras') next.cameras = numify(value)
-    // auto-fill MRR from the quick calc when units or cams change
-    if (field === 'units' || field === 'cameras') next.mrr = mrrCalc(next)
-    // EMC = MRR × 10% (auto-derived, read-only)
-    const effMrr = next.mrr ?? mrrCalc(next)
-    next.pcr = effMrr != null ? Math.round(effMrr * 0.10 * 100) / 100 : null
-    // optimistic in-place update — no full reload, no page flicker
-    setDash(prev => ({ ...prev, analysis: (prev.analysis ?? []).map(r => r.id === id ? next : r) }))
-    try {
-      const payload: Record<string, unknown> = { action: 'update_details', [FIELD_TO_BODY[field]]: value }
-      if ((field === 'units' || field === 'cameras') && next.mrr != null) payload.mrr = String(next.mrr)
-      if (['units', 'cameras', 'mrr'].includes(field) && next.pcr != null) payload.pcr = String(next.pcr)
-      const res = await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (!res.ok) await loadDash()   // save failed — re-pull truth, don't leave a wrong optimistic value
-    } catch { await loadDash() } finally { setSavingCell(false) }
+  const selected = rows.find((r) => r.id === selId) ?? null
+
+  // Keyboard: j/k move, n new lead, / search, Esc close.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+      if (e.metaKey || e.ctrlKey || showNew) return
+      const i = filtered.findIndex((r) => r.id === selId)
+      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); const r = filtered[Math.min(filtered.length - 1, i + 1)]; if (r) setSelId(r.id) }
+      if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); const r = filtered[Math.max(0, i - 1)]; if (r) setSelId(r.id) }
+      if (e.key === 'n') { e.preventDefault(); setShowNew(true) }
+      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus() }
+      if (e.key === 'Escape') setSelId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [filtered, selId, showNew])
+
+  async function moveStage(id: string, to: LeadRow['bucket'] | 'deal') {
+    const lead = rows.find((r) => r.id === id)
+    if (!lead) return
+    if (to === 'deal') { await convert(id); return }
+    if (lead.bucket === to) return
+    const before = rows
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, bucket: to } : r)))
+    const r = await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_status', stage: STAGES.find((s) => s.id === to)!.set }) })
+    if (!r.ok) { setRows(before); flash('Couldn’t move that lead.'); return }
+    flash(`Moved to ${STAGES.find((s) => s.id === to)!.label}`)
+    void load(true)
+  }
+  async function convert(id: string) {
+    const r = await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity' }) })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok || !d?.opportunityId) { flash(d?.message ?? 'Couldn’t make the deal.'); return }
+    flash('Deal created')
+    setSelId(null)
+    void load(true)
+    const o = await fetch(`/api/nexus/opps/opportunity-window/${d.opportunityId}`, { cache: 'no-store' }).then((x) => x.json()).catch(() => null)
+    if (o) setOppData(o)
   }
 
   if (oppData) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
         <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={oppData as never} onBack={() => setOppData(null)} onRefresh={loadDash} /></div>
+        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={oppData as never} onBack={() => setOppData(null)} onRefresh={() => load(true)} /></div>
       </div>
     )
   }
-  if (selected) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
-        <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><LeadGlassWindow data={selected as never} onBack={() => setSelected(null)} onRefresh={refreshSelected} onOpenOpportunity={openOpportunity} /></div>
+
+  const kpi = (label: string, value: string, sub: string, color: string, icon: React.ReactNode) => (
+    <div style={{ flex: '1 1 150px', minWidth: 140, boxSizing: 'border-box', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow, padding: '12px 14px', display: 'flex', gap: 11, alignItems: 'center' }}>
+      <span aria-hidden style={{ width: 36, height: 36, borderRadius: 10, background: `${color}1C`, color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 20, fontWeight: 650, color: M.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{loading ? '–' : value}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: M.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: M.ink3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
       </div>
-    )
-  }
-  if (work !== null) {
-    return <WorkExistingLead initialQuery={work} onBack={() => setWork(null)} onOpen={(id) => { setWork(null); void openLead(id) }} />
-  }
-
-  const k = dash.kpis ?? { newLeadIds: 0, leadsVisited: 0, leadsCount: 0, conversionPct: 0 }
-  const bd = dash.breakdown ?? { identified: 0, contacted: 0, sentInfo: 0 }
-  const bdTotal = bd.identified + bd.contacted + bd.sentInfo || 1
-  const seg = (v: number) => (v / bdTotal) * 100
-  const analysis = dash.analysis ?? []
-  const fuToday = dash.followupsToday ?? []
-  const fuWeek = dash.followupsWeek ?? []
-
-  const kpiCard = (icon: string, value: string | number, label: string, accent = '#00A3FF') => (
-    <div className="rounded-2xl p-3" style={TILE_STYLE}>
-      <div className="text-[16px]" aria-hidden style={{ color: accent }}>{icon}</div>
-      <div className="mt-1 text-[22px] font-bold leading-none" style={{ color: '#eaf2fb' }}>{loading ? '–' : value}</div>
-      <div className="mt-0.5 text-[10px]" style={{ color: '#c3d3e2' }}>{label}</div>
     </div>
   )
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 90, overflowY: 'auto', background: NEXUS_BG }}>
-      <NexusBackdropLayers variant="page" />
-      <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4 pb-24">
-        <NexusGlassBackButton label="Back to Sales" onClick={onClose} />
-        <div className="mt-3 rounded-[2rem] p-5 sm:p-6" style={FRAME_STYLE}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: '#2f4a63' }}>Sales</div><h2 className="text-xl font-semibold leading-tight" style={{ color: '#152535' }}>Leads Hub</h2></div>
-            <button type="button" onClick={() => setWork('')} className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]" style={{ background: '#1E293B', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.55)' }}><span aria-hidden style={{ color: '#00A3FF' }}>⌕</span> Search leads…</button>
-          </div>
-
-          {/* KPI ROW */}
-          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-[repeat(4,1fr)_1.6fr]">
-            {kpiCard('⊕', k.newLeadIds, 'New Lead IDs')}
-            {kpiCard('◎', k.leadsVisited, 'Leads Visited')}
-            {kpiCard('☰', k.leadsCount, 'Leads Count')}
-            {kpiCard('◑', `${k.conversionPct}%`, 'Conversion', '#00E699')}
-            <div className="col-span-2 flex items-center gap-3 rounded-2xl p-3 sm:col-span-4 lg:col-span-1" style={TILE_STYLE}>
-              <div className="flex-1">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#00A3FF' }}>Pipeline Breakdown</div>
-                <div className="space-y-0.5 text-[11px]" style={{ color: '#c3d3e2' }}>
-                  <div><span style={{ color: '#00A3FF' }}>●</span> Identified · {bd.identified}</div>
-                  <div><span style={{ color: '#3f7fb8' }}>●</span> Contacted · {bd.contacted}</div>
-                  <div><span style={{ color: '#00E699' }}>●</span> Sent Info · {bd.sentInfo}</div>
-                </div>
-              </div>
-              <svg viewBox="0 0 42 42" width={78} height={78} role="img" aria-label="Lead pipeline breakdown">
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#0B111E" strokeWidth={7} />
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00A3FF" strokeWidth={7} strokeDasharray={`${seg(bd.identified).toFixed(1)} ${(100 - seg(bd.identified)).toFixed(1)}`} strokeDashoffset="0" transform="rotate(-90 21 21)" />
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#3f7fb8" strokeWidth={7} strokeDasharray={`${seg(bd.contacted).toFixed(1)} ${(100 - seg(bd.contacted)).toFixed(1)}`} strokeDashoffset={`${(-seg(bd.identified)).toFixed(1)}`} transform="rotate(-90 21 21)" />
-                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#00E699" strokeWidth={7} strokeDasharray={`${seg(bd.sentInfo).toFixed(1)} ${(100 - seg(bd.sentInfo)).toFixed(1)}`} strokeDashoffset={`${(-(seg(bd.identified) + seg(bd.contacted))).toFixed(1)}`} transform="rotate(-90 21 21)" />
-                <text x="21" y="23.5" textAnchor="middle" fill="#eaf2fb" fontSize="8" fontWeight="700">{k.leadsCount}</text>
-              </svg>
-            </div>
-          </div>
-
-          {/* LEAD ANALYSIS — editable, scrolls internally */}
-          <div className="mb-3 rounded-2xl p-4" style={TILE_STYLE}>
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-[13px] font-semibold" style={{ color: '#eaf2fb' }}>Lead Analysis <span className="text-[10px] font-normal" style={{ color: '#7d93a8' }}>· tap a cell to edit · carries to the opportunity on convert</span></div>
-            </div>
-            <div className="overflow-y-auto pr-1" style={{ maxHeight: 200 }}>
-              <table className="w-full border-collapse text-[12px]">
-                <thead><tr className="text-left text-[10px] uppercase tracking-[0.06em]" style={{ color: '#7d93a8' }}>
-                  <th className="sticky top-0 py-1.5" style={{ background: '#233346' }}>Lead</th>
-                  {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(h => (
-                    <th key={h} className="sticky top-0 py-1.5" style={{ background: '#233346' }}>{({ lead_type: 'Type', units: 'Units', entry_points: 'Entry Points', cameras: 'Cams', mrr: 'MRR', pcr: 'EMC' } as Record<string, string>)[h]}</th>
-                  ))}
-                </tr></thead>
-                <tbody style={{ color: '#dbeaf7' }}>
-                  {loading ? (
-                    <tr><td colSpan={7} className="py-6 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading…</td></tr>
-                  ) : analysis.length === 0 ? (
-                    <tr><td colSpan={7} className="py-6 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.82)' }}>No open leads yet. Enter a new lead below.</td></tr>
-                  ) : analysis.map(row => (
-                    <tr key={row.id} className="border-b" style={{ borderColor: '#1E293B' }}>
-                      <td className="cursor-pointer py-2 font-semibold" onClick={() => void openLead(row.id)} style={{ color: '#eaf2fb' }}>{row.name}</td>
-                      {(['lead_type', 'units', 'entry_points', 'cameras', 'mrr', 'pcr'] as const).map(field => {
-                        const editing = edit && edit.id === row.id && edit.field === field
-                        const raw = row[field]
-                        const display = field === 'mrr' ? money(row.mrr ?? mrrCalc(row)) : field === 'pcr' ? money(emcCalc(row)) : (raw ?? '—')
-                        return (
-                          <td key={field} className="py-2" onClick={() => { if (!editing && field !== 'pcr') setEdit({ id: row.id, field, value: raw == null ? '' : String(raw) }) }}>
-                            {editing ? (
-                              field === 'lead_type' ? (
-                                <select autoFocus value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} onBlur={() => void saveCell()} style={CELL_INPUT}>
-                                  <option value="">—</option>{LEAD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                              ) : (
-                                <input autoFocus value={edit.value} disabled={savingCell} onChange={e => setEdit({ ...edit, value: e.target.value })} onBlur={() => void saveCell()} onKeyDown={e => { if (e.key === 'Enter') void saveCell(); if (e.key === 'Escape') setEdit(null) }} inputMode={field === 'mrr' || field === 'pcr' ? 'decimal' : 'numeric'} style={CELL_INPUT} />
-                              )
-                            ) : (
-                              <span className="rounded px-1.5 py-0.5 transition-colors hover:bg-white/5" style={{ color: raw == null ? '#7d93a8' : (field === 'mrr' ? '#00E699' : '#dbeaf7') }}>{display}</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ACTIONS + FOLLOW-UPS */}
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_2fr_2fr]">
-            <div className="flex flex-col gap-3">
-              <button type="button" onClick={() => setShowNew(true)} className="flex flex-1 flex-col items-center justify-center rounded-2xl p-4 text-center transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(180deg,#3f7fb8,#2f6d94)', border: '1px solid rgba(150,200,230,0.4)', color: '#eaf6ff', minHeight: 84 }}><span className="text-[22px]" aria-hidden>＋</span><span className="mt-1 text-[12px] font-bold">Enter New Lead</span></button>
-              <button type="button" onClick={() => setWork('')} className="flex flex-1 flex-col items-center justify-center rounded-2xl p-4 text-center transition-all hover:-translate-y-0.5" style={{ ...TILE_STYLE, minHeight: 84 }}><span className="text-[22px]" aria-hidden style={{ color: '#00A3FF' }}>⌕</span><span className="mt-1 text-[12px] font-bold" style={{ color: '#eaf2fb' }}>Work Existing Lead</span></button>
-            </div>
-            <FollowUpColumn title="Today's Follow-ups" items={fuToday} loading={loading} onOpen={() => setWork('')} />
-            <FollowUpColumn title="This Week's Follow-ups" items={fuWeek} loading={loading} onOpen={() => setWork('')} />
-          </div>
-        </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', flexDirection: 'column', background: N.bg, color: N.ink, fontFamily: M.font }}>
+      {/* top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${N.line}`, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onClose} className="hover:bg-white/[0.08]" style={navBtnLg}><ArrowLeft size={14} /> Back to Sales</button>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, marginLeft: 6 }}>
+          <span aria-hidden style={{ width: 28, height: 28, borderRadius: 8, background: N.brand, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 6px 16px -6px rgba(74,140,255,0.7)' }}><Target size={15} /></span>
+          <span style={{ fontSize: 16, fontWeight: 650, color: '#fff', letterSpacing: '-0.01em' }}>Leads</span>
+          <span className="hidden sm:inline" style={{ fontSize: 11, color: N.label, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Nexus</span>
+        </span>
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={() => void load()} className="hover:bg-white/[0.08]" style={navBtnLg} aria-label="Refresh">{loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}</button>
+        <button type="button" onClick={() => setShowNew(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 600, color: '#fff', background: N.brand, border: 0, borderRadius: 10, padding: '8px 14px', cursor: 'pointer', boxShadow: '0 8px 20px -10px rgba(74,140,255,0.9)', fontFamily: M.font }}>
+          <Plus size={15} /> New lead
+        </button>
       </div>
 
-      {showNew && <NewLeadModal onClose={() => setShowNew(false)} onCreated={async (id) => { setShowNew(false); await loadDash(); await openLead(id) }} />}
-    </div>
-  )
-}
-
-function FollowUpColumn({ title, items, loading, onOpen }: { title: string; items: FollowUp[]; loading: boolean; onOpen: () => void }) {
-  return (
-    <div className="rounded-2xl p-4" style={TILE_STYLE}>
-      <div className="mb-2.5 flex items-center justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#00A3FF' }}>{title}</div>
-        <span className="text-[10px]" style={{ color: '#7d93a8' }}>{items.length}</span>
-      </div>
-      <div className="space-y-1.5 overflow-y-auto pr-1" style={{ maxHeight: 168 }}>
-        {loading ? (
-          <div className="py-4 text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="rounded-xl px-3 py-5 text-center text-[11px]" style={{ background: 'rgba(15,26,38,0.5)', color: 'rgba(255,255,255,0.82)' }}>Nothing due. Nice and clear.</div>
-        ) : items.map(f => {
-          const s = FU_STYLE[f.type]
-          return (
-            <button key={f.id} type="button" onClick={onOpen} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors hover:bg-white/5" style={{ background: 'rgba(15,26,38,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: s.bg, color: s.fg }}>{s.label}</span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px]" style={{ color: '#dbeaf7' }}>{f.title}</div>
-                {f.lead && <div className="truncate text-[10px]" style={{ color: '#7d93a8' }}>{f.lead}</div>}
-              </div>
-              <span className="shrink-0 text-[10px]" style={{ color: '#7d93a8' }}>{dueLabel(f.due)}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// "Work Existing Lead" — one popup: search box + a dropdown of leads → opens the Lead window.
-function WorkExistingLead({ initialQuery, onBack, onOpen }: { initialQuery: string; onBack: () => void; onOpen: (id: string) => void }) {
-  const [q, setQ] = useState(initialQuery)
-  const [rows, setRows] = useState<WbLead[]>([])
-  const [loading, setLoading] = useState(true)
-  const load = useCallback(async (query: string) => {
-    setLoading(true)
-    try {
-      const url = query.trim() ? `/api/nexus/opps/workbench?q=${encodeURIComponent(query)}` : '/api/nexus/opps/workbench'
-      const r = await fetch(url, { cache: 'no-store' })
-      const d = await r.json().catch(() => ({}))
-      setRows(query.trim() ? (Array.isArray(d?.leads) ? d.leads : []) : (Array.isArray(d?.openLeads) ? d.openLeads : []))
-    } finally { setLoading(false) }
-  }, [])
-  useEffect(() => { void load(initialQuery) }, [load, initialQuery])
-
-  return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onBack}>
-      <div onClick={e => e.stopPropagation()} className="w-full max-w-lg rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>Work Existing Lead</div>
-        <h3 className="mb-3 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Pick a lead to work</h3>
-        <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' }}>
-          <span aria-hidden style={{ color: '#00A3FF' }}>⌕</span>
-          <input autoFocus value={q} onChange={e => { setQ(e.target.value); void load(e.target.value) }} placeholder="Search or pick a lead…" className="w-full bg-transparent text-[13px] outline-none placeholder:text-white/35" style={{ color: 'rgba(255,255,255,0.92)' }} />
-        </div>
-        <div className="overflow-y-auto rounded-xl" style={{ maxHeight: 300, border: '1px solid #1E293B' }}>
-          {loading ? (
-            <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Loading…</div>
-          ) : rows.length === 0 ? (
-            <div className="py-8 text-center text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>No leads found.</div>
-          ) : rows.map(l => (
-            <button key={l.id} type="button" onClick={() => onOpen(l.id)} className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/5" style={{ borderColor: '#1E293B' }}>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: '#00A3FF', color: '#eaf6ff' }}>{initials(l.contact_name ?? l.company_name)}</div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold" style={{ color: '#eaf2fb' }}>{l.company_name || l.contact_name || 'Unnamed lead'}</div>
-                <div className="truncate text-[10px]" style={{ color: '#c3d3e2' }}>{[l.contact_name, l.location, l.stage].filter(Boolean).join(' · ') || '—'}</div>
-              </div>
-              <span className="shrink-0 text-[10px]" style={{ color: '#7d93a8' }}>{relTime(l.updated_at)}</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 flex justify-end">
-          <button type="button" onClick={onBack} className="rounded-xl px-4 py-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// New Lead modal → POST /api/crm/leads (existing leads table)
-function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
-  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', location: '', source: 'aria', lead_type: 'MDU', units: '', entry_points: '', cameras: '' })
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const set = (key: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF(p => ({ ...p, [key]: e.target.value }))
-  const SOURCES: [string, string][] = [['aria', 'ARIA research'], ['outbound', 'Cold call / field'], ['company', 'Company supplied'], ['referral', 'Referral / walk-in'], ['phone', 'Phone'], ['website', 'Website']]
-  async function save() {
-    if (!f.name.trim()) { setErr('A contact or property name is required.'); return }
-    setBusy(true); setErr(null)
-    try {
-      const res = await fetch('/api/crm/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, company: f.company, email: f.email, phone: f.phone, city: f.location, source: f.source, lead_type: f.lead_type, units: f.units, entry_points: f.entry_points, cameras: f.cameras }) })
-      const d = await res.json().catch(() => ({}))
-      if (!res.ok || !d?.id) throw new Error(d?.error || 'Could not create the lead.')
-      onCreated(d.id)
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not create the lead.'); setBusy(false) }
-  }
-  const input = 'w-full rounded-xl px-3 py-2 text-sm outline-none'
-  const inStyle = { background: 'linear-gradient(180deg,#1b2836,#141e29)', border: '1px solid #1E293B', color: 'rgba(255,255,255,0.92)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.45)' } as const
-  return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl p-5" style={{ background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16)' }}>
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#00A3FF' }}>New Lead</div>
-        <h3 className="mb-4 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Add a lead</h3>
-
-        <div className="mb-1.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Where did it come from?</div>
-        <div className="mb-3 grid grid-cols-2 gap-1.5">
-          {SOURCES.map(([val, label]) => {
-            const on = f.source === val
-            return <button key={val} type="button" onClick={() => setF(p => ({ ...p, source: val }))} className="rounded-lg px-2 py-1.5 text-[12px] font-semibold" style={on ? { background: 'rgba(0,163,255,0.16)', border: '1px solid rgba(0,163,255,0.4)', color: '#bfe6ff' } : { background: 'linear-gradient(165deg,rgba(255,255,255,0.045),transparent 55%), linear-gradient(180deg,rgba(32,44,66,0.82),rgba(18,26,42,0.78))', border: '1px solid #1E293B', color: '#c3d3e2' }}>{label}</button>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {/* views */}
+        <nav aria-label="Lead views" className="hidden lg:flex" style={{ width: 236, flexShrink: 0, flexDirection: 'column', borderRight: `1px solid ${N.line}`, padding: '12px 10px', overflowY: 'auto' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '4px 10px 6px' }}>Work these</div>
+          {VIEWS.map((v, i) => {
+            const on = view === v.id
+            const Icon = v.icon as React.ComponentType<{ size?: number }>
+            const c = counts?.[v.id] ?? 0
+            return (
+              <React.Fragment key={v.id}>
+                {i === 6 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>By stage</div>}
+                <button type="button" onClick={() => setView(v.id)} title={v.hint || undefined} aria-current={on ? 'page' : undefined} className={on ? '' : 'hover:bg-white/[0.06]'}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 2, borderRadius: 9, border: 0, cursor: 'pointer', background: on ? N.sel : 'transparent', boxShadow: on ? `inset 3px 0 0 ${v.color}` : undefined, color: on ? '#fff' : N.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 500, textAlign: 'left' }}>
+                  <span aria-hidden style={{ width: 26, height: 26, borderRadius: 8, background: `${v.color}26`, color: v.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} /></span>
+                  <span style={{ flex: 1 }}>{v.label}</span>
+                  {c > 0 && <span style={{ fontSize: 11.5, fontWeight: 600, minWidth: 22, textAlign: 'center', padding: '1px 7px', borderRadius: 20, background: (v.id === 'overdue' || v.id === 'no_next') && c ? `${v.color}` : v.id === 'all' ? N.accent : N.pill, color: '#fff' }}>{c}</span>}
+                </button>
+              </React.Fragment>
+            )
           })}
-        </div>
-
-        <div className="space-y-2.5">
-          <input className={input} style={inStyle} placeholder="Property or contact name *" value={f.name} onChange={set('name')} />
-          <input className={input} style={inStyle} placeholder="Company / management co." value={f.company} onChange={set('company')} />
-          <div className="grid grid-cols-2 gap-2.5">
-            <input className={input} style={inStyle} placeholder="Email" value={f.email} onChange={set('email')} />
-            <input className={input} style={inStyle} placeholder="Phone" value={f.phone} onChange={set('phone')} />
+          <div style={{ marginTop: 'auto', padding: '14px 10px 4px', fontSize: 11.5, color: N.ink2, lineHeight: 1.6 }}>
+            <b style={{ color: '#fff' }}>Score</b> = size + can we reach them + stage + how recently touched. Work Hot and Overdue first.
+            <div style={{ marginTop: 6, color: N.label }}>j / k move · n new · / search</div>
           </div>
-          <input className={input} style={inStyle} placeholder="City / location" value={f.location} onChange={set('location')} />
-        </div>
+        </nav>
 
-        <div className="mb-2 mt-3.5 flex items-center gap-2">
-          <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: '#7d93a8' }}>Quick sizing</div>
-          <div className="h-px flex-1" style={{ background: '#1E293B' }} />
-          <div className="text-[9px]" style={{ color: '#7d93a8' }}>optional · carries to the deal</div>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <select className={input} style={inStyle} value={f.lead_type} onChange={set('lead_type')}>{['MDU', 'SFH', 'Commercial', 'Mixed-Use', 'Gated', 'HOA'].map(t => <option key={t} value={t}>{t}</option>)}</select>
-          <input className={input} style={inStyle} inputMode="numeric" placeholder="Units" value={f.units} onChange={set('units')} />
-          <input className={input} style={inStyle} inputMode="numeric" placeholder="Entry points" value={f.entry_points} onChange={set('entry_points')} />
-          <input className={input} style={inStyle} inputMode="numeric" placeholder="Cameras" value={f.cameras} onChange={set('cameras')} />
-        </div>
+        {/* sheet */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', background: N.canvas }} className="lg:rounded-tl-[14px]">
+          <section aria-label="Leads" style={{ flex: 1, minWidth: 0, flexDirection: 'column', minHeight: 0 }} className={selected ? 'hidden xl:flex' : 'flex'}>
+            {/* numbers */}
+            <div style={{ display: 'flex', gap: 10, padding: '14px 14px 4px', flexWrap: 'wrap' }}>
+              {kpi('Open leads', String(kpis?.open ?? 0), `${kpis?.new_week ?? 0} new this week`, '#4A8CFF', <Inbox size={18} />)}
+              {kpi('Speed to lead', kpis?.speed_hours == null ? '—' : kpis.speed_hours < 24 ? `${kpis.speed_hours}h` : `${Math.round(kpis.speed_hours / 24)}d`, 'median to first contact', '#22C1EE', <ClockI size={18} />)}
+              {kpi('Due today', String(kpis?.due_today ?? 0), `${counts?.overdue ?? 0} overdue`, (counts?.overdue ?? 0) > 0 ? '#F04438' : '#F5A524', <AlarmClock size={18} />)}
+              {kpi('Pipeline', `${money(kpis?.pipeline_mrr ?? 0)}/mo`, 'est. if all close', '#10B981', <Trend size={18} />)}
+              {kpi('Conversion', `${kpis?.conversion_pct ?? 0}%`, `${kpis?.converted_90 ?? 0} deals · 90 days`, '#8B5CF6', <Target size={18} />)}
+            </div>
 
-        {err && <div className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(255,77,77,0.12)', border: '1px solid rgba(255,77,77,0.3)', color: '#FF4D4D' }}>{err}</div>}
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-[10px]" style={{ color: '#7d93a8' }}>Saves to your leads database</span>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
-            <button type="button" onClick={() => void save()} disabled={busy} className="rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40" style={{ background: 'linear-gradient(180deg,#3f7fb8,#2f6d94)', border: '1px solid rgba(150,200,230,0.4)', color: '#eaf6ff' }}>{busy ? 'Saving…' : 'Create lead'}</button>
-          </div>
+            {/* tools */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', flexWrap: 'wrap' }}>
+              <select aria-label="View" value={view} onChange={(e) => setView(e.target.value as View)} className="lg:hidden" style={selectStyle}>
+                {VIEWS.map((v) => <option key={v.id} value={v.id}>{v.label} ({counts?.[v.id] ?? 0})</option>)}
+              </select>
+              <div style={{ flex: '1 1 220px', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 10, padding: '0 10px', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
+                <Search size={14} style={{ color: M.ink3 }} />
+                <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search leads — name, company, phone, city…" aria-label="Search leads"
+                  style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13.5, padding: '8px 0', color: M.ink, fontFamily: M.font }} />
+                {q && <button type="button" aria-label="Clear search" onClick={() => setQ('')} style={{ border: 0, background: 'none', color: M.ink3, cursor: 'pointer', display: 'inline-flex' }}><X size={14} /></button>}
+              </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: M.ink3 }}>
+                <Filter size={13} />
+                <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} style={selectStyle}>
+                  <option value="score">Best first (score)</option>
+                  <option value="next">Next step date</option>
+                  <option value="recent">Recently touched</option>
+                  <option value="mrr">Biggest $/mo</option>
+                  <option value="name">Name A–Z</option>
+                </select>
+              </label>
+              <div role="group" aria-label="Layout" style={{ display: 'inline-flex', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 9, padding: 2 }}>
+                {(['list', 'board'] as const).map((l) => (
+                  <button key={l} type="button" onClick={() => saveLayout(l)} aria-pressed={layout === l}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, padding: '5px 10px', borderRadius: 7, border: 0, cursor: 'pointer', background: layout === l ? N.accent : 'transparent', color: layout === l ? '#fff' : M.ink2, fontFamily: M.font }}>
+                    {l === 'list' ? <LayoutList size={14} /> : <LayoutGrid size={14} />} {l === 'list' ? 'List' : 'Board'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {err && <div role="alert" style={{ margin: '0 14px 8px', padding: '9px 12px', borderRadius: 10, background: '#FDECEA', color: M.red, fontSize: 13 }}>{err}</div>}
+
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 4px 20px' }}>
+              {loading && !rows.length ? (
+                <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={20} className="animate-spin" /></div>
+              ) : layout === 'list' ? (
+                filtered.length === 0 ? <Empty view={view} onNew={() => setShowNew(true)} /> : filtered.map((l) => (
+                  <LeadCard key={l.id} l={l} selected={l.id === selId} onOpen={() => setSelId(l.id)} />
+                ))
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap: 10, padding: '0 10px', minWidth: 1000 }}>
+                  {[...STAGES, { id: 'deal' as const, label: 'Make it a deal', color: '#8B5CF6', set: '' }].map((s) => {
+                    const items = s.id === 'deal' ? [] : filtered.filter((l) => l.bucket === s.id)
+                    const total = items.reduce((a, l) => a + (l.mrr ?? 0), 0)
+                    return (
+                      <div key={s.id} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragId) void moveStage(dragId, s.id as LeadRow['bucket'] | 'deal'); setDragId(null) }}
+                        aria-label={`${s.label} column`}
+                        style={{ background: s.id === 'deal' ? 'linear-gradient(180deg, rgba(139,92,246,0.10), rgba(74,140,255,0.06))' : 'rgba(15,23,42,0.035)', border: s.id === 'deal' ? '1.5px dashed rgba(139,92,246,0.45)' : `1px solid ${N.cardLine}`, borderRadius: 14, padding: 8, minHeight: 300 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px 10px' }}>
+                          <span aria-hidden style={{ width: 8, height: 8, borderRadius: 8, background: s.color }} />
+                          <span style={{ fontSize: 13, fontWeight: 650, color: M.ink }}>{s.label}</span>
+                          {s.id !== 'deal' && <span style={{ fontSize: 12, color: M.ink3 }}>{items.length} · {money(total)}/mo</span>}
+                        </div>
+                        {s.id === 'deal'
+                          ? <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: 12.5, color: '#6D4FD8', lineHeight: 1.5 }}>Drag a lead here to turn it into a deal. Its sizing carries over.</div>
+                          : items.map((l) => (
+                            <div key={l.id} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} style={{ opacity: dragId === l.id ? 0.5 : 1 }}>
+                              <LeadCard l={l} compact selected={l.id === selId} onOpen={() => setSelId(l.id)} />
+                            </div>
+                          ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {selected && (
+            <aside aria-label="Lead details" className="w-full xl:w-[460px]" style={{ flexShrink: 0, minHeight: 0, borderLeft: `1px solid ${N.cardLine}` }}>
+              <LeadPanel lead={selected} canReassign={canReassign} onClose={() => setSelId(null)} onChanged={() => load(true)} onConvert={() => convert(selected.id)} onToast={flash}
+                onRemoved={() => { setSelId(null); void load(true) }} onStage={(b) => moveStage(selected.id, b)} />
+            </aside>
+          )}
         </div>
       </div>
+
+      {showNew && <NewLeadModal onClose={() => setShowNew(false)} onOpenExisting={(id) => { setShowNew(false); setSelId(id) }}
+        onCreated={async (id) => { setShowNew(false); await load(true); setSelId(id); flash('Lead added') }} />}
+
+      {toast && (
+        <div role="status" aria-live="polite" style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 120, background: '#1D1D1F', color: '#fff', borderRadius: 10, padding: '10px 16px', fontSize: 13.5, boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>{toast}</div>
+      )}
     </div>
   )
 }
+
+function LeadCard({ l, selected, compact, onOpen }: { l: LeadRow; selected: boolean; compact?: boolean; onOpen: () => void }) {
+  const t = tint(l.name)
+  const sc = scoreColor(l.score)
+  return (
+    <button type="button" onClick={onOpen} id={`lead-${l.id}`} aria-current={selected ? 'true' : undefined}
+      style={{ display: 'flex', gap: 12, width: compact ? '100%' : 'calc(100% - 20px)', margin: compact ? '0 0 8px' : '6px 10px', padding: compact ? '10px 11px' : '12px 14px', textAlign: 'left', cursor: 'pointer', fontFamily: M.font,
+        background: '#fff', borderRadius: 12, border: `1px solid ${selected ? N.accent : N.cardLine}`, boxShadow: selected ? '0 0 0 3px rgba(74,140,255,0.16), 0 6px 18px -8px rgba(74,140,255,0.45)' : N.cardShadow, position: 'relative' }}>
+      {l.overdue && <span aria-hidden style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3, background: '#F04438' }} />}
+      <span aria-hidden style={{ width: compact ? 34 : 40, height: compact ? 34 : 40, borderRadius: 40, background: `linear-gradient(140deg, ${t}, ${t}B3)`, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 650, flexShrink: 0, boxShadow: `0 4px 10px -4px ${t}99` }}>{initials(l.name)}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 650, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{l.name}</span>
+          <span title={l.why.length ? `Why: ${l.why.join(' · ')}` : undefined} aria-label={`Score ${l.score} (${scoreLabel(l.score)})`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: sc, background: `${sc}17`, borderRadius: 20, padding: '2px 8px', flexShrink: 0 }}>
+            {l.score >= 70 && <Flame size={11} />}{l.score}
+          </span>
+        </span>
+        <span style={{ display: 'block', fontSize: 12.5, color: M.ink2, marginTop: 2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {[l.contact, l.company && l.company !== l.name ? l.company : null, l.location].filter(Boolean).join(' · ') || 'No contact yet'}
+        </span>
+        <span style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {l.next_step
+            ? <span style={{ ...chip, color: l.overdue ? '#C4302B' : '#0B5CAD', background: l.overdue ? 'rgba(240,68,56,0.12)' : 'rgba(74,140,255,0.12)' }}>{l.overdue ? 'Overdue: ' : 'Next: '}{l.next_step.title} · {dueText(l.next_step.due)}</span>
+            : <span style={{ ...chip, color: '#9A5B00', background: 'rgba(245,165,36,0.16)' }}>No next step</span>}
+          {!compact && <span style={{ ...chip, color: STAGES.find((s) => s.id === l.bucket)!.color === '#94A3B8' ? '#5B6B80' : '#0F766E', background: '#EEF1F6' }}>{STAGES.find((s) => s.id === l.bucket)!.label}</span>}
+          {l.mrr != null && <span style={{ ...chip, color: '#047857', background: 'rgba(16,185,129,0.12)' }}>{money(l.mrr)}/mo</span>}
+          {!compact && l.units != null && <span style={{ ...chip }}>{l.units} units</span>}
+        </span>
+        {!compact && (
+          <span style={{ display: 'flex', gap: 12, marginTop: 7, fontSize: 11.5, color: M.ink3, flexWrap: 'wrap' }}>
+            <span>Last touch {ago(l.last_touch)}</span>
+            {l.source && <span>Source: {l.source}</span>}
+            {l.owner && <span>Rep: {l.owner}</span>}
+            {l.phone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Phone size={11} /> {l.phone}</span>}
+            {!l.phone && l.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Mail size={11} /> {l.email}</span>}
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+function Empty({ view, onNew }: { view: View; onNew: () => void }) {
+  const msg: Partial<Record<View, string>> = {
+    overdue: 'Nothing overdue. Nice work.', no_next: 'Every lead has a next step.', hot: 'No hot leads right now — log calls and set follow-ups to warm them up.',
+    stale: 'Nothing has gone quiet.', mine: 'No leads assigned to you yet.',
+  }
+  return (
+    <div style={{ padding: '50px 20px', textAlign: 'center', color: M.ink3, fontSize: 13.5 }}>
+      <div>{msg[view] ?? 'No leads here yet.'}</div>
+      <button type="button" onClick={onNew} style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: '#fff', background: N.brand, border: 0, borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}><Plus size={15} /> New lead</button>
+    </div>
+  )
+}
+
+const navBtnLg: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: N.ink, background: 'rgba(255,255,255,0.05)', border: `1px solid ${N.line}`, borderRadius: 9, padding: '7px 11px', cursor: 'pointer', fontFamily: M.font }
+const selectStyle: React.CSSProperties = { fontSize: 13, padding: '7px 9px', borderRadius: 9, border: `1px solid ${N.cardLine}`, background: '#fff', color: M.ink, fontFamily: M.font }
+export const chip: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#5B6B80', background: '#EEF1F6', borderRadius: 6, padding: '2px 7px', whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }
