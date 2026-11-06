@@ -18,7 +18,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 // Words that mark a surveyed device as an access point / opening worth a door.
 const DOOR_KEYWORDS = ['gate', 'door', 'entry', 'entrance', 'pedestrian', 'vehicle', 'garage', 'lobby', 'turnstile', 'barrier', 'reader', 'access', 'arm', 'callbox', 'call box', 'intercom', 'manc-', 'man gate', 'side gate', 'rear gate']
 
-export type KickoffResult = { ok: boolean; created_site?: boolean; site_id?: string; panel_id?: string; doors?: string[]; skipped?: string; error?: string }
+export type KickoffResult = { ok: boolean; created_site?: boolean; site_id?: string; panel_id?: string; doors?: string[]; skipped?: string; error?: string; customer_id?: string; customer_name?: string; created_customer?: boolean }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -114,9 +114,14 @@ export async function kickoffProvisioning(oppId: string): Promise<KickoffResult>
       await supabase.from('opportunities').update({ site_id: siteId }).eq('id', oppId)
     }
 
+    // 1b. Won deal → customer. Reuse the customer the deal is already tied to, or one with
+    //     the same name under this dealer; otherwise create it. The property goes under it.
+    const cust = await ensureCustomer(opp, siteId!)
+    if (!cust.ok) return { ok: false, site_id: siteId!, created_site: createdSite, error: cust.error }
+
     // 2. Idempotency — one kickoff panel per site.
     const { data: existingPanel } = await supabase.from('site_panels').select('id').eq('site_id', siteId).eq('source', 'kickoff').maybeSingle()
-    if (existingPanel) return { ok: true, site_id: siteId!, created_site: createdSite, skipped: 'kickoff panel exists', panel_id: (existingPanel as { id: string }).id }
+    if (existingPanel) return { ok: true, site_id: siteId!, created_site: createdSite, skipped: 'kickoff panel exists', panel_id: (existingPanel as { id: string }).id, ...cust.out }
 
     // 3. Pull doors from the survey.
     const doors = await extractDoors(oppId, siteId!, opp)
@@ -136,7 +141,7 @@ export async function kickoffProvisioning(oppId: string): Promise<KickoffResult>
       delete panelInsert[col]; pg++
       ;({ data: panel, error: pErr } = await supabase.from('site_panels').insert(panelInsert).select('id').single())
     }
-    if (pErr || !panel) return { ok: false, site_id: siteId!, created_site: createdSite, error: pErr?.message ?? 'panel create failed' }
+    if (pErr || !panel) return { ok: false, site_id: siteId!, created_site: createdSite, error: pErr?.message ?? 'panel create failed', ...cust.out }
 
     // 5. Timeline event (live site_events column set: no title/description).
     try {
@@ -148,8 +153,73 @@ export async function kickoffProvisioning(oppId: string): Promise<KickoffResult>
       })
     } catch { /* timeline optional */ }
 
-    return { ok: true, site_id: siteId!, created_site: createdSite, panel_id: (panel as { id: string }).id, doors }
+    return { ok: true, site_id: siteId!, created_site: createdSite, panel_id: (panel as { id: string }).id, doors, ...cust.out }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
+}
+
+const normName = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/**
+ * Make sure a won deal has a customer (organizations, org_tier 'client') and that its
+ * property sits under that customer (sites.org_id). Safe to run again — it reuses.
+ */
+export async function ensureCustomer(opp: Row, siteId: string): Promise<{ ok: true; out: { customer_id: string; customer_name: string; created_customer: boolean } } | { ok: false; error: string }> {
+  const dealerId: string | null = opp.dealer_org_id ?? null
+  const name = String(opp.management_co || opp.account_name || opp.name || '').replace(/\s+—\s+GateGuard Opportunity$/i, '').trim() || 'New customer'
+  let cust: { id: string; name: string } | null = null
+  let created = false
+
+  if (opp.related_org_id) {
+    const { data, error } = await supabase.from('organizations').select('id, name').eq('id', opp.related_org_id).maybeSingle()
+    if (error) return { ok: false, error: `customer lookup: ${error.message}` }
+    cust = (data as { id: string; name: string } | null) ?? null
+  }
+  if (!cust) {
+    let q = supabase.from('organizations').select('id, name').eq('org_tier', 'client').limit(1000)
+    if (dealerId) q = q.or(`parent_org_id.eq.${dealerId},master_dealer_id.eq.${dealerId}`)
+    const { data, error } = await q
+    if (error) return { ok: false, error: `customer lookup: ${error.message}` }
+    const key = normName(name)
+    cust = ((data ?? []) as { id: string; name: string }[]).find((o) => key.length >= 3 && normName(o.name) === key) ?? null
+  }
+  if (!cust) {
+    const insert: Row = {
+      name, org_tier: 'client', parent_org_id: dealerId, master_dealer_id: dealerId,
+      primary_contact_name: opp.site_contact_name ?? opp.manager_name ?? null,
+      primary_contact_email: opp.site_contact_email ?? null,
+      primary_contact_phone: opp.site_contact_phone ?? null,
+      city: opp.property_city ?? null, state: opp.property_state ?? null,
+      is_active: true, onboarded_at: new Date().toISOString(),
+    }
+    let { data, error } = await supabase.from('organizations').insert(insert).select('id, name').single()
+    let guard = 0
+    while (error && isMissingColumn(error) && guard < 8) {
+      const m = /Could not find the '([a-z_]+)' column/i.exec(error.message ?? '') || /column "?([a-z_]+)"?/i.exec(error.message ?? '')
+      const col = m?.[1]
+      if (!col || !(col in insert) || col === 'name' || col === 'org_tier') break
+      delete insert[col]; guard++
+      ;({ data, error } = await supabase.from('organizations').insert(insert).select('id, name').single())
+    }
+    if (error || !data) return { ok: false, error: `customer create: ${error?.message ?? 'failed'}` }
+    cust = data as { id: string; name: string }
+    created = true
+  }
+
+  if (opp.related_org_id !== cust.id) {
+    const { error } = await supabase.from('opportunities').update({ related_org_id: cust.id }).eq('id', opp.id)
+    if (error && !isMissingColumn(error)) return { ok: false, error: `link deal to customer: ${error.message}` }
+  }
+  // The property belongs to the customer; the dealer stays on master_dealer_id.
+  const { data: site, error: sErr } = await supabase.from('sites').select('id, org_id, master_dealer_id').eq('id', siteId).maybeSingle()
+  if (sErr) return { ok: false, error: `site lookup: ${sErr.message}` }
+  const s = site as { org_id: string | null; master_dealer_id: string | null } | null
+  if (s && s.org_id !== cust.id && (!s.org_id || s.org_id === dealerId)) {
+    const patch: Row = { org_id: cust.id }
+    if (!s.master_dealer_id && dealerId) patch.master_dealer_id = dealerId
+    const { error } = await supabase.from('sites').update(patch).eq('id', siteId)
+    if (error) return { ok: false, error: `put property under customer: ${error.message}` }
+  }
+  return { ok: true, out: { customer_id: cust.id, customer_name: cust.name, created_customer: created } }
 }

@@ -19,8 +19,7 @@ import { Search, Plus, X, Loader2, Phone, Mail, Filter, RefreshCw } from 'lucide
 import { M, N } from '@/components/nexus/mail/mailShared'
 import { LeadPanel } from '@/components/nexus/leads/LeadPanel'
 import { NewLeadModal } from '@/components/nexus/leads/NewLeadModal'
-import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
-import { NEXUS_BG, NexusBackdropLayers } from '@/components/nexus/NexusBackdrop'
+import { DealPage } from '@/components/nexus/sales/DealPage'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Flame, Clock: ClockI, AlarmClock, Sparkles, Users: UsersI, Inbox, Snowflake, LayoutList, LayoutGrid, UserCheck, Send, Target, TrendingUp: Trend } = require('lucide-react') as any
 
@@ -84,6 +83,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [me, setMe] = useState<string | null>(null)
   const [canReassign, setCanReassign] = useState(false)
+  const [asDeals, setAsDeals] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [view, setView] = useState<View>('all')
@@ -92,7 +92,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   const [layout, setLayout] = useState<'list' | 'board'>('list')
   const [selId, setSelId] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
-  const [oppData, setOppData] = useState<unknown | null>(null)
+  const [dealId, setDealId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -101,6 +101,15 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   const saveLayout = (l: 'list' | 'board') => { setLayout(l); try { localStorage.setItem('gg_leads_layout', l) } catch { /* ignore */ } }
   const flash = (t: string) => { setToast(t); window.setTimeout(() => setToast((x) => (x === t ? null : x)), 3000) }
 
+  const apply = (d: { leads?: LeadRow[]; counts?: Counts; kpis?: Kpis; me?: string; can_reassign?: boolean; hidden_as_deals?: number }) => {
+    setAsDeals(d.hidden_as_deals ?? 0)
+    setRows(Array.isArray(d.leads) ? d.leads : [])
+    setCounts(d.counts ?? null); setKpis(d.kpis ?? null); setMe(d.me ?? null); setCanReassign(!!d.can_reassign)
+  }
+  // Last list from this browser shows instantly; fresh numbers replace it when they arrive.
+  useEffect(() => {
+    try { const c = sessionStorage.getItem('gg_leads_cache'); if (c) { apply(JSON.parse(c)); setLoading(false) } } catch { /* ignore */ }
+  }, [])
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
@@ -108,8 +117,8 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
       const d = await r.json().catch(() => ({}))
       if (!r.ok) { setErr(d?.error ?? 'Could not load leads.'); return }
       setErr(null)
-      setRows(Array.isArray(d.leads) ? d.leads : [])
-      setCounts(d.counts ?? null); setKpis(d.kpis ?? null); setMe(d.me ?? null); setCanReassign(!!d.can_reassign)
+      try { sessionStorage.setItem('gg_leads_cache', JSON.stringify(d)) } catch { /* too big / private mode */ }
+      apply(d)
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -175,27 +184,19 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
     const r = await fetch(`/api/nexus/opps/lead-window/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity' }) })
     const d = await r.json().catch(() => ({}))
     if (!r.ok || !d?.opportunityId) { flash(d?.message ?? 'Couldn’t make the deal.'); return }
-    flash('Deal created')
+    flash(d.existing ? 'Already a deal — opening it' : 'Lead converted — opening the deal')
     setSelId(null)
+    setDealId(String(d.opportunityId))
     void load(true)
-    const o = await fetch(`/api/nexus/opps/opportunity-window/${d.opportunityId}`, { cache: 'no-store' }).then((x) => x.json()).catch(() => null)
-    if (o) setOppData(o)
   }
 
-  if (oppData) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 92, overflowY: 'auto', background: NEXUS_BG }}>
-        <NexusBackdropLayers variant="page" />
-        <div style={{ position: 'relative' }} className="mx-auto max-w-5xl xl:max-w-none p-4"><OpportunityGlassWindow data={oppData as never} onBack={() => setOppData(null)} onRefresh={() => load(true)} /></div>
-      </div>
-    )
-  }
+  if (dealId) return <DealPage dealId={dealId} onClose={() => { setDealId(null); void load(true) }} />
 
   const kpi = (label: string, value: string, sub: string, color: string, icon: React.ReactNode) => (
     <div style={{ flex: '1 1 150px', minWidth: 140, boxSizing: 'border-box', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow, padding: '12px 14px', display: 'flex', gap: 11, alignItems: 'center' }}>
       <span aria-hidden style={{ width: 36, height: 36, borderRadius: 10, background: `${color}1C`, color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 20, fontWeight: 650, color: M.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{loading ? '–' : value}</div>
+        <div style={{ fontSize: 20, fontWeight: 650, color: M.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{!kpis ? '–' : value}</div>
         <div style={{ fontSize: 12, fontWeight: 600, color: M.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
         {sub && <div style={{ fontSize: 11, color: M.ink3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
       </div>
@@ -288,6 +289,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
+            {asDeals > 0 && <div style={{ margin: '0 14px 8px', fontSize: 12.5, color: M.ink3 }}>{asDeals} lead{asDeals === 1 ? ' is' : 's are'} already a deal — they live in Opportunities now, so they’re left out here.</div>}
             {err && <div role="alert" style={{ margin: '0 14px 8px', padding: '9px 12px', borderRadius: 10, background: '#FDECEA', color: M.red, fontSize: 13 }}>{err}</div>}
 
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 4px 20px' }}>

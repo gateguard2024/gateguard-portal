@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const DAY = 86400_000
+const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at'
 type Bucket = 'identified' | 'contacted' | 'sent_info'
 function bucketOf(stage: string | null | undefined): Bucket {
   const s = String(stage ?? '').toLowerCase()
@@ -52,14 +53,59 @@ export async function GET() {
   if (!user.canViewCRM) return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
   const scope = await resolveOrgScope(user)
 
-  let q = supabase.from('leads').select('*').is('deleted_at', null).is('lost_at', null).is('opportunity_id', null)
-  q = applyOrgScope(q, scope)
-  q = applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rows, error } = await (q as any).order('updated_at', { ascending: false }).limit(3000)
+  // Only the columns the screen uses (select('*') dragged in big research blobs and
+  // made the page slow). If an environment is missing one of the newer columns,
+  // fall back to '*' so it still works.
+  const listQ = (cols: string) => {
+    let q = supabase.from('leads').select(cols).is('deleted_at', null).is('lost_at', null).is('opportunity_id', null)
+    q = applyOrgScope(q, scope)
+    q = applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (q as any).order('updated_at', { ascending: false }).limit(3000)
+  }
+  // Conversion count runs alongside the list.
+  let convQ = supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('opportunity_id', 'is', null)
+    .gte('created_at', new Date(Date.now() - 90 * DAY).toISOString())
+  convQ = applyOrgScope(convQ, scope)
+  convQ = applyAssignedScope(convQ, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
+  const convP = convQ
+  let { data: rows, error } = await listQ(LEAD_COLS)
+  if (error && /column|does not exist|schema cache/i.test(error.message ?? '')) ({ data: rows, error } = await listQ('*'))
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leads = (rows ?? []) as any[]
+  const allOpen = (rows ?? []) as any[]
+
+  // Leads that are really deals already. Two ways that happens:
+  //  1. The deal points at the lead (opportunities.lead_id) but the lead was never
+  //     stamped with opportunity_id → stamp it now so it's fixed everywhere.
+  //  2. A deal was made by hand for the same property / company (no link) → hide it here.
+  const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const asDeal = new Set<string>()
+  const allIds = allOpen.map((l) => l.id)
+  const linkChunks: string[][] = []
+  for (let i = 0; i < allIds.length; i += 150) linkChunks.push(allIds.slice(i, i + 150))
+  let oppNamesQ = supabase.from('opportunities').select('name, account_name').is('deleted_at', null)
+  oppNamesQ = applyOrgScope(oppNamesQ, scope, 'dealer_org_id')
+  const [linkRes, namesRes] = await Promise.all([
+    Promise.all(linkChunks.map((c) => supabase.from('opportunities').select('id, lead_id').in('lead_id', c).is('deleted_at', null).limit(2000))),
+    oppNamesQ.limit(10000),
+  ])
+  const heal: { lead: string; opp: string }[] = []
+  for (const r of linkRes) for (const o of r.data ?? []) {
+    if (o.lead_id && !asDeal.has(o.lead_id)) { asDeal.add(o.lead_id); heal.push({ lead: o.lead_id, opp: o.id }) }
+  }
+  const dealNames = new Set<string>()
+  for (const o of namesRes.data ?? []) for (const n of [o.name, o.account_name]) { const k = norm(n); if (k.length >= 4) dealNames.add(k) }
+  for (const l of allOpen) {
+    const k = norm(l.property_name || l.company_name)
+    if (k.length >= 4 && dealNames.has(k)) asDeal.add(l.id)
+  }
+  for (let i = 0; i < heal.length; i += 20) {
+    const batch = heal.slice(i, i + 20)
+    const res = await Promise.all(batch.map((h) => supabase.from('leads').update({ opportunity_id: h.opp }).eq('id', h.lead).is('opportunity_id', null)))
+    for (const r of res) if (r.error) console.error('leads: link to deal failed', r.error.message)
+  }
+  const leads = allOpen.filter((l) => !asDeal.has(l.id))
   const ids = leads.map((l) => l.id)
   const now = Date.now()
   const todayIso = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
@@ -68,12 +114,14 @@ export async function GET() {
   const nextStep = new Map<string, { title: string; due: string; kind: string }>()
   const lastTouch = new Map<string, string>()
   const touches = new Map<string, number>()
-  for (let i = 0; i < ids.length; i += 300) {
-    const chunk = ids.slice(i, i + 300)
-    const [acts, todos] = await Promise.all([
-      supabase.from('crm_activities').select('lead_id, type, subject, due_at, completed_at, created_at').in('lead_id', chunk).order('created_at', { ascending: false }).limit(4000),
-      supabase.from('todos').select('linked_id, title, due_date, status').eq('linked_type', 'lead').in('linked_id', chunk).neq('status', 'done').limit(4000),
-    ])
+  // Activities + follow-ups for all leads at once (batches of 150 ids keep the URL short).
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150))
+  const results = await Promise.all(chunks.map((chunk) => Promise.all([
+    supabase.from('crm_activities').select('lead_id, type, subject, due_at, completed_at, created_at').in('lead_id', chunk).order('created_at', { ascending: false }).limit(4000),
+    supabase.from('todos').select('linked_id, title, due_date, status').eq('linked_type', 'lead').in('linked_id', chunk).neq('status', 'done').limit(4000),
+  ])))
+  for (const [acts, todos] of results) {
     for (const a of acts.data ?? []) {
       const at = a.completed_at ?? a.created_at
       if (at && !(a.due_at && !a.completed_at)) {
@@ -155,11 +203,7 @@ export async function GET() {
   const median = recent.length ? recent[Math.floor(recent.length / 2)] : null
 
   // Conversion: converted ÷ (converted + open), last 90 days.
-  let convQ = supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('opportunity_id', 'is', null)
-    .gte('created_at', new Date(now - 90 * DAY).toISOString())
-  convQ = applyOrgScope(convQ, scope)
-  convQ = applyAssignedScope(convQ, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
-  const { count: converted } = await convQ
+  const { count: converted } = await convP
   const open90 = out.filter((l) => now - Date.parse(l.created_at) <= 90 * DAY).length
   const conv = (converted ?? 0) + open90 > 0 ? Math.round(((converted ?? 0) / ((converted ?? 0) + open90)) * 100) : 0
 
@@ -172,5 +216,5 @@ export async function GET() {
     conversion_pct: conv,
     converted_90: converted ?? 0,
   }
-  return NextResponse.json({ leads: out, counts, kpis, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+  return NextResponse.json({ leads: out, counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
 }

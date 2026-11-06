@@ -26,6 +26,8 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
   const [nextDate, setNextDate] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 2); return localISO(d) })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // After a win: which customer the deal became (shown before the dialog closes).
+  const [wonInfo, setWonInfo] = useState<{ card: Deal; customer?: string; created?: boolean; problem?: string } | null>(null)
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }
@@ -45,6 +47,12 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
       const res = await fetch(`/api/sales/deals/${deal.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not move the deal.')
+      if (won && data.provisioning) {
+        const p = data.provisioning as { ok?: boolean; customer_name?: string; created_customer?: boolean; error?: string }
+        setWonInfo({ card: data.card as Deal, customer: p.customer_name, created: p.created_customer, problem: p.ok === false ? p.error : undefined })
+        setBusy(false)
+        return
+      }
       onDone(data.card as Deal)
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not move the deal.'); setBusy(false) }
   }
@@ -54,6 +62,22 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
     : won ? 'What closed it? It moves to the Won tab, where you can create the job.'
     : backward ? `Moving back from ${stageLabel(deal.stage)}. What changed?`
     : `From ${stageLabel(deal.stage)}. What happened?`
+
+  if (wonInfo) {
+    return (
+      <div className="sb-modal" role="dialog" aria-modal="true" aria-label="Deal won" onMouseDown={e => { if (e.target === e.currentTarget) onDone(wonInfo.card) }}>
+        <div className="sb-dlg">
+          <h3>Won 🎉</h3>
+          {wonInfo.customer
+            ? <p className="sb-sub" style={{ margin: '6px 0 0' }}>{wonInfo.created ? 'New customer created: ' : 'Added to customer: '}<b>{wonInfo.customer}</b>. The property is set up under them and the install kickoff has started.</p>
+            : <p className="sb-sub" style={{ margin: '6px 0 0' }}>The deal is won, but the customer wasn’t set up{wonInfo.problem ? ` (${wonInfo.problem})` : ''}. You can add it from Customers.</p>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+            <button type="button" className="sb-btn pri" onClick={() => onDone(wonInfo.card)} autoFocus>Done</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="sb-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => { if (e.target === e.currentTarget) onCancel() }}>
