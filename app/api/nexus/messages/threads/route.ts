@@ -61,8 +61,32 @@ export async function GET(req: NextRequest) {
     return qq.order('last_message_at', { ascending: false, nullsFirst: false }).limit(limit + 1)
   }
 
+  // Sent = the emails / texts YOU sent, newest first, each row showing what you sent and
+  // to whom — not the conversation's latest reply (that's what put "Waiting on you"
+  // rows in Sent before).
+  const sentInfo = new Map<string, { at: string; snippet: string; toName: string | null; toAddr: string | null }>()
+  let sentMore = false
+  if (folder === 'sent' && !ids.length && !q) {
+    const chanIds = (chans ?? []).map((c) => c.id)
+    if (chanIds.length) {
+      let mq = supabase.from('messages').select('thread_id, created_at, snippet, body, to_addresses')
+        .in('channel_id', chanIds).eq('direction', 'outbound').neq('status', 'failed')
+      if (before) mq = mq.lt('created_at', before)
+      const { data: sent } = await mq.order('created_at', { ascending: false }).limit(limit * 6)
+      for (const m of sent ?? []) {
+        if (sentInfo.has(m.thread_id)) continue
+        if (sentInfo.size === limit) { sentMore = true; break }
+        const to = (Array.isArray(m.to_addresses) ? m.to_addresses : [])[0] as { name?: string; address?: string } | undefined
+        sentInfo.set(m.thread_id, { at: m.created_at, snippet: String(m.snippet || m.body || '').replace(/\s+/g, ' ').trim().slice(0, 200), toName: to?.name || null, toAddr: to?.address || null })
+      }
+      if (!sentMore && (sent ?? []).length === limit * 6) sentMore = true
+    }
+  }
+
   let needsMigration = false
-  let { data: rows, error } = await build(LIST_COLS, true)
+  let { data: rows, error } = sentInfo.size
+    ? await supabase.from('message_threads').select(LIST_COLS).eq('user_id', user.id).in('id', [...sentInfo.keys()]).limit(limit + 1)
+    : folder === 'sent' && !ids.length && !q ? { data: [], error: null } : await build(LIST_COLS, true)
   if (error && /column|schema cache|does not exist/i.test(error.message)) {
     needsMigration = true
     const r = await build(OLD_COLS, false)
@@ -72,8 +96,9 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const list = ((rows ?? []) as any[])
-  const hasMore = list.length > limit
+  let list = ((rows ?? []) as any[])
+  if (sentInfo.size) list = list.filter((t) => !t.is_trashed).sort((a, b) => (sentInfo.get(a.id)!.at < sentInfo.get(b.id)!.at ? 1 : -1))
+  const hasMore = sentInfo.size ? sentMore : list.length > limit
   const page = list.slice(0, limit)
 
   // Before migration 222 the list fields aren't on the thread yet — take them from the
@@ -95,6 +120,22 @@ export async function GET(req: NextRequest) {
     const nameRaw = (!lastFromSelf && t.last_from_name) || other.name || (!lastFromSelf && t.last_from_address) || other.address || 'Unknown'
     const name = /^\+\d{8,15}$/.test(nameRaw) ? prettyPhone(nameRaw) : nameRaw
     const snoozedActive = !!t.snoozed_until && t.snoozed_until > nowIso
+    const sent = sentInfo.get(t.id)
+    if (sent) {
+      const known = parts.find((p) => p.address && sent.toAddr && p.address.toLowerCase() === sent.toAddr.toLowerCase())?.name
+      const raw = sent.toName || known || sent.toAddr || name
+      const toName = /^\+\d{8,15}$/.test(raw) ? prettyPhone(raw) : raw
+      return {
+        id: t.id, channel: String(t.external_thread_id ?? '').startsWith('rc:') ? 'text' : 'email',
+        contact_name: toName, contact_address: other.address || null, participants: parts,
+        subject: t.subject || '(no subject)', preview: sent.snippet, last_at: sent.at, last_from_me: true,
+        unread: false, unread_count: 0, needs_reply: false, starred: !!t.is_starred, archived: !!t.is_archived,
+        trashed: false, bulk: false, has_attachments: !!t.has_attachments, message_count: t.message_count ?? null,
+        snoozed_until: null, channel_id: t.channel_id ?? null,
+        linked_type: t.linked_type ?? (t.linked_opportunity_id ? 'opportunity' : t.linked_customer_org_id ? 'customer' : null),
+        linked_id: t.linked_id ?? t.linked_opportunity_id ?? t.linked_customer_org_id ?? null, linked_label: t.linked_label ?? null,
+      }
+    }
     return {
       id: t.id,
       channel: String(t.external_thread_id ?? '').startsWith('rc:') ? 'text' : uiChannel(last?.source_type),
@@ -132,15 +173,15 @@ export async function GET(req: NextRequest) {
       const { count } = await qq
       return count ?? 0
     }
-    const [all, inbox, other, needs, snoozed, unread] = await Promise.all([c('all_inbox', true), c('inbox', true), c('other', true), c('needs_reply'), c('snoozed'), c('unread')])
-    counts = { all_inbox: all, inbox, other, needs_reply: needs, snoozed, unread }
+    const [all, inbox, other, needs, awaiting, snoozed, unread] = await Promise.all([c('all_inbox', true), c('inbox', true), c('other', true), c('needs_reply'), c('awaiting'), c('snoozed'), c('unread')])
+    counts = { all_inbox: all, inbox, other, needs_reply: needs, awaiting, snoozed, unread }
   }
 
   return NextResponse.json({
     conversations,
     folder,
     has_more: hasMore,
-    next_before: hasMore ? page[page.length - 1]?.last_message_at ?? null : null,
+    next_before: hasMore ? (sentInfo.size ? conversations[conversations.length - 1]?.last_at : page[page.length - 1]?.last_message_at) ?? null : null,
     counts,
     needs_migration: needsMigration || undefined,
   })

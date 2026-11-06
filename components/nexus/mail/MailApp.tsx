@@ -15,11 +15,11 @@ import MailSettings from './MailSettings'
 import { NewTextModal } from './MailText'
 import { FOLDERS, FOLDER_COLOR, N, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Sparkle: Star2, Phone: PhoneI, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
+const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Hourglass, Sparkle: Star2, Phone: PhoneI, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const FOLDER_ICON: Record<Folder, any> = {
-  all_inbox: Inbox, inbox: Star2, other: Archive, needs_reply: ClockI, unread: MailOpen, starred: Flag, snoozed: AlarmClock,
+  all_inbox: Inbox, inbox: Star2, other: Archive, needs_reply: ClockI, awaiting: Hourglass, unread: MailOpen, starred: Flag, snoozed: AlarmClock,
   phone: PhoneI, sent: Send, linked: Link2, archived: Archive, trash: Trash2, all: Inbox,
 }
 // Folders a conversation leaves when you do this to it.
@@ -303,7 +303,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
 
   // ── pieces ────────────────────────────────────────────────────────────────
   const folderLabel = FOLDERS.find((f) => f.id === folder)?.label ?? 'Mail'
-  const countFor = (f: Folder) => (counts ? (f === 'all_inbox' ? counts.all_inbox ?? 0 : f === 'inbox' ? counts.inbox : f === 'other' ? counts.other : f === 'needs_reply' ? counts.needs_reply : f === 'snoozed' ? counts.snoozed : f === 'unread' ? counts.unread : 0) : 0)
+  const countFor = (f: Folder) => (counts ? (f === 'all_inbox' ? counts.all_inbox ?? 0 : f === 'inbox' ? counts.inbox : f === 'other' ? counts.other : f === 'needs_reply' ? counts.needs_reply : f === 'awaiting' ? counts.awaiting ?? 0 : f === 'snoozed' ? counts.snoozed : f === 'unread' ? counts.unread : 0) : 0)
   const syncLine = useMemo(() => {
     if (!accounts) return { text: 'Checking…', bad: false }
     if (!account) return { text: 'No email connected', bad: true }
@@ -314,7 +314,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
   if (settings) return <Shell onClose={onClose} closeLabel={closeLabel}><MailSettings accounts={accounts ?? []} onBack={() => setSettings(false)} onChanged={() => { void sync(true) }} /></Shell>
 
   const sideGroups: { label: string; ids: Folder[] }[] = [
-    { label: 'Mailboxes', ids: ['all_inbox', 'inbox', 'other', 'needs_reply'] },
+    { label: 'Mailboxes', ids: ['all_inbox', 'inbox', 'other', 'needs_reply', 'awaiting'] },
     { label: 'Views', ids: ['unread', 'starred', 'snoozed', 'phone'] },
     { label: 'More', ids: ['sent', 'linked', 'archived', 'trash'] },
   ]
@@ -465,7 +465,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         ) : rows.length === 0 ? (
           <EmptyState folder={folder} searching={!!q} hasAccount={!!account} accountsLoaded={!!accounts} onConnect={() => setSettings(true)} />
         ) : rows.map((r) => (
-          <Row key={r.id} r={r} selected={r.id === selId} checked={picked.has(r.id)} picking={picked.size > 0 || pickMode}
+          <Row key={r.id} r={r} selected={r.id === selId} checked={picked.has(r.id)} picking={picked.size > 0 || pickMode} awaitingView={folder === 'awaiting'}
             onCheck={(shift) => togglePick(r.id, shift)} onOpen={() => open(r)}
             onArchive={() => void act(r, r.archived ? 'inbox' : 'archive')}
             onRead={() => void act(r, r.unread ? 'read' : 'unread', undefined, true)}
@@ -511,7 +511,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
       <div style={{ fontSize: 12.5 }}>j / k to move · c for a new email · ⌘↵ to send</div>
       {counts && (counts.needs_reply > 0 || counts.all_inbox > 0) && (
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-          {[['all_inbox', 'Unread', counts.all_inbox], ['needs_reply', 'Waiting on you', counts.needs_reply], ['snoozed', 'Snoozed', counts.snoozed]].map(([id, label, n]) => (
+          {[['all_inbox', 'Unread', counts.all_inbox], ['needs_reply', 'Waiting on you', counts.needs_reply], ['awaiting', 'Waiting on them', counts.awaiting ?? 0]].map(([id, label, n]) => (
             <button key={String(id)} type="button" onClick={() => { setFolder(id as Folder); setGmailIds(null) }} style={{ minWidth: 112, textAlign: 'left', padding: '10px 12px', borderRadius: 12, background: '#fff', border: `1px solid ${N.cardLine}`, boxShadow: N.cardShadow, cursor: 'pointer', fontFamily: M.font }}>
               <div style={{ fontSize: 20, fontWeight: 600, color: FOLDER_COLOR[String(id)], fontVariantNumeric: 'tabular-nums' }}>{String(n)}</div>
               <div style={{ fontSize: 12, color: M.ink3 }}>{String(label)}</div>
@@ -586,7 +586,7 @@ function Shell({ children, onClose, closeLabel }: { children: React.ReactNode; o
   )
 }
 
-function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; checked: boolean; picking: boolean; onCheck: (shift: boolean) => void; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
+function Row({ r, selected, checked, picking, awaitingView, onCheck, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; checked: boolean; picking: boolean; awaitingView?: boolean; onCheck: (shift: boolean) => void; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
   const badge = r.linked_type ? RECORD_BADGE[r.linked_type] : null
   const who = r.last_from_me ? `To: ${r.contact_name}` : r.contact_name
   const tint = tintFor(r.contact_name)
@@ -621,12 +621,13 @@ function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead
             {r.starred && <Flag size={12.5} fill={M.flag} style={{ color: M.flag, flexShrink: 0 }} aria-label="Flagged" />}
           </span>
           <span style={{ fontSize: 12.5, color: M.ink3, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 } as React.CSSProperties}>{r.preview}</span>
-          {(badge || (r.needs_reply && !r.last_from_me) || r.bulk || isText) && (
+          {(badge || (r.needs_reply && !r.last_from_me) || r.bulk || isText || (awaitingView && r.last_from_me)) && (
             <span style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
               {badge && <span style={{ ...tag, color: badge.color, background: `${badge.color}17`, maxWidth: 230 }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>}
               {isText && <span style={{ ...tag, color: '#0F9F6E', background: 'rgba(52,211,153,0.15)' }}>Text</span>}
               {r.needs_reply && !r.last_from_me && !r.bulk && <span style={{ ...tag, color: '#B76E00', background: 'rgba(245,165,36,0.15)' }}>Waiting on you</span>}
               {r.bulk && <span style={{ ...tag, color: '#5B6B80', background: '#EEF1F6' }}>Newsletter</span>}
+              {awaitingView && r.last_from_me && <span style={{ ...tag, color: '#0F766E', background: 'rgba(20,184,166,0.14)' }}>No reply · {daysSince(r.last_at)}</span>}
             </span>
           )}
         </span>
@@ -641,6 +642,7 @@ function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead
     </div>
   )
 }
+const daysSince = (iso: string) => { const d = Math.floor((Date.now() - Date.parse(iso)) / 86400_000); return d <= 0 ? 'today' : d === 1 ? '1 day' : `${d} days` }
 const tag: React.CSSProperties = { fontSize: 11, fontWeight: 600, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
 function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }: { folder: Folder; searching: boolean; hasAccount: boolean; accountsLoaded: boolean; onConnect: () => void }) {
@@ -654,7 +656,7 @@ function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }
     )
   }
   const text = searching ? 'No matches here. Press Enter to search all of Gmail.'
-    : folder === 'inbox' || folder === 'all_inbox' ? 'Inbox zero. Nice.' : folder === 'needs_reply' ? 'You’re caught up — nobody is waiting on you.'
+    : folder === 'inbox' || folder === 'all_inbox' ? 'Inbox zero. Nice.' : folder === 'needs_reply' ? 'You’re caught up — nobody is waiting on you.' : folder === 'awaiting' ? 'Everyone you wrote to has answered.'
     : folder === 'snoozed' ? 'Nothing snoozed.' : 'Nothing here.'
   return <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13.5, color: M.ink3, fontFamily: M.font }}>{text}</div>
 }

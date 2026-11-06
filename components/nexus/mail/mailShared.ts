@@ -1,6 +1,6 @@
 // Shared bits for Nexus Mail: types, look, small helpers, API calls.
 
-export type Folder = 'all_inbox' | 'inbox' | 'other' | 'needs_reply' | 'unread' | 'starred' | 'snoozed' | 'phone' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
+export type Folder = 'all_inbox' | 'inbox' | 'other' | 'needs_reply' | 'awaiting' | 'unread' | 'starred' | 'snoozed' | 'phone' | 'sent' | 'linked' | 'archived' | 'trash' | 'all'
 
 export type Person = { name?: string | null; address?: string | null }
 
@@ -58,7 +58,7 @@ export type ThreadDetail = {
   }
   messages: MailMessage[]
 }
-export type Counts = { all_inbox: number; inbox: number; other: number; needs_reply: number; snoozed: number; unread: number }
+export type Counts = { all_inbox: number; inbox: number; other: number; needs_reply: number; awaiting?: number; snoozed: number; unread: number }
 export type Account = { id: string; email: string; last_synced_at: string | null; last_error: string | null; can_modify: boolean; live: boolean; gmail_inbox_unread?: number | null; checked_at?: string | null; provider?: 'gmail' | 'ringcentral'; sms_from?: string | null }
 
 // ── Look (Apple-grade: graphite on white, one blue, hairlines) ──────────────────
@@ -103,7 +103,7 @@ export const N = {
 }
 // Each folder gets its own color so the list reads at a glance.
 export const FOLDER_COLOR: Record<string, string> = {
-  all_inbox: '#4A8CFF', inbox: '#A78BFA', other: '#94A3B8', needs_reply: '#F5A524',
+  all_inbox: '#4A8CFF', inbox: '#A78BFA', other: '#94A3B8', needs_reply: '#F5A524', awaiting: '#14B8A6',
   unread: '#38BDF8', starred: '#FF9500', snoozed: '#C084FC', phone: '#34D399',
   sent: '#22D3EE', linked: '#818CF8', archived: '#8FA3B8', trash: '#F87171', all: '#4A8CFF',
 }
@@ -112,7 +112,8 @@ export const FOLDERS: { id: Folder; label: string; hint: string }[] = [
   { id: 'all_inbox', label: 'Inbox', hint: 'Everything in your Gmail inbox' },
   { id: 'inbox', label: 'Priority', hint: 'Just people and customers' },
   { id: 'other', label: 'Other', hint: 'Newsletters, receipts, notifications' },
-  { id: 'needs_reply', label: 'Waiting on you', hint: 'They wrote last' },
+  { id: 'needs_reply', label: 'Waiting on you', hint: 'They wrote last — you owe a reply' },
+  { id: 'awaiting', label: 'Waiting on them', hint: 'You wrote last — no answer yet' },
   { id: 'unread', label: 'Unread', hint: '' },
   { id: 'starred', label: 'Flagged', hint: 'Flagged in Nexus = starred in Gmail' },
   { id: 'snoozed', label: 'Snoozed', hint: 'Comes back later' },
