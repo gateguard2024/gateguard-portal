@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2, Loader2, Download, ClipboardList, MoreHorizontal, X } from 'lucide-react'
 import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailComposer'
 import { ChatView, TextBox, prettyPhone } from './MailText'
-import { M, api, emailDoc, fileSize, fullTime, initials, personLabel, snoozeOptions, splitQuoted, splitQuotedText, tintFor, type MailMessage, type ThreadDetail, type ThreadRow } from './mailShared'
+import { M, N, RECORD_BADGE, api, emailDoc, fileSize, fullTime, initials, personLabel, snoozeOptions, splitQuoted, splitQuotedText, tintFor, type MailMessage, type ThreadDetail, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Flag, Archive, ArrowLeft, Paperclip, Reply, ReplyAll, Forward, Sparkles, MailOpen, AlarmClock, Inbox } = require('lucide-react') as any
 
@@ -39,7 +39,7 @@ function EmailFrame({ html, text }: { html: string; text: string }) {
 
 function Avatar({ name, size = 34 }: { name: string; size?: number }) {
   const t = tintFor(name)
-  return <span aria-hidden style={{ width: size, height: size, borderRadius: size, background: `${t}1A`, color: t, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 600, flexShrink: 0 }}>{initials(name)}</span>
+  return <span aria-hidden style={{ width: size, height: size, borderRadius: size, background: `linear-gradient(140deg, ${t}, ${t}B3)`, color: '#fff', boxShadow: `0 4px 10px -4px ${t}99`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 600, flexShrink: 0 }}>{initials(name)}</span>
 }
 
 function MessageCard({ m, expanded, onToggle, onReply, selfEmail }: { m: MailMessage; expanded: boolean; onToggle: () => void; onReply: (mode: 'reply' | 'replyAll' | 'forward', m: MailMessage) => void; selfEmail: string }) {
@@ -51,7 +51,7 @@ function MessageCard({ m, expanded, onToggle, onReply, selfEmail }: { m: MailMes
   const toLine = [...m.to, ...m.cc].map((p) => (p.address?.toLowerCase() === selfEmail ? 'me' : (p.name || p.address))).filter(Boolean).join(', ')
   if (!expanded) {
     return (
-      <button type="button" onClick={onToggle} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', background: '#fff', border: 0, borderBottom: `1px solid ${M.line}`, textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
+      <button type="button" onClick={onToggle} className="hover:shadow-md" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 12, boxShadow: N.cardShadow, marginBottom: 8, textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
         <Avatar name={m.from_name || m.from_address || '?'} size={28} />
         <span style={{ fontSize: 13.5, fontWeight: 600, color: M.ink, flexShrink: 0 }}>{name}</span>
         <span style={{ fontSize: 13, color: M.ink3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1 }}>{m.snippet || m.body.slice(0, 140)}</span>
@@ -60,7 +60,7 @@ function MessageCard({ m, expanded, onToggle, onReply, selfEmail }: { m: MailMes
     )
   }
   return (
-    <div style={{ background: '#fff', borderBottom: `1px solid ${M.line}` }}>
+    <div style={{ background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow, marginBottom: 10, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '16px 20px 8px' }}>
         <Avatar name={m.from_name || m.from_address || '?'} />
         <button type="button" onClick={onToggle} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: M.font }}>
@@ -192,22 +192,29 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
   const archived = t?.archived ?? row.archived
   const trashed = t?.trashed ?? row.trashed
   const tb = (label: string, icon: React.ReactNode, onClick: () => void, extra?: React.CSSProperties) => (
-    <button type="button" title={label} aria-label={label} onClick={onClick} style={{ ...iconBtn, ...extra }}>{icon}</button>
+    <button type="button" title={label} aria-label={label} onClick={onClick} className="hover:bg-slate-100" style={{ ...iconBtn, width: 34, height: 34, ...extra }}>{icon}</button>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', fontFamily: M.font }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: N.canvas, fontFamily: M.font }}>
       {/* toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '8px 12px', borderBottom: `1px solid ${M.line}`, flexShrink: 0, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '8px 12px', background: 'linear-gradient(180deg,#FFFFFF,#F7F9FC)', borderBottom: `1px solid ${N.cardLine}`, flexShrink: 0, position: 'relative', paddingRight: 52 }}>
         <span className="inline-flex lg:hidden"><button type="button" onClick={onBack} aria-label="Back to list" style={iconBtn}><ArrowLeft size={18} /></button></span>
+        {!isText && detail && (
+          <span className="hidden 2xl:inline-flex" style={{ gap: 4, marginRight: 6 }}>
+            <button type="button" onClick={() => startReply('reply')} style={tbLabeled}><Reply size={15} style={{ color: N.accent }} /> Reply</button>
+            <button type="button" onClick={() => startReply('replyAll')} style={tbLabeled}><ReplyAll size={15} style={{ color: N.accent }} /> Reply all</button>
+            <button type="button" onClick={() => startReply('forward')} style={tbLabeled}><Forward size={15} style={{ color: N.accent }} /> Forward</button>
+          </span>
+        )}
         {archived || trashed
-          ? tb('Move to inbox', <Inbox size={17} />, () => onAction('inbox'))
-          : tb('Archive (e)', <Archive size={17} />, () => onAction('archive'))}
-        {tb(trashed ? 'Restore' : 'Trash (#)', <Trash2 size={17} />, () => onAction(trashed ? 'untrash' : 'trash'))}
-        {tb('Mark unread (u)', <MailOpen size={17} />, () => onAction('unread'))}
-        {tb(starred ? 'Unflag (s)' : 'Flag (s)', <Flag size={17} fill={starred ? M.flag : 'none'} style={{ color: starred ? M.flag : undefined }} />, () => onAction(starred ? 'unstar' : 'star'))}
+          ? tb('Move to inbox', <Inbox size={17} style={{ color: '#4A8CFF' }} />, () => onAction('inbox'))
+          : tb('Archive (e)', <Archive size={17} style={{ color: '#64748B' }} />, () => onAction('archive'))}
+        {tb(trashed ? 'Restore' : 'Trash (#)', <Trash2 size={17} style={{ color: '#E5484D' }} />, () => onAction(trashed ? 'untrash' : 'trash'))}
+        {tb('Mark unread (u)', <MailOpen size={17} style={{ color: '#0EA5E9' }} />, () => onAction('unread'))}
+        {tb(starred ? 'Unflag (s)' : 'Flag (s)', <Flag size={17} fill={starred ? M.flag : 'none'} style={{ color: M.flag }} />, () => onAction(starred ? 'unstar' : 'star'))}
         <div style={{ position: 'relative' }}>
-          {tb('Snooze (h)', <AlarmClock size={17} />, () => setSnoozeOpen((o) => !o))}
+          {tb('Snooze (h)', <AlarmClock size={17} style={{ color: '#A855F7' }} />, () => setSnoozeOpen((o) => !o))}
           {snoozeOpen && (
             <div role="menu" style={menu}>
               <div style={{ fontSize: 11.5, color: M.ink3, padding: '6px 10px 4px' }}>Bring it back…</div>
@@ -219,8 +226,8 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
           )}
         </div>
         <div style={{ width: 1, height: 18, background: M.line, margin: '0 6px' }} />
-        {tb('Add to my to-dos', <ClipboardList size={17} />, onTodo)}
-        <button type="button" onClick={() => void summarize()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: M.blue, background: M.blueSoft, border: 0, borderRadius: 8, padding: '6px 11px', cursor: 'pointer', marginLeft: 4 }}>
+        {tb('Add to my to-dos', <ClipboardList size={17} style={{ color: '#10B981' }} />, onTodo)}
+        <button type="button" onClick={() => void summarize()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', background: N.brand, border: 0, borderRadius: 9, padding: '7px 12px', cursor: 'pointer', marginLeft: 4, boxShadow: '0 6px 16px -8px rgba(74,140,255,0.8)' }}>
           {sumBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Summarize
         </button>
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
@@ -236,15 +243,18 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <div style={{ padding: '18px 20px 10px' }}>
+        <div style={{ margin: '14px 16px 10px', padding: '16px 18px', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em', lineHeight: 1.3 }}>{isText ? row.contact_name : (t?.subject ?? row.subject)}</h2>
           {isText && row.contact_address && <div style={{ fontSize: 13, color: M.ink3, marginTop: 3 }}>{prettyPhone(row.contact_address)} · Texts &amp; calls (RingCentral)</div>}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {row.linked_type && RECORD_BADGE[row.linked_type] && <span style={{ ...chip, color: RECORD_BADGE[row.linked_type].color, background: `${RECORD_BADGE[row.linked_type].color}17`, fontWeight: 600 }}>{RECORD_BADGE[row.linked_type].label}{row.linked_label ? ` · ${row.linked_label}` : ''}</span>}
+            {row.needs_reply && !row.last_from_me && !row.bulk && <span style={{ ...chip, color: '#B76E00', background: 'rgba(245,165,36,0.15)', fontWeight: 600 }}>Waiting on you</span>}
+            {row.has_attachments && <span style={{ ...chip, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Paperclip size={11} /> Attachments</span>}
             {archived && !trashed && <span style={chip}>Archived</span>}
             {trashed && <span style={{ ...chip, color: M.red }}>In Trash</span>}
             {t?.snoozed_until && <span style={chip}>Snoozed until {fullTime(t.snoozed_until)}</span>}
             {row.bulk && <span style={chip}>Newsletter / notification</span>}
-            {starred && <span style={{ ...chip, color: M.flag }}>Flagged</span>}
+            {starred && <span style={{ ...chip, color: '#C25E00', background: 'rgba(255,149,0,0.14)', fontWeight: 600 }}>Flagged</span>}
           </div>
         </div>
         {summary && (
@@ -256,15 +266,15 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
         )}
         {loadErr && <div role="alert" style={{ padding: 20, fontSize: 13.5, color: M.red }}>{loadErr}</div>}
         {!detail && !loadErr && <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={18} className="animate-spin" /></div>}
-        {isText && detail && <div style={{ borderTop: `1px solid ${M.line}` }}><ChatView messages={detail.messages} /></div>}
-        <div style={{ borderTop: `1px solid ${M.line}`, display: isText ? 'none' : undefined }}>
+        {isText && detail && <div style={{ margin: '0 16px', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow }}><ChatView messages={detail.messages} /></div>}
+        <div style={{ padding: '0 16px', display: isText ? 'none' : undefined }}>
           {!isText && detail?.messages.map((m) => (
             <MessageCard key={m.id} m={m} selfEmail={selfEmail} expanded={open.has(m.id)}
               onToggle={() => setOpen((s) => { const n = new Set(s); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n })}
               onReply={(mode, mm) => startReply(mode, mm)} />
           ))}
         </div>
-        <div ref={bottom} style={{ padding: '14px 20px 24px' }}>
+        <div ref={bottom} style={{ padding: '6px 16px 28px' }}>
           {seed ? (
             <MailComposer compact seed={seed} channelId={channelId ?? row.channel_id} fromEmail={fromEmail}
               onQueue={(e, s) => { setSeed(null); onQueue(e, s) }} onClose={() => setSeed(null)} />
@@ -283,7 +293,8 @@ export default function MailReader({ row, selfEmail, channelId, fromEmail, onAct
   )
 }
 
-const chip: React.CSSProperties = { fontSize: 11.5, color: M.ink3, background: M.side, borderRadius: 6, padding: '2px 8px' }
+const chip: React.CSSProperties = { fontSize: 11.5, color: '#5B6B80', background: '#EEF1F6', borderRadius: 6, padding: '3px 8px' }
+const tbLabeled: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: M.ink, background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 9, padding: '6px 11px', cursor: 'pointer', fontFamily: M.font, boxShadow: '0 1px 2px rgba(15,23,42,0.05)' }
 const menu: React.CSSProperties = { position: 'absolute', top: 36, left: 0, zIndex: 30, minWidth: 220, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.14)', padding: 4 }
 const menuItem: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'left', fontSize: 13, color: M.ink, background: 'none', border: 0, borderRadius: 6, padding: '7px 10px', cursor: 'pointer', fontFamily: M.font }
-const replyBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, color: M.ink, background: '#fff', border: `1px solid ${M.lineStrong}`, borderRadius: 9, padding: '8px 14px', cursor: 'pointer', fontFamily: M.font }
+const replyBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, color: M.ink, background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 10, padding: '9px 15px', cursor: 'pointer', fontFamily: M.font, boxShadow: N.cardShadow }

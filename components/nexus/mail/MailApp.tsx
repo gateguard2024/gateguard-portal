@@ -13,7 +13,7 @@ import MailComposer, { type ComposerSeed, type OutgoingEmail } from './MailCompo
 import MailContext from './MailContext'
 import MailSettings from './MailSettings'
 import { NewTextModal } from './MailText'
-import { FOLDERS, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
+import { FOLDERS, FOLDER_COLOR, N, M, RECORD_BADGE, ago, api, initials, listTime, tintFor, type Account, type Counts, type Folder, type ThreadRow } from './mailShared'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Archive, Inbox, Paperclip, PenSquare, MailOpen, Mail: MailI, Sparkles, AlarmClock, Send, Trash2, Link2, Clock: ClockI, Sparkle: Star2, Phone: PhoneI, ArrowLeft, PanelRight, Flag, CheckCheck } = require('lucide-react') as any
 
@@ -313,62 +313,79 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
 
   if (settings) return <Shell onClose={onClose} closeLabel={closeLabel}><MailSettings accounts={accounts ?? []} onBack={() => setSettings(false)} onChanged={() => { void sync(true) }} /></Shell>
 
+  const sideGroups: { label: string; ids: Folder[] }[] = [
+    { label: 'Mailboxes', ids: ['all_inbox', 'inbox', 'other', 'needs_reply'] },
+    { label: 'Views', ids: ['unread', 'starred', 'snoozed', 'phone'] },
+    { label: 'More', ids: ['sent', 'linked', 'archived', 'trash'] },
+  ]
   const sidebar = (
-    <nav aria-label="Mail folders" style={{ width: 228, flexShrink: 0, background: M.side, borderRight: `1px solid ${M.line}`, flexDirection: 'column', minHeight: 0 }} className="hidden lg:flex">
-      <div style={{ padding: '14px 12px 8px' }}>
-        <button type="button" onClick={newEmail} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: M.blue, border: 0, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: M.font }}>
+    <nav aria-label="Mail folders" style={{ width: 240, flexShrink: 0, background: 'transparent', borderRight: `1px solid ${N.line}`, flexDirection: 'column', minHeight: 0, color: N.ink }} className="hidden lg:flex">
+      <div style={{ padding: '16px 14px 10px' }}>
+        <button type="button" onClick={newEmail} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: N.brand, border: 0, borderRadius: 11, padding: '11px 12px', cursor: 'pointer', fontFamily: M.font, boxShadow: '0 8px 22px -8px rgba(74,140,255,0.65), inset 0 1px 0 rgba(255,255,255,0.25)' }}>
           <PenSquare size={16} /> New email
         </button>
         {rcAccount && (
-          <button type="button" onClick={() => setNewText(true)} style={{ width: '100%', marginTop: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13.5, fontWeight: 500, color: M.blue, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer', fontFamily: M.font }}>
-            <PhoneI size={15} /> New text
+          <button type="button" onClick={() => setNewText(true)} style={{ width: '100%', marginTop: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13.5, fontWeight: 500, color: N.ink, background: 'rgba(255,255,255,0.06)', border: `1px solid ${N.line}`, borderRadius: 11, padding: '9px 12px', cursor: 'pointer', fontFamily: M.font }}>
+            <PhoneI size={15} style={{ color: FOLDER_COLOR.phone }} /> New text
           </button>
         )}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
-        {folders.map((f, i) => {
-          const Icon = FOLDER_ICON[f.id]
-          const on = folder === f.id && !gmailIds
-          const c = countFor(f.id)
+      <div style={{ flex: 1, overflowY: 'auto', padding: '2px 10px 10px' }}>
+        {sideGroups.map((g) => {
+          const items = folders.filter((f) => g.ids.includes(f.id))
+          if (!items.length) return null
           return (
-            <React.Fragment key={f.id}>
-              {(i === 4 || i === 7) && <div style={{ height: 1, background: M.line, margin: '8px 8px' }} />}
-              <button type="button" onClick={() => { setFolder(f.id); setGmailIds(null); setSelId(null) }} title={f.hint || undefined}
-                aria-current={on ? 'page' : undefined}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8, border: 0, cursor: 'pointer', background: on ? 'rgba(0,0,0,0.07)' : 'transparent', color: M.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 400, textAlign: 'left' }}>
-                <Icon size={16} style={{ color: on ? M.blue : M.ink3 }} />
-                <span style={{ flex: 1 }}>{f.label}</span>
-                {c > 0 && <span style={{ fontSize: 12, color: f.id === 'all_inbox' ? M.blue : M.ink3, fontWeight: f.id === 'all_inbox' ? 600 : 400 }}>{c}</span>}
-              </button>
-            </React.Fragment>
+            <div key={g.label} style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '4px 10px 6px' }}>{g.label}</div>
+              {items.map((f) => {
+                const Icon = FOLDER_ICON[f.id]
+                const on = folder === f.id && !gmailIds
+                const c = countFor(f.id)
+                const col = FOLDER_COLOR[f.id] ?? N.accent
+                return (
+                  <button key={f.id} type="button" onClick={() => { setFolder(f.id); setGmailIds(null); setSelId(null) }} title={f.hint || undefined}
+                    aria-current={on ? 'page' : undefined} className={on ? '' : 'hover:bg-white/[0.06]'}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 2, borderRadius: 9, border: 0, cursor: 'pointer', background: on ? N.sel : 'transparent', boxShadow: on ? `inset 3px 0 0 ${col}` : undefined, color: on ? '#fff' : N.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 500, textAlign: 'left' }}>
+                    <span aria-hidden style={{ width: 26, height: 26, borderRadius: 8, background: `${col}26`, color: col, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} /></span>
+                    <span style={{ flex: 1 }}>{f.label}</span>
+                    {c > 0 && <span style={{ fontSize: 11.5, fontWeight: 600, minWidth: 22, textAlign: 'center', padding: '1px 7px', borderRadius: 20, background: f.id === 'all_inbox' ? N.accent : N.pill, color: '#fff' }}>{c > 999 ? '999+' : c}</span>}
+                  </button>
+                )
+              })}
+            </div>
           )
         })}
       </div>
-      <div style={{ padding: '10px 14px 14px', borderTop: `1px solid ${M.line}` }}>
-        <div style={{ fontSize: 12.5, fontWeight: 500, color: M.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account?.email ?? 'Email'}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: syncLine.bad ? M.red : M.ink3, marginTop: 3 }}>
-          <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: syncLine.bad ? M.red : M.green, flexShrink: 0 }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{syncLine.text}</span>
-        </div>
-        {rcAccount && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: rcAccount.last_error ? M.red : M.ink3, marginTop: 3 }}>
-            <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: rcAccount.last_error ? M.red : M.green, flexShrink: 0 }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rcAccount.last_error ? `RingCentral: ${rcAccount.last_error}` : `RingCentral · synced ${ago(rcAccount.last_synced_at)}`}</span>
+      <div style={{ margin: 10, padding: '12px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: `1px solid ${N.line}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span aria-hidden style={{ width: 30, height: 30, borderRadius: 30, background: N.brand, color: '#fff', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(account?.email ?? '?').slice(0, 1).toUpperCase()}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: N.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account?.email ?? 'Email'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: syncLine.bad ? '#FCA5A5' : N.ink2, marginTop: 2 }}>
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: syncLine.bad ? '#F87171' : '#34D399', boxShadow: syncLine.bad ? undefined : '0 0 0 3px rgba(52,211,153,0.18)', flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{syncLine.text}</span>
+            </div>
+            {rcAccount && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: rcAccount.last_error ? '#FCA5A5' : N.ink2, marginTop: 2 }}>
+                <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: rcAccount.last_error ? '#F87171' : '#34D399', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rcAccount.last_error ? `RingCentral: ${rcAccount.last_error}` : `RingCentral · synced ${ago(rcAccount.last_synced_at)}`}</span>
+              </div>
+            )}
           </div>
-        )}
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           {syncLine.bad
-            ? <a href="/api/nexus/messages/google/connect" style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', background: M.blue, borderRadius: 7, padding: '5px 10px', textDecoration: 'none' }}>{account ? 'Reconnect Gmail' : 'Connect Gmail'}</a>
-            : <button type="button" onClick={() => void sync(true)} style={sideBtn}>{syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh</button>}
-          <button type="button" onClick={() => setSettings(true)} style={sideBtn} aria-label="Mail settings"><Settings size={13} /> Settings</button>
+            ? <a href="/api/nexus/messages/google/connect" style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', background: N.brand, borderRadius: 8, padding: '6px 10px', textDecoration: 'none' }}>{account ? 'Reconnect Gmail' : 'Connect Gmail'}</a>
+            : <button type="button" onClick={() => void sync(true)} style={navBtn}>{syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh</button>}
+          <button type="button" onClick={() => setSettings(true)} style={navBtn} aria-label="Mail settings"><Settings size={13} /> Settings</button>
         </div>
       </div>
     </nav>
   )
 
   const list = (
-    <section aria-label={folderLabel} style={{ flexDirection: 'column', minHeight: 0, background: '#fff', borderRight: `1px solid ${M.line}` }} className={`${selected ? 'hidden lg:flex' : 'flex'} w-full lg:w-[380px] lg:flex-shrink-0`}>
-      <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${M.line}` }}>
+    <section aria-label={folderLabel} style={{ flexDirection: 'column', minHeight: 0, background: N.canvas, borderRight: `1px solid ${N.cardLine}` }} className={`${selected ? 'hidden lg:flex' : 'flex'} w-full lg:w-[390px] lg:flex-shrink-0 lg:rounded-tl-[14px]`}>
+      <div style={{ padding: '14px 14px 10px', background: 'linear-gradient(180deg,#FFFFFF,#F7F9FC)', borderBottom: `1px solid ${N.cardLine}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           {/* phone: folder picker */}
           <div className="lg:hidden" style={{ position: 'relative' }}>
@@ -387,8 +404,9 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
               </div>
             )}
           </div>
+          <span className="hidden lg:inline-flex" aria-hidden style={{ width: 30, height: 30, borderRadius: 9, background: `${FOLDER_COLOR[folder] ?? N.accent}1F`, color: FOLDER_COLOR[folder] ?? N.accent, alignItems: 'center', justifyContent: 'center' }}>{React.createElement(FOLDER_ICON[folder] ?? Inbox, { size: 16 })}</span>
           <h2 className="hidden lg:block" style={{ margin: 0, fontSize: 19, fontWeight: 600, color: M.ink, letterSpacing: '-0.01em' }}>{gmailIds ? 'Gmail results' : folderLabel}</h2>
-          <span style={{ fontSize: 12, color: M.ink3 }}>{counts && !gmailIds && (folder === 'all_inbox' || folder === 'inbox' || folder === 'other') ? `${countFor(folder)} unread` : ''}</span>
+          {counts && !gmailIds && (folder === 'all_inbox' || folder === 'inbox' || folder === 'other') && <span style={{ fontSize: 11.5, fontWeight: 600, color: countFor(folder) ? N.accent : M.ink3, background: countFor(folder) ? 'rgba(74,140,255,0.10)' : 'transparent', borderRadius: 20, padding: '2px 8px' }}>{countFor(folder)} unread</span>}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
             <span className="flex lg:hidden" style={{ gap: 2 }}>
               <button type="button" onClick={() => void sync(true)} aria-label="Refresh" style={iconBtn}>{syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}</button>
@@ -397,7 +415,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: M.side, borderRadius: 9, padding: '0 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${N.cardLine}`, boxShadow: '0 1px 2px rgba(15,23,42,0.04)', borderRadius: 10, padding: '0 10px' }}>
           <Search size={14} style={{ color: M.ink3, flexShrink: 0 }} />
           <input ref={searchRef} value={qLive} onChange={(e) => setQLive(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void searchGmail() }}
             placeholder="Search mail" aria-label="Search mail" style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13.5, padding: '8px 0', color: M.ink, fontFamily: M.font }} />
@@ -430,7 +448,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
           <button type="button" onClick={clearPick} style={{ fontSize: 13, color: M.blue, background: 'none', border: 0, padding: '5px 8px', cursor: 'pointer', fontFamily: M.font }}>Done</button>
         </div>
       ) : rows.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 14px', borderBottom: `1px solid ${M.line}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '7px 16px 3px' }}>
           <button type="button" onClick={() => setPickMode(true)} style={linkBtn}>Select</button>
           {rows.some((r) => r.unread) && <button type="button" onClick={() => void bulk('read', { all: true })} style={linkBtn}><CheckCheck size={13} /> Mark all as read</button>}
         </div>
@@ -441,7 +459,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
         <div style={banner}>Changes are saved here. <a href="/api/nexus/messages/google/connect" style={{ color: M.blue, fontWeight: 600 }}>Reconnect Gmail</a> once so they also show in Gmail.</div>
       )}
 
-      <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 12px' }}>
         {loading && rows.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: M.ink3 }}><Loader2 size={18} className="animate-spin" /></div>
         ) : rows.length === 0 ? (
@@ -487,10 +505,20 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
       )}
     </div>
   ) : (
-    <div className="hidden lg:flex" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', background: '#fff', color: M.ink3, flexDirection: 'column', gap: 8, fontFamily: M.font }}>
-      <Inbox size={34} style={{ color: M.ink4 }} />
-      <div style={{ fontSize: 15, fontWeight: 500, color: M.ink2 }}>{rows.length ? 'Pick an email' : 'Nothing here'}</div>
-      <div style={{ fontSize: 12.5 }}>j / k to move · c for a new email</div>
+    <div className="hidden lg:flex" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', background: `radial-gradient(600px 400px at 50% 40%, rgba(74,140,255,0.08), transparent 70%), ${N.canvas}`, color: M.ink3, flexDirection: 'column', gap: 10, fontFamily: M.font }}>
+      <span aria-hidden style={{ width: 64, height: 64, borderRadius: 18, background: N.brand, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 16px 36px -14px rgba(74,140,255,0.7)' }}><Inbox size={30} /></span>
+      <div style={{ fontSize: 16, fontWeight: 600, color: M.ink }}>{rows.length ? 'Pick an email' : 'Nothing here'}</div>
+      <div style={{ fontSize: 12.5 }}>j / k to move · c for a new email · ⌘↵ to send</div>
+      {counts && (counts.needs_reply > 0 || counts.all_inbox > 0) && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+          {[['all_inbox', 'Unread', counts.all_inbox], ['needs_reply', 'Waiting on you', counts.needs_reply], ['snoozed', 'Snoozed', counts.snoozed]].map(([id, label, n]) => (
+            <button key={String(id)} type="button" onClick={() => { setFolder(id as Folder); setGmailIds(null) }} style={{ minWidth: 112, textAlign: 'left', padding: '10px 12px', borderRadius: 12, background: '#fff', border: `1px solid ${N.cardLine}`, boxShadow: N.cardShadow, cursor: 'pointer', fontFamily: M.font }}>
+              <div style={{ fontSize: 20, fontWeight: 600, color: FOLDER_COLOR[String(id)], fontVariantNumeric: 'tabular-nums' }}>{String(n)}</div>
+              <div style={{ fontSize: 12, color: M.ink3 }}>{String(label)}</div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 
@@ -537,14 +565,20 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
 
 function Shell({ children, onClose, closeLabel }: { children: React.ReactNode; onClose?: () => void; closeLabel: string }) {
   return (
-    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: N.bg, color: N.ink }}>
       {onClose && (
-        <div className="hidden lg:flex" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderBottom: `1px solid ${M.line}`, background: M.side, fontFamily: M.font }}>
-          <button type="button" onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: M.blue, background: 'none', border: 0, cursor: 'pointer', fontFamily: M.font }}>
-            <ArrowLeft size={15} /> {closeLabel}
+        <div className="hidden lg:flex" style={{ alignItems: 'center', gap: 12, padding: '9px 16px', borderBottom: `1px solid ${N.line}`, fontFamily: M.font }}>
+          <button type="button" onClick={onClose} className="hover:bg-white/[0.08]" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: N.ink, background: 'rgba(255,255,255,0.05)', border: `1px solid ${N.line}`, borderRadius: 9, padding: '6px 11px', cursor: 'pointer', fontFamily: M.font }}>
+            <ArrowLeft size={14} /> {closeLabel}
           </button>
-          <span style={{ fontSize: 13, fontWeight: 600, color: M.ink2 }}>Mail</span>
-          <span style={{ width: 80 }} />
+          <span style={{ flex: 1 }} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <span aria-hidden style={{ width: 26, height: 26, borderRadius: 8, background: N.brand, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 6px 16px -6px rgba(74,140,255,0.7)' }}><MailI size={14} /></span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#fff', letterSpacing: '-0.01em' }}>Mail</span>
+            <span style={{ fontSize: 11, color: N.label, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Nexus</span>
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={{ width: 120 }} />
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
@@ -555,40 +589,50 @@ function Shell({ children, onClose, closeLabel }: { children: React.ReactNode; o
 function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead, onStar }: { r: ThreadRow; selected: boolean; checked: boolean; picking: boolean; onCheck: (shift: boolean) => void; onOpen: () => void; onArchive: () => void; onRead: () => void; onStar: () => void }) {
   const badge = r.linked_type ? RECORD_BADGE[r.linked_type] : null
   const who = r.last_from_me ? `To: ${r.contact_name}` : r.contact_name
+  const tint = tintFor(r.contact_name)
+  const isText = r.channel === 'text'
   return (
-    <div id={`mail-row-${r.id}`} className="group" style={{ position: 'relative', display: 'flex', borderBottom: `1px solid ${M.line}`, background: checked ? 'rgba(0,113,227,0.06)' : selected ? M.sel : '#fff' }}>
-      <span aria-hidden style={{ width: 18, flexShrink: 0, paddingTop: 25, paddingLeft: 8 }}>{r.unread && <span style={{ display: 'block', width: 8, height: 8, borderRadius: 8, background: M.blue }} />}</span>
+    <div id={`mail-row-${r.id}`} className="group" style={{
+      position: 'relative', display: 'flex', margin: '6px 10px', borderRadius: 12,
+      background: checked ? '#F1F6FF' : N.card,
+      border: `1px solid ${selected ? N.accent : checked ? 'rgba(74,140,255,0.45)' : N.cardLine}`,
+      boxShadow: selected ? '0 0 0 3px rgba(74,140,255,0.16), 0 6px 18px -8px rgba(74,140,255,0.45)' : N.cardShadow,
+      overflow: 'hidden', transition: 'box-shadow .12s, border-color .12s',
+    }}>
+      {r.unread && <span aria-hidden style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3, background: N.accent }} />}
       {/* Avatar doubles as the select box (tap it, or hover on a computer) */}
       <button type="button" role="checkbox" aria-checked={checked} aria-label={`Select ${r.subject}`} onClick={(e) => onCheck(e.shiftKey)}
-        style={{ width: 34, height: 34, margin: '11px 0 0', borderRadius: 34, flexShrink: 0, border: 0, padding: 0, cursor: 'pointer', position: 'relative', background: 'transparent' }}>
-        <span className={picking || checked ? 'hidden' : 'flex lg:group-hover:hidden'} style={{ width: 34, height: 34, borderRadius: 34, background: `${tintFor(r.contact_name)}1A`, color: tintFor(r.contact_name), alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>{initials(r.contact_name)}</span>
+        style={{ width: 38, height: 38, margin: '12px 0 0 12px', borderRadius: 38, flexShrink: 0, border: 0, padding: 0, cursor: 'pointer', position: 'relative', background: 'transparent' }}>
+        <span className={picking || checked ? 'hidden' : 'flex lg:group-hover:hidden'} style={{ width: 38, height: 38, borderRadius: 38, background: `linear-gradient(140deg, ${tint}, ${tint}B3)`, color: '#fff', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 600, boxShadow: `0 4px 10px -4px ${tint}99` }}>{isText ? <PhoneI size={16} /> : initials(r.contact_name)}</span>
         <span className={picking || checked ? 'flex' : 'hidden lg:group-hover:flex'} style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ width: 20, height: 20, borderRadius: 20, border: checked ? 0 : `1.5px solid ${M.ink4}`, background: checked ? M.blue : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{checked && <Check size={13} strokeWidth={3} />}</span>
+          <span style={{ width: 22, height: 22, borderRadius: 22, border: checked ? 0 : `1.5px solid ${M.ink4}`, background: checked ? N.accent : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{checked && <Check size={14} strokeWidth={3} />}</span>
         </span>
       </button>
       <button type="button" onClick={(e) => (picking || e.metaKey || e.ctrlKey || e.shiftKey ? onCheck(e.shiftKey) : onOpen())} aria-current={selected ? 'true' : undefined}
-        style={{ flex: 1, minWidth: 0, display: 'flex', gap: 10, padding: '11px 14px 11px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
+        style={{ flex: 1, minWidth: 0, display: 'flex', gap: 10, padding: '11px 14px 11px 11px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: M.font }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.unread ? 600 : 500, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{who}{r.message_count && r.message_count > 1 ? <span style={{ color: M.ink3, fontWeight: 400 }}> {r.message_count}</span> : null}</span>
-            <span style={{ fontSize: 12, color: r.unread ? M.blue : M.ink3, flexShrink: 0 }}>{r.snoozed_until ? `⏰ ${listTime(r.snoozed_until)}` : listTime(r.last_at)}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.unread ? 700 : 600, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{who}{r.message_count && r.message_count > 1 ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: M.ink3, background: '#EEF1F6', borderRadius: 10, padding: '1px 6px' }}>{r.message_count}</span> : null}</span>
+            <span style={{ fontSize: 12, fontWeight: r.unread ? 600 : 400, color: r.unread ? N.accent : M.ink3, flexShrink: 0 }}>{r.snoozed_until ? `⏰ ${listTime(r.snoozed_until)}` : listTime(r.last_at)}</span>
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: r.unread ? 600 : 400, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.subject}</span>
-            {r.channel === 'text' && <PhoneI size={12} style={{ color: M.green, flexShrink: 0 }} aria-label="Text or call" />}
-            {r.has_attachments && <Paperclip size={12} style={{ color: M.ink3, flexShrink: 0 }} />}
-            {r.starred && <Flag size={12} fill={M.flag} style={{ color: M.flag, flexShrink: 0 }} aria-label="Flagged" />}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: r.unread ? 600 : 500, color: r.unread ? M.ink : M.ink2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{isText ? 'Text message' : r.subject}</span>
+            {r.has_attachments && <Paperclip size={12.5} style={{ color: M.ink3, flexShrink: 0 }} />}
+            {r.starred && <Flag size={12.5} fill={M.flag} style={{ color: M.flag, flexShrink: 0 }} aria-label="Flagged" />}
           </span>
-          <span style={{ fontSize: 12.5, color: M.ink3, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 } as React.CSSProperties}>{r.preview}</span>
-          {badge && (
-            <span style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: `${badge.color}14`, borderRadius: 5, padding: '1px 6px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>
+          <span style={{ fontSize: 12.5, color: M.ink3, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 } as React.CSSProperties}>{r.preview}</span>
+          {(badge || (r.needs_reply && !r.last_from_me) || r.bulk || isText) && (
+            <span style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+              {badge && <span style={{ ...tag, color: badge.color, background: `${badge.color}17`, maxWidth: 230 }}>{badge.label}{r.linked_label ? ` · ${r.linked_label}` : ''}</span>}
+              {isText && <span style={{ ...tag, color: '#0F9F6E', background: 'rgba(52,211,153,0.15)' }}>Text</span>}
+              {r.needs_reply && !r.last_from_me && !r.bulk && <span style={{ ...tag, color: '#B76E00', background: 'rgba(245,165,36,0.15)' }}>Waiting on you</span>}
+              {r.bulk && <span style={{ ...tag, color: '#5B6B80', background: '#EEF1F6' }}>Newsletter</span>}
             </span>
           )}
         </span>
       </button>
       {!picking && (
-        <div className="hidden lg:group-hover:flex" style={{ position: 'absolute', right: 10, bottom: 8, gap: 2, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', padding: 2 }}>
+        <div className="hidden lg:group-hover:flex" style={{ position: 'absolute', right: 10, bottom: 8, gap: 2, background: '#fff', borderRadius: 9, boxShadow: '0 4px 14px rgba(15,23,42,0.16)', border: `1px solid ${N.cardLine}`, padding: 2 }}>
           <button type="button" title={r.archived ? 'Move to inbox' : 'Archive'} aria-label={r.archived ? 'Move to inbox' : 'Archive'} onClick={onArchive} style={iconBtnSm}>{r.archived ? <Inbox size={14} /> : <Archive size={14} />}</button>
           <button type="button" title={r.unread ? 'Mark read' : 'Mark unread'} aria-label={r.unread ? 'Mark read' : 'Mark unread'} onClick={onRead} style={iconBtnSm}><MailOpen size={14} /></button>
           <button type="button" title={r.starred ? 'Unflag' : 'Flag'} aria-label={r.starred ? 'Unflag' : 'Flag'} onClick={onStar} style={iconBtnSm}><Flag size={14} fill={r.starred ? M.flag : 'none'} style={{ color: r.starred ? M.flag : undefined }} /></button>
@@ -597,6 +641,7 @@ function Row({ r, selected, checked, picking, onCheck, onOpen, onArchive, onRead
     </div>
   )
 }
+const tag: React.CSSProperties = { fontSize: 11, fontWeight: 600, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
 function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }: { folder: Folder; searching: boolean; hasAccount: boolean; accountsLoaded: boolean; onConnect: () => void }) {
   if (accountsLoaded && !hasAccount) {
@@ -614,6 +659,7 @@ function EmptyState({ folder, searching, hasAccount, accountsLoaded, onConnect }
   return <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13.5, color: M.ink3, fontFamily: M.font }}>{text}</div>
 }
 
+const navBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: N.ink, background: 'rgba(255,255,255,0.07)', border: `1px solid ${N.line}`, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', fontFamily: M.font }
 const iconBtn: React.CSSProperties = { width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 0, background: 'transparent', color: M.ink2, cursor: 'pointer' }
 const iconBtnSm: React.CSSProperties = { ...iconBtn, width: 28, height: 28 }
 const sideBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: M.ink2, background: '#fff', border: `1px solid ${M.line}`, borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontFamily: M.font }

@@ -73,7 +73,7 @@ export const syncMailboxes = inngest.createFunction(
           return { fetched: rr.fetched, updated: rr.updated, error: rr.error ?? null, provider: 'ringcentral' }
         }
         if (event?.name !== 'messages/mailbox.sync' && ch.gmail_history_id && ch.last_synced_at && Date.now() - Date.parse(ch.last_synced_at) < 30_000) return { skipped: true }
-        const r = await fetchGmailInbox(supabase, ch)
+        const r = await fetchGmailInbox(supabase, ch, { heavy: true })
         return { fetched: r.fetched, updated: r.updated ?? 0, removed: r.removed ?? 0, mode: r.mode, error: r.error ?? null }
       })
     }

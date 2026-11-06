@@ -18,7 +18,7 @@ export function applyFolder(q: any, folder: Folder, nowIso: string) {
     case 'other':       return q.eq('is_archived', false).eq('is_trashed', false).or(notSnoozed).eq('is_bulk', true).is('linked_type', null).is('linked_opportunity_id', null).is('linked_customer_org_id', null)
     case 'unread':      return q.eq('is_trashed', false).eq('is_archived', false).gt('unread_count', 0)
     case 'needs_reply': return q.eq('is_trashed', false).eq('is_archived', false).eq('is_bulk', false).eq('last_direction', 'inbound').or(notSnoozed)
-                          .gte('last_message_at', new Date(Date.now() - 30 * 86400_000).toISOString())
+                          .gte('last_message_at', new Date(Date.now() - 14 * 86400_000).toISOString())
     case 'starred':     return q.eq('is_trashed', false).eq('is_starred', true)
     case 'phone':       return q.eq('is_trashed', false).like('external_thread_id', 'rc:%')
     case 'snoozed':     return q.eq('is_trashed', false).gt('snoozed_until', nowIso)

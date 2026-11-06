@@ -156,6 +156,11 @@ export function extractAttachments(payload: GmailPart | undefined, out: MailAtta
 // Newsletters, notifications, receipts → "Other". Real people → "Priority".
 const BULK_FROM = /(^|[._+-])(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer|news(letter)?|marketing|updates?|digest|info|hello|team|support|billing|receipts?|accounts?)@/i
 const BULK_LABELS = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS']
+// Senders that are machines, not people (receipts, alerts, Nexus's own notices…).
+const AUTOMATED = /^(no-?reply|do-?not-?reply|donotreply|notifications?|notify|alerts?|mailer(-daemon)?|bounces?|news(letter)?s?|marketing|digest|reports?|updates?|automated|system|postmaster|invitations?|calendar-notification|feedback|surveys?|promo(tions)?|deals|offers)([+._-][^@]*)?@/i
+export const automatedAddress = (addr: string | null | undefined) => AUTOMATED.test(String(addr ?? '').trim())
+const CATEGORY_BULK = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS']
+
 export function looksBulk(headers: GmailHeader[] | undefined, fromAddress: string, labels: string[]): boolean {
   if (labels.some((l) => BULK_LABELS.includes(l))) return true
   if (headerValue(headers, 'List-Unsubscribe') || headerValue(headers, 'List-Id')) return true
@@ -199,6 +204,7 @@ interface Ctx {
   touched: Set<string>                       // Nexus thread ids to recompute
   newThreadAddrs: Map<string, Set<string>>   // thread → addresses for CRM matching
   threadCache: Map<string, string>           // gmail threadId → Nexus thread id
+  heavy?: boolean                            // background run: allowed to do big one-time jobs
 }
 
 async function findOrCreateThread(ctx: Ctx, gthread: string, subject: string, others: { name: string; address: string }[], from: { name: string; address: string }, at: string): Promise<string | null> {
@@ -324,6 +330,8 @@ export async function recomputeThread(supabase: SupabaseClient, threadId: string
   const lab = (m: { labels?: string[] }) => (Array.isArray(m.labels) ? m.labels : [])
   const all = new Set<string>(msgs.flatMap(lab))
   const inbound = msgs.filter((m) => m.direction === 'inbound')
+  const bulkMsg = (m: { is_bulk?: boolean; labels?: string[]; from_address?: string }) =>
+    !!m.is_bulk || lab(m).some((l) => CATEGORY_BULK.includes(l)) || automatedAddress(m.from_address)
   const unread = inbound.filter((m) => !m.read_at).length
   const hasLabels = msgs.some((m) => lab(m).length > 0)
   // The conversation's name = the first email's subject, without "Re:" / "Fwd:".
@@ -339,7 +347,7 @@ export async function recomputeThread(supabase: SupabaseClient, threadId: string
     message_count: msgs.length,
     labels: [...all],
     has_attachments: msgs.some((m) => Array.isArray(m.attachments) && m.attachments.some((a: MailAttachmentMeta) => !a.inline)),
-    is_bulk: inbound.length > 0 && !msgs.some((m) => m.direction === 'outbound') && inbound.every((m) => m.is_bulk),
+    is_bulk: inbound.length > 0 && !msgs.some((m) => m.direction === 'outbound') && inbound.every(bulkMsg),
   }
   if (hasLabels) {
     patch.is_archived = !all.has('INBOX')
@@ -392,12 +400,15 @@ async function listIds(token: string, q: string, max: number): Promise<{ ids: { 
 // (cheap: ids only, 500 per call) and fixes any stored message that disagrees —
 // e.g. mail you read in Gmail weeks ago that still showed unread here.
 const SET_MAX = 3000
-async function reconcileLabels(ctx: Ctx, token: string): Promise<{ fixed: number; inbox_unread: number | null; at: string }> {
+async function reconcileLabels(ctx: Ctx, token: string): Promise<{ fixed: number; inbox_unread: number | null; at: string; bulk_v?: number }> {
   const at = new Date().toISOString()
-  const [inbox, unread, starred, trash, inboxUnread] = await Promise.all([
+  const [inbox, unread, starred, trash, inboxUnread, promo, social, upd, forums] = await Promise.all([
     listIds(token, 'in:inbox', SET_MAX), listIds(token, 'is:unread -in:spam', SET_MAX),
     listIds(token, 'is:starred', SET_MAX), listIds(token, 'in:trash', 1000),
     listIds(token, 'in:inbox is:unread', SET_MAX),
+    // Gmail's own sorting (newsletters, social, receipts/notices, groups) → "Other".
+    listIds(token, 'category:promotions newer_than:90d', SET_MAX), listIds(token, 'category:social newer_than:90d', 1000),
+    listIds(token, 'category:updates newer_than:90d', SET_MAX), listIds(token, 'category:forums newer_than:90d', 1000),
   ])
   if (inbox.error || unread.error || starred.error || trash.error) return { fixed: 0, inbox_unread: null, at }
   const sets = {
@@ -405,6 +416,11 @@ async function reconcileLabels(ctx: Ctx, token: string): Promise<{ fixed: number
     UNREAD: { ids: new Set(unread.ids.map((m) => m.id)), full: unread.ids.length < SET_MAX },
     STARRED: { ids: new Set(starred.ids.map((m) => m.id)), full: starred.ids.length < SET_MAX },
     TRASH: { ids: new Set(trash.ids.map((m) => m.id)), full: trash.ids.length < 1000 },
+    // Only ever added (the lists are limited to 90 days).
+    CATEGORY_PROMOTIONS: { ids: new Set((promo.error ? [] : promo.ids).map((m) => m.id)), full: false },
+    CATEGORY_SOCIAL: { ids: new Set((social.error ? [] : social.ids).map((m) => m.id)), full: false },
+    CATEGORY_UPDATES: { ids: new Set((upd.error ? [] : upd.ids).map((m) => m.id)), full: false },
+    CATEGORY_FORUMS: { ids: new Set((forums.error ? [] : forums.ids).map((m) => m.id)), full: false },
   }
   // What each stored message should look like.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -460,7 +476,16 @@ async function reconcileLabels(ctx: Ctx, token: string): Promise<{ fixed: number
     fixed += g.ids.length
     for (const t of g.threads) ctx.touched.add(t)
   }
-  return { fixed, inbox_unread: inboxUnread.error ? null : inboxUnread.ids.length, at }
+  // One time: re-sort every recent conversation with the better newsletter rules
+  // (mail stored before them never got checked). Only on the background run.
+  let bulk_v: number | undefined
+  if (ctx.heavy && ctx.channel.config?.bulk_v !== 2) {
+    const { data } = await ctx.supabase.from('message_threads').select('id').eq('channel_id', ctx.channel.id)
+      .gte('last_message_at', new Date(Date.now() - 120 * 86400_000).toISOString()).limit(3000)
+    for (const t of data ?? []) ctx.touched.add((t as { id: string }).id)
+    bulk_v = 2
+  }
+  return { fixed, inbox_unread: inboxUnread.error ? null : inboxUnread.ids.length, at, ...(bulk_v ? { bulk_v } : {}) }
 }
 
 // ─── the sync ─────────────────────────────────────────────────────────────────
@@ -468,7 +493,7 @@ export async function fetchGmailInbox(
   supabase: SupabaseClient,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   channel: any,
-  opts: { maxResults?: number; query?: string; full?: boolean } = {},
+  opts: { maxResults?: number; query?: string; full?: boolean; heavy?: boolean } = {},
 ): Promise<FetchResult> {
   if (channel.channel_type !== 'gmail' || !channel.oauth_refresh_token) {
     return { fetched: 0, error: 'not a connected Gmail channel' }
@@ -483,12 +508,12 @@ export async function fetchGmailInbox(
   const ctx: Ctx = {
     supabase, channel,
     selfAddress: String(channel.config?.from_address ?? channel.display_name ?? '').toLowerCase(),
-    touched: new Set(), newThreadAddrs: new Map(), threadCache: new Map(),
+    touched: new Set(), newThreadAddrs: new Map(), threadCache: new Map(), heavy: !!opts.heavy,
   }
   let fetched = 0, updated = 0, removed = 0
   let mode: FetchResult['mode'] = 'history'
   let newHistoryId: string | null = null
-  let reconcile: { fixed: number; inbox_unread: number | null; at: string } | null = null
+  let reconcile: { fixed: number; inbox_unread: number | null; at: string; bulk_v?: number } | null = null
 
   try {
     if (opts.query) {
@@ -572,7 +597,7 @@ export async function fetchGmailInbox(
       // (catches anything the history feed missed, and mail older than 30 days).
       if (!doFull) {
         const last = Date.parse(channel.config?.reconcile?.at ?? '') || 0
-        if (Date.now() - last > 10 * 60_000) { const rec = await reconcileLabels(ctx, token); updated += rec.fixed; reconcile = rec }
+        if (Date.now() - last > 10 * 60_000 || (opts.heavy && channel.config?.bulk_v !== 2)) { const rec = await reconcileLabels(ctx, token); updated += rec.fixed; reconcile = rec }
       }
       if (doFull) {
         mode = 'full'
@@ -610,7 +635,10 @@ export async function fetchGmailInbox(
 
   const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString(), last_error: null, last_error_at: null }
   if (newHistoryId && mode !== 'search') patch.gmail_history_id = newHistoryId
-  if (reconcile) patch.config = { ...(channel.config ?? {}), reconcile }
+  if (reconcile) {
+    const { bulk_v, ...rec } = reconcile
+    patch.config = { ...(channel.config ?? {}), reconcile: rec, ...(bulk_v ? { bulk_v } : {}) }
+  }
   await noteChannel(supabase, channel, patch)
 
   return { fetched, updated, removed, mode, thread_ids: [...ctx.touched] }

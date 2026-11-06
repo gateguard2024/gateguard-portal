@@ -82,6 +82,32 @@ export const M = {
   font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
 }
 
+// Nexus chrome (the navy frame the rest of Nexus uses) + the brand gradient.
+export const N = {
+  bg: 'radial-gradient(900px 600px at 0% -10%, rgba(30,150,230,0.18), transparent 60%),' +
+      'radial-gradient(900px 700px at 100% 120%, rgba(107,126,255,0.16), transparent 55%),' +
+      'linear-gradient(180deg, #141d2e 0%, #0e1521 55%, #0b111b 100%)',
+  ink: '#eaf2fb',
+  ink2: '#c3d3e2',
+  label: '#5FB8E0',
+  line: 'rgba(140,170,200,0.16)',
+  hover: 'rgba(255,255,255,0.06)',
+  sel: 'linear-gradient(90deg, rgba(74,140,255,0.30), rgba(74,140,255,0.10))',
+  pill: 'rgba(255,255,255,0.10)',
+  brand: 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#8A5CFF 100%)',
+  accent: '#4A8CFF',
+  canvas: '#EDF1F7',
+  card: '#FFFFFF',
+  cardLine: 'rgba(15,23,42,0.08)',
+  cardShadow: '0 1px 2px rgba(15,23,42,0.05), 0 2px 10px -4px rgba(15,23,42,0.10)',
+}
+// Each folder gets its own color so the list reads at a glance.
+export const FOLDER_COLOR: Record<string, string> = {
+  all_inbox: '#4A8CFF', inbox: '#A78BFA', other: '#94A3B8', needs_reply: '#F5A524',
+  unread: '#38BDF8', starred: '#FF9500', snoozed: '#C084FC', phone: '#34D399',
+  sent: '#22D3EE', linked: '#818CF8', archived: '#8FA3B8', trash: '#F87171', all: '#4A8CFF',
+}
+
 export const FOLDERS: { id: Folder; label: string; hint: string }[] = [
   { id: 'all_inbox', label: 'Inbox', hint: 'Everything in your Gmail inbox' },
   { id: 'inbox', label: 'Priority', hint: 'Just people and customers' },

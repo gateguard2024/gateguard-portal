@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import { X, Building2, Wrench, FileText, Search, Loader2, ExternalLink } from 'lucide-react'
-import { M, RECORD_BADGE, api, initials, tintFor, type ThreadRow } from './mailShared'
+import { M, N, RECORD_BADGE, api, initials, tintFor, type ThreadRow } from './mailShared'
 import { prettyPhone } from './MailText'
 
 type Ctx = {
@@ -82,10 +82,10 @@ export default function MailContext({ row, onLinked, onClose }: { row: ThreadRow
     : type === 'opportunity' ? `/crm/opportunities/${id}` : type === 'lead' ? `/crm/leads/${id}` : type === 'job' ? `/maintenance/${id}` : null
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', background: '#FBFBFD', borderLeft: `1px solid ${M.line}`, fontFamily: M.font }}>
-      <div style={{ padding: '18px 18px 14px', borderBottom: `1px solid ${M.line}`, position: 'relative' }}>
+    <div style={{ height: '100%', overflowY: 'auto', background: N.canvas, borderLeft: `1px solid ${N.cardLine}`, fontFamily: M.font, padding: '12px 12px 20px' }}>
+      <div style={{ padding: '18px 16px 14px', position: 'relative', borderRadius: 14, background: `radial-gradient(300px 140px at 0% 0%, ${tintFor(who)}22, transparent 70%), #fff`, border: `1px solid ${N.cardLine}`, boxShadow: N.cardShadow, marginBottom: 10 }}>
         {onClose && <button type="button" aria-label="Hide details" onClick={onClose} style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, border: 0, background: 'none', color: M.ink3, cursor: 'pointer', borderRadius: 6 }}><X size={14} /></button>}
-        <span aria-hidden style={{ width: 44, height: 44, borderRadius: 44, background: `${tintFor(who)}1A`, color: tintFor(who), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 600 }}>{initials(who)}</span>
+        <span aria-hidden style={{ width: 48, height: 48, borderRadius: 48, background: `linear-gradient(140deg, ${tintFor(who)}, ${tintFor(who)}B3)`, color: '#fff', boxShadow: `0 8px 18px -8px ${tintFor(who)}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 600 }}>{initials(who)}</span>
         <div style={{ fontSize: 15, fontWeight: 600, color: M.ink, marginTop: 8 }}>{who}</div>
         {email && (/^\+\d{8,15}$/.test(email)
           ? <a href={`tel:${email}`} style={{ fontSize: 12.5, color: M.ink3, textDecoration: 'none' }}>{prettyPhone(email)}</a>
@@ -219,10 +219,10 @@ export default function MailContext({ row, onLinked, onClose }: { row: ThreadRow
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ padding: '14px 18px', borderBottom: `1px solid ${M.line}` }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: M.ink3, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{title}</div>
+    <div style={{ padding: '12px 14px', marginBottom: 10, background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 14, boxShadow: N.cardShadow }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: N.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{title}</div>
       {children}
     </div>
   )
 }
-const cardLink: React.CSSProperties = { display: 'block', padding: '9px 10px', borderRadius: 9, background: '#fff', border: `1px solid ${M.line}`, textDecoration: 'none' }
+const cardLink: React.CSSProperties = { display: 'block', padding: '9px 10px', borderRadius: 10, background: 'linear-gradient(135deg, rgba(94,92,230,0.08), rgba(74,140,255,0.06))', border: `1px solid rgba(94,92,230,0.18)`, textDecoration: 'none' }
