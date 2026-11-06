@@ -16,6 +16,7 @@ export type OutgoingEmail = {
   subject?: string
   html: string
   text: string
+  closing?: string               // "Thank you," etc. — goes right above the signature
   attachments?: { filename: string; content: string; contentType: string; size: number }[]
 }
 
@@ -45,6 +46,7 @@ let sigCache: Promise<string> | null = null
 const loadSignature = () => (sigCache ??= api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => r.data.signature ?? '').catch(() => ''))
 // Settings saved a new signature → the next composer reads it fresh.
 export function resetSignatureCache() { sigCache = null }
+const CLOSINGS = ['Thank you,', 'Thanks,', 'Sincerely,', 'Best regards,', 'Regards,', 'Respectfully,', 'Best,', '']
 const sigIsHtml = (s: string) => /<\s*(img|div|p|br|table|span|a|b|strong|i|em|font)\b/i.test(s)
 
 export function clearDraft(k: string) { try { localStorage.removeItem(draftKey(k)) } catch { /* ignore */ } }
@@ -72,6 +74,10 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
   const [sigReady, setSigReady] = useState(false)
   const [sigEdit, setSigEdit] = useState(false)
   const [sigMsg, setSigMsg] = useState<string | null>(null)
+  // Closing line above the signature — your last choice is remembered.
+  const [closing, setClosing] = useState<string>(() => { try { return localStorage.getItem('gg_mail_closing') ?? 'Thank you,' } catch { return 'Thank you,' } })
+  const [closingCustom, setClosingCustom] = useState(false)
+  const pickClosing = (v: string) => { setClosing(v); try { localStorage.setItem('gg_mail_closing', v) } catch { /* ignore */ } }
   useEffect(() => { void loadSignature().then((s) => { setSignature(s); setSigReady(true) }) }, [])
   const saveSignature = async (html: string) => {
     const clean = html.replace(/<br\s*\/?>|&nbsp;|\s/gi, '') ? html : ''
@@ -137,7 +143,7 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
       forward: seed.mode === 'forward' || undefined,
       to, cc: cc || undefined, bcc: bcc || undefined,
       subject: subject || undefined,
-      html, text: noteText,
+      html, text: noteText, closing: closing.trim() || undefined,
       attachments: files.length ? files : undefined,
     }, { ...seed, to, cc, subject, html: noteHtml, attachments: files })
     clearDraft(seed.key)
@@ -176,15 +182,27 @@ export default function MailComposer({ seed, channelId, fromEmail, onQueue, onCl
         {empty && <div style={{ position: 'absolute', left: 14, top: 12, fontSize: 14, color: M.ink4, pointerEvents: 'none' }}>{seed.mode === 'forward' ? 'Add a note (optional)…' : 'Write your email…'}  ⌘↵ to send</div>}
         <div ref={ed} contentEditable suppressContentEditableWarning onInput={onInput} aria-label="Message"
           style={{ padding: '12px 14px', minHeight: compact ? 120 : 200, outline: 'none', fontSize: 14.5, lineHeight: 1.55, color: M.ink }} />
+        <div style={{ margin: '0 14px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {closingCustom
+            ? <input aria-label="Closing" autoFocus value={closing} onChange={(e) => pickClosing(e.target.value)} onBlur={() => setClosingCustom(false)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setClosingCustom(false) } }}
+                placeholder="Your closing…" style={{ fontSize: 14, color: M.ink, border: `1px solid ${M.lineStrong}`, borderRadius: 6, padding: '2px 6px', width: 200, fontFamily: 'inherit' }} />
+            : <select aria-label="Closing" value={CLOSINGS.includes(closing) ? closing : '__custom'} onChange={(e) => { if (e.target.value === '__edit') setClosingCustom(true); else if (e.target.value !== '__custom') pickClosing(e.target.value) }}
+                title="Closing line — goes right above your signature"
+                style={{ fontSize: 14, color: closing ? M.ink : M.ink4, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', appearance: 'auto' }}>
+                {CLOSINGS.map((c) => <option key={c} value={c}>{c || 'No closing'}</option>)}
+                {!CLOSINGS.includes(closing) && <option value="__custom">{closing}</option>}
+                <option value="__edit">Write my own…</option>
+              </select>}
+        </div>
         {signature && (
-          <div style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, position: 'relative' }}>
+          <div style={{ margin: '0 14px 12px', paddingTop: 2, position: 'relative' }}>
             <div aria-label="Your signature" title="Added when you send" style={{ opacity: 0.7, fontSize: 13, color: M.ink2, pointerEvents: 'none' }}
               {...(sigIsHtml(signature) ? { dangerouslySetInnerHTML: { __html: signature } } : { children: <span style={{ whiteSpace: 'pre-wrap' }}>{signature}</span> })} />
             <button type="button" onClick={() => setSigEdit(true)} style={{ position: 'absolute', top: 6, right: 0, fontSize: 12, color: M.blue, background: '#fff', border: 0, cursor: 'pointer', padding: '2px 4px' }}>Edit signature</button>
           </div>
         )}
         {!signature && sigReady && (
-          <div style={{ margin: '0 14px 12px', paddingTop: 8, borderTop: `1px dashed ${M.line}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: M.ink3 }}>
+          <div style={{ margin: '0 14px 12px', paddingTop: 4, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: M.ink3 }}>
             No signature yet.
             <button type="button" onClick={() => setSigEdit(true)} style={{ fontSize: 12.5, fontWeight: 600, color: M.blue, background: 'none', border: 0, cursor: 'pointer', padding: 0 }}>+ Add signature</button>
           </div>

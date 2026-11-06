@@ -29,8 +29,9 @@ export type LeadRow = {
   source: string | null; lead_type: string | null; units: number | null; cameras: number | null; entry_points: number | null; mrr: number | null
   owner_id: string | null; owner: string | null; created_at: string; last_touch: string | null; touches: number
   next_step: { title: string; due: string; kind: string } | null; overdue: boolean; score: number; why: string[]; researched: boolean
+  snoozed_until?: string | null; snooze_reason?: string | null
 }
-type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'identified' | 'contacted' | 'sent_info' | 'stale', number>
+type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'identified' | 'contacted' | 'sent_info' | 'stale' | 'snoozed', number>
 type Kpis = { open: number; new_week: number; speed_hours: number | null; due_today: number; pipeline_mrr: number; conversion_pct: number; converted_90: number }
 type View = keyof Counts
 
@@ -45,6 +46,7 @@ const VIEWS: { id: View; label: string; color: string; icon: unknown; hint: stri
   { id: 'contacted', label: 'Contacted', color: '#38BDF8', icon: Phone, hint: '' },
   { id: 'sent_info', label: 'Info sent', color: '#34D399', icon: Send, hint: '' },
   { id: 'stale', label: 'Gone quiet (14+ days)', color: '#8FA3B8', icon: Snowflake, hint: '' },
+  { id: 'snoozed', label: 'Not now (snoozed)', color: '#64748B', icon: ClockI, hint: 'Comes back on its revisit date' },
 ]
 const STAGES: { id: LeadRow['bucket']; label: string; color: string; set: string }[] = [
   { id: 'identified', label: 'Identified', color: '#94A3B8', set: 'new' },
@@ -127,6 +129,8 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
     const now = Date.now()
     const t = q.trim().toLowerCase()
     let list = rows.filter((l) => {
+      if (view === 'snoozed') return !!l.snoozed_until
+      if (l.snoozed_until) return false
       switch (view) {
         case 'mine': return l.owner_id === me
         case 'new': return now - Date.parse(l.created_at) <= 14 * 86400_000
@@ -230,6 +234,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
             const c = counts?.[v.id] ?? 0
             return (
               <React.Fragment key={v.id}>
+                {i === 10 && <div style={{ height: 10 }} />}
                 {i === 6 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>By stage</div>}
                 <button type="button" onClick={() => setView(v.id)} title={v.hint || undefined} aria-current={on ? 'page' : undefined} className={on ? '' : 'hover:bg-white/[0.06]'}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 2, borderRadius: 9, border: 0, cursor: 'pointer', background: on ? N.sel : 'transparent', boxShadow: on ? `inset 3px 0 0 ${v.color}` : undefined, color: on ? '#fff' : N.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 500, textAlign: 'left' }}>
@@ -368,7 +373,9 @@ function LeadCard({ l, selected, compact, onOpen }: { l: LeadRow; selected: bool
           {[l.contact, l.company && l.company !== l.name ? l.company : null, l.location].filter(Boolean).join(' · ') || 'No contact yet'}
         </span>
         <span style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {l.next_step
+          {l.snoozed_until
+            ? <span style={{ ...chip, color: '#475569', background: '#E7ECF3' }}>Not now · back {new Date(`${l.snoozed_until}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{l.snooze_reason ? ` · ${l.snooze_reason}` : ''}</span>
+            : l.next_step
             ? <span style={{ ...chip, color: l.overdue ? '#C4302B' : '#0B5CAD', background: l.overdue ? 'rgba(240,68,56,0.12)' : 'rgba(74,140,255,0.12)' }}>{l.overdue ? 'Overdue: ' : 'Next: '}{l.next_step.title} · {dueText(l.next_step.due)}</span>
             : <span style={{ ...chip, color: '#9A5B00', background: 'rgba(245,165,36,0.16)' }}>No next step</span>}
           {!compact && <span style={{ ...chip, color: STAGES.find((s) => s.id === l.bucket)!.color === '#94A3B8' ? '#5B6B80' : '#0F766E', background: '#EEF1F6' }}>{STAGES.find((s) => s.id === l.bucket)!.label}</span>}
@@ -392,7 +399,7 @@ function LeadCard({ l, selected, compact, onOpen }: { l: LeadRow; selected: bool
 function Empty({ view, onNew }: { view: View; onNew: () => void }) {
   const msg: Partial<Record<View, string>> = {
     overdue: 'Nothing overdue. Nice work.', no_next: 'Every lead has a next step.', hot: 'No hot leads right now — log calls and set follow-ups to warm them up.',
-    stale: 'Nothing has gone quiet.', mine: 'No leads assigned to you yet.',
+    stale: 'Nothing has gone quiet.', mine: 'No leads assigned to you yet.', snoozed: 'Nothing snoozed. Use “Not now” on a lead to park it for 3, 6 or 12 months.',
   }
   return (
     <div style={{ padding: '50px 20px', textAlign: 'center', color: M.ink3, fontSize: 13.5 }}>

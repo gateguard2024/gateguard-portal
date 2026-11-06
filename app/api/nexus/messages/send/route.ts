@@ -100,9 +100,16 @@ export async function POST(req: NextRequest) {
   // Append the user's saved signature (if any) to the outgoing message.
   const { data: sig } = await supabase.from('user_settings').select('email_signature').eq('user_id', user.id).maybeSingle()
   const sigParts = signatureParts(sig?.email_signature ?? '')
-  const textWithSig = sigParts.text ? `${text ?? ''}\n\n${sigParts.text}` : text
+  // Closing line ("Thank you,", "Sincerely," …) sits right above the signature as one block,
+  // not a paragraph away. Trailing blank lines from the editor are trimmed first.
+  const closing = String(body?.closing ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
+  const escC = closing.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const tidy = (h: string) => h.replace(/(\s|&nbsp;|<br\s*\/?>|<div>\s*(<br\s*\/?>)?\s*<\/div>|<p>\s*(<br\s*\/?>)?\s*<\/p>)+$/gi, '')
+  const tail = [escC, sigParts.html].filter(Boolean).join('<br>')
+  const textTail = [closing, sigParts.text].filter(Boolean).join('\n')
+  const textWithSig = textTail ? `${String(text ?? '').replace(/\s+$/, '')}\n\n${textTail}` : text
   const htmlWithSig = html
-    ? (sigParts.html ? `${html}<br><br><div class="gg-signature">${sigParts.html}</div>` : html)
+    ? (tail ? `${isForward ? html : tidy(html)}<div class="gg-signature" style="margin-top:14px">${tail}</div>` : html)
     : undefined
 
   const email: OutboundEmail = {

@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const DAY = 86400_000
-const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at'
+const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason'
 type Bucket = 'identified' | 'contacted' | 'sent_info'
 function bucketOf(stage: string | null | undefined): Bucket {
   const s = String(stage ?? '').toLowerCase()
@@ -141,7 +141,7 @@ export async function GET() {
     }
   }
 
-  const out = leads.map((l) => {
+  const outAll = leads.map((l) => {
     const units = l.unit_count ?? null
     const cams = l.cameras ?? null
     const bucket = bucketOf(l.stage)
@@ -180,8 +180,13 @@ export async function GET() {
       overdue: !!ns && ns.due < todayIso,
       score, why,
       researched: !!l.property_intel,
+      // "Not now": off the working lists until this date (then back, with a revisit due).
+      snoozed_until: l.snoozed_until && String(l.snoozed_until) > todayIso ? String(l.snoozed_until).slice(0, 10) : null,
+      snooze_reason: l.snooze_reason ?? null,
     }
   })
+  const snoozed = outAll.filter((l) => l.snoozed_until)
+  const out = outAll.filter((l) => !l.snoozed_until)
 
   const mine = (l: { owner_id: string | null }) => l.owner_id === user.id
   const counts = {
@@ -195,6 +200,7 @@ export async function GET() {
     contacted: out.filter((l) => l.bucket === 'contacted').length,
     sent_info: out.filter((l) => l.bucket === 'sent_info').length,
     stale: out.filter((l) => (l.last_touch ? now - Date.parse(l.last_touch) > 14 * DAY : now - Date.parse(l.created_at) > 14 * DAY)).length,
+    snoozed: snoozed.length,
   }
 
   // Speed to lead: median hours from created → first contact, leads from the last 60 days.
@@ -216,5 +222,5 @@ export async function GET() {
     conversion_pct: conv,
     converted_90: converted ?? 0,
   }
-  return NextResponse.json({ leads: out, counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+  return NextResponse.json({ leads: [...out, ...snoozed], counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
 }

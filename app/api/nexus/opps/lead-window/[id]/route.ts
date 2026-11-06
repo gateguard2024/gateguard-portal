@@ -436,6 +436,42 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
   }
 
+  // ── snooze — "Not now": off the lists for 3 / 6 / 12 months, then back with a revisit ──
+  if (action === 'snooze') {
+    const months = Math.max(0, Math.min(24, Math.round(Number(body.months) || 0)))
+    const reason = clean(body.reason).slice(0, 200)
+    const note = clean(body.note).slice(0, 2000)
+    const nowIso = new Date().toISOString()
+    if (months === 0) {
+      const { error: wErr } = await supabase.from('leads').update({ snoozed_until: null, snooze_reason: null, updated_at: nowIso }).eq('id', lead.id)
+      if (wErr) return NextResponse.json({ success: false, message: /snoozed_until|snooze_reason/.test(wErr.message) ? 'Run migration 224 to use Not now.' : wErr.message }, { status: wErr.code === '42703' || wErr.code === 'PGRST204' ? 409 : 500 })
+      const { error: aErr } = await supabase.from('crm_activities').insert({ dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: 'Back on the list', body: 'Snooze ended early.', lead_id: lead.id })
+      if (aErr) console.error('lead snooze note:', aErr.message)
+      return NextResponse.json({ success: true, message: 'Back on the list.' })
+    }
+    const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+    et.setMonth(et.getMonth() + months)
+    const until = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`
+    const { error: sErr } = await supabase.from('leads').update({ snoozed_until: until, snooze_reason: reason || null, updated_at: nowIso }).eq('id', lead.id)
+    if (sErr) return NextResponse.json({ success: false, message: /snoozed_until|snooze_reason/.test(sErr.message) ? 'Run migration 224 to use Not now.' : sErr.message }, { status: sErr.code === '42703' || sErr.code === 'PGRST204' ? 409 : 500 })
+    const { error: tErr } = await supabase.from('todos').insert({
+      org_id: lead.org_id, title: `Revisit lead: ${leadLabel(lead)}`,
+      body: [reason && `Snoozed: ${reason}`, note].filter(Boolean).join('\n') || null,
+      priority: 'normal', status: 'open', due_date: until,
+      created_by: user.id, created_by_name: user.name,
+      assigned_to: String((lead as Record<string, unknown>).assigned_to_user_id ?? user.id), assigned_to_name: String((lead as Record<string, unknown>).assigned_to_name ?? user.name),
+      linked_type: 'lead', linked_id: lead.id, linked_label: leadLabel(lead),
+    })
+    if (tErr) return NextResponse.json({ success: false, message: `Snoozed, but the revisit reminder didn’t save: ${tErr.message}` }, { status: 500 })
+    const { error: aErr } = await supabase.from('crm_activities').insert({
+      dealer_org_id: lead.org_id, created_by: profileId, type: 'note',
+      subject: `Not now — revisit in ${months} months`,
+      body: [reason, note, `Back on ${until}`].filter(Boolean).join('\n'), lead_id: lead.id,
+    })
+    if (aErr) console.error('lead snooze note:', aErr.message)
+    return NextResponse.json({ success: true, message: `Snoozed until ${until}.`, snoozed_until: until })
+  }
+
   // ── update_details ─────────────────────────────────────────────────────────
   if (action === 'update_details') {
     const fieldsMap: Record<string, unknown> = {}

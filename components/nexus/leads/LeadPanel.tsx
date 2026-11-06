@@ -13,17 +13,19 @@ import { M, N } from '@/components/nexus/mail/mailShared'
 import MailApp from '@/components/nexus/mail/MailApp'
 import { type LeadRow, ago, chip, dueText, initials, money, scoreColor, scoreLabel, tint } from '@/components/nexus/LeadsHub'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Flame, StickyNote, Target, Sparkles, UserCheck, Edit2 } = require('lucide-react') as any
+const { Flame, StickyNote, Target, Sparkles, UserCheck, Edit2, Clock: ClockI } = require('lucide-react') as any
 
 type Activity = { id: string; type: string | null; subject: string | null; body: string | null; outcome: string | null; due_at: string | null; completed_at: string | null; created_at: string }
 type Todo = { id: string; title: string | null; body: string | null; status: string | null; due_date: string | null; created_at: string }
 type MailHit = { id: string; subject: string; preview: string; last_at: string; last_from_me: boolean; channel: string }
 type Detail = { lead: Record<string, unknown>; activity: { activities: Activity[] }; todos: Todo[] }
-type Tool = null | 'call' | 'note' | 'follow' | 'more' | 'edit'
+type Tool = null | 'call' | 'note' | 'follow' | 'more' | 'edit' | 'snooze'
 
 const STEPS: { id: LeadRow['bucket']; label: string }[] = [
   { id: 'identified', label: 'Identified' }, { id: 'contacted', label: 'Contacted' }, { id: 'sent_info', label: 'Info sent' },
 ]
+const SNOOZE_REASONS = ['Not interested right now', 'Under contract with someone', 'No budget this year', 'Bad timing', 'Just installed a system', 'Can’t reach the right person']
+function snoozeDate(months: number): string { const d = new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) }
 const OUTCOMES = ['Talked — interested', 'Left voicemail', 'No answer', 'Call back later', 'Not interested', 'Wrong number']
 const ACT_COLOR: Record<string, string> = { call: '#22C1EE', email: '#4A8CFF', meeting: '#8B5CF6', note: '#94A3B8', task: '#F5A524', visit: '#10B981' }
 
@@ -56,6 +58,9 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
   const [info, setInfo] = useState({ contact_name: '', company_name: '', email: '', phone: '', location: '', source: '' })
   const [users, setUsers] = useState<{ id: string; full_name: string; email: string }[] | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [snzMonths, setSnzMonths] = useState(6)
+  const [snzReason, setSnzReason] = useState('')
+  const [snzNote, setSnzNote] = useState('')
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/nexus/opps/lead-window/${lead.id}`, { cache: 'no-store' })
@@ -179,6 +184,13 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px 30px' }}>
+        {lead.snoozed_until && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '9px 11px', borderRadius: 11, background: '#E7ECF3', border: `1px solid ${N.cardLine}` }}>
+            <ClockI size={16} style={{ color: '#475569', flexShrink: 0 }} />
+            <div style={{ flex: 1, fontSize: 12.5, color: M.ink2 }}><b>Not now</b> — back {new Date(`${lead.snoozed_until}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{lead.snooze_reason ? ` · ${lead.snooze_reason}` : ''}</div>
+            <button type="button" disabled={busy === 'snooze'} onClick={async () => { if (await act('snooze', { months: 0 }, 'Back on the list')) onRemoved() }} style={smallBtn}>Bring back now</button>
+          </div>
+        )}
         {err && <div role="alert" style={{ marginBottom: 10, padding: '8px 11px', borderRadius: 9, background: '#FDECEA', color: M.red, fontSize: 12.5 }}>{err}</div>}
 
         {/* next step */}
@@ -208,11 +220,12 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
         </Card>
 
         {/* quick actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, margin: '10px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, margin: '10px 0' }}>
           <QA label="Log call" color="#22C1EE" icon={<Phone size={16} />} on={tool === 'call'} onClick={() => setTool(tool === 'call' ? null : 'call')} />
           <QA label="Note" color="#94A3B8" icon={<StickyNote size={16} />} on={tool === 'note'} onClick={() => setTool(tool === 'note' ? null : 'note')} />
           <QA label="Info sent" color="#10B981" icon={<Send size={16} />} busy={busy === 'send_info'} onClick={async () => { if (await act('send_info', {}, 'Marked info sent')) await onStage('sent_info') }} />
           <QA label="Visited" color="#8B5CF6" icon={<MapPin size={16} />} busy={busy === 'log_visit'} onClick={() => act('log_visit', {}, 'Site visit logged')} />
+          <QA label="Not now" color="#64748B" icon={<ClockI size={16} />} on={tool === 'snooze'} onClick={() => setTool(tool === 'snooze' ? null : 'snooze')} />
         </div>
 
         {tool === 'call' && (
@@ -227,6 +240,22 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
               {[['None', ''], ['Tomorrow', dateIn(1)], ['In 2 days', dateIn(2)], ['Next week', dateIn(7)]].map(([l, d]) => <button key={l} type="button" onClick={() => setCallNext(d)} aria-pressed={callNext === d} style={pickChip(callNext === d)}>{l}</button>)}
             </div>
             <FormBtns busy={busy === 'log_call' || busy === 'schedule_followup'} onCancel={() => setTool(null)} onSave={saveCall} label="Log call" />
+          </Card>
+        )}
+        {tool === 'snooze' && (
+          <Card>
+            <div style={label}>Not now — bring it back in</div>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+              {[3, 6, 12].map((m) => <button key={m} type="button" onClick={() => setSnzMonths(m)} aria-pressed={snzMonths === m} style={{ ...pickChip(snzMonths === m), flex: 1, padding: '7px 0', fontSize: 13 }}>{m} months</button>)}
+            </div>
+            <div style={label}>Why</div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+              {SNOOZE_REASONS.map((r) => <button key={r} type="button" onClick={() => setSnzReason(snzReason === r ? '' : r)} aria-pressed={snzReason === r} style={pickChip(snzReason === r)}>{r}</button>)}
+            </div>
+            <textarea aria-label="Snooze note" value={snzNote} onChange={(e) => setSnzNote(e.target.value)} placeholder="Anything to remember for next time? (contract end date, who to ask for…)" rows={2} style={{ ...inputS, resize: 'vertical' }} />
+            <div style={{ fontSize: 12, color: M.ink3, margin: '8px 0 10px' }}>It leaves your lists and comes back on {snoozeDate(snzMonths)} with a “Revisit” follow-up due.</div>
+            <FormBtns busy={busy === 'snooze'} onCancel={() => setTool(null)} label={`Snooze ${snzMonths} months`}
+              onSave={async () => { if (await act('snooze', { months: snzMonths, reason: snzReason, note: snzNote }, `Not now — back ${snoozeDate(snzMonths)}`)) { setSnzNote(''); setSnzReason(''); onRemoved() } }} />
           </Card>
         )}
         {tool === 'note' && (
