@@ -9,6 +9,9 @@ import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGly
 import { TasksSurface, addDays, fmtDue, localISO, type DueFilter, type Task } from '@/components/nexus/tasks/TasksSurface'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MailApp from '@/components/nexus/mail/MailApp'
+import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
+import { OperationsHub } from '@/components/nexus/OperationsHub'
+import { PAGE_BG_GRADIENT } from '@/components/nexus/tasks/shared'
 import type { ThreadRow } from '@/components/nexus/mail/mailShared'
 import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
 import { SiteStatusModule } from '@/components/nexus/SiteStatusModule'
@@ -345,6 +348,8 @@ export function MyDaySurface() {
   // Messages card = your real inbox, refreshed every minute.
   const [inbox, setInbox] = useState<{ rows: ThreadRow[]; unread: number; loaded: boolean; error: boolean }>({ rows: [], unread: 0, loaded: false, error: false })
   const [mailThreadId, setMailThreadId] = useState<string | null>(null)
+  const [newOpp, setNewOpp] = useState(false)
+  const [newWo, setNewWo] = useState(false)
   const loadInbox = useCallback(async () => {
     try {
       const r = await fetch('/api/nexus/messages/threads?folder=all_inbox&limit=6', { cache: 'no-store' })
@@ -525,18 +530,31 @@ export function MyDaySurface() {
             {taskOverdue.length > 0 && <> · <span style={{ color: '#FF8A80' }}><b style={{ fontWeight: 600 }}>{taskOverdue.length}</b> overdue</span></>}
           </div>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
-          <button type="button" onClick={() => { window.location.href = '/quotes/new' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-semibold sm:flex-none" style={{ background: L.blue, color: '#fff' }}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg> New quote
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+          <button type="button" onClick={() => { setMailThreadId(null); openCard(cards[3]) }} className="relative flex h-[38px] min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-semibold sm:gap-2 sm:px-4 sm:text-[14px]" style={{ background: 'linear-gradient(135deg,#19C8F5 0%,#4A8CFF 52%,#8A5CFF 100%)', color: '#fff', boxShadow: '0 8px 20px -10px rgba(74,140,255,0.8)' }}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> Mail
+            {inbox.unread > 0 && <span className="ml-0.5 rounded-full px-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.25)' }}>{inbox.unread > 99 ? '99+' : inbox.unread}</span>}
           </button>
-          <button type="button" onClick={() => { window.location.href = '/dispatch' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-medium sm:flex-none" style={DARK_BTN}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg> Work order
+          <button type="button" onClick={() => setNewOpp(true)} className="flex h-[38px] min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-medium sm:gap-2 sm:px-4 sm:text-[14px]" style={DARK_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg> Add opportunity
           </button>
-          <button type="button" onClick={() => { window.location.href = '/crm/leads' }} className="flex h-[38px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] sm:gap-2 sm:px-4 sm:text-[14px] font-medium sm:flex-none" style={DARK_BTN}>
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" /></svg> Add lead
+          <button type="button" onClick={() => setNewWo(true)} className="flex h-[38px] min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-medium sm:gap-2 sm:px-4 sm:text-[14px]" style={DARK_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z" /></svg> Add work order
+          </button>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: 'systems' }))} className="flex h-[38px] min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-medium sm:gap-2 sm:px-4 sm:text-[14px]" style={DARK_BTN}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg> Check system
           </button>
         </div>
       </div>
+
+      {newOpp && <NewOpportunityFlow onClose={() => setNewOpp(false)} onCreated={() => { setNewOpp(false); void loadSummary(); window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: 'opps' })) }} />}
+      {newWo && (
+        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:px-6 sm:py-6" style={{ backgroundColor: '#EEF2F7', backgroundImage: PAGE_BG_GRADIENT, backgroundRepeat: 'no-repeat', backgroundAttachment: 'local', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          <div className="relative mx-auto w-full" style={{ maxWidth: 1360 }}>
+            <OperationsHub embedded initialTab="Work Orders:new" onBack={() => { setNewWo(false); void loadSummary() }} />
+          </div>
+        </div>
+      )}
 
       {/* Four numbers */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
