@@ -55,6 +55,8 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/terms') ||
     // Public "find a dealer" directory — called from gateguard.co contact section
     pathname.startsWith('/api/dealers/locator') ||
+    // Website lead intake — gateguard.co forms land in Nexus → Leads (source 'website')
+    pathname.startsWith('/api/public/website-lead') ||
     // Conference landing page — public lead capture
     pathname.startsWith('/show') ||
     // Show lead API — called from public page
