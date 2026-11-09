@@ -5,7 +5,11 @@ export const dynamic = 'force-dynamic'
 
 // GET /api/calendar/google/connect
 // Initiates Google OAuth 2.0 flow for Calendar access
-export async function GET() {
+export async function GET(req: Request) {
+  // One Google sign-in now covers Mail + Calendar — use that flow (it returns here).
+  if (process.env.GOOGLE_CALENDAR_CLIENT_SECRET) {
+    return NextResponse.redirect(new URL('/api/nexus/messages/google/connect?from=calendar', req.url))
+  }
   const clientId    = process.env.GOOGLE_CALENDAR_CLIENT_ID
   const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI
 

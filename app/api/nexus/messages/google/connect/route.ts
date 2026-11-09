@@ -32,7 +32,10 @@ export async function GET(req: Request) {
   }
 
   // Signed so nobody can hand-craft a state that attaches their mailbox to someone else.
-  const state = signOAuthState({ user_id: user.id, org_id: user.org_id })
+  // One Google sign-in for Mail AND Calendar (same Google app) — so you approve once.
+  // ?from=calendar just sends you back to the Calendar page afterwards.
+  const from = new URL(req.url).searchParams.get('from') === 'calendar' ? 'calendar' : 'mail'
+  const state = signOAuthState({ user_id: user.id, org_id: user.org_id, from })
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -44,8 +47,10 @@ export async function GET(req: Request) {
       'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/calendar',
     ].join(' '),
     access_type: 'offline',
+    include_granted_scopes: 'true',
     prompt: 'consent',
     state,
   })

@@ -27,8 +27,15 @@ export default function MailSettings({ onBack, accounts, onChanged }: { onBack: 
     void api<{ signature?: string }>('/api/nexus/messages/signature').then((r) => { setSig(r.data.signature ?? ''); setSigLoaded(true) })
     // Back from Google with a result in the URL.
     const p = new URLSearchParams(window.location.search)
-    if (p.get('gmail_connected')) setMsg('Gmail connected. Your mail is syncing now.')
+    if (p.get('gmail_connected')) setMsg(p.get('gmail_limited')
+      ? 'Gmail connected, but Google didn’t allow Nexus to change your mail, so read / archive / trash won’t show in Gmail. Click Reconnect Gmail and tick every box on Google’s screen.'
+      : 'Gmail connected. Your mail is syncing now.')
     if (p.get('gmail_error')) setMsg(`Gmail didn’t connect (${p.get('gmail_error')}). Try again.`)
+    // Shown once — take it out of the address so Mail doesn't reopen Settings next time.
+    if (p.has('gmail_connected') || p.has('gmail_error')) {
+      for (const k of ['gmail_connected', 'gmail_error', 'gmail_limited']) p.delete(k)
+      try { window.history.replaceState(null, '', `${window.location.pathname}${p.toString() ? `?${p}` : ''}${window.location.hash}`) } catch { /* ignore */ }
+    }
   }, [])
 
   const health = (id: string) => accounts.find((a) => a.id === id)

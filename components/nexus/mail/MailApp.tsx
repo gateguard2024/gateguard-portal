@@ -55,7 +55,8 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
   const [composeFor, setComposeFor] = useState<{ mode: 'reply' | 'replyAll' | 'forward'; restore?: ComposerSeed } | null>(null)
   const [readerKey, setReaderKey] = useState(0)
   const [showContext, setShowContext] = useState(true)
-  const [settings, setSettings] = useState(false)
+  // Back from Google's sign-in → open Settings so the result (connected / limited / error) is shown.
+  const [settings, setSettings] = useState(() => typeof window !== 'undefined' && /[?&]gmail_(connected|error)=/.test(window.location.search))
   const [reconnectHint, setReconnectHint] = useState(false)
   const [folderMenu, setFolderMenu] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -456,7 +457,7 @@ export default function MailApp({ onClose, closeLabel = 'Done', initialFolder = 
 
       {needsMigration && <div style={banner}>Mail is running in basic mode until migration 222 is run.</div>}
       {reconnectHint && account && (
-        <div style={banner}>Changes are saved here. <a href="/api/nexus/messages/google/connect" style={{ color: M.blue, fontWeight: 600 }}>Reconnect Gmail</a> once so they also show in Gmail.</div>
+        <div style={banner}>Changes are saved here. <a href="/api/nexus/messages/google/connect" style={{ color: M.blue, fontWeight: 600 }}>Reconnect Gmail</a> so they also show in Gmail. On Google’s screen, tick every box (including “Read, compose and send… / see and edit your email”).</div>
       )}
 
       <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 12px' }}>

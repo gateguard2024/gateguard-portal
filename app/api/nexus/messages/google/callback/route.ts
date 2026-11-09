@@ -24,7 +24,11 @@ export async function GET(req: NextRequest) {
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? new URL(req.url).host
   const appUrl = `${proto}://${host}`
-  const back = (q: string) => NextResponse.redirect(`${appUrl}/?view=messages&${q}`)
+  // Where to land afterwards: Mail (default) or the Calendar page if that's where you started.
+  let fromCal = false
+  const back = (q: string) => fromCal
+    ? NextResponse.redirect(`${appUrl}/calendar?${/gmail_error/.test(q) ? `error=${q.split('=')[1]}` : 'connected=true'}`)
+    : NextResponse.redirect(`${appUrl}/?view=messages&${q}`)
 
   if (errorParam) return back('gmail_error=denied')
   if (!code || !state) return back('gmail_error=missing_params')
@@ -42,6 +46,7 @@ export async function GET(req: NextRequest) {
   const decoded = verifyOAuthState(state)
   if (!decoded?.user_id) return back('gmail_error=invalid_state')
   userId = String(decoded.user_id)
+  fromCal = decoded.from === 'calendar'
   orgId = (decoded.org_id as string | null) ?? null
 
   // Exchange code → tokens.
@@ -120,5 +125,19 @@ export async function GET(req: NextRequest) {
     return back('gmail_error=storage_failed')
   }
 
+  // Same sign-in also covers Calendar (when that box was ticked) — no second connect.
+  if (/auth\/calendar/.test(grantedScope)) {
+    const now = new Date().toISOString()
+    const { error: calErr } = await supabase.from('user_settings')
+      .upsert({ user_id: userId, gcal_refresh_token: refreshToken, gcal_connected_at: now }, { onConflict: 'user_id' })
+    if (calErr) {
+      console.error('Failed to store Google Calendar token:', calErr)
+      if (fromCal) return back('gmail_error=storage_failed')
+    }
+  } else if (fromCal) return back('gmail_error=calendar_not_allowed')
+
+  // Google lets people untick a permission on its sign-in screen. Without "modify",
+  // read / archive / star / trash stay in Nexus only — say so instead of looking fine.
+  if (grantedScope && !/gmail\.modify|mail\.google\.com/.test(grantedScope)) return back('gmail_connected=true&gmail_limited=1')
   return back('gmail_connected=true')
 }
