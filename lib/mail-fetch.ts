@@ -680,6 +680,39 @@ export async function gmailAttachment(channel: any, messageId: string, attachmen
   return { data: Buffer.from(r.data.data ?? '', 'base64url') }
 }
 
+// An inline picture (cid:…) by its Content-ID. Gmail hands small pictures (signature
+// icons, logos) over inside the message instead of as attachments, so they were never
+// saved — fetch the message and find the part. Also matches Outlook's
+// "image001.png@01DC…" style by file name.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function gmailInlineImage(channel: any, messageId: string, cid: string): Promise<{ data?: Buffer; mime?: string; error?: string }> {
+  const { token, error } = await getGmailAccessToken(channel.oauth_refresh_token)
+  if (!token) return { error }
+  const m = await fetchFull(token, messageId)
+  if (!m) return { error: 'Message not found in Gmail.' }
+  const want = cid.replace(/[<>]/g, '').trim().toLowerCase()
+  const wantFile = want.split('@')[0]
+  let hit: GmailPart | null = null
+  const walk = (p: GmailPart | undefined) => {
+    if (!p || hit) return
+    const id = headerValue(p.headers, 'Content-ID').replace(/[<>]/g, '').trim().toLowerCase()
+    const xid = headerValue(p.headers, 'X-Attachment-Id').trim().toLowerCase()
+    if ((id && id === want) || (xid && xid === want) || (!!p.filename && p.filename.toLowerCase() === wantFile && (p.mimeType ?? '').startsWith('image/'))) { hit = p; return }
+    for (const c of p.parts ?? []) walk(c)
+  }
+  walk(m.payload as GmailPart | undefined)
+  const part = hit as GmailPart | null
+  if (!part) return { error: 'Picture not found.' }
+  const mime = part.mimeType ?? 'image/png'
+  if (part.body?.data) return { data: Buffer.from(part.body.data, 'base64url'), mime }
+  if (part.body?.attachmentId) {
+    const r = await gget<{ data?: string }>(token, `/messages/${messageId}/attachments/${part.body.attachmentId}`)
+    if (!r.ok) return { error: r.error }
+    return { data: Buffer.from(r.data.data ?? '', 'base64url'), mime }
+  }
+  return { error: 'Picture has no data.' }
+}
+
 // Backfill formatted HTML for messages stored before HTML capture existed.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function backfillGmailHtml(supabase: any, channel: any, limit = 20): Promise<number> {

@@ -193,7 +193,7 @@ export function emailDoc(html: string, text: string): string {
   const body = html && html.trim()
     ? html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, '')
     : `<div class="gg-text">${linkify(cleanText(text || ''))}</div>`
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 html,body{margin:0;padding:0;background:#fff;color:#1D1D1F;font:14.5px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;overflow-wrap:anywhere}
 body{padding:2px 2px 8px}

@@ -40,6 +40,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       `/api/nexus/messages/attachment?m=${m.id}&a=${encodeURIComponent(a.attachment_id)}${inline ? '&inline=1' : ''}`
     let html: string = m.body_html || ''
     for (const a of atts) if (a.content_id) html = html.split(`cid:${a.content_id}`).join(url(a, true))
+    // Pictures we don't have on file (small inline ones) → fetched from Gmail when shown.
+    html = html.replace(/(\ssrc\s*=\s*["'])cid:([^"']+)(["'])/gi, (_x, a: string, cid: string, z: string) =>
+      `${a}/api/nexus/messages/inline?m=${m.id}&cid=${encodeURIComponent(cid)}${z}`)
+    // Pictures linked over plain http:// are blocked on a secure page — load them through Nexus.
+    html = html.replace(/(\ssrc\s*=\s*["'])(http:\/\/[^"']+)(["'])/gi, (_x, a: string, u: string, z: string) =>
+      `${a}/api/nexus/messages/img?u=${encodeURIComponent(u.replace(/&amp;/g, '&'))}${z}`)
     return {
       id: m.id,
       direction: m.direction === 'outbound' ? 'out' : 'in',
