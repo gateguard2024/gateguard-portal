@@ -48,8 +48,8 @@ function scoreLead(l: {
 // GET /api/nexus/leads → every open lead you can see, already scored, with its next
 // step, last touch and est. MRR, plus the counts for each view and the top numbers.
 // The screen filters / sorts on the client (it's at most a few thousand rows).
-export async function GET(req?: Request) {
-  const find = req ? new URL(req.url).searchParams.get('find') : null
+export async function GET(req: Request) {
+  const find = new URL(req.url).searchParams.get('find')
   if (find != null) return findLeads(find)
 
   const user = await getCurrentUser()
