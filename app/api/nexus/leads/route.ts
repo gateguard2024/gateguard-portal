@@ -48,7 +48,10 @@ function scoreLead(l: {
 // GET /api/nexus/leads → every open lead you can see, already scored, with its next
 // step, last touch and est. MRR, plus the counts for each view and the top numbers.
 // The screen filters / sorts on the client (it's at most a few thousand rows).
-export async function GET() {
+export async function GET(req?: Request) {
+  const find = req ? new URL(req.url).searchParams.get('find') : null
+  if (find != null) return findLeads(find)
+
   const user = await getCurrentUser()
   if (!user.canViewCRM) return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
   const scope = await resolveOrgScope(user)
@@ -223,4 +226,52 @@ export async function GET() {
     converted_90: converted ?? 0,
   }
   return NextResponse.json({ leads: [...out, ...snoozed], counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+}
+
+// GET /api/nexus/leads?find=wynne → every lead matching that name / contact / phone /
+// email / address — open, lost, snoozed or already a deal — with its status, so search
+// and the duplicate check can always say where a lead is and get you to it.
+async function findLeads(raw: string) {
+  const user = await getCurrentUser()
+  if (!user.canViewCRM) return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
+  const term = raw.replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  if (term.length < 2) return NextResponse.json({ matches: [] })
+  const scope = await resolveOrgScope(user)
+  const like = `%${term.replace(/_/g, '\\_')}%`
+  const cols = ['property_name', 'company_name', 'contact_name', 'email', 'phone', 'location']
+  const run = async (fields: string[]) => {
+    let q = supabase.from('leads').select('*').is('deleted_at', null)
+    q = applyOrgScope(q, scope)
+    q = applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (q as any).or(fields.map((c) => `${c}.ilike.${like}`).join(',')).order('updated_at', { ascending: false }).limit(15)
+  }
+  let { data, error } = await run(cols)
+  if (error && /property_name/.test(error.message ?? '')) ({ data, error } = await run(cols.filter((c) => c !== 'property_name')))
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data ?? []) as any[]
+
+  // Same "already a deal" rule as the list: linked deal, or a deal with the same name.
+  const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  let oq = supabase.from('opportunities').select('id, name, account_name, lead_id').is('deleted_at', null)
+  oq = applyOrgScope(oq, scope, 'dealer_org_id')
+  const { data: opps } = await oq.limit(10000)
+  const byLead = new Map<string, string>(), byName = new Map<string, string>()
+  for (const o of opps ?? []) {
+    if (o.lead_id) byLead.set(o.lead_id, o.id)
+    for (const n of [o.name, o.account_name]) { const k = norm(n); if (k.length >= 4 && !byName.has(k)) byName.set(k, o.id) }
+  }
+  const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
+  const matches = rows.map((l) => {
+    const dealId = l.opportunity_id || byLead.get(l.id) || byName.get(norm(l.property_name || l.company_name)) || null
+    const status = dealId ? 'deal' : l.lost_at || /^(lost|dead)$/i.test(l.stage ?? '') ? 'lost' : l.snoozed_until && String(l.snoozed_until) > today ? 'snoozed' : 'open'
+    return {
+      id: l.id, name: l.property_name || l.company_name || l.contact_name || 'Unnamed lead',
+      contact: l.contact_name ?? null, company: l.company_name ?? null, location: l.location || [l.city, l.state].filter(Boolean).join(', ') || null,
+      phone: l.phone ?? null, email: l.email ?? null, status, opportunity_id: dealId,
+      snoozed_until: status === 'snoozed' ? String(l.snoozed_until).slice(0, 10) : null, owner: l.assigned_to_name ?? null,
+    }
+  })
+  return NextResponse.json({ matches })
 }

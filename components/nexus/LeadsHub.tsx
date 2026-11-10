@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, X, Loader2, Phone, Mail, Filter, RefreshCw } from 'lucide-react'
 import { M, N } from '@/components/nexus/mail/mailShared'
 import { LeadPanel } from '@/components/nexus/leads/LeadPanel'
-import { NewLeadModal } from '@/components/nexus/leads/NewLeadModal'
+import { NewLeadModal, FoundRow, type FoundLead } from '@/components/nexus/leads/NewLeadModal'
 import { DealPage } from '@/components/nexus/sales/DealPage'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Flame, Clock: ClockI, AlarmClock, Sparkles, Users: UsersI, Inbox, Snowflake, LayoutList, LayoutGrid, UserCheck, Send, Target, TrendingUp: Trend } = require('lucide-react') as any
@@ -154,6 +154,33 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
   }, [rows, view, q, sort, me])
 
   const selected = rows.find((r) => r.id === selId) ?? null
+
+  // Search also looks past this list — lost leads, Not now, ones already a deal — so a
+  // lead is never "missing" when the duplicate check says it exists.
+  const [found, setFound] = useState<FoundLead[]>([])
+  useEffect(() => {
+    const t = q.trim()
+    if (t.length < 2) { setFound([]); return }
+    const h = window.setTimeout(async () => {
+      const d = await fetch(`/api/nexus/leads?find=${encodeURIComponent(t)}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      setFound(Array.isArray(d?.matches) ? d.matches : [])
+    }, 350)
+    return () => window.clearTimeout(h)
+  }, [q])
+  const elsewhere = found.filter((m) => !filtered.some((l) => l.id === m.id))
+  async function goTo(m: FoundLead) {
+    setShowNew(false)
+    if (m.status === 'deal' && m.opportunity_id) { setDealId(m.opportunity_id); return }
+    if (m.status === 'lost') {
+      const r = await fetch(`/api/nexus/opps/lead-window/${m.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_status', stage: 'new' }) })
+      if (!r.ok) { flash('Couldn’t bring that lead back.'); return }
+      flash(`${m.name} is back in your leads`)
+      await load(true)
+    }
+    setQ('')
+    setView(m.status === 'snoozed' ? 'snoozed' : 'all')
+    setSelId(m.id)
+  }
 
   // Keyboard: j/k move, n new lead, / search, Esc close.
   useEffect(() => {
@@ -301,9 +328,17 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
               {loading && !rows.length ? (
                 <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={20} className="animate-spin" /></div>
               ) : layout === 'list' ? (
-                filtered.length === 0 ? <Empty view={view} onNew={() => setShowNew(true)} /> : filtered.map((l) => (
-                  <LeadCard key={l.id} l={l} selected={l.id === selId} onOpen={() => setSelId(l.id)} />
-                ))
+                <>
+                  {filtered.length === 0 && !(q && elsewhere.length) ? <Empty view={view} onNew={() => setShowNew(true)} /> : filtered.map((l) => (
+                    <LeadCard key={l.id} l={l} selected={l.id === selId} onOpen={() => setSelId(l.id)} />
+                  ))}
+                  {q && elsewhere.length > 0 && (
+                    <div style={{ margin: '10px', padding: '10px 14px', background: '#fff', border: `1px solid ${N.cardLine}`, borderRadius: 12, boxShadow: N.cardShadow }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: M.ink3, marginBottom: 4 }}>Also found — not in this list</div>
+                      {elsewhere.map((m) => <FoundRow key={m.id} m={m} onGo={goTo} />)}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap: 10, padding: '0 10px', minWidth: 1000 }}>
                   {[...STAGES, { id: 'deal' as const, label: 'Make it a deal', color: '#8B5CF6', set: '' }].map((s) => {
@@ -342,7 +377,7 @@ export function LeadsHub({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {showNew && <NewLeadModal onClose={() => setShowNew(false)} onOpenExisting={(id) => { setShowNew(false); setSelId(id) }}
+      {showNew && <NewLeadModal onClose={() => setShowNew(false)} onOpenExisting={(m) => void goTo(m)}
         onCreated={async (id) => { setShowNew(false); await load(true); setSelId(id); flash('Lead added') }} />}
 
       {toast && (

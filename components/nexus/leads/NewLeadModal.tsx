@@ -12,9 +12,32 @@ import { money } from '@/components/nexus/LeadsHub'
 
 const SOURCES: [string, string][] = [['aria', 'ARIA research'], ['outbound', 'Cold call / field'], ['referral', 'Referral'], ['website', 'Website'], ['phone', 'Called in'], ['company', 'Company supplied']]
 const TYPES = ['MDU', 'HOA', 'Commercial', 'Single family', 'Other']
-type Dup = { id: string; contact_name: string | null; company_name: string | null; location: string | null; stage: string | null; opportunity_id: string | null }
+export type FoundLead = { id: string; name: string; contact: string | null; company: string | null; location: string | null; phone: string | null; email: string | null
+  status: 'open' | 'lost' | 'snoozed' | 'deal'; opportunity_id: string | null; snoozed_until: string | null; owner: string | null }
+type Dup = FoundLead
+const STATUS: Record<FoundLead['status'], { label: string; color: string; bg: string; action: string }> = {
+  open: { label: 'Open lead', color: '#0B5CAD', bg: 'rgba(74,140,255,0.12)', action: 'Open it' },
+  snoozed: { label: 'Not now', color: '#475569', bg: '#E7ECF3', action: 'Open it' },
+  lost: { label: 'Marked lost', color: '#9A5B00', bg: 'rgba(245,165,36,0.16)', action: 'Bring it back' },
+  deal: { label: 'Already a deal', color: '#6D4FD8', bg: 'rgba(139,92,246,0.12)', action: 'Open the deal' },
+}
+/** One found lead: who it is, where it sits (open / lost / not now / deal) and the button to get there. */
+export function FoundRow({ m, onGo }: { m: FoundLead; onGo: (m: FoundLead) => void }) {
+  const st = STATUS[m.status]
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '4px 0' }}>
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', color: M.ink }}>
+        <b style={{ fontWeight: 600 }}>{m.name}</b>{[m.contact && m.contact !== m.name ? m.contact : null, m.location].filter(Boolean).map((x) => ` · ${x}`).join('')}
+      </span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: st.color, background: st.bg, borderRadius: 6, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+        {st.label}{m.status === 'snoozed' && m.snoozed_until ? ` until ${new Date(`${m.snoozed_until}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}
+      </span>
+      <button type="button" onClick={() => onGo(m)} style={{ fontSize: 12, fontWeight: 600, color: '#0B5CAD', background: 'none', border: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}>{st.action}</button>
+    </div>
+  )
+}
 
-export function NewLeadModal({ onClose, onCreated, onOpenExisting }: { onClose: () => void; onCreated: (id: string) => void; onOpenExisting: (id: string) => void }) {
+export function NewLeadModal({ onClose, onCreated, onOpenExisting }: { onClose: () => void; onCreated: (id: string) => void; onOpenExisting: (m: FoundLead) => void }) {
   const [f, setF] = useState({ property: '', name: '', title: '', company: '', email: '', phone: '', location: '', source: 'aria', lead_type: 'MDU', units: '', entry_points: '', cameras: '', notes: '' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -28,8 +51,8 @@ export function NewLeadModal({ onClose, onCreated, onOpenExisting }: { onClose: 
     const h = window.setTimeout(async () => {
       const seen = new Map<string, Dup>()
       for (const t of terms.slice(0, 3)) {
-        const d = await fetch(`/api/nexus/opps/workbench?q=${encodeURIComponent(t)}`, { cache: 'no-store' }).then((r) => r.json()).catch(() => null)
-        for (const l of (d?.leads ?? []) as Dup[]) if (!seen.has(l.id)) seen.set(l.id, l)
+        const d = await fetch(`/api/nexus/leads?find=${encodeURIComponent(t)}`, { cache: 'no-store' }).then((r) => r.json()).catch(() => null)
+        for (const l of (d?.matches ?? []) as Dup[]) if (!seen.has(l.id)) seen.set(l.id, l)
       }
       setDups([...seen.values()].slice(0, 4))
     }, 450)
@@ -91,12 +114,7 @@ export function NewLeadModal({ onClose, onCreated, onOpenExisting }: { onClose: 
           {dups.length > 0 && (
             <div role="status" style={{ border: '1px solid rgba(245,165,36,0.45)', background: 'rgba(245,165,36,0.08)', borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 650, color: '#9A5B00', marginBottom: 4 }}><AlertTriangle size={14} /> Might already be in Nexus</div>
-              {dups.map((d) => (
-                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '3px 0' }}>
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{[d.company_name, d.contact_name, d.location].filter(Boolean).join(' · ')}{d.opportunity_id ? ' (already a deal)' : ''}</span>
-                  {!d.opportunity_id && <button type="button" onClick={() => onOpenExisting(d.id)} style={{ fontSize: 12, fontWeight: 600, color: '#0B5CAD', background: 'none', border: 0, cursor: 'pointer' }}>Open it</button>}
-                </div>
-              ))}
+              {dups.map((d) => <FoundRow key={d.id} m={d} onGo={onOpenExisting} />)}
             </div>
           )}
 

@@ -605,6 +605,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (stage === 'converted') updates.converted_at = new Date().toISOString()
     if (stage === 'won')       updates.won_at       = new Date().toISOString()
     if (stage === 'lost' || stage === 'dead') updates.lost_at = new Date().toISOString()
+    // Brought back from lost → clear it, or the lead stays hidden from the open lists.
+    else if ((lead as unknown as Record<string, unknown>).lost_at) updates.lost_at = null
 
     // First-entry stage timestamps → time-in-stage reporting (never overwrite the first touch).
     const Lrec = lead as unknown as Record<string, unknown>
