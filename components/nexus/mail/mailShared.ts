@@ -127,6 +127,8 @@ export const FOLDERS: { id: Folder; label: string; hint: string }[] = [
 export const RECORD_BADGE: Record<string, { label: string; color: string }> = {
   lead: { label: 'Lead', color: '#B25000' },
   customer: { label: 'Customer', color: '#248A3D' },
+  property: { label: 'Customer', color: '#248A3D' },   // the customer IS the property
+  work_order: { label: 'Job', color: '#0E7C86' },
   opportunity: { label: 'Deal', color: '#5E5CE6' },
   contact: { label: 'Contact', color: '#0071E3' },
   job: { label: 'Job', color: '#0E7C86' },

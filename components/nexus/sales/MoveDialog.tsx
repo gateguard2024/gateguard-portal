@@ -5,7 +5,7 @@
  * Lost asks for a reason + optional competitor. Open stages offer to schedule the next step.
  */
 import { useEffect, useState } from 'react'
-import { ACT_TYPES, BACKWARD_REASONS, FORWARD_REASONS, LOST_REASONS, localISO, stageIndex, stageLabel, type Deal } from './salesShared'
+import { ACT_TYPES, BACKWARD_REASONS, FORWARD_REASONS, LOST_REASONS, localISO, stageIndex, stageLabel, type Deal, openPropertyInSystems } from './salesShared'
 
 export function MoveDialog({ deal, to, onCancel, onDone }: {
   deal: Pick<Deal, 'id' | 'name' | 'stage'>
@@ -27,7 +27,7 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   // After a win: which customer the deal became (shown before the dialog closes).
-  const [wonInfo, setWonInfo] = useState<{ card: Deal; customer?: string; created?: boolean; problem?: string } | null>(null)
+  const [wonInfo, setWonInfo] = useState<{ card: Deal; customer?: string; created?: boolean; problem?: string; siteId?: string } | null>(null)
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }
@@ -48,8 +48,8 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not move the deal.')
       if (won && data.provisioning) {
-        const p = data.provisioning as { ok?: boolean; customer_name?: string; created_customer?: boolean; error?: string }
-        setWonInfo({ card: data.card as Deal, customer: p.customer_name, created: p.created_customer, problem: p.ok === false ? p.error : undefined })
+        const p = data.provisioning as { ok?: boolean; customer_name?: string; created_customer?: boolean; error?: string; site_id?: string }
+        setWonInfo({ card: data.card as Deal, customer: p.customer_name, created: p.created_customer, problem: p.ok === false ? p.error : undefined, siteId: p.site_id })
         setBusy(false)
         return
       }
@@ -69,10 +69,11 @@ export function MoveDialog({ deal, to, onCancel, onDone }: {
         <div className="sb-dlg">
           <h3>Won 🎉</h3>
           {wonInfo.customer
-            ? <p className="sb-sub" style={{ margin: '6px 0 0' }}>{wonInfo.created ? 'New customer created: ' : 'Added to customer: '}<b>{wonInfo.customer}</b>. The property is set up under them and the install kickoff has started.</p>
+            ? <p className="sb-sub" style={{ margin: '6px 0 0' }}>{wonInfo.created ? 'New customer: ' : 'Customer: '}<b>{wonInfo.customer}</b>. The property is ready and the install kickoff has started — next, set up its gates, cameras and access.</p>
             : <p className="sb-sub" style={{ margin: '6px 0 0' }}>The deal is won, but the customer wasn’t set up{wonInfo.problem ? ` (${wonInfo.problem})` : ''}. You can add it from Customers.</p>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-            <button type="button" className="sb-btn pri" onClick={() => onDone(wonInfo.card)} autoFocus>Done</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+            <button type="button" className="sb-btn" onClick={() => onDone(wonInfo.card)}>Done</button>
+            {wonInfo.siteId && <button type="button" className="sb-btn pri" autoFocus onClick={() => { const id = wonInfo.siteId!; onDone(wonInfo.card); openPropertyInSystems(id) }}>Open property &amp; set up systems →</button>}
           </div>
         </div>
       </div>

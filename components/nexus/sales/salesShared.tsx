@@ -88,3 +88,13 @@ export function nextChip(d: Pick<Deal, 'next' | 'overdue'>): { cls: 'late' | 'to
   return { cls: 'ok', text: `${what} · ${diff < 7 ? due.toLocaleDateString(undefined, { weekday: 'short' }) : fmtDate(day)}` }
 }
 export const needsAttention = (d: Deal) => d.tab === 'open' && (!d.next || d.overdue > 0)
+
+/** Open a property's Systems page (gates, cameras, Brivo, Gate Watch) from anywhere in Nexus. */
+export function openPropertyInSystems(siteId: string) {
+  try {
+    const u = new URL(window.location.href)
+    u.searchParams.set('tab', 'systems'); u.searchParams.set('site', siteId)
+    window.history.replaceState({}, '', `${u.pathname}?${u.searchParams.toString()}`)
+  } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent('nexus:navigate', { detail: 'systems' }))
+}

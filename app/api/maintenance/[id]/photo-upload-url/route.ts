@@ -29,7 +29,13 @@ export async function POST(
       return NextResponse.json({ error: 'filename is required' }, { status: 400 })
     }
 
-    const safeName    = filename.replace(/\s+/g, '-').toLowerCase()
+    // Storage only takes plain names: accents → plain letters, anything else (#, &, (), ',
+    // emoji, the odd spaces Macs/phones put in names) → "-". Keep the extension.
+    const raw         = String(filename).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const dot         = raw.lastIndexOf('.')
+    const ext         = (dot > 0 ? raw.slice(dot + 1) : 'jpg').replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg'
+    const base        = (dot > 0 ? raw.slice(0, dot) : raw).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'photo'
+    const safeName    = `${base}.${ext}`
     const timestamp   = Date.now()
     const storagePath = `${params.id}/${timestamp}_${safeName}`
     const BUCKET      = 'work-order-photos'

@@ -119,8 +119,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     for (const i of invoices) { i.total = null; i.balance_due = null }
   }
 
+  // Won deal → its customer (the property) and the property's Systems page.
+  const [siteR, custR] = await Promise.all([
+    deal.site_id ? sb.from('sites').select('id, name, status').eq('id', deal.site_id).maybeSingle() : Promise.resolve({ data: null }),
+    deal.related_org_id ? sb.from('organizations').select('id, name').eq('id', deal.related_org_id).maybeSingle() : Promise.resolve({ data: null }),
+  ])
+  const home = { site: (siteR.data as Row | null) ?? null, customer: (custR.data as Row | null) ?? null }
+
   return NextResponse.json({
-    deal: raw, card, health, timeline: tl, upcoming, stageDays,
+    deal: raw, card, health, timeline: tl, upcoming, stageDays, home,
     contacts, quotes, primaryQuoteId: deal.quote_id ?? null, valuesLocked: !!deal.values_locked,
     surveys, files, todos, invoices, jobs, threads: threads.length, lead, aria,
     dealer: org?.name ?? null, owner: ownerFor(deal, names),

@@ -2433,15 +2433,18 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   }
   // One photo: get an upload link, upload, then record it. Only recorded if the file
   // actually uploaded — no broken "proof".
-  async function uploadOnePhoto(file: File): Promise<boolean> {
+  // Returns true, or the reason it failed (shown to the user — no more silent "didn't upload").
+  async function uploadOnePhoto(file: File): Promise<true | string> {
     try {
-      const up = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) }).then(r => r.json());
-      if (!up?.signedUrl) return false;
+      const u = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name || "photo.jpg" }) });
+      const up = await u.json().catch(() => ({}));
+      if (!u.ok || !up?.signedUrl) return u.status === 404 ? "no access to this job" : `upload link failed${up?.error ? `: ${up.error}` : ` (${u.status})`}`;
       const put = await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
-      if (!put.ok) return false;
+      if (!put.ok) { const t = await put.text().catch(() => ""); let msg = t; try { msg = JSON.parse(t)?.message || JSON.parse(t)?.error || t } catch { /* plain text */ } return `storage refused it (${put.status}${msg ? `: ${String(msg).slice(0, 120)}` : ""})`; }
       const r = await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) });
-      return r.ok;
-    } catch { return false; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); return `uploaded but not saved to the job${d?.error ? `: ${d.error}` : ` (${r.status})`}`; }
+      return true;
+    } catch (e) { return e instanceof Error ? e.message : "network error"; }
   }
   // One file (drawing, permit, quote…): upload, then attach it to the job.
   async function uploadOneFile(file: File): Promise<boolean> {
@@ -2468,7 +2471,8 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     await Promise.all(Array.from({ length: Math.min(3, list.length) }, async () => {
       while (next < list.length) {
         const f = list[next++];
-        if (!(await one(f))) failed.push(f.name);
+        const res = await one(f);
+        if (res !== true) failed.push(typeof res === "string" ? `${f.name} — ${res}` : f.name);
         done++; setUpProg({ done, total: list.length });
       }
     }));
@@ -2476,7 +2480,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     const ok = list.length - failed.length;
     const noun = kind === "photo" ? "photo" : "file";
     setExtraMsg(failed.length
-      ? `${ok} of ${list.length} ${noun}s added. These didn’t upload — try them again: ${failed.slice(0, 5).join(", ")}${failed.length > 5 ? "…" : ""}`
+      ? `${ok} of ${list.length} ${noun}s added. Didn’t upload: ${failed.slice(0, 3).join("; ")}${failed.length > 3 ? ` (+${failed.length - 3} more)` : ""}`
       : `${ok} ${noun}${ok === 1 ? "" : "s"} added.`);
     if (files.length > 40) setExtraMsg(m => `${m ?? ""} Only the first 40 were added — add the rest in another batch.`);
   }

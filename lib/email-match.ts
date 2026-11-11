@@ -123,6 +123,17 @@ export async function autoLinkThread(
     }
   }
 
+  // A deal that's been won lives on as the customer (the property) — file the email
+  // there, not on the closed deal.
+  if (opportunityId) {
+    const { data: o } = await supabase.from('opportunities').select('stage, won_at, related_org_id').eq('id', opportunityId).maybeSingle()
+    const won = !!o && (!!o.won_at || /^(won|closed_won)$/i.test(String(o.stage ?? '')))
+    if (won && o?.related_org_id) {
+      if (!thread.linked_customer_org_id) customerOrgId = o.related_org_id
+      opportunityId = undefined
+    }
+  }
+
   // 3) org_contacts → customer organization.
   if (!thread.linked_customer_org_id) {
     const orgFilter = ilikeOr('email', candidates)

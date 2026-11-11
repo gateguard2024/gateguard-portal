@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { carryForward } from '@/lib/relationship'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope, applyAssignedScope, getProfileId as resolveProfileIdFromLib } from '@/lib/org-scope'
 
@@ -660,6 +661,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         .eq('id', lead.opportunity_id)
         .maybeSingle()
       if (existingOpp) {
+        await carryForward(supabase, { from: 'lead', fromId: lead.id, to: 'opportunity', toId: existingOpp.id, label: String(existingOpp.name ?? leadLabel(lead)) })
         return NextResponse.json({
           success: true,
           message: 'Opportunity already exists for this lead.',
@@ -697,6 +699,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           return NextResponse.json({ success: false, message: linkError.message }, { status: 500 })
         }
       }
+      await carryForward(supabase, { from: 'lead', fromId: lead.id, to: 'opportunity', toId: existingByLeadId.id, label: String(existingByLeadId.name ?? leadLabel(lead)) })
       return NextResponse.json({
         success: true,
         message: 'Opportunity already exists for this lead.',
@@ -828,6 +831,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       ])
       carried = { crm_activities: c, attachments: at }
     } catch { /* non-blocking */ }
+    // Email threads + tasks on the lead move to the deal — the lead now lives inside it,
+    // so Mail / search / "Link to…" show the deal, not a second "lead" copy.
+    const moved = await carryForward(supabase, { from: 'lead', fromId: lead.id, to: 'opportunity', toId: newOpp.id, label: String(newOpp.name ?? leadLabel(lead)) })
 
     return NextResponse.json({
       success: true,
@@ -835,7 +841,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       opportunity: newOpp,
       opportunityId: newOpp.id,
       lead: updatedLead,
-      carried,
+      carried: { ...carried, email_threads: moved.threads, tasks: moved.tasks },
     })
   }
 

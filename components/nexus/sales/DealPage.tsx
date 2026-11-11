@@ -14,13 +14,14 @@ import { DealFields } from './DealFields'
 import { MoveDialog } from './MoveDialog'
 import { SALES_CSS } from './salesCss'
 import { proposalHref, startProposal } from './proposal'
-import { STAGES, fmtDate, initials, localISO, money, stageIndex, type Deal } from './salesShared'
+import { STAGES, fmtDate, initials, localISO, money, openPropertyInSystems, stageIndex, type Deal } from './salesShared'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
 type Risk = { key: string; level: 'red' | 'orange'; text: string; fix: string }
 type PageData = {
   deal: Row; card: Deal; health: { score: number; label: string; risks: Risk[]; ok: string[] } | null
+  home?: { site: Row | null; customer: Row | null }
   timeline: { id: string; kind: string; at: string; title: string; body?: string | null; meta?: string | null; who?: string | null; href?: string | null }[]
   upcoming: { id: string; source: 'activity' | 'task'; type: string; title: string; due: string | null; key?: string | null }[]
   stageDays: Record<string, number>
@@ -67,6 +68,10 @@ a.dpg-dark{color:#fff}
 .dpg-path button.done{background:#2D4A7A;color:#fff}.dpg-path button.on{background:#0071E3;color:#fff}
 .dpg-path button.won{background:#248A3D;color:#fff}.dpg-path button.lost{background:#D70015;color:#fff}
 .dpg-kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.dpg-home{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 12px;padding:12px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(48,209,88,.10),rgba(74,140,255,.08));border:1px solid rgba(48,209,88,.35)}
+.dpg-home .l{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#248A3D}
+.dpg-home .v{font-size:16px;font-weight:650;margin-top:2px}
+.dpg-home .s{font-size:12.5px;opacity:.75;margin-top:2px}
 .dpg-k{background:#fff;border-radius:12px;padding:11px 14px;box-shadow:0 1px 2px rgba(10,20,40,.06),0 8px 24px rgba(10,20,40,.08);min-width:0}
 .dpg-k .l{font-size:11.5px;color:#6E6E73;font-weight:500}.dpg-k .v{font-size:20px;font-weight:600;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dpg-k .s{font-size:11.5px;color:#6E6E73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dpg-k .s.r{color:#D70015}.dpg-k .s.g{color:#1A7F37}
@@ -172,6 +177,20 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
       await load(); if (done) setToast(done); return true
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save.'); return false }
   }, [dealId, load])
+
+  // Won deal with no property yet → create customer + property (same as winning does), then open it.
+  const setUpProperty = useCallback(async () => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/sales/deals/${dealId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set_up_property' }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setErr(data?.error ?? 'Could not create the property.'); return }
+      const siteId = data?.provisioning?.site_id as string | undefined
+      setToast(data?.provisioning?.customer_name ? `Customer ready: ${data.provisioning.customer_name}` : 'Property created')
+      await load()
+      if (siteId) { onClose(); openPropertyInSystems(siteId) }
+    } finally { setBusy(false) }
+  }, [dealId, load, onClose])
 
   const contactCall = useCallback(async (method: 'POST' | 'PATCH' | 'DELETE', body?: Row, contactId?: string) => {
     const url = `/api/crm/opportunities/${dealId}/contacts${method === 'DELETE' ? `?contactId=${contactId}` : ''}`
@@ -348,6 +367,19 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
         {card.tab === 'lost' ? 'Lost' : 'Won'}<span>{card.tab === 'won' ? fmtDate(card.won_at) : card.tab === 'lost' ? (card.lost_reason ?? '') : ' '}</span>
       </button>
     </div>
+
+    {card.tab === 'won' && (
+      <div className="dpg-home" role="region" aria-label="Customer and property">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="l">Customer</div>
+          <div className="v">{d.home?.customer?.name ?? d.home?.site?.name ?? 'Not set up yet'}</div>
+          <div className="s">{d.home?.site ? 'Property is set up — add gates, cameras, Brivo and Gate Watch in Systems.' : 'This won deal has no property yet. Create it to set up its systems.'}</div>
+        </div>
+        {d.home?.site
+          ? <button type="button" className="sb-btn pri" onClick={() => { onClose(); openPropertyInSystems(String(d.home!.site!.id)) }}>Open property &amp; set up systems →</button>
+          : <button type="button" className="sb-btn pri" disabled={busy} onClick={() => void setUpProperty()}>{busy ? 'Creating…' : 'Create the property →'}</button>}
+      </div>
+    )}
 
     <div className="dpg-kpis">
       {can.money && <div className="dpg-k"><div className="l">Monthly (MRR)</div><div className="v">{money(card.mrr, false)}</div><div className="s">{primary && !d.valuesLocked ? `from proposal ${primary.quote_number ?? ''}` : 'entered on the deal'}</div></div>}

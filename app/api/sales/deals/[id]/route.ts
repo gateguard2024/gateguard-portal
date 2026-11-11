@@ -186,6 +186,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ deal: data, card: await cardFor(data, ctx), provisioning })
   }
 
+  // Won deal with no property yet (older wins, or setup failed) → create the customer +
+  // property now, exactly like winning does. Safe to run again: it reuses what exists.
+  if (body.action === 'set_up_property') {
+    if (normalizeStage(deal.stage) !== 'won' && !deal.won_at) return bad('Mark the deal won first')
+    let provisioning: unknown
+    try { provisioning = await kickoffProvisioning(deal.id) } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }) }
+    const p = provisioning as { ok?: boolean; error?: string } | undefined
+    if (!p?.ok) return NextResponse.json({ error: p?.error ?? 'Could not set up the property', provisioning }, { status: 500 })
+    return NextResponse.json({ ok: true, provisioning })
+  }
+
   if (body.action === 'archive' || body.action === 'unarchive') {
     const { error } = await sb.from('opportunities').update({ archived_at: body.action === 'archive' ? now : null, updated_at: now }).eq('id', deal.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

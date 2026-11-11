@@ -12,6 +12,7 @@
  * Brivo and enters the serial. Idempotent — safe to call more than once.
  */
 import { createClient } from '@supabase/supabase-js'
+import { carryForward, copyDealContactsToCustomer } from './relationship'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -166,15 +167,30 @@ const normName = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9
  * property sits under that customer (sites.org_id). Safe to run again — it reuses.
  */
 export async function ensureCustomer(opp: Row, siteId: string): Promise<{ ok: true; out: { customer_id: string; customer_name: string; created_customer: boolean } } | { ok: false; error: string }> {
+  // The customer IS the property. Management companies and owners change; Marbella stays
+  // the customer. So the customer is named after the property, one per property, and the
+  // management company is just a detail on it.
   const dealerId: string | null = opp.dealer_org_id ?? null
-  const name = String(opp.management_co || opp.account_name || opp.name || '').replace(/\s+—\s+GateGuard Opportunity$/i, '').trim() || 'New customer'
+  const { data: siteRow, error: siteErr } = await supabase.from('sites').select('id, name, org_id').eq('id', siteId).maybeSingle()
+  if (siteErr) return { ok: false, error: `site lookup: ${siteErr.message}` }
+  const site = siteRow as { id: string; name: string | null; org_id: string | null } | null
+  const name = String(site?.name || opp.account_name || opp.name || '').replace(/\s+—\s+GateGuard Opportunity$/i, '').trim() || 'New customer'
   let cust: { id: string; name: string } | null = null
   let created = false
 
   if (opp.related_org_id) {
-    const { data, error } = await supabase.from('organizations').select('id, name').eq('id', opp.related_org_id).maybeSingle()
+    const { data, error } = await supabase.from('organizations').select('id, name, org_tier').eq('id', opp.related_org_id).maybeSingle()
     if (error) return { ok: false, error: `customer lookup: ${error.message}` }
-    cust = (data as { id: string; name: string } | null) ?? null
+    const o = data as { id: string; name: string; org_tier: string } | null
+    // Only a customer of this property counts — not an old "management company" customer.
+    cust = o && o.org_tier === 'client' && normName(o.name) === normName(name) ? o : null
+  }
+  // The property already belongs to a customer → that's the one.
+  if (!cust && site?.org_id && site.org_id !== dealerId) {
+    const { data, error } = await supabase.from('organizations').select('id, name, org_tier').eq('id', site.org_id).maybeSingle()
+    if (error) return { ok: false, error: `customer lookup: ${error.message}` }
+    const o = data as { id: string; name: string; org_tier: string } | null
+    if (o?.org_tier === 'client') cust = o
   }
   if (!cust) {
     let q = supabase.from('organizations').select('id, name').eq('org_tier', 'client').limit(1000)
@@ -191,6 +207,7 @@ export async function ensureCustomer(opp: Row, siteId: string): Promise<{ ok: tr
       primary_contact_email: opp.site_contact_email ?? null,
       primary_contact_phone: opp.site_contact_phone ?? null,
       city: opp.property_city ?? null, state: opp.property_state ?? null,
+      management_company: opp.management_co ?? null,
       is_active: true, onboarded_at: new Date().toISOString(),
     }
     let { data, error } = await supabase.from('organizations').insert(insert).select('id, name').single()
@@ -212,14 +229,20 @@ export async function ensureCustomer(opp: Row, siteId: string): Promise<{ ok: tr
     if (error && !isMissingColumn(error)) return { ok: false, error: `link deal to customer: ${error.message}` }
   }
   // The property belongs to the customer; the dealer stays on master_dealer_id.
-  const { data: site, error: sErr } = await supabase.from('sites').select('id, org_id, master_dealer_id').eq('id', siteId).maybeSingle()
+  const { data: site2, error: sErr } = await supabase.from('sites').select('id, org_id, master_dealer_id').eq('id', siteId).maybeSingle()
   if (sErr) return { ok: false, error: `site lookup: ${sErr.message}` }
-  const s = site as { org_id: string | null; master_dealer_id: string | null } | null
+  const s = site2 as { org_id: string | null; master_dealer_id: string | null } | null
   if (s && s.org_id !== cust.id && (!s.org_id || s.org_id === dealerId)) {
     const patch: Row = { org_id: cust.id }
     if (!s.master_dealer_id && dealerId) patch.master_dealer_id = dealerId
     const { error } = await supabase.from('sites').update(patch).eq('id', siteId)
     if (error) return { ok: false, error: `put property under customer: ${error.message}` }
   }
+  // Emails + tasks on the deal move to the customer, and the deal's people become the
+  // customer's contacts so their next emails file there too. Best-effort: logged, never
+  // blocks the win.
+  await carryForward(supabase, { from: 'opportunity', fromId: String(opp.id), to: 'customer', toId: cust.id, label: cust.name })
+  const cErr = await copyDealContactsToCustomer(supabase, String(opp.id), cust.id, { name: opp.site_contact_name ?? opp.manager_name, email: opp.site_contact_email, phone: opp.site_contact_phone })
+  if (cErr) console.error('ensureCustomer: contacts', cErr)
   return { ok: true, out: { customer_id: cust.id, customer_name: cust.name, created_customer: created } }
 }
