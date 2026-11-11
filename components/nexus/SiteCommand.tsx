@@ -3,7 +3,7 @@
 // SiteCommand — one property's systems (Systems tab → a location). Light Apple look.
 //   Status tiles: health · cameras · doors · uptime/faults · door events today
 //   Quick actions: unlock a door · reset a gate · visitor pass · report a fault · cameras
-//   Tabs: Live · Doors & gates · People · Activity · Faults · Network · Controllers · Setup (checklist + steps)
+//   Tabs: Live · Doors & gates · People · Packages · Activity · Faults · Network · Controllers · Setup (checklist + steps)
 // The same panel (SitePanel) is used on the Operations site page via SiteSystems.
 // 🔒 "Setup & keys" (vendor logins) renders ONLY for corporate users — and every
 // credential endpoint refuses non-corporate server-side. Never loosen this.
@@ -17,6 +17,7 @@ import { PeopleTab } from '@/components/nexus/systems/PeopleTab';
 import { ActivityTab } from '@/components/nexus/systems/ActivityTab';
 import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
 import { SetupTab } from '@/components/nexus/systems/SetupTab';
+import { PackagesTab } from '@/components/nexus/systems/PackagesTab';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
@@ -24,9 +25,9 @@ import { InactiveBanner, SiteStatusSheet, statusOf } from '@/components/nexus/sy
 import { PropertyPortalSetup } from '@/components/nexus/systems/PropertyPortal';
 import { todayET, etDateOf } from '@/lib/tz';
 
-type Tab = 'live' | 'doors' | 'people' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
+type Tab = 'live' | 'doors' | 'people' | 'packages' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' },
+  { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' }, { id: 'packages', label: 'Packages' },
   { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
   { id: 'setup', label: 'Setup' },
 ];
@@ -157,6 +158,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
         {tab === 'live' && <LiveTab ctx={ctx} cams={cams} camErr={camErr} doors={doors} camMap={camMap} reloadDoors={loadDoors} />}
         {tab === 'doors' && <DoorsTab ctx={ctx} doors={doors} doorErr={doorErr} camMap={camMap} cams={cams} relays={relays} relayErr={relayErr} reloadDoors={loadDoors} reloadRelays={loadRelays} setRelayState={setRelayState} />}
         {tab === 'people' && <PeopleTab ctx={ctx} guestRequest={guestReq} onActivity={n => { setWho(n); setTab('activity'); }} />}
+        {tab === 'packages' && <PackagesTab ctx={ctx} />}
         {tab === 'activity' && <ActivityTab ctx={ctx} brivoEvents={events} brivoErr={eventErr} who={who} setWho={setWho} />}
         {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
         {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}

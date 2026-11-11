@@ -10,7 +10,6 @@ export const dynamic = 'force-dynamic'
 // built yet. Built tabs have their own static route folder, which Next.js matches
 // before this one. Delete an entry here when its real page ships.
 const SECTIONS: Record<string, { title: string; body: string; today?: { label: string; path: string } }> = {
-  packages: { title: 'Packages', body: 'Deliveries, pickups, and hold fees for the package room and lockers.' },
   units: { title: 'Units', body: 'Smart locks and unit security, unit by unit.' },
   movein: { title: 'Move-in & Renewals', body: 'Your move-in and renewal portals: fees, revenue share, and the wording and look residents see.' },
   service: { title: 'Service', body: 'Service requests and GateGuard visits for this property.' },
