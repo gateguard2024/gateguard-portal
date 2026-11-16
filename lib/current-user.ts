@@ -12,7 +12,7 @@ export type OrgTier =
   | 'client'
 
 // ─── Portal roles (Clerk role, controls UI access level) ──────────────────────
-export type PortalRole = 'admin' | 'supervisor' | 'agent' | 'dealer' | 'rep' | 'client'
+export type PortalRole = 'admin' | 'supervisor' | 'agent' | 'dealer' | 'rep' | 'client' | 'resident'
 
 export interface PortalUser {
   id:         string
@@ -124,6 +124,12 @@ function toPortalUser(user: ClerkUserLike): PortalUser {
     const org_id    = (meta.org_id  as string)     ?? null
     const org_tier  = (meta.org_tier as OrgTier)   ?? null
     const role      = (meta.role    as PortalRole)  ?? 'dealer'
+
+    // Resident-app accounts share this Clerk instance. They get NOTHING in the staff
+    // portal — same powerless shape as an anonymous user (tagged in lib/mobile-resident.ts).
+    if (role === 'resident') {
+      return { ...ANON_USER, id, name, initials, email, role: 'resident' }
+    }
 
     const isCorporate         = org_tier === 'corporate'
     const isMasterAgent       = org_tier === 'master_agent'

@@ -134,6 +134,11 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (pathname.startsWith('/api/aria/')) {
     return NextResponse.next()
   }
+  // Resident app API: the app sends its Clerk session as a Bearer token. Clerk is
+  // initialised so auth() works, but never redirect — each route returns 401 JSON itself.
+  if (pathname.startsWith('/api/mobile/')) {
+    return NextResponse.next()
+  }
   // Knowledge-base routes: same pattern — Clerk is available to auth(), but the
   // field tool (x-tech-code, no login) is not redirected; each handler checks access.
   if (pathname.startsWith('/api/kb/')) {
