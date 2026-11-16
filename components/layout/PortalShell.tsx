@@ -34,10 +34,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isDesignCanvas = pathname.startsWith('/design/floor-plans') // evolved design tool — full-screen, own rail
   const isPortal     = pathname.startsWith('/portal') // customer-facing client portal — branded, standalone
   const isLegal      = pathname.startsWith('/privacy') || pathname.startsWith('/terms') // public legal pages
+  const isMoveIn     = pathname.startsWith('/move-in/') // resident move-in setup — public, phone-first, own chrome
   const isDealerAdmin = pathname.startsWith('/admin/dealers') // dealer network — steel, full-screen, own chrome
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin || isMoveIn
     // Proposal builder + the public proposal/approve pages run full-screen, no sidebar.
     || /^\/quotes\/[^/]+(\/proposal|\/approve|\/build|\/partnership|\/agreement)(\/|$)/.test(pathname)
     // Survey record editor + the public survey document run full-screen, no sidebar.

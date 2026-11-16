@@ -90,6 +90,10 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/webhooks/clerk') ||
     // Adobe Acrobat Sign webhook — verified via X-AdobeSign-ClientId echo, no Clerk session
     pathname.startsWith('/api/adobe-sign/webhook') ||
+    // Resident move-in setup — public pages + token API (token IS the auth). The staff
+    // route /api/move-in/invites is NOT bypassed: it needs a Clerk session.
+    pathname.startsWith('/move-in/') ||
+    /^\/api\/move-in\/[a-f0-9]{48}(\/|$)/.test(pathname) ||
     // Public Nexus Document Portal — external no-login document pages (slug + token credential)
     pathname.startsWith('/document/') ||
     pathname.startsWith('/api/document/') ||
