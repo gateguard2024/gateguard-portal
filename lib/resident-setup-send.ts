@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email-sender'
 import { renderResidentSetupEmail, type ResidentSetupEmailKind } from '@/lib/resident-setup-email'
 import { setupUrl, type MoveInInvite } from '@/lib/move-in'
+import { getSiteFeeRules, type PaidBy } from '@/lib/access-fee'
 
 export interface NewInvite {
   siteId: string
@@ -20,7 +21,8 @@ export interface NewInvite {
   leaseEndDate?: string | null
   household?: MoveInInvite['household']
   feeCents?: number
-  feePaidBy?: 'resident' | 'property' | 'partial'
+  /** Overrides the property's fee rules for this one invite (rare). Leave out to use the property's rules. */
+  feePaidBy?: PaidBy
   residentFeeCents?: number | null
   createdBy?: string
 }
@@ -29,6 +31,9 @@ export async function createInvite(n: NewInvite): Promise<{ invite?: MoveInInvit
   const email = n.email.trim().toLowerCase()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'A valid email is required' }
   const db = createServiceClient()
+  const rules = await getSiteFeeRules(n.siteId)
+  const feeCents = n.feeCents ?? (rules.enabled ? rules.amountCents : 0)
+  const paidBy = n.feePaidBy ?? rules.paidBy
   const { data, error } = await db
     .from('move_in_invites')
     .insert({
@@ -43,9 +48,12 @@ export async function createInvite(n: NewInvite): Promise<{ invite?: MoveInInvit
       move_in_date: n.moveInDate ?? null,
       lease_end_date: n.leaseEndDate ?? null,
       household: n.household ?? [],
-      fee_cents: n.feeCents ?? 15000,
-      fee_paid_by: n.feePaidBy ?? 'resident',
-      resident_fee_cents: n.residentFeeCents ?? null,
+      fee_cents: feeCents,
+      fee_paid_by: paidBy,
+      fee_charge_per: rules.chargePer,
+      property_covers_cents: rules.propertyCoversCents,
+      term_months: rules.termMonths,
+      resident_fee_cents: n.residentFeeCents ?? (paidBy === 'partial' ? Math.max(0, feeCents - rules.propertyCoversCents) : null),
       created_by: n.createdBy ?? 'system',
     })
     .select('*')

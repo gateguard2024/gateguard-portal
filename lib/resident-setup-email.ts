@@ -17,8 +17,8 @@ export type ResidentSetupEmailKind = 'invite' | 'reminder' | 'renewal'
 export interface ResidentSetupFee {
   /** Full parking & access (P&A) fee for the lease term, in cents. */
   amountCents: number
-  /** Who pays: the resident, the property, or split. */
-  paidBy: 'resident' | 'property' | 'partial'
+  /** Who pays: the resident online, the property, the property via the resident's lease ledger, or split. */
+  paidBy: 'resident' | 'property' | 'property_collects' | 'partial'
   /** For 'partial': what the resident pays, in cents. */
   residentCents?: number
 }
@@ -63,8 +63,10 @@ function niceDate(iso?: string | null) {
 
 function feeLine(fee?: ResidentSetupFee | null): { title: string; body: string } {
   if (!fee) return { title: 'Review and finish', body: 'Check everything over and tap Finish.' }
-  if (fee.paidBy === 'property')
+  if (fee.paidBy === 'property' || fee.amountCents === 0)
     return { title: 'Review and finish', body: 'Your parking &amp; access fee is covered by the property — nothing to pay.' }
+  if (fee.paidBy === 'property_collects')
+    return { title: 'Review and finish', body: 'Your parking &amp; access fee is billed by your community with your lease — nothing to pay here.' }
   const due = fee.paidBy === 'partial' && fee.residentCents != null ? fee.residentCents : fee.amountCents
   const note = fee.paidBy === 'partial' ? ` (the property covers the rest of the ${money(fee.amountCents)} fee)` : ''
   return {

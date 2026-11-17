@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
   if (typeof b?.site_id !== 'string' || typeof b?.email !== 'string') {
     return NextResponse.json({ error: 'site_id and email are required' }, { status: 400 })
   }
-  const paidBy = ['resident', 'property', 'partial'].includes(b.fee_paid_by) ? b.fee_paid_by : 'resident'
+  // Fee rules come from the property (site_access_fees). Only override when staff say so.
+  const paidBy = ['resident', 'property', 'property_collects', 'partial'].includes(b.fee_paid_by) ? b.fee_paid_by : undefined
   const { invite, error } = await createInvite({
     siteId: b.site_id,
     kind: b.kind === 'renewal' ? 'renewal' : 'move_in',

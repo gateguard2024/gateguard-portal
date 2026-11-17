@@ -20,6 +20,8 @@ import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { inngest } from '@/inngest/client'
 import { releaseHeldCommissions } from '@/lib/qbo-sync'
+import { completeInvite } from '@/lib/move-in-complete'
+import { MOVE_IN_KIND } from '@/lib/move-in-stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +71,18 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : 'Signature verification failed'
     console.error('[billing/webhook] Signature error:', msg)
     return NextResponse.json({ error: `Webhook signature error: ${msg}` }, { status: 400 })
+  }
+
+  // Resident move-in P&A fee (Part 3) — turn access on. Idempotent.
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    const s = event.data.object as Stripe.Checkout.Session
+    if (s.metadata?.kind === MOVE_IN_KIND && s.metadata?.invite_id) {
+      if (s.payment_status === 'paid') {
+        const r = await completeInvite(s.metadata.invite_id, { status: 'paid', stripeSessionId: s.id })
+        if (!r.ok) console.error('[billing/webhook] move-in complete failed', s.metadata.invite_id, r.error)
+      }
+      return NextResponse.json({ received: true, move_in: true })
+    }
   }
 
   // Only handle checkout completion
