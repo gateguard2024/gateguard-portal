@@ -6,11 +6,12 @@
  *  - resident_app_access row for the resident + each included household member (upsert)
  *  - invite → status complete, step done, access_id, payment fields
  *  - redemption code use counted
+ *  - add-ons (gate key fob, …) → resident_orders for staff to program + hand over
  *  - key-ready email to each person
  * TODO (Part 6/7): grant Brivo credential / ESP32 access; move photo to site_people.
  */
 import { createServiceClient } from '@/lib/supabase'
-import { inviteCode, inviteQuote, type MoveInInvite } from '@/lib/move-in'
+import { inviteCode, inviteQuote, moveInProducts, priceCart, type MoveInInvite } from '@/lib/move-in'
 import { sendResidentWelcome } from '@/lib/resident-welcome-send'
 
 export async function completeInvite(
@@ -62,6 +63,25 @@ export async function completeInvite(
     return { ok: false, error: error.message }
   }
 
+  // Add-on orders (priced from the property's products, snapshotted)
+  const cart = priceCart(invite.cart ?? [], await moveInProducts(invite.site_id))
+  if (cart.lines.length) {
+    await db.from('resident_orders').insert(cart.lines.map((l) => ({
+      site_id: invite.site_id,
+      invite_id: invite.id,
+      product_id: l.product.id,
+      sku: l.product.sku,
+      name: l.product.name,
+      qty: l.qty,
+      unit_cents: l.product.price_cents,
+      site_share_cents: l.product.site_share_cents,
+      email: invite.email,
+      unit_number: invite.unit_number,
+      status: 'paid',
+      stripe_session_id: payment.stripeSessionId ?? null,
+    })))
+  }
+
   const residentAccess = access?.find((a) => a.email === invite.email)
   await db
     .from('move_in_invites')
@@ -70,7 +90,7 @@ export async function completeInvite(
       payment_status: payment.status,
       paid_at: payment.status === 'paid' ? new Date().toISOString() : null,
       stripe_session_id: payment.stripeSessionId ?? invite.stripe_session_id,
-      amount_due_cents: quote.dueCents,
+      amount_due_cents: quote.dueCents + cart.totalCents,
       property_owes_cents: quote.propertyCoversCents,
       updated_at: new Date().toISOString(),
     })

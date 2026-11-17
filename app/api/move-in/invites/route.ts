@@ -1,7 +1,8 @@
 /**
  * Staff: create a move-in (or renewal) setup invite and email it.
  *   POST /api/move-in/invites { site_id, email, first_name?, last_name?, phone?, unit?, move_in_date?,
- *                               lease_end_date?, kind?, fee_cents?, fee_paid_by?, resident_fee_cents?, send? }
+ *                               lease_end_date?, household?: [{first_name,last_name,email?,phone?}],
+ *                               kind?, fee_cents?, fee_paid_by?, resident_fee_cents?, send? }
  *   → { id, setup_url, sent }
  * Staff only (Clerk session). The PMS sync will call createInvite/sendSetupInvite directly.
  * Middleware only bypasses the public token routes (/api/move-in/{48-hex token}), so this
@@ -34,17 +35,27 @@ export async function POST(req: NextRequest) {
     unit: b.unit ?? null,
     moveInDate: b.move_in_date ?? null,
     leaseEndDate: b.lease_end_date ?? null,
+    // Others on the lease (from the office / PMS) — the only people the resident can give a key to.
+    household: Array.isArray(b.household)
+      ? b.household.slice(0, 6).map((h: Record<string, unknown>) => ({
+          first_name: typeof h.first_name === 'string' ? h.first_name : undefined,
+          last_name: typeof h.last_name === 'string' ? h.last_name : undefined,
+          email: typeof h.email === 'string' ? h.email.toLowerCase() : undefined,
+          phone: typeof h.phone === 'string' ? h.phone : undefined,
+        }))
+      : [],
     feeCents: Number.isFinite(b.fee_cents) ? b.fee_cents : undefined,
     feePaidBy: paidBy,
     residentFeeCents: Number.isFinite(b.resident_fee_cents) ? b.resident_fee_cents : null,
     createdBy: user.id,
   })
   if (!invite) return NextResponse.json({ error }, { status: 400 })
+  const origin = req.nextUrl.origin  // links point back at whichever site created them (beta stays beta)
   let sent = false
   if (b.send !== false) {
-    const r = await sendSetupInvite(invite.id)
+    const r = await sendSetupInvite(invite.id, { baseUrl: origin })
     sent = r.ok
-    if (!r.ok) return NextResponse.json({ id: invite.id, setup_url: setupUrl(invite.token), sent, error: r.error }, { status: 207 })
+    if (!r.ok) return NextResponse.json({ id: invite.id, setup_url: setupUrl(invite.token, origin), sent, error: r.error }, { status: 207 })
   }
-  return NextResponse.json({ id: invite.id, setup_url: setupUrl(invite.token), sent })
+  return NextResponse.json({ id: invite.id, setup_url: setupUrl(invite.token, origin), sent })
 }

@@ -47,7 +47,8 @@ export async function createInvite(n: NewInvite): Promise<{ invite?: MoveInInvit
       unit_number: n.unit ?? null,
       move_in_date: n.moveInDate ?? null,
       lease_end_date: n.leaseEndDate ?? null,
-      household: n.household ?? [],
+      household: (n.household ?? []).map((h) => ({ ...h, include: true, from_lease: true })),
+      lease_household: (n.household ?? []).map((h) => ({ ...h, from_lease: true })),
       fee_cents: feeCents,
       fee_paid_by: paidBy,
       fee_charge_per: rules.chargePer,
@@ -63,7 +64,7 @@ export async function createInvite(n: NewInvite): Promise<{ invite?: MoveInInvit
 }
 
 /** Send (or resend) the setup email for one invite. kind: invite on first send, reminder after. */
-export async function sendSetupInvite(inviteId: string, opts: { reminder?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
+export async function sendSetupInvite(inviteId: string, opts: { reminder?: boolean; baseUrl?: string } = {}): Promise<{ ok: boolean; error?: string }> {
   const db = createServiceClient()
   const { data } = await db.from('move_in_invites').select('*').eq('id', inviteId).maybeSingle()
   const invite = data as MoveInInvite | null
@@ -78,7 +79,7 @@ export async function sendSetupInvite(inviteId: string, opts: { reminder?: boole
     propertyName: site?.name ?? 'your community',
     unit: invite.unit_number,
     startDate: invite.move_in_date,
-    setupUrl: setupUrl(invite.token),
+    setupUrl: setupUrl(invite.token, opts.baseUrl),
     fee: { amountCents: invite.fee_cents, paidBy: invite.fee_paid_by, residentCents: invite.resident_fee_cents ?? undefined },
     officePhone: site?.primary_contact_phone ?? null,
   })

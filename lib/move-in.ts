@@ -24,6 +24,19 @@ export interface Vehicle {
   state?: string
 }
 
+export interface CartLine { product_id: string; qty: number }
+
+export interface SiteProduct {
+  id: string
+  sku: string
+  name: string
+  description: string | null
+  price_cents: number
+  site_share_cents: number
+  max_per_unit: number
+  fulfillment: 'office_pickup' | 'ship'
+}
+
 export const MAX_HOUSEHOLD = 6
 export const MAX_VEHICLES = 4
 
@@ -40,6 +53,8 @@ export interface MoveInInvite {
   move_in_date: string | null
   lease_end_date: string | null
   household: HouseholdMember[]
+  lease_household: HouseholdMember[] | null
+  cart: CartLine[]
   vehicles: Vehicle[]
   access_confirmed_at: string | null
   fee_cents: number
@@ -68,8 +83,9 @@ export interface MoveInInvite {
 export const PHOTO_BUCKET = 'resident-photos'
 export const TOKEN_RE = /^[a-f0-9]{48}$/
 
-export function setupUrl(token: string) {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://portal.gateguard.co').replace(/\/$/, '')
+/** baseUrl: pass the request's origin so beta links stay on beta (production uses NEXT_PUBLIC_APP_URL). */
+export function setupUrl(token: string, baseUrl?: string) {
+  const base = (baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://portal.gateguard.co').replace(/\/$/, '')
   return `${base}/move-in/${token}`
 }
 
@@ -126,6 +142,7 @@ export function publicView(invite: MoveInInvite, propertyName: string, officePho
     unit: invite.unit_number,
     moveInDate: invite.move_in_date,
     household: (invite.household ?? []).map((h) => ({ ...h, include: h.include !== false })),
+    leaseHasEmails: (invite.lease_household ?? invite.household ?? []).map((h) => !!h.email),
     vehicles: invite.vehicles ?? [],
     fee: { cents: invite.fee_cents, paidBy: invite.fee_paid_by, chargePer: invite.fee_charge_per, termMonths: invite.term_months },
     quote: inviteQuote(invite, code),
@@ -141,4 +158,40 @@ export function publicView(invite: MoveInInvite, propertyName: string, officePho
 export async function updateInvite(id: string, patch: Partial<MoveInInvite> & Record<string, unknown>) {
   const db = createServiceClient()
   return db.from('move_in_invites').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+}
+
+/** Add-ons this property offers at move-in (gate key fob, …). */
+export async function moveInProducts(siteId: string): Promise<SiteProduct[]> {
+  const db = createServiceClient()
+  const { data } = await db
+    .from('site_products')
+    .select('id, sku, name, description, price_cents, site_share_cents, max_per_unit, fulfillment')
+    .eq('site_id', siteId).eq('enabled', true).eq('offer_at_move_in', true)
+    .order('sort_order')
+  return (data ?? []) as SiteProduct[]
+}
+
+/** Cart priced against the property's current products (unknown / disabled items drop out). */
+export function priceCart(cart: CartLine[], products: SiteProduct[]) {
+  const lines = (cart ?? []).flatMap((c) => {
+    const p = products.find((x) => x.id === c.product_id)
+    if (!p || c.qty < 1) return []
+    const qty = Math.min(c.qty, p.max_per_unit)
+    return [{ product: p, qty, cents: p.price_cents * qty }]
+  })
+  return { lines, totalCents: lines.reduce((a, l) => a + l.cents, 0) }
+}
+
+/** Everything the setup page needs, in one call. */
+export async function inviteView(invite: MoveInInvite, propertyName: string, officePhone: string | null) {
+  const [code, products] = await Promise.all([inviteCode(invite), moveInProducts(invite.site_id)])
+  const base = publicView(invite, propertyName, officePhone, code)
+  const cart = priceCart(invite.cart ?? [], products)
+  return {
+    ...base,
+    products: products.map((p) => ({ id: p.id, name: p.name, description: p.description, priceCents: p.price_cents, maxQty: p.max_per_unit, fulfillment: p.fulfillment })),
+    cart: cart.lines.map((l) => ({ productId: l.product.id, name: l.product.name, qty: l.qty, cents: l.cents })),
+    cartCents: cart.totalCents,
+    totalDueCents: base.quote.dueCents + cart.totalCents,
+  }
 }

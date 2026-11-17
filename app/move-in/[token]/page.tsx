@@ -24,7 +24,7 @@ const TITLES: Record<Step, string> = {
   details: 'Confirm your details',
   photo: 'Add your photo',
   access: 'Who gets access',
-  services: 'Optional services',
+  services: 'Add a key fob?',
   review: 'Review and pay',
   done: 'You’re all set',
 }
@@ -48,6 +48,11 @@ interface View {
   quote: { people: number; grossCents: number; propertyCoversCents: number; codeOffCents: number; dueCents: number; lines: Array<{ label: string; cents: number }> }
   code: string | null
   paymentStatus: string
+  leaseHasEmails: boolean[]
+  products: Array<{ id: string; name: string; description: string | null; priceCents: number; maxQty: number; fulfillment: 'office_pickup' | 'ship' }>
+  cart: Array<{ productId: string; name: string; qty: number; cents: number }>
+  cartCents: number
+  totalDueCents: number
 }
 
 function money(cents: number) {
@@ -74,6 +79,7 @@ function MoveIn() {
   const [fatal, setFatal] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [started, setStarted] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/move-in/${token}`, { cache: 'no-store' })
@@ -116,6 +122,9 @@ function MoveIn() {
   if (!view || confirming) return <Shell eyebrow="" title={confirming ? 'Confirming your payment…' : 'Loading…'} progress={0}><div style={{ height: 200 }} /></Shell>
 
   const step: Step = view.status === 'complete' ? 'done' : view.step
+  if (!started && step === 'details' && ['created', 'sent', 'opened'].includes(view.status)) {
+    return <Welcome view={view} onStart={() => setStarted(true)} />
+  }
   const idx = ORDER.indexOf(step)
   const eyebrow = `STEP ${idx + 1} OF ${ORDER.length} · ${view.propertyName.toUpperCase()}`
 
@@ -142,13 +151,7 @@ function MoveIn() {
         />
       )}
       {step === 'services' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
-          <div style={{ background: '#F2F5FA', borderRadius: 12, padding: 16, color: INK2, fontSize: 15, lineHeight: 1.5 }}>
-            Gate remotes, internet, unit security and more will be offered here. Nothing to add right now — you can shop any time in the GateGuard app.
-          </div>
-          <button type="button" style={{ ...btn, ...btnPri }} onClick={() => patch({ action: 'services' })} disabled={busy}>Continue</button>
-          <button type="button" onClick={() => patch({ action: 'goto', step: 'access' })} disabled={busy} style={{ ...linkBtn, color: INK2, alignSelf: 'center' }}>‹ Back</button>
-        </div>
+        <Shop view={view} busy={busy} onSave={(cart) => patch({ action: 'cart', cart })} onBack={() => patch({ action: 'goto', step: 'access' })} />
       )}
       {step === 'review' && (
         <Review view={view} token={token} busy={busy} setBusy={setBusy} setErr={setErr} patch={patch} onDone={load} />
@@ -168,6 +171,31 @@ function MoveIn() {
         Questions? {view.officePhone ? <>Call the leasing office at <a href={`tel:${view.officePhone}`} style={{ color: BLUE }}>{view.officePhone}</a>.</> : 'Contact your leasing office.'}
       </p>
     </Shell>
+  )
+}
+
+function Welcome({ view, onStart }: { view: View; onStart: () => void }) {
+  const date = view.moveInDate
+    ? new Date(view.moveInDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : null
+  return (
+    <div style={{ minHeight: '100vh', background: `radial-gradient(120% 80% at 50% 0%, #12305C 0%, ${NAVY} 55%, #060D1A 100%)`, color: '#fff', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '64px 24px 40px', boxSizing: 'border-box', textAlign: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, letterSpacing: '.16em', color: 'rgba(255,255,255,.8)' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-sm.png" width={34} height={34} alt="" />GATEGUARD
+      </div>
+      <div style={{ maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ fontSize: 13, letterSpacing: '.12em', color: BLUE_BRIGHT, fontWeight: 600 }}>{view.propertyName.toUpperCase()}{view.unit ? ` · UNIT ${view.unit}` : ''}</div>
+        <h1 style={{ margin: 0, fontSize: 38, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-.02em' }}>Welcome{view.firstName ? `, ${view.firstName}` : ' home'}.</h1>
+        <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5, color: 'rgba(255,255,255,.75)' }}>
+          Let’s set up your gate and door access{date ? ` before you move in on ${date}` : ''}. It takes about 3 minutes — then your phone is your key.
+        </p>
+      </div>
+      <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <button type="button" onClick={onStart} style={{ ...btn, ...btnPri, minHeight: 56, fontSize: 17, border: 0 }}>Get started</button>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)' }}>Questions? {view.officePhone ? <>Call the leasing office at <a href={`tel:${view.officePhone}`} style={{ color: '#fff' }}>{view.officePhone}</a>.</> : 'Contact your leasing office.'}</div>
+      </div>
+    </div>
   )
 }
 
@@ -335,19 +363,12 @@ function Photo({ token, busy, setBusy, onDone, onSkip, onBack, setErr }: {
 }
 
 function Access({ view, busy, onSave, onBack }: { view: View; busy: boolean; onSave: (h: Person[], v: Car[]) => void; onBack: () => void }) {
-  const [people, setPeople] = useState<Person[]>(view.household.length ? view.household : [])
+  const [people, setPeople] = useState<Person[]>(view.household)
   const [cars, setCars] = useState<Car[]>(view.vehicles)
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState<Person>({})
   const [carDraft, setCarDraft] = useState<Car | null>(null)
 
   const toggle = (i: number) => setPeople((p) => p.map((x, j) => (j === i ? { ...x, include: !(x.include !== false) } : x)))
-  const setField = (i: number, k: keyof Person, v: string) => setPeople((p) => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
-  const remove = (i: number) => setPeople((p) => p.filter((_, j) => j !== i))
-  const addPerson = () => {
-    if (!draft.first_name || !draft.last_name || !draft.email) return
-    setPeople((p) => [...p, { ...draft, include: true, from_lease: false }]); setDraft({}); setAdding(false)
-  }
+  const setEmail = (i: number, v: string) => setPeople((p) => p.map((x, j) => (j === i ? { ...x, email: v } : x)))
   const addCar = () => {
     if (!carDraft?.plate) return
     setCars((c) => [...c, carDraft]); setCarDraft(null)
@@ -356,53 +377,32 @@ function Access({ view, busy, onSave, onBack }: { view: View; busy: boolean; onS
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
-      <p style={{ ...sub, textAlign: 'left', margin: 0 }}>Everyone you choose gets their own key in the GateGuard app. They sign in with their own email.</p>
+      <p style={{ ...sub, textAlign: 'left', margin: 0 }}>Everyone on your lease can get their own key in the GateGuard app. Switch off anyone who doesn’t need one.</p>
 
       <Card>
         <PersonRow name={`${view.firstName ?? ''} ${view.lastName ?? ''}`.trim() || 'You'} detail={`${view.email} · you`} right={<span style={{ fontSize: 13, color: '#1E8E3E', fontWeight: 600 }}>Included</span>} />
         {people.map((p, i) => {
           const on = p.include !== false
-          const missing = on && !p.email
+          const canEditEmail = !view.leaseHasEmails[i]
           return (
             <div key={i} style={{ borderTop: '1px solid rgba(0,0,0,.06)' }}>
               <PersonRow
                 name={`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Someone on your lease'}
-                detail={p.email || (p.from_lease ? 'On your lease · add their email' : '')}
-                right={
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {!p.from_lease && <button type="button" onClick={() => remove(i)} style={linkBtn}>Remove</button>}
-                    <Toggle on={on} onClick={() => toggle(i)} label={`Give ${p.first_name ?? 'this person'} access`} />
-                  </div>
-                }
+                detail={p.email && !canEditEmail ? p.email : 'On your lease'}
+                right={<Toggle on={on} onClick={() => toggle(i)} label={`Give ${p.first_name ?? 'this person'} a key`} />}
               />
-              {missing && (
+              {on && canEditEmail && (
                 <div style={{ padding: '0 14px 14px' }}>
-                  <input placeholder="Their email" type="email" value={p.email ?? ''} onChange={(e) => setField(i, 'email', e.target.value)} style={input} />
+                  <input placeholder="Their email (they sign in with this)" type="email" value={p.email ?? ''} onChange={(e) => setEmail(i, e.target.value)} style={input} />
                 </div>
               )}
             </div>
           )
         })}
       </Card>
-
-      {adding ? (
-        <Card>
-          <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <input placeholder="First name" value={draft.first_name ?? ''} onChange={(e) => setDraft({ ...draft, first_name: e.target.value })} style={input} />
-              <input placeholder="Last name" value={draft.last_name ?? ''} onChange={(e) => setDraft({ ...draft, last_name: e.target.value })} style={input} />
-            </div>
-            <input placeholder="Email (they sign in with this)" type="email" value={draft.email ?? ''} onChange={(e) => setDraft({ ...draft, email: e.target.value })} style={input} />
-            <input placeholder="Mobile (optional)" inputMode="tel" value={draft.phone ?? ''} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} style={input} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" style={btn} onClick={() => { setAdding(false); setDraft({}) }}>Cancel</button>
-              <button type="button" style={{ ...btn, ...btnPri }} onClick={addPerson} disabled={!draft.first_name || !draft.last_name || !draft.email}>Add</button>
-            </div>
-          </div>
-        </Card>
-      ) : (
-        people.length < 6 && <button type="button" style={btn} onClick={() => setAdding(true)}>+ Add someone</button>
-      )}
+      <p style={{ ...sub, fontSize: 13, textAlign: 'left', margin: 0 }}>
+        {people.length === 0 ? 'Only you are on this lease. ' : ''}Someone missing? Only people on your lease can get a key — ask the leasing office to add them{view.officePhone ? ` (${view.officePhone})` : ''}.
+      </p>
 
       <div style={{ ...label, marginTop: 6, letterSpacing: '.06em' }}>VEHICLES</div>
       <Card>
@@ -432,8 +432,49 @@ function Access({ view, busy, onSave, onBack }: { view: View; busy: boolean; onS
       </Card>
       {!carDraft && cars.length < 4 && <button type="button" style={btn} onClick={() => setCarDraft({})}>+ Add a vehicle</button>}
 
-      <button type="button" style={{ ...btn, ...btnPri, marginTop: 6 }} disabled={busy || adding || !!carDraft} onClick={() => onSave(people, cars)}>
-        {busy ? 'Saving…' : `Continue · ${included + 1} ${included ? 'people' : 'person'}`}
+      <button type="button" style={{ ...btn, ...btnPri, marginTop: 6 }} disabled={busy || !!carDraft} onClick={() => onSave(people, cars)}>
+        {busy ? 'Saving…' : `Continue · ${included + 1} ${included ? 'keys' : 'key'}`}
+      </button>
+      <button type="button" onClick={onBack} disabled={busy} style={{ ...linkBtn, color: INK2, alignSelf: 'center' }}>‹ Back</button>
+    </div>
+  )
+}
+
+function Shop({ view, busy, onSave, onBack }: { view: View; busy: boolean; onSave: (cart: Array<{ product_id: string; qty: number }>) => void; onBack: () => void }) {
+  const [qty, setQty] = useState<Record<string, number>>(Object.fromEntries(view.cart.map((c) => [c.productId, c.qty])))
+  const set = (id: string, n: number, max: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(max, n)) }))
+  const total = view.products.reduce((a, p) => a + (qty[p.id] ?? 0) * p.priceCents, 0)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
+      {view.products.length === 0 ? (
+        <div style={{ background: '#F2F5FA', borderRadius: 12, padding: 16, color: INK2, fontSize: 15, lineHeight: 1.5 }}>
+          Nothing extra to add at {view.propertyName} right now. You can shop any time in the GateGuard app.
+        </div>
+      ) : (
+        <>
+          <p style={{ ...sub, textAlign: 'left', margin: 0 }}>Optional. Your phone already opens every door you have access to.</p>
+          <Card>
+            {view.products.map((p, i) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px', borderTop: i ? '1px solid rgba(0,0,0,.06)' : 'none' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 12, background: '#EEF4FD', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="4" /><circle cx="12" cy="8" r="1.6" /><path d="M10 14h4M10 17h4" /></svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 16 }}>{p.name} · {money(p.priceCents)}</div>
+                  <div style={{ color: INK2, fontSize: 13 }}>{p.description ?? ''}{p.fulfillment === 'office_pickup' ? ' Pick up at the leasing office.' : ' Shipped to you.'}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+                  <button type="button" aria-label={`Fewer ${p.name}`} onClick={() => set(p.id, (qty[p.id] ?? 0) - 1, p.maxQty)} style={roundBtn} disabled={!qty[p.id]}>−</button>
+                  <span style={{ minWidth: 18, textAlign: 'center', fontWeight: 600 }}>{qty[p.id] ?? 0}</span>
+                  <button type="button" aria-label={`More ${p.name}`} onClick={() => set(p.id, (qty[p.id] ?? 0) + 1, p.maxQty)} style={roundBtn} disabled={(qty[p.id] ?? 0) >= p.maxQty}>+</button>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+      <button type="button" style={{ ...btn, ...btnPri }} disabled={busy} onClick={() => onSave(Object.entries(qty).filter(([, n]) => n > 0).map(([product_id, n]) => ({ product_id, qty: n })))}>
+        {busy ? 'Saving…' : total > 0 ? `Continue · add ${money(total)}` : 'Continue'}
       </button>
       <button type="button" onClick={onBack} disabled={busy} style={{ ...linkBtn, color: INK2, alignSelf: 'center' }}>‹ Back</button>
     </div>
@@ -479,14 +520,16 @@ function Review({ view, token, busy, setBusy, setErr, patch, onDone }: {
         <Sum l="Photo" v={view.hasPhoto ? 'Added' : 'Skipped — add it later in the app'} step="photo" />
         <Sum l={`Access · ${included.length + 1} ${included.length ? 'people' : 'person'}`} v={['You', ...included.map((h) => h.first_name ?? '')].join(', ')} step="access" />
         <Sum l="Vehicles" v={view.vehicles.length ? view.vehicles.map((c) => c.plate).join(', ') : 'None'} step="access" />
+        {view.products.length > 0 && <Sum l="Add-ons" v={view.cart.length ? view.cart.map((c) => `${c.qty} × ${c.name}`).join(', ') : 'None'} step="services" />}
       </Card>
 
       <Card>
         <div style={{ padding: '6px 14px' }}>
           {q.lines.map((l, i) => <Line key={i} l={l.label} r={money(l.cents)} />)}
           {q.lines.length === 0 && <Line l="Parking & access" r="Included" />}
+          {view.cart.map((c) => <Line key={c.productId} l={`${c.name}${c.qty > 1 ? ` × ${c.qty}` : ''}`} r={money(c.cents)} />)}
           <div style={{ borderTop: '1px solid rgba(0,0,0,.08)', marginTop: 4 }} />
-          <Line l="Due today" r={money(q.dueCents)} bold />
+          <Line l="Due today" r={money(view.totalDueCents)} bold />
         </div>
         {view.fee.paidBy === 'property_collects' && (
           <div style={{ padding: '0 14px 12px', fontSize: 13, color: INK2 }}>Your community adds this fee to your lease charges. Nothing to pay here.</div>
@@ -510,9 +553,9 @@ function Review({ view, token, busy, setBusy, setErr, patch, onDone }: {
       )}
 
       <button type="button" style={{ ...btn, ...btnPri, marginTop: 4 }} onClick={finish} disabled={busy}>
-        {busy ? 'One moment…' : q.dueCents > 0 ? `Pay ${money(q.dueCents)}` : 'Finish setup'}
+        {busy ? 'One moment…' : view.totalDueCents > 0 ? `Pay ${money(view.totalDueCents)}` : 'Finish setup'}
       </button>
-      {q.dueCents > 0 && <p style={{ ...sub, fontSize: 12, margin: 0 }}>Secure checkout by Stripe · card, Apple Pay or Google Pay · covers {view.fee.termMonths} months · no refunds.</p>}
+      {view.totalDueCents > 0 && <p style={{ ...sub, fontSize: 12, margin: 0 }}>Secure checkout by Stripe · card, Apple Pay or Google Pay{q.dueCents > 0 ? ` · access fee covers ${view.fee.termMonths} months · no refunds` : ''}.</p>}
       <button type="button" onClick={() => patch({ action: 'goto', step: 'services' })} disabled={busy} style={{ ...linkBtn, color: INK2, alignSelf: 'center' }}>‹ Back</button>
     </div>
   )
