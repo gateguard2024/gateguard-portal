@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withoutRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser }  from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
@@ -10,7 +11,9 @@ const supabase = createClient(
 
 // GET /api/dispatch/technicians — scoped to the caller's org (corporate sees all).
 // Legacy techs with NULL org_id remain visible to everyone until reassigned.
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ?include_removed=1 → also return removed techs (the roster's "Show removed").
+  const includeRemoved = new URL(req.url).searchParams.get('include_removed') === '1'
   let query = supabase.from('technicians').select('*').order('name')
   try {
     const scope = await resolveOrgScope(await getCurrentUser())
@@ -22,7 +25,7 @@ export async function GET() {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ technicians: data ?? [] })
+  return NextResponse.json({ technicians: includeRemoved ? (data ?? []) : await withoutRemoved(data ?? []) })
 }
 
 // POST /api/dispatch/technicians — add a new tech (stamped to caller's org)

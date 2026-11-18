@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkCloseout } from '@/lib/job-closeout'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
@@ -364,6 +365,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
   if (action === 'mark_complete') {
     const note = clean(body.note ?? body.notes)
+    // Close-out rules: time on site + parts first (lib/job-closeout.ts).
+    if (String((job as { status?: string }).status ?? '') !== 'completed') {
+      const block = await checkCloseout(job.id, user, (body.closeout_override_reason as string) ?? null)
+      if (block) return NextResponse.json({ success: false, message: String(block.body.error), code: 'closeout_required', closeout: block.body.closeout }, { status: block.status })
+    }
 
     const { data, error: updateError } = await supabase
       .from('work_orders')

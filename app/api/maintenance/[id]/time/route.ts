@@ -101,6 +101,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'entry_id required' }, { status: 400 })
     }
 
+    // Edit mode: fix an entry's arrive / leave times (close-out times are editable).
+    if (body.clock_in !== undefined || body.clock_out !== undefined) {
+      const { data: cur, error: cErr } = await supabase.from('work_order_time_entries').select('id, clock_in, clock_out')
+        .eq('id', body.entry_id).eq('work_order_id', params.id).maybeSingle()
+      if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
+      if (!cur) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+      const inAt  = new Date(body.clock_in ?? cur.clock_in)
+      const outAt = body.clock_out === null ? null : new Date(body.clock_out ?? cur.clock_out ?? '')
+      if (isNaN(inAt.getTime()) || (outAt && isNaN(outAt.getTime()))) return NextResponse.json({ error: 'Enter a valid date and time.' }, { status: 400 })
+      let mins: number | null = null
+      if (outAt) {
+        mins = Math.round((outAt.getTime() - inAt.getTime()) / 60000)
+        if (mins <= 0) return NextResponse.json({ error: 'Leave time must be after arrive time.' }, { status: 400 })
+        if (mins > 24 * 60) return NextResponse.json({ error: 'That’s over 24 hours on site — check the dates.' }, { status: 400 })
+        if (outAt.getTime() > Date.now() + 15 * 60000) return NextResponse.json({ error: 'Leave time can’t be in the future.' }, { status: 400 })
+      }
+      const { data, error } = await supabase.from('work_order_time_entries')
+        .update({ clock_in: inAt.toISOString(), clock_out: outAt ? outAt.toISOString() : null, duration_mins: mins, ...(body.notes !== undefined ? { notes: body.notes } : {}) })
+        .eq('id', body.entry_id).eq('work_order_id', params.id).select().single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(data)
+    }
+
     // Fetch the open entry to compute duration
     const { data: entry, error: fetchErr } = await supabase
       .from('work_order_time_entries')
@@ -133,4 +156,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
+}
+
+// DELETE ?entry_id= — remove a wrong time entry.
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await guardWorkOrder(req, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const entryId = new URL(req.url).searchParams.get('entry_id')
+  if (!entryId) return NextResponse.json({ error: 'entry_id required' }, { status: 400 })
+  const { error } = await supabase.from('work_order_time_entries').delete().eq('id', entryId).eq('work_order_id', params.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }

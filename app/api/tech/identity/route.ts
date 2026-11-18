@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withoutRemoved } from '@/lib/tech-active'
 import { createClient }              from '@supabase/supabase-js'
 import { isTechAuthed, resolveTechByCode } from '@/lib/tech-auth'
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   // person — no identity picker, and it overrides any stale saved identity.
   const me = await resolveTechByCode(req.headers.get('x-tech-code'))
 
-  return NextResponse.json({ technicians: data ?? [], me })
+  return NextResponse.json({ technicians: await withoutRemoved(data ?? []), me })
 }
 
 export async function POST(req: NextRequest) {

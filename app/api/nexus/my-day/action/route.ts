@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkCloseout } from '@/lib/job-closeout'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 
@@ -92,6 +93,9 @@ export async function POST(req: NextRequest) {
       }
 
       if (itemType === 'work_order') {
+        // Close-out rules: time on site + parts first (lib/job-closeout.ts).
+        const block = await checkCloseout(itemId, user)
+        if (block) return NextResponse.json({ success: false, message: String(block.body.error), code: 'closeout_required', closeout: block.body.closeout, work_order_id: itemId }, { status: block.status })
         const { error } = await supabase
           .from('work_orders')
           .update({ status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })

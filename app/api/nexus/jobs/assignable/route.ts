@@ -5,6 +5,7 @@
  * subtree (corporate = all). Used by the job glass "Assign" picker.
  */
 import { NextResponse } from 'next/server'
+import { withoutRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
@@ -28,5 +29,5 @@ export async function GET() {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ success: false, message: error.message, technicians: [] }, { status: 500 })
-  return NextResponse.json({ success: true, technicians: data ?? [] })
+  return NextResponse.json({ success: true, technicians: await withoutRemoved(data ?? []) })
 }

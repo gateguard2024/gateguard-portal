@@ -1,4 +1,6 @@
 import crypto from 'node:crypto'
+import { checkCloseout } from '@/lib/job-closeout'
+import { isTechRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import type { PortalUser } from '@/lib/current-user'
 import { isInScope, type OrgScope } from '@/lib/org-scope'
@@ -279,6 +281,11 @@ async function runTool(
       if (fetchError) return { success: false, error: fetchError.message }
 
       const prevStatus = (existing as { status: string }).status
+      // Close-out rules: no completing a job without time on site + parts (lib/job-closeout.ts).
+      if (args.status === 'completed' && prevStatus !== 'completed') {
+        const block = await checkCloseout(id, ctx.user)
+        if (block) return { success: false, error: `${String(block.body.error)} Open the job and use Finish job to add them.` }
+      }
       const { error } = await supabase
         .from('work_orders')
         .update({ status: args.status })
@@ -728,6 +735,7 @@ export async function executeToolWithRevert(
     if (error || !tech || !isInScope(ctx.scope, (tech as { org_id: string | null }).org_id)) return { success: false, error: 'That technician isn’t on your team.' }
   }
 
+  if (toolName === 'assign_technician' && args.technician_id && (await isTechRemoved(String(args.technician_id)))) return { success: false, error: 'That technician was removed. Pick someone else.' }
   const result = await runTool(toolName, args, ctx)
 
   // Stamp new rows with the caller's company (corporate rows stay as before). If

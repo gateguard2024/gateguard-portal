@@ -18,6 +18,7 @@ import { ActivityTab } from '@/components/nexus/systems/ActivityTab';
 import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
 import { SetupTab } from '@/components/nexus/systems/SetupTab';
 import { PackagesTab } from '@/components/nexus/systems/PackagesTab';
+import { ServiceTab } from '@/components/nexus/systems/ServiceTab';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
@@ -25,10 +26,10 @@ import { InactiveBanner, SiteStatusSheet, statusOf } from '@/components/nexus/sy
 import { PropertyPortalSetup } from '@/components/nexus/systems/PropertyPortal';
 import { todayET, etDateOf } from '@/lib/tz';
 
-type Tab = 'live' | 'doors' | 'people' | 'packages' | 'activity' | 'faults' | 'network' | 'controllers' | 'setup';
+type Tab = 'live' | 'doors' | 'people' | 'packages' | 'activity' | 'faults' | 'service' | 'network' | 'controllers' | 'setup';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' }, { id: 'packages', label: 'Packages' },
-  { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
+  { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'service', label: 'Service' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
   { id: 'setup', label: 'Setup' },
 ];
 type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number };
@@ -161,6 +162,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
         {tab === 'packages' && <PackagesTab ctx={ctx} />}
         {tab === 'activity' && <ActivityTab ctx={ctx} brivoEvents={events} brivoErr={eventErr} who={who} setWho={setWho} />}
         {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
+        {tab === 'service' && <ServiceTab ctx={ctx} />}
         {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}
         {tab === 'controllers' && <SitePanels siteId={siteId} isCorporate={isCorporate} notify={notify} />}
         {tab === 'setup' && <SetupTab key={setupRound} ctx={ctx} cams={cams} doors={doors} doorErr={doorErr} relays={relays} camMap={camMap} onGo={setTab} />}

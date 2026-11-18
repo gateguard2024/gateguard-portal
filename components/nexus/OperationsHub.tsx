@@ -27,6 +27,7 @@ import { SiteSystems } from "@/components/nexus/SiteSystems";
 import CalendarViews from "@/components/nexus/CalendarViews";
 import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
 import { isInactive, statusOf } from "@/components/nexus/systems/Decommission";
+import { FinishJobSheet } from "@/components/nexus/ops/FinishJobSheet";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
@@ -361,6 +362,16 @@ export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boo
     } catch { return false; }
   };
   const updateWO = async (id: string, patch: Record<string, unknown>) => {
+    // Completing needs the close-out (time on site + parts) — open the job so its Finish job sheet is right there.
+    if (patch.status === "completed") {
+      try {
+        const r = await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 409 && d?.code === "closeout_required") { setToast(`${d.error} Tap Complete to finish it.`); setOpenId(id); }
+        else if (!r.ok) setToast(d?.error ? `That didn’t save: ${d.error}` : "That change didn’t save. Try again.");
+      } catch { setToast("That change didn’t save. Try again."); }
+      loadOps(); return;
+    }
     const ok = await patchOne(id, patch);
     if (!ok) setToast("That change didn’t save. Try again.");
     loadOps();
@@ -368,7 +379,7 @@ export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boo
   const bulkUpdate = async (ids: string[], patch: Record<string, unknown>) => {
     const results = await Promise.all(ids.map(id => patchOne(id, patch)));
     const failed = results.filter(r => !r).length;
-    setToast(failed ? `${ids.length - failed} updated, ${failed} didn’t save.` : `${ids.length} work order${ids.length === 1 ? "" : "s"} updated.`);
+    setToast(failed ? `${ids.length - failed} updated, ${failed} didn’t save${patch.status === "completed" ? " — each job needs its time on site and parts before it can close" : ""}.` : `${ids.length} work order${ids.length === 1 ? "" : "s"} updated.`);
     loadOps();
   };
   const refreshAll = () => { loadOps(); loadCounts(); };
@@ -914,6 +925,65 @@ function techOffToday(t: any): TimeOff | null {
   const list: TimeOff[] = t?.schedule?.time_off ?? [];
   return list.find(o => o.start && o.end && o.start <= today && today <= o.end) ?? null;
 }
+// ── Service stats (lib/service-stats.ts) ─────────────────────────────────────
+type TechStat = { technician_id: string; jobs: number; hours: number; visits: number; avg_visit_mins: number | null; first_time_fix_pct: number | null; jobs_per_week: number; on_time_pct: number | null; parts_per_job: number | null };
+let techStatsCache: { at: number; p: Promise<Record<string, TechStat>> } | null = null;
+function loadTechStats(): Promise<Record<string, TechStat>> {
+  if (techStatsCache && Date.now() - techStatsCache.at < 60_000) return techStatsCache.p;
+  const p = fetch("/api/service-stats?view=techs&days=90").then(r => r.json()).then(d => Object.fromEntries(((d.techs ?? []) as TechStat[]).map(t => [t.technician_id, t]))).catch(() => ({}));
+  techStatsCache = { at: Date.now(), p }; return p;
+}
+const fmtMins = (m: number | null) => m == null ? "—" : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+function TechStatsLine({ techId }: { techId: string }) {
+  const [st, setSt] = useState<TechStat | null | undefined>(undefined);
+  useEffect(() => { let on = true; loadTechStats().then(m => { if (on) setSt(m[techId] ?? null); }); return () => { on = false; }; }, [techId]);
+  if (st === undefined) return null;
+  if (!st) return <div style={{ marginTop: 8, fontSize: 12, color: "#8E8E93" }}>No finished jobs in the last 90 days.</div>;
+  const cells: [string, string, string?][] = [
+    ["Jobs done", String(st.jobs), `${st.jobs_per_week}/wk`],
+    ["Hours on site", String(st.hours), `avg ${fmtMins(st.avg_visit_mins)}/visit`],
+    ["First-time fix", st.first_time_fix_pct == null ? "—" : `${st.first_time_fix_pct}%`],
+    ["On time", st.on_time_pct == null ? "—" : `${st.on_time_pct}%`],
+    ["Parts / job", st.parts_per_job == null ? "—" : String(st.parts_per_job)],
+  ];
+  return <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+    <div style={{ fontSize: 11, color: "#8E8E93", marginBottom: 6 }}>Last 90 days</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(84px,1fr))", gap: 8 }}>
+      {cells.map(([k, v, sub]) => <div key={k}><div style={{ fontSize: 16, fontWeight: 600, color: INK, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 11, color: "#6E6E73" }}>{k}{sub ? <span style={{ color: "#8E8E93" }}> · {sub}</span> : null}</div></div>)}
+    </div>
+  </div>;
+}
+
+type BenchGroup = { key?: string; label?: string; properties: number; visits_per_year: number | null; visits_median: number | null; hours_per_year: number | null; hours_per_visit: number | null; parts_cost_per_year: number | null; return_trip_pct: number | null };
+// Network "what to expect" per property per year — for dealers sizing service work.
+function ServiceBenchmark() {
+  const [b, setB] = useState<{ all: BenchGroup; by_size: BenchGroup[]; jobs: number; jobs_without_time: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { fetch("/api/service-stats?view=benchmark").then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) setErr(d?.error ?? "Couldn’t load"); else setB(d); }).catch(() => setErr("Couldn’t load")); }, []);
+  const n = (v: number | null, suffix = "") => v == null ? "—" : `${v}${suffix}`;
+  const rows = b ? [{ ...b.all, key: "all", label: "All properties" }, ...b.by_size.filter(g => g.properties > 0)] : [];
+  const th: React.CSSProperties = { textAlign: "right", fontWeight: 600, fontSize: 11.5, color: "#6E6E73", padding: "6px 8px", whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { textAlign: "right", padding: "8px", fontVariantNumeric: "tabular-nums", fontSize: 13.5 };
+  return <Card>
+    <h2 style={{ fontSize: 16, marginBottom: 2 }}>What to expect per property, per year</h2>
+    <Small>Network averages from properties live a full year. Use it to plan service for a new dealer or price a service plan.</Small>
+    {err ? <div style={{ marginTop: 10, fontSize: 13, color: "#D70015" }}>{err}</div> : !b ? <div style={{ marginTop: 10 }}><Small>Loading…</Small></div> : <>
+      <div style={{ overflowX: "auto", marginTop: 10 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "1px solid rgba(0,0,0,0.10)" }}><th style={{ ...th, textAlign: "left" }}>Property size</th><th style={th}>Properties</th><th style={th}>Visits / yr</th><th style={th}>Hours / yr</th><th style={th}>Hours / visit</th><th style={th}>Parts $ / yr</th><th style={th}>Return trips</th></tr></thead>
+          <tbody>{rows.map(g => <tr key={g.key} style={{ borderBottom: "1px solid rgba(0,0,0,0.06)", fontWeight: g.key === "all" ? 600 : 400 }}>
+            <td style={{ ...td, textAlign: "left" }}>{g.label}</td><td style={td}>{g.properties}</td>
+            <td style={td}>{n(g.visits_per_year)}{g.visits_median != null && <span style={{ color: "#8E8E93", fontWeight: 400 }}> (median {g.visits_median})</span>}</td>
+            <td style={td}>{n(g.hours_per_year)}</td><td style={td}>{n(g.hours_per_visit)}</td>
+            <td style={td}>{g.parts_cost_per_year == null ? "—" : `$${g.parts_cost_per_year.toLocaleString()}`}</td><td style={td}>{n(g.return_trip_pct, "%")}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      {b.jobs_without_time > 0 && <div style={{ marginTop: 8, fontSize: 12, color: "#B25000" }}>{b.jobs_without_time} of {b.jobs} finished jobs this year have no time on site logged (before the Finish job rule) — hours run low until new jobs fill in.</div>}
+    </>}
+  </Card>;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Techs() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -926,7 +996,30 @@ function Techs() {
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [sched, setSched] = useState<{ days: string[]; start: string; end: string; timeOff: TimeOff[] }>({ days: [], start: "08:00", end: "17:00", timeOff: [] });
   const [savingId, setSavingId] = useState<string | null>(null);
-  const load = React.useCallback(() => { setLoading(true); fetch("/api/dispatch/technicians").then(r => r.json()).then(d => setTechs(d.technicians ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [techMsg, setTechMsg] = useState<string | null>(null);
+  const load = React.useCallback(() => { setLoading(true); fetch(`/api/dispatch/technicians${showRemoved ? "?include_removed=1" : ""}`).then(r => r.json()).then(d => setTechs(d.technicians ?? [])).catch(() => {}).finally(() => setLoading(false)); }, [showRemoved]);
+  // Remove = deactivate when they have job history (kept for stats), delete when they have none.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function removeTech(t: any) {
+    if (!window.confirm(`Remove ${t.name}?\n\nTheir field-app code stops working and they drop off dispatch. Their past jobs and hours are kept. Any open jobs go back to unassigned.`)) return;
+    setSavingId(t.id); setTechMsg(null);
+    const r = await fetch(`/api/dispatch/technicians/${t.id}`, { method: "DELETE" }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setSavingId(null);
+    if (!r?.ok) { setTechMsg(d?.error ?? "Couldn’t remove them. Try again."); return; }
+    setTechMsg(d.removed === "deleted" ? `${t.name} removed.` : `${t.name} removed — ${d.jobs_kept} past job${d.jobs_kept === 1 ? "" : "s"} kept${d.unassigned ? `, ${d.unassigned} open job${d.unassigned === 1 ? "" : "s"} now unassigned` : ""}.`);
+    setEditId(null); load();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function reactivateTech(t: any) {
+    setSavingId(t.id); setTechMsg(null);
+    const r = await fetch(`/api/dispatch/technicians/${t.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: true }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setSavingId(null);
+    setTechMsg(r?.ok ? `${t.name} is back. Give them a new field-app code.` : (d?.error ?? "Couldn’t bring them back."));
+    load();
+  }
   useEffect(() => { load(); }, [load]);
   async function addTech() {
     if (!form.name.trim()) return;
@@ -966,6 +1059,8 @@ function Techs() {
         <button onClick={() => setShowNew(s => !s)} style={btn}>+ Add tech</button>
       </div>
       <Small>Tap a tech to edit their details. Each logs into the field tool at <b style={{ color: "#6E6E73" }}>/tech</b> using their personal code.</Small>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12.5, color: "#6E6E73", cursor: "pointer" }}><input type="checkbox" checked={showRemoved} onChange={e => setShowRemoved(e.target.checked)} /> Show removed techs</label>
+      {techMsg && <div role="status" style={{ marginTop: 8, fontSize: 13, color: "#1D1D1F" }}>{techMsg}</div>}
       {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Full name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
         <div style={{ display: "flex", gap: 8 }}>
@@ -978,7 +1073,13 @@ function Techs() {
     </Card>
     {loading ? <Card><Small>Loading…</Small></Card> : techs.length === 0 ? <Card><Small>No technicians yet. Tap “+ Add tech”.</Small></Card> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
-        {techs.map(t => <Card key={t.id}>
+        {techs.map(t => t.active === false ? <Card key={t.id}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", opacity: 0.75 }}>
+            <div><b style={{ fontSize: 15, color: "#6E6E73" }}>{t.name}</b><Small>Removed{t.removed_at ? ` ${new Date(t.removed_at).toLocaleDateString()}` : ""}{t.removed_by ? ` by ${t.removed_by}` : ""} · history kept</Small></div>
+            <button onClick={() => reactivateTech(t)} disabled={savingId === t.id} style={{ ...btn2, padding: "6px 12px" }}>Bring back</button>
+          </div>
+          <TechStatsLine techId={t.id} />
+        </Card> : <Card key={t.id}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer", alignItems: "center" }} onClick={() => editId === t.id ? setEditId(null) : startEdit(t)}>
             <b style={{ fontSize: 15 }}>{t.name}</b>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -988,6 +1089,7 @@ function Techs() {
           </div>
           {(t.phone || t.email) && <Small>{[t.phone, t.email].filter(Boolean).join(" · ")}</Small>}
           {Array.isArray(t.skills) && t.skills.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{t.skills.map((s: string, i: number) => <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#EEEEFF", border: "1px solid rgba(99,102,241,0.3)" }}>{s}</span>)}</div>}
+          <TechStatsLine techId={t.id} />
 
           {editId === t.id && <div style={{ ...card, marginTop: 10, display: "grid", gap: 8 }}>
             <input placeholder="Full name" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
@@ -1034,6 +1136,7 @@ function Techs() {
               <button onClick={() => saveEdit(t.id)} disabled={savingId === t.id} style={{ ...btn, flex: 1, opacity: savingId === t.id ? 0.6 : 1 }}>{savingId === t.id ? "Saving…" : "Save"}</button>
               <button onClick={() => setEditId(null)} style={{ ...btn2 }}>Cancel</button>
             </div>
+            <button onClick={() => removeTech(t)} disabled={savingId === t.id} style={{ ...btn2, color: "#D70015", justifySelf: "start", padding: "6px 12px" }}>Remove tech…</button>
           </div>}
 
           <div style={{ marginTop: 12 }}>
@@ -1046,6 +1149,7 @@ function Techs() {
           </div>
         </Card>)}
       </div>}
+    <ServiceBenchmark />
   </div>;
 }
 
@@ -2134,6 +2238,10 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   useEffect(() => { if (!techsProp?.length) fetch("/api/dispatch").then(r => r.json()).then(d => setTechsOwn(d.techs ?? [])).catch(() => {}); }, [techsProp]);
   const techs = techsProp?.length ? techsProp : techsOwn;
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // Every "Complete" opens the Finish job sheet (time on site + parts are required).
+  const [finishOpen, setFinishOpen] = useState(false);
+  const { user: me } = useUser();
+  const meCorporate = (me?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === "corporate";
   // Saves straight to the job and reports whether it worked (so the page can undo
   // what it showed). onUpdateProp is only told after a successful save.
   const onUpdate = async (wid: string, patch: Record<string, unknown>): Promise<boolean> => {
@@ -2691,6 +2799,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
     if (!wo) return;
     if (cancelled) { setHint("This job is cancelled. Tap Reopen job first."); return; }
     if (key === "Done" && !canComplete) { setHint(completeBlockReason + " — then finish the job."); setTab(!allStepsDone ? "Execution" : "Activity"); return; }
+    if (key === "Done") { setHint(null); setFinishOpen(true); return; }
     setHint(null); patchField({ status: COL_TO_DB[key] });
   }
   // The one obvious next thing to do (ServiceTitan / Housecall Pro style).
@@ -2734,7 +2843,9 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   // Opens this same job page (Jobs tab) — not the old /maintenance screen.
   const link = typeof window !== "undefined" ? `${window.location.origin}/?tab=jobs&job=${id}` : `/?tab=jobs&job=${id}`;
 
-  return <div className="jp" style={{ position: "fixed", inset: 0, zIndex: 130, overflowY: "auto", backgroundColor: "#EEF2F7", backgroundImage: "linear-gradient(180deg,#0E1726 0px,#18263F 200px,#283B5E 380px,#5D7193 560px,#B4C1D6 760px,#E2E8F1 940px,#EEF2F7 1100px)", backgroundRepeat: "no-repeat", backgroundAttachment: "local", color: INK, fontFamily: FONT, letterSpacing: "-0.01em", WebkitOverflowScrolling: "touch" }}>
+  return <>{finishOpen && wo && <FinishJobSheet woId={id} title={woName(wo)} isCorporate={meCorporate} techName={wo.assignee_name ?? null} scheduledAt={wo.scheduled_at ?? null} onClose={() => setFinishOpen(false)}
+    complete={async (override) => { const r = await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed", send_notifications: notifyOnChange, ...(override ? { closeout_override_reason: override } : {}) }) }); const d = await r.json().catch(() => ({})); if (!r.ok) return d?.error ?? "That didn’t save. Try again."; setWo((w: typeof wo) => w ? { ...w, status: "completed" } : w); await onUpdateProp?.(id, { status: "completed" }); load(true); return true; }} />}
+  <div className="jp" style={{ position: "fixed", inset: 0, zIndex: 130, overflowY: "auto", backgroundColor: "#EEF2F7", backgroundImage: "linear-gradient(180deg,#0E1726 0px,#18263F 200px,#283B5E 380px,#5D7193 560px,#B4C1D6 760px,#E2E8F1 940px,#EEF2F7 1100px)", backgroundRepeat: "no-repeat", backgroundAttachment: "local", color: INK, fontFamily: FONT, letterSpacing: "-0.01em", WebkitOverflowScrolling: "touch" }}>
     <style>{`
       .jp *{box-sizing:border-box}
       .jp h2{font-weight:600;letter-spacing:-.01em}
@@ -2889,7 +3000,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             </div>
           </div>}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select disabled={cancelled} title={cancelled ? "Cancelled — use Reopen job" : undefined} value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select disabled={cancelled} title={cancelled ? "Cancelled — use Reopen job" : undefined} value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } if (COL_TO_DB[v] === "completed") { setFinishOpen(true); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select id="jp-tech" value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input id="jp-date" type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
@@ -3296,11 +3407,11 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
         </>)}
 
         {bucketOf(stOf(wo)) !== "Done" && <div>
-          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#248A3D" : "#F5F5F7", color: canComplete ? "white" : "#6E6E73", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
+          <button onClick={() => canComplete && setFinishOpen(true)} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#248A3D" : "#F5F5F7", color: canComplete ? "white" : "#6E6E73", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
           {!canComplete && <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#B25000", textAlign: "center", marginTop: 8 }}><Lock size={12} /> {completeBlockReason}</p>}
         </div>}
       </div>
       </>}
     </div>
-  </div>;
+  </div></>;
 }

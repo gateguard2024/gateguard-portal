@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withoutRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
@@ -27,7 +28,8 @@ export async function GET(_req: NextRequest) {
     techQuery = (techQuery as any).or(`org_id.in.(${idList}),org_id.is.null`) as typeof techQuery
   }
 
-  const { data: techs, error: techErr } = await techQuery
+  const { data: techsAll, error: techErr } = await techQuery
+  const techs = techsAll ? await withoutRemoved(techsAll) : techsAll
   if (techErr) return NextResponse.json({ error: techErr.message }, { status: 500 })
   if (!techs || techs.length === 0) return NextResponse.json({ fleet: [] })
 

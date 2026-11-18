@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isTechRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
 import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
 import { guardSite, guardWorkOrder } from '@/lib/ops-scope'
 import { getCurrentUser } from '@/lib/current-user'
+import { checkCloseout } from '@/lib/job-closeout'
 import { isInScope, resolveOrgScope } from '@/lib/org-scope'
 
 const supabase = createClient(
@@ -141,6 +143,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { data: tech } = await supabase.from('technicians').select('id, org_id').eq('id', String(body.assignee_id)).maybeSingle()
     if (!tech || !isInScope(scope, (tech as { org_id: string | null }).org_id)) return NextResponse.json({ error: 'That technician isn’t on your team.' }, { status: 400 })
   }
+  if (body.assignee_id && (await isTechRemoved(String(body.assignee_id)))) return NextResponse.json({ error: 'That technician was removed. Pick someone else.' }, { status: 400 })
+  // Close-out rules: a job can't be completed without time on site and the parts
+  // answer (lib/job-closeout.ts). Corporate may override with a reason.
+  delete upd.closeout_override_reason
+  for (const k of ['closeout_override_by', 'closeout_override_at', 'parts_none_at', 'parts_none_by']) delete upd[k]
+  if (body.status === 'completed' && (current as { status?: string } | null)?.status !== 'completed') {
+    const block = await checkCloseout(params.id, me, body.closeout_override_reason as string | undefined)
+    if (block) return NextResponse.json(block.body, { status: block.status })
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any = null; let error: { code?: string; message: string } | null = null
   for (let i = 0; i < 8; i++) {

@@ -15,6 +15,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams }                        from 'next/navigation'
 import { WiringGuide }  from '@/components/tech/WiringDiagram'
 import { CableGuide }   from '@/components/tech/CableGuide'
+import { FinishJobSheet } from '@/components/nexus/ops/FinishJobSheet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
@@ -715,6 +716,7 @@ function TechTool() {
   // GPS / identity state
   const [techId,     setTechId]     = useState<string | null>(null)
   const [techName,   setTechName]   = useState<string | null>(null)
+  const [finishOpen, setFinishOpen] = useState(false)   // Finish job sheet (time on site + parts required)
   // My Jobs (work orders assigned to this tech)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [myJobs,     setMyJobs]     = useState<any[]>([])
@@ -922,12 +924,14 @@ function TechTool() {
     setBriefLoading(false)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // (Completing goes through FinishJobSheet now; this stays for other status moves.)
   async function setJobStatus(woId: string, status: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setOpenJob((prev: any) => prev ? { ...prev, status } : prev)   // optimistic
     await queuedWrite(`/api/maintenance/${woId}`, 'PATCH', { status })
     if (typeof navigator !== 'undefined' && navigator.onLine) { refreshOpenJob(woId); loadMyJobs() }
   }
+  void setJobStatus
   async function uploadJobPhoto(woId: string, file: File, stage: string = 'general') {
     if (!file) return
     try {
@@ -1525,10 +1529,22 @@ function TechTool() {
                 const doComplete = () => {
                   if (!can) return
                   if (!hasPhoto && typeof window !== 'undefined' && !window.confirm('No photo attached to this job. Complete it anyway?')) return
-                  setJobStatus(openJob.id, 'completed')
+                  setFinishOpen(true)
                 }
                 return (
                   <>
+                    {finishOpen && <FinishJobSheet woId={openJob.id} title={openJob.title ?? openJob.wo_number ?? null} techName={techName} headers={{ 'x-tech-code': techCode }} scheduledAt={openJob.scheduled_at ?? null} onClose={() => setFinishOpen(false)}
+                      complete={async () => {
+                        if (typeof navigator !== 'undefined' && !navigator.onLine) return 'You’re offline — finish the job when you have signal.'
+                        try {
+                          const r = await fetch(`/api/maintenance/${openJob.id}`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ status: 'completed' }) })
+                          const d = await r.json().catch(() => ({}))
+                          if (!r.ok) return d?.error ?? 'That didn’t save. Try again.'
+                        } catch { return 'No connection — try again.' }
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        setOpenJob((prev: any) => prev ? { ...prev, status: 'completed' } : prev)
+                        refreshOpenJob(openJob.id); loadMyJobs(); return true
+                      }} />}
                     <button onClick={doComplete} disabled={!can} style={{ width: '100%', padding: 14, borderRadius: 12, background: can ? C.green : 'rgba(255,255,255,0.06)', color: can ? '#06120c' : C.textMuted, border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, cursor: can ? 'pointer' : 'not-allowed', letterSpacing: '0.06em' }}>✓ COMPLETE JOB</button>
                     {!can && <div style={{ textAlign: 'center', fontSize: 11, color: C.amber, marginTop: 6 }}>🔒 Finish all steps ({doneCount}/{checklist.length})</div>}
                     {can && !hasPhoto && <div style={{ textAlign: 'center', fontSize: 11, color: C.textMuted, marginTop: 6 }}>Tip: add a photo for the commissioning record (optional)</div>}

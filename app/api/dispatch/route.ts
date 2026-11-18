@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withoutRemoved } from '@/lib/tech-active'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
     dueDate:        j.due_date,
   }))
 
-  const techs = (techsRes.data ?? []).map(t => ({
+  const techs = (await withoutRemoved(techsRes.data ?? [])).map(t => ({
     id:                   t.id,
     name:                 t.name,
     initials:             t.initials,
