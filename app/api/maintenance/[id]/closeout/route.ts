@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json(await closeoutStatus(params.id))
 }
 
-// POST { arrive?, leave?, technician_name?, technician_id?, parts_none? }
+// POST { arrive?, leave?, technician_name?, technician_id?, parts_none?, opening? ('<opening id>' | 'property') }
 // Saves the close-out answers (an arrive/leave entry and/or the parts answer) and
 // returns the new status. Completing the job is still the normal status change.
 // Works for the portal (Clerk) and the field app (x-tech-code).
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     technician_id: (body.technician_id as string) || job?.assignee_id || (signedIn ? user!.id : null) || null,
     org_id: signedIn ? user!.org_id ?? null : null,
     parts_none: typeof body.parts_none === 'boolean' ? body.parts_none : null,
+    opening: typeof body.opening === 'string' && body.opening ? body.opening : null,
     who: (body.technician_name as string) || (signedIn ? user!.name || user!.email : null) || null,
   })
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })

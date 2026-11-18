@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isTechRemoved } from '@/lib/tech-active'
+import { openingOnSite } from '@/lib/openings'
 import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
 import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
@@ -144,6 +145,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!tech || !isInScope(scope, (tech as { org_id: string | null }).org_id)) return NextResponse.json({ error: 'That technician isn’t on your team.' }, { status: 400 })
   }
   if (body.assignee_id && (await isTechRemoved(String(body.assignee_id)))) return NextResponse.json({ error: 'That technician was removed. Pick someone else.' }, { status: 400 })
+  // A job's opening (233) must be at the job's property; picking one clears "Whole property".
+  if (body.opening_id) {
+    if (!(await openingOnSite(String(body.opening_id), String(body.site_id ?? (current as { site_id?: string | null } | null)?.site_id ?? '')))) return NextResponse.json({ error: 'That gate or door isn’t at this job’s property.' }, { status: 400 })
+    upd.opening_property = false
+  }
   // Close-out rules: a job can't be completed without time on site and the parts
   // answer (lib/job-closeout.ts). Corporate may override with a reason.
   delete upd.closeout_override_reason

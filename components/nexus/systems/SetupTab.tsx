@@ -13,6 +13,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react'
 import { Card, Dot, DOT, MUTED, GREEN, ORANGE, RED, TEXT2, LINE, getJson, type Any, type SiteCtx } from '@/components/nexus/systems/shared'
+import { OpeningsCard } from '@/components/nexus/systems/OpeningsCard'
 import { SETUP_START, SETUP_GUIDES, type SetupGuide, type SetupCheck } from '@/lib/setup-guides'
 
 type State = 'ok' | 'partial' | 'error' | 'off' | 'wait' | 'na' | 'soon'
@@ -165,6 +166,8 @@ export function SetupTab({ ctx, cams, doors, doorErr, relays, camMap, onGo }: {
           {openId === SETUP_START.id && <Steps g={SETUP_START} />}
         </div>
       </Card>
+
+      <OpeningsCard ctx={ctx} doors={doors} cams={cams} relays={relays} />
 
       <Card title="Checklist" sub="Tap Steps on any line for simple instructions. The same steps are in the How-to button, and you can ask Lexi.">
         <div className="su-list">

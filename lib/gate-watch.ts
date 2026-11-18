@@ -332,7 +332,9 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
   }
   // Left open but already ticketed (no Fault): only look every 30 min until it closes or the work is done.
   if ((patch.state ?? g.state) === 'left_open' && !(patch.incident_id ?? g.incident_id)) {
-    patch.next_check_at = new Date(now.getTime() + 1800e3).toISOString()
+    // …unless a "closed" reading is waiting to be confirmed — that stays at 1 minute.
+    const pend = patch.pending_state !== undefined ? patch.pending_state : g.pending_state
+    if (pend !== 'closed') patch.next_check_at = new Date(now.getTime() + 1800e3).toISOString()
     // The ticket's work is finished but the gate is still open → re-arm: the next check alerts as normal.
     if (g.state === 'left_open' && !(await openGateTicket(g))) { patch.state = 'open'; patch.alerted_at = null; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
   }
@@ -389,7 +391,7 @@ export async function runDueGates(limit = 40): Promise<{ checked: number; alerts
           if (!frame) {
             const n = (g.unclear_count ?? 0) + 1
             if (n >= 10 && g.state !== 'left_open' && g.state !== 'blind') await recordDowntime(g, g.state, 'blind', now)
-            const { error: uErr } = await db.from('gate_watches').update({ last_checked_at: now.toISOString(), last_verdict: 'error', last_reason: fErr ?? 'No picture', unclear_count: n, ...(n >= 10 && g.state !== 'left_open' ? { state: 'blind' } : {}), next_check_at: new Date(now.getTime() + (n < 10 && (g.state === 'open' || g.state === 'left_open') ? 60e3 : n >= 10 ? 1800e3 : 300e3)).toISOString() }).eq('id', g.id)
+            const { error: uErr } = await db.from('gate_watches').update({ last_checked_at: now.toISOString(), last_verdict: 'error', last_reason: fErr ?? 'No picture', unclear_count: n, ...(n >= 10 && g.state !== 'left_open' ? { state: 'blind' } : {}), next_check_at: new Date(now.getTime() + (n < 10 && (g.state === 'open' || g.state === 'left_open' || g.pending_state === 'open') ? 60e3 : n >= 10 ? 1800e3 : 300e3)).toISOString() }).eq('id', g.id)
             if (uErr) errors.push(uErr.message)
             continue
           }
@@ -406,4 +408,81 @@ export async function runDueGates(limit = 40): Promise<{ checked: number; alerts
   const { error: pErr } = await db.from('gate_watch_checks').delete().lt('checked_at', new Date(now.getTime() - 14 * 864e5).toISOString())
   if (pErr) errors.push(`prune: ${pErr.message}`)
   return { checked, alerts, cleared, errors }
+}
+
+// ── Health check (corporate) ─────────────────────────────────────────────────
+/**
+ * Why isn't a gate alerting? One plain-English list per gate: is the schedule
+ * running, can it see, what did it last read, and is anything silencing it
+ * (an open service ticket, hold-open hours, a manager hold). Reads only.
+ */
+export async function gateWatchHealth(siteId?: string | null) {
+  const db = sb()
+  const now = new Date()
+  let q = db.from('gate_watches').select('*').order('site_id').order('label')
+  if (siteId) q = q.eq('site_id', siteId)
+  const { data: gates, error } = await q
+  if (error) throw new Error(error.message)
+  const siteIds = [...new Set((gates ?? []).map(g => g.site_id))]
+  const { data: sites } = siteIds.length ? await db.from('sites').select('id, name').in('id', siteIds) : { data: [] }
+  const siteName = new Map((sites ?? []).map((s: { id: string; name: string }) => [s.id, s.name]))
+  const { data: lastRun } = await db.from('gate_watch_checks').select('checked_at').order('checked_at', { ascending: false }).limit(1)
+  const lastAny = lastRun?.[0]?.checked_at ?? null
+  const env = {
+    anthropic: !!process.env.ANTHROPIC_API_KEY, resend: !!process.env.RESEND_API_KEY,
+    twilio: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER),
+    inngest: !!(process.env.INNGEST_SIGNING_KEY && process.env.INNGEST_EVENT_KEY),
+  }
+  const ago = (t: string | null) => (t ? `${mins(now.getTime() - Date.parse(t))} min ago` : 'never')
+  const system: string[] = []
+  if (!env.inngest) system.push('Inngest keys are missing on this deployment — the every-minute Gate Watch job can’t run here.')
+  if (!env.anthropic) system.push('ANTHROPIC_API_KEY is missing — the AI can’t read any gate.')
+  if (!env.resend) system.push('RESEND_API_KEY is missing — no alert emails can go out.')
+  if (!env.twilio) system.push('Twilio isn’t set up — no alert texts can go out.')
+  const enabledGates = (gates ?? []).filter(g => g.enabled)
+  if (enabledGates.length && (!lastAny || now.getTime() - Date.parse(lastAny) > 45 * 60e3)) system.push(`No gate has been checked since ${ago(lastAny)} — the schedule isn’t running (check Inngest → nexus-gate-watch).`)
+
+  const out = []
+  for (const g of gates ?? []) {
+    const issues: string[] = [], notes: string[] = []
+    const { data: checks } = await db.from('gate_watch_checks').select('checked_at, method, verdict, confidence, vehicle, reason, state_after').eq('gate_id', g.id).order('checked_at', { ascending: false }).limit(12)
+    const list = checks ?? []
+    const ticket = await openGateTicket(g)
+    let ticketInfo: Record<string, unknown> | null = null
+    if (ticket) {
+      const { data: req } = await db.from('wo_requests').select('id, status, created_at, title').eq('id', ticket.request_id).maybeSingle()
+      ticketInfo = { request_id: ticket.request_id, work_order_id: ticket.work_order_id, status: req?.status ?? null, opened: req?.created_at ?? null }
+      issues.push(`SILENCED: a service ticket for this gate is still open (${ticket.work_order_id ? 'its work order isn’t completed' : `request status “${req?.status ?? '?'}”`}, opened ${ago(req?.created_at ?? null)}). No Fault, text or email until it’s closed or its work order is completed.`)
+    }
+    if (!g.enabled) issues.push('Gate Watch is turned OFF for this gate.')
+    if (inHoldHours(g.hold_open_hours, now)) issues.push('Inside its hold-open hours right now — open is expected, so no alert.')
+    if (await managerHold(g, now)) issues.push('A manager set “hold open” from the property portal — no alert until it ends.')
+    if (g.enabled && g.next_check_at && now.getTime() - Date.parse(g.next_check_at) > 10 * 60e3) issues.push(`Overdue: it was due for a check ${ago(g.next_check_at)} — the schedule isn’t picking it up.`)
+    if (g.state === 'blind') issues.push(`BLIND since ${ago(g.state_since)}: ${g.last_reason ?? 'no usable picture'}. Blind gates can’t alert.`)
+    else if ((g.unclear_count ?? 0) >= 3) issues.push(`Last ${g.unclear_count} looks were unusable (${g.last_reason ?? 'no picture / unsure'}) — ${10 - g.unclear_count} more and it goes blind.`)
+    if (g.last_verdict === 'error') issues.push(`Last picture failed: ${g.last_reason}`)
+    if (!(g.notify_phones ?? []).length) notes.push('No phone numbers to text — alerts go by email only (info@gateguard.co + any added).')
+    if (!Array.isArray(g.region) || !g.region.length) issues.push('No gate outline drawn — the AI is judging the whole picture. Draw the outline in setup.')
+    const { count: refOpen } = await db.from('gate_watch_refs').select('id', { count: 'exact', head: true }).eq('gate_id', g.id).eq('state', 'open')
+    const { count: refClosed } = await db.from('gate_watch_refs').select('id', { count: 'exact', head: true }).eq('gate_id', g.id).eq('state', 'closed')
+    if (!refOpen || !refClosed) issues.push(`Not taught enough: ${refOpen ?? 0} open + ${refClosed ?? 0} closed example pictures. Teach at least 2 of each.`)
+    const openReads = list.filter(c => c.verdict === 'open' || c.verdict === 'partial').length
+    const lowConf = list.filter(c => c.verdict !== 'unclear' && c.confidence < 50).length
+    if (openReads && g.state === 'closed' && !g.pending_state) notes.push(`${openReads} of the last ${list.length} looks read OPEN but each was followed by a CLOSED read, so it never counted as left open (needs 2 open reads in a row, ~${mins((g.threshold_sec ?? 300) * 1000 + 60e3)} min apart).`)
+    if (lowConf >= 3) notes.push(`${lowConf} of the last ${list.length} reads were under 50% sure — those are ignored. More taught pictures help.`)
+    if (g.state === 'open' && g.open_since) {
+      const openMs = now.getTime() - Date.parse(g.open_since)
+      notes.push(`Open ${mins(openMs)} min of its ${mins((g.threshold_sec ?? 300) * 1000)}-min limit; next look ${g.next_check_at ? `in ${mins(Date.parse(g.next_check_at) - now.getTime())} min` : 'not scheduled'}.`)
+    }
+    if (g.state === 'left_open') notes.push(g.incident_id ? `Alerted ${ago(g.alerted_at)} (Fault open).` : 'Left open quietly because a ticket is open.')
+    out.push({
+      gate_id: g.id, site: siteName.get(g.site_id) ?? g.site_id, gate: g.label, enabled: g.enabled,
+      state: g.state, pending: g.pending_state ? `${g.pending_state} ×${g.pending_count}` : null,
+      last_check: ago(g.last_checked_at), next_check: g.next_check_at, last_read: g.last_verdict ? `${g.last_verdict} ${g.last_confidence ?? ''}% (${g.last_method ?? ''})` : null, last_reason: g.last_reason,
+      threshold_min: mins((g.threshold_sec ?? 300) * 1000), emails: [GATE_ALWAYS_EMAIL, ...(g.notify_emails ?? [])], phones: (g.notify_phones ?? []).length,
+      ticket: ticketInfo, ok: issues.length === 0, issues, notes,
+      recent: list.map(c => `${new Date(c.checked_at).toLocaleString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${c.verdict} ${c.confidence}% · ${c.method}${c.vehicle ? ' · vehicle' : ''} → ${c.state_after}`),
+    })
+  }
+  return { checked_at: now.toISOString(), last_check_anywhere: ago(lastAny), env, system, gates: out }
 }

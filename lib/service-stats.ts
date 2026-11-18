@@ -6,10 +6,13 @@
  *  - Visit        = one finished time-on-site entry (arrive → leave) on a job.
  *  - Job          = a completed work order (completed_at in the window).
  *  - Hours        = sum of visit minutes ÷ 60.
- *  - Return trip  = a completed job at a property that already had a completed job
- *                   in the 30 days before it was opened (the first fix didn't hold).
+ *  - Return trip  = a completed job at the same OPENING (gate/door, migration 233)
+ *                   as a completed job closed in the 30 days before it was opened —
+ *                   the first fix didn't hold. Jobs with no opening (older jobs,
+ *                   "Whole property / other", properties without openings) are
+ *                   compared with each other at the property level.
  *  - First-time fix (tech) = their job was done in one visit day AND no return trip
- *                   at that property in the 30 days after.
+ *                   at that opening in the 30 days after.
  *  - On time      = first arrival on or before the job's scheduled day (ET).
  *  - Parts        = work_order_parts not marked 'returned'; cost = qty × unit_cost.
  */
@@ -19,7 +22,7 @@ const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 const DAY = 86_400_000
 const RETURN_WINDOW = 30 * DAY
 
-export type WO = { id: string; site_id: string | null; assignee_id: string | null; assignee_name: string | null; status: string | null; completed_at: string | null; created_at: string | null; scheduled_date: string | null }
+export type WO = { id: string; opening_id?: string | null; site_id: string | null; assignee_id: string | null; assignee_name: string | null; status: string | null; completed_at: string | null; created_at: string | null; scheduled_date: string | null }
 export type TE = { work_order_id: string; technician_id: string | null; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null }
 export type PT = { work_order_id: string; qty: number | null; unit_cost: number | null; action: string | null }
 
@@ -51,7 +54,7 @@ async function inChunks<T>(table: string, cols: string, col: string, ids: string
 
 /** Completed jobs (completed_at ≥ since), with their visits and parts. */
 export async function loadWork(filter: { siteIds?: string[]; orgIds?: string[] | 'all'; since: Date }) {
-  const cols = 'id, site_id, assignee_id, assignee_name, status, completed_at, created_at, scheduled_date'
+  const cols = await woCols()
   let jobs: WO[] = []
   if (filter.siteIds) {
     if (filter.siteIds.length) jobs = (await inChunks<WO>('work_orders', cols, 'site_id', filter.siteIds)).filter((w) => w.completed_at && w.completed_at >= filter.since.toISOString())
@@ -71,10 +74,20 @@ export async function loadWork(filter: { siteIds?: string[]; orgIds?: string[] |
   return { jobs, visits: visits.filter((v) => v.clock_out), parts: parts.filter((p) => p.action !== 'returned') }
 }
 
+/** Where a repeat is judged: the opening when the job names one, else the property. */
+export const spotOf = (j: WO) => (j.opening_id ? `o:${j.opening_id}` : j.site_id ? `s:${j.site_id}` : null)
+
+let hasOpeningCol: boolean | null = null
+async function woCols() {
+  const base = 'id, site_id, assignee_id, assignee_name, status, completed_at, created_at, scheduled_date'
+  if (hasOpeningCol === null) { const { error } = await db().from('work_orders').select('opening_id').limit(1); hasOpeningCol = !error }
+  return hasOpeningCol ? `${base}, opening_id` : base
+}
+
 /** Ids of jobs that were a return trip (same property, a completed job in the 30 days before it was opened). */
 export function returnTrips(jobs: WO[]): Set<string> {
   const bySite = new Map<string, WO[]>()
-  for (const j of jobs) if (j.site_id && j.completed_at) (bySite.get(j.site_id) ?? bySite.set(j.site_id, []).get(j.site_id)!).push(j)
+  for (const j of jobs) { const k = spotOf(j); if (k && j.completed_at) (bySite.get(k) ?? bySite.set(k, []).get(k)!).push(j) }
   const out = new Set<string>()
   for (const list of Array.from(bySite.values())) {
     list.sort((a, b) => a.completed_at!.localeCompare(b.completed_at!))
@@ -115,13 +128,28 @@ export async function siteStats(siteId: string) {
     month: totals(jobs, visits, parts, now - 30 * DAY, returns),
     d90: totals(jobs, visits, parts, now - 90 * DAY, returns),
     year: totals(jobs, visits, parts, now - 365 * DAY, returns),
+    by_opening: byOpening(jobs, visits, parts, returns),
     last_visit: last,
     last_job_at: jobs.length ? jobs[jobs.length - 1].completed_at : null,
     recent: jobs.slice(-6).reverse().map((j) => {
       const vs = visits.filter((v) => v.work_order_id === j.id)
-      return { id: j.id, completed_at: j.completed_at, tech: j.assignee_name, visits: vs.length, mins: vs.reduce((s, v) => s + (v.duration_mins ?? 0), 0), return_trip: returns.has(j.id) }
+      return { id: j.id, opening_id: j.opening_id ?? null, completed_at: j.completed_at, tech: j.assignee_name, visits: vs.length, mins: vs.reduce((s, v) => s + (v.duration_mins ?? 0), 0), return_trip: returns.has(j.id) }
     }),
   }
+}
+
+/** 12-month totals per opening (+ "Whole property / other" and jobs with no opening set). */
+function byOpening(jobs: WO[], visits: TE[], parts: PT[], returns: Set<string>) {
+  const vBy = byJob(visits), pBy = byJob(parts)
+  const m = new Map<string, { opening_id: string | null; jobs: number; visits: number; mins: number; parts_cost: number; return_trips: number; last_visit: string | null }>()
+  for (const j of jobs) {
+    const key = j.opening_id ?? '_none'
+    const r = m.get(key) ?? m.set(key, { opening_id: j.opening_id ?? null, jobs: 0, visits: 0, mins: 0, parts_cost: 0, return_trips: 0, last_visit: null }).get(key)!
+    r.jobs++; if (returns.has(j.id)) r.return_trips++
+    for (const v of vBy.get(j.id) ?? []) { r.visits++; r.mins += v.duration_mins ?? 0; if (!r.last_visit || v.clock_out! > r.last_visit) r.last_visit = v.clock_out }
+    for (const p of pBy.get(j.id) ?? []) r.parts_cost += (Number(p.qty) || 1) * (Number(p.unit_cost) || 0)
+  }
+  return Array.from(m.values()).map((r) => ({ ...r, hours: r1(r.mins / 60), parts_cost: Math.round(r.parts_cost) }))
 }
 
 /** Per tech over the last `days` (default 90). */
@@ -132,7 +160,7 @@ export async function techStats(orgIds: string[] | 'all', days = 90) {
   const { jobs, visits, parts } = await loadWork({ orgIds, since: new Date(since - 30 * DAY) })
   const returns = returnTrips(jobs)
   const inWin = jobs.filter((j) => new Date(j.completed_at!).getTime() >= since)
-  const bySiteLater = (j: WO) => jobs.some((o) => o.id !== j.id && o.site_id && o.site_id === j.site_id && returns.has(o.id) && new Date(o.created_at ?? o.completed_at!).getTime() >= new Date(j.completed_at!).getTime() && new Date(o.created_at ?? o.completed_at!).getTime() - new Date(j.completed_at!).getTime() <= RETURN_WINDOW)
+  const bySiteLater = (j: WO) => jobs.some((o) => o.id !== j.id && spotOf(o) !== null && spotOf(o) === spotOf(j) && returns.has(o.id) && new Date(o.created_at ?? o.completed_at!).getTime() >= new Date(j.completed_at!).getTime() && new Date(o.created_at ?? o.completed_at!).getTime() - new Date(j.completed_at!).getTime() <= RETURN_WINDOW)
 
   const vByJob = byJob(visits), pByJob = byJob(parts)
   type Acc = { id: string; name: string | null; jobs: number; mins: number; visits: number; ftf: number; ftfJudged: number; onTime: number; onTimeJudged: number; parts: number }

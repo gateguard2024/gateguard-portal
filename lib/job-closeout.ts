@@ -4,6 +4,9 @@
  *      work_order_time_entries, and no clock still running.
  *   2. PARTS — at least one part used/replaced on work_order_parts, or the
  *      "No parts used" answer (work_orders.parts_none).
+ *   3. WHICH OPENING (migration 233) — only at properties that have openings set
+ *      up: the gate/door the job was for (work_orders.opening_id), or
+ *      "Whole property / other" (opening_property). Return trips count per opening.
  * Corporate may close without them by giving a reason (logged on the job).
  *
  * Every path that completes a job calls `checkCloseout` first: the job drawer /
@@ -15,10 +18,12 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 
 export type CloseoutStatus = {
   ok: boolean
-  missing: ('time' | 'clock_running' | 'parts')[]
+  missing: ('time' | 'clock_running' | 'parts' | 'opening')[]
   message: string               // plain-English "what's missing", '' when ok
   time: { entries: number; minutes: number; running: number }
   parts: { count: number; none: boolean }
+  /** required = the property has openings set up. */
+  opening: { required: boolean; id: string | null; property: boolean; name: string | null; options: { id: string; name: string; kind: string }[] }
   needsMigration?: boolean
 }
 
@@ -29,6 +34,20 @@ export async function closeoutStatus(woId: string): Promise<CloseoutStatus> {
     supabase.from('work_orders').select('parts_none').eq('id', woId).maybeSingle(),
   ])
   const needsMigration = !!w.error && /parts_none/.test(w.error.message ?? '')
+  // Openings (233): which gate/door this job was for. Drift-safe — before 233 runs it's simply not asked.
+  const opening: CloseoutStatus['opening'] = { required: false, id: null, property: false, name: null, options: [] }
+  const wo = await supabase.from('work_orders').select('site_id, opening_id, opening_property').eq('id', woId).maybeSingle()
+  if (!wo.error && wo.data) {
+    const j = wo.data as { site_id: string | null; opening_id: string | null; opening_property: boolean | null }
+    opening.id = j.opening_id; opening.property = !!j.opening_property
+    if (j.site_id) {
+      const { data: ops } = await supabase.from('site_openings').select('id, name, kind, active').eq('site_id', j.site_id).order('sort').order('name')
+      const list = (ops ?? []) as { id: string; name: string; kind: string; active: boolean }[]
+      opening.options = list.filter((o) => o.active || o.id === j.opening_id).map(({ id, name, kind }) => ({ id, name, kind }))
+      opening.required = list.some((o) => o.active)
+      opening.name = list.find((o) => o.id === j.opening_id)?.name ?? null
+    }
+  }
   const entries = (t.data ?? []) as { clock_out: string | null; duration_mins: number | null }[]
   const done = entries.filter((e) => e.clock_out)
   const running = entries.length - done.length
@@ -41,12 +60,14 @@ export async function closeoutStatus(woId: string): Promise<CloseoutStatus> {
   if (!done.length) missing.push('time')
   if (running) missing.push('clock_running')
   if (!parts && !none) missing.push('parts')
+  if (opening.required && !opening.id && !opening.property) missing.push('opening')
   const needs: string[] = []
   if (running) needs.push(running === 1 ? 'stop the clock that’s still running' : `stop the ${running} clocks still running`)
   if (!done.length) needs.push('add time on site (arrive and leave)')
   if (!parts && !none) needs.push('add the parts used or replaced (or tick “No parts used”)')
+  if (missing.includes('opening')) needs.push('pick which gate or door it was for')
   const message = needs.length ? `Before completing, ${needs.length > 1 ? needs.slice(0, -1).join(', ') + ' and ' + needs[needs.length - 1] : needs[0]}.` : ''
-  return { ok: !missing.length, missing, message, time: { entries: done.length, minutes, running }, parts: { count: parts, none }, needsMigration }
+  return { ok: !missing.length, missing, message, time: { entries: done.length, minutes, running }, parts: { count: parts, none }, opening, needsMigration }
 }
 
 /**
@@ -78,6 +99,8 @@ export async function checkCloseout(
 export async function saveCloseout(woId: string, input: {
   arrive?: string | null; leave?: string | null; technician_name?: string | null; technician_id?: string | null; org_id?: string | null
   parts_none?: boolean | null; who?: string | null; notes?: string | null
+  /** an opening id, or 'property' = Whole property / other, or null = leave as is */
+  opening?: string | null
 }): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   if (input.arrive || input.leave) {
     const a = input.arrive ? new Date(input.arrive) : null
@@ -99,6 +122,19 @@ export async function saveCloseout(woId: string, input: {
       ? { parts_none: true, parts_none_at: new Date().toISOString(), parts_none_by: input.who ?? null }
       : { parts_none: false, parts_none_at: null, parts_none_by: null }).eq('id', woId)
     if (error) return { ok: false, status: /parts_none/.test(error.message) ? 409 : 500, error: /parts_none/.test(error.message) ? 'Run migration 232 to record “No parts used”.' : error.message }
+  }
+  if (input.opening) {
+    let upd: Record<string, unknown>
+    if (input.opening === 'property') upd = { opening_id: null, opening_property: true }
+    else {
+      const { data: job } = await supabase.from('work_orders').select('site_id').eq('id', woId).maybeSingle()
+      const siteId = (job as { site_id?: string | null } | null)?.site_id
+      const { data: op } = siteId ? await supabase.from('site_openings').select('id').eq('id', input.opening).eq('site_id', siteId).eq('active', true).maybeSingle() : { data: null }
+      if (!op) return { ok: false, status: 400, error: 'That gate or door isn’t at this job’s property.' }
+      upd = { opening_id: input.opening, opening_property: false }
+    }
+    const { error } = await supabase.from('work_orders').update(upd).eq('id', woId)
+    if (error) return { ok: false, status: /opening_/.test(error.message) ? 409 : 500, error: /opening_/.test(error.message) ? 'Run migration 233 to record the opening.' : error.message }
   }
   return { ok: true }
 }

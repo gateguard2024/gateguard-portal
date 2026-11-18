@@ -6,17 +6,19 @@
  *   1. Time on site — arrive / leave (filled from the clock if they used it;
  *      entries can be fixed or removed; a running clock must be stopped).
  *   2. Parts used or replaced — add them, or tick "No parts used".
+ *   3. Which gate or door (only at properties with openings set up) — so a
+ *      repeat visit is counted on the right opening. "Whole property / other" is fine.
  * Corporate can close without them by giving a reason.
  *
  * Works in the portal and the field app: pass `headers` (e.g. x-tech-code) and the
  * host's own `complete` (the field app queues it offline).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Check, Clock, Package, Loader2, Trash2, Plus } from 'lucide-react'
+import { X, Check, Clock, Package, Loader2, Trash2, Plus, MapPin } from 'lucide-react'
 
 type Entry = { id: string; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null; notes?: string | null }
 type Part = { id: string; name: string | null; qty: number | null; action: string | null }
-type Status = { ok: boolean; message: string; missing: string[]; time: { entries: number; minutes: number; running: number }; parts: { count: number; none: boolean }; needsMigration?: boolean }
+type Status = { ok: boolean; message: string; missing: string[]; time: { entries: number; minutes: number; running: number }; parts: { count: number; none: boolean }; opening?: { required: boolean; id: string | null; property: boolean; name: string | null; options: { id: string; name: string; kind: string }[] }; needsMigration?: boolean }
 
 const INK = '#1D1D1F', MUTED = '#6E6E73', BLUE = '#0071E3', GREEN = '#1A7F37', ORANGE = '#B25000', RED = '#D70015', LINE = 'rgba(0,0,0,0.10)'
 
@@ -104,6 +106,11 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const removePart = (p: Part) => call(`delp-${p.id}`, `/api/maintenance/${woId}/parts/${p.id}`, { method: 'DELETE' })
   const setNone = (v: boolean) => { setSt((x) => (x ? { ...x, parts: { ...x.parts, none: v } } : x)); return call('none', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ parts_none: v, technician_name: techName ?? undefined }) }) }
 
+  const setOpening = (v: string) => {
+    if (!v) return
+    setSt((x) => (x?.opening ? { ...x, opening: { ...x.opening, id: v === 'property' ? null : v, property: v === 'property' } } : x))
+    return call('opening', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ opening: v }) })
+  }
   async function doComplete(override?: string) {
     setBusy('complete'); setErr(null)
     const r = await complete(override)
@@ -115,6 +122,8 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const timeOk = !!st && st.time.entries > 0 && st.time.running === 0
   const partsOk = !!st && (st.parts.count > 0 || st.parts.none)
   const shownParts = parts.filter((p) => p.action !== 'returned')
+  const op = st?.opening
+  const openingOk = !!op && (!op.required || !!op.id || op.property)
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Finish job" onClick={onClose}
@@ -197,6 +206,20 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
               </label>
             )}
           </section>
+
+          {/* 3. Which gate or door — only where openings are set up */}
+          {op?.required && (
+            <section style={card}>
+              <Head n={3} ok={openingOk} icon={<MapPin size={15} />} title="Which gate or door?" sub={op.property ? 'Whole property / other' : op.name ?? 'So a repeat visit shows on the right one'} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[...op.options.map((o) => ({ v: o.id, l: o.name })), { v: 'property', l: 'Whole property / other' }].map(({ v, l }) => {
+                  const on = v === 'property' ? op.property : op.id === v
+                  return <button key={v} type="button" aria-pressed={on} onClick={() => void setOpening(v)} disabled={busy === 'opening'}
+                    style={{ border: `1px solid ${on ? INK : 'rgba(0,0,0,0.16)'}`, background: on ? INK : '#fff', color: on ? '#fff' : INK, borderRadius: 999, padding: '7px 13px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
+                })}
+              </div>
+            </section>
+          )}
 
           {err && <div role="alert" style={{ fontSize: 13, color: RED }}>{err}</div>}
 

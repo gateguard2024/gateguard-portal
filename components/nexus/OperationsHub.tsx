@@ -2240,6 +2240,8 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   const [saveErr, setSaveErr] = useState<string | null>(null);
   // Every "Complete" opens the Finish job sheet (time on site + parts are required).
   const [finishOpen, setFinishOpen] = useState(false);
+  // The property's gates/doors (Systems → Setup → Openings) for the "Gate / door" picker.
+  const [openings, setOpenings] = useState<{ id: string; name: string }[]>([]);
   const { user: me } = useUser();
   const meCorporate = (me?.publicMetadata as { org_tier?: string } | undefined)?.org_tier === "corporate";
   // Saves straight to the job and reports whether it worked (so the page can undo
@@ -2350,6 +2352,11 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
   const [invBusy, setInvBusy] = useState(false);
   // silent=true refreshes data in the background without flashing the whole panel
   // to "Loading…" — used after every in-drawer action so it doesn't blink/jump.
+  const woSiteId = (wo as { site_id?: string | null } | null)?.site_id ?? null;
+  useEffect(() => {
+    if (!woSiteId) { setOpenings([]); return; }
+    fetch(`/api/sites/${woSiteId}/openings?lite=1`).then(r => r.ok ? r.json() : { openings: [] }).then(d => setOpenings(((d.openings ?? []) as { id: string; name: string; active?: boolean }[]).filter(o => o.active !== false))).catch(() => setOpenings([]));
+  }, [woSiteId]);
   const load = React.useCallback((silent = false) => {
     if (!silent) setLoading(true);
     Promise.all([
@@ -3001,6 +3008,7 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
           </div>}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select disabled={cancelled} title={cancelled ? "Cancelled — use Reopen job" : undefined} value={bucketOf(stOf(wo))} onChange={e => { const v = e.target.value; if (COL_TO_DB[v] === "completed" && !canComplete) { setSaveErr(`Can’t mark it done yet — ${completeBlockReason.toLowerCase()}.`); return; } if (COL_TO_DB[v] === "completed") { setFinishOpen(true); return; } patchField({ status: COL_TO_DB[v] }); }} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
+            {openings.length > 0 && <div style={{ flex: 1, minWidth: 140 }}><Small>Gate / door</Small><select value={wo.opening_property ? "property" : (wo.opening_id ?? "")} onChange={e => { const v = e.target.value; patchField(v === "property" ? { opening_id: null, opening_property: true } : { opening_id: v || null, opening_property: false }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Not set yet</option>{openings.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}<option value="property">Whole property / other</option></select></div>}
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select id="jp-tech" value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input id="jp-date" type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
