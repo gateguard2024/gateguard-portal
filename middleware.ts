@@ -93,6 +93,8 @@ function isBypassPath(pathname: string): boolean {
     // Resident move-in setup — public pages + token API (token IS the auth). The staff
     // route /api/move-in/invites is NOT bypassed: it needs a Clerk session.
     pathname.startsWith('/move-in/') ||
+    // One public link for the resident app (sends phones to the right store)
+    pathname === '/app' ||
     /^\/api\/move-in\/[a-f0-9]{48}(\/|$)/.test(pathname) ||
     // Public Nexus Document Portal — external no-login document pages (slug + token credential)
     pathname.startsWith('/document/') ||

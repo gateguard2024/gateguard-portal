@@ -3,6 +3,7 @@
  * Called after Stripe confirms payment, or right away when nothing is owed
  * (property pays / property collects / code covers it). Idempotent.
  *
+ *  - app login (Clerk) for each person, with their mobile when we have it (lib/resident-login)
  *  - resident_app_access row for the resident + each included household member (upsert)
  *  - invite → status complete, step done, access_id, payment fields
  *  - redemption code use counted
@@ -13,6 +14,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { inviteCode, inviteQuote, moveInProducts, priceCart, type MoveInInvite } from '@/lib/move-in'
 import { sendResidentWelcome } from '@/lib/resident-welcome-send'
+import { ensureResidentLogin } from '@/lib/resident-login'
 
 export async function completeInvite(
   inviteId: string,
@@ -38,11 +40,18 @@ export async function completeInvite(
   if (code) await db.rpc('use_access_fee_code', { p_code_id: code.id })
 
   const people = [
-    { email: invite.email, first_name: invite.first_name, last_name: invite.last_name },
+    { email: invite.email, first_name: invite.first_name, last_name: invite.last_name, phone: invite.phone },
     ...(invite.household ?? [])
       .filter((h) => h.include !== false && h.email)
-      .map((h) => ({ email: h.email!.toLowerCase(), first_name: h.first_name ?? null, last_name: h.last_name ?? null })),
+      .map((h) => ({ email: h.email!.toLowerCase(), first_name: h.first_name ?? null, last_name: h.last_name ?? null, phone: h.phone ?? null })),
   ]
+
+  // App logins created now, so the app is a plain sign-in (email or text code, no password).
+  const clerkIds = new Map<string, string>()
+  for (const p of people) {
+    const id = await ensureResidentLogin({ email: p.email, phone: p.phone, firstName: p.first_name, lastName: p.last_name })
+    if (id) clerkIds.set(p.email, id)
+  }
 
   const rows = people.map((p) => ({
     site_id: invite.site_id,
@@ -80,6 +89,12 @@ export async function completeInvite(
       status: 'paid',
       stripe_session_id: payment.stripeSessionId ?? null,
     })))
+  }
+
+  // Link each access row to its login (only where we have one — never blank out an existing link).
+  for (const a of access ?? []) {
+    const id = clerkIds.get(a.email)
+    if (id) await db.from('resident_app_access').update({ clerk_user_id: id }).eq('id', a.id)
   }
 
   const residentAccess = access?.find((a) => a.email === invite.email)

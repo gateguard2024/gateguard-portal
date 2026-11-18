@@ -167,3 +167,33 @@ export async function notifyWOSMS(params: {
     }).catch(console.error)
   }
 }
+
+// ── Plain text (not a work-order template) ────────────────────────────────────
+/** Send one plain text message. Never throws. Used by resident move-in ("Text me the app link"). */
+export async function sendText(toRaw: string, body: string): Promise<SMSResult> {
+  const SID   = process.env.TWILIO_ACCOUNT_SID
+  const TOKEN = process.env.TWILIO_AUTH_TOKEN
+  const FROM  = process.env.TWILIO_FROM_NUMBER
+  if (!SID || !TOKEN || !FROM) return { ok: false, error: 'Texting isn’t set up yet (Twilio keys are missing).' }
+  const d = toRaw.replace(/\D/g, '')
+  const e164 = d.length === 11 && d.startsWith('1') ? `+${d}` : `+1${d}`
+  if (e164.length !== 12) return { ok: false, error: 'That phone number doesn’t look right.' }
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(`${SID}:${TOKEN}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ From: FROM, To: e164, Body: body }).toString(),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      let msg = `Twilio said no (${res.status}).`
+      try { const j = JSON.parse(err); if (j?.message) msg = String(j.message) } catch { /* not JSON */ }
+      return { ok: false, error: msg }
+    }
+    const j = await res.json().catch(() => ({}))
+    return { ok: true, sid: (j as { sid?: string }).sid }
+  } catch {
+    return { ok: false, error: 'Couldn’t reach Twilio.' }
+  }
+}

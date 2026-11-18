@@ -156,21 +156,72 @@ function MoveIn() {
       {step === 'review' && (
         <Review view={view} token={token} busy={busy} setBusy={setBusy} setErr={setErr} patch={patch} onDone={load} />
       )}
-      {step === 'done' && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, width: '100%' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 36, background: '#E8F7EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1E8E3E" strokeWidth="2.4" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-          </div>
-          <p style={{ ...sub, fontSize: 16, color: INK, margin: 0 }}>Your access is on{view.paymentStatus === 'paid' ? ' and your payment is received' : ''}.</p>
-          <p style={sub}>We emailed you the GateGuard app link. Download it, sign in with <b style={{ color: INK }}>{view.email}</b> and your phone is your key. Everyone you added gets their own email.</p>
-          <a href="https://gateguard.co/app" style={{ ...btn, ...btnPri, textDecoration: 'none' }}>Get the GateGuard app</a>
-        </div>
-      )}
+      {step === 'done' && <Done view={view} token={token} />}
       {err && <div role="alert" style={{ color: '#C4180F', fontSize: 14, textAlign: 'center' }}>{err}</div>}
       <p style={{ ...sub, fontSize: 12, marginTop: 8 }}>
         Questions? {view.officePhone ? <>Call the leasing office at <a href={`tel:${view.officePhone}`} style={{ color: BLUE }}>{view.officePhone}</a>.</> : 'Contact your leasing office.'}
       </p>
     </Shell>
+  )
+}
+
+function Done({ view, token }: { view: View; token: string }) {
+  const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other')
+  const [texted, setTexted] = useState<'idle' | 'sending' | 'sent' | string>('idle')
+  useEffect(() => {
+    const ua = navigator.userAgent
+    setPlatform(/iPhone|iPad|iPod/i.test(ua) ? 'ios' : /Android/i.test(ua) ? 'android' : 'other')
+  }, [])
+  const textMe = async () => {
+    setTexted('sending')
+    const res = await fetch(`/api/move-in/${token}/text-app`, { method: 'POST' })
+    const j = await res.json().catch(() => ({}))
+    setTexted(res.ok ? 'sent' : (j.error ?? 'We couldn’t send the text.'))
+  }
+  const others = view.household.filter((h) => h.include !== false && h.email)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
+      <div style={{ width: 72, height: 72, borderRadius: 36, background: '#E8F7EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1E8E3E" strokeWidth="2.4" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      </div>
+      <p style={{ ...sub, fontSize: 17, color: INK, margin: 0, fontWeight: 600 }}>Your access is on{view.paymentStatus === 'paid' ? ' and your payment is received' : ''}.</p>
+
+      <Card>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            ['1', platform === 'other' ? 'Get the GateGuard app' : `Get the app from ${platform === 'ios' ? 'the App Store' : 'Google Play'}`],
+            ['2', `Sign in with ${view.email}`],
+            ['3', 'Enter the 6-digit code we send — no password'],
+          ].map(([n, t]) => (
+            <div key={n} style={{ display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left' }}>
+              <span style={{ width: 26, height: 26, borderRadius: 13, background: BLUE, color: '#fff', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{n}</span>
+              <span style={{ fontSize: 15 }}>{t}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {platform === 'other' ? (
+        <>
+          <button type="button" style={{ ...btn, ...btnPri }} onClick={textMe} disabled={texted === 'sending' || texted === 'sent'}>
+            {texted === 'sent' ? 'Sent — check your phone' : texted === 'sending' ? 'Sending…' : 'Text me the app link'}
+          </button>
+          <a href="/app" style={{ ...linkBtn, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>Or open the download page</a>
+        </>
+      ) : (
+        <>
+          <a href="/app" style={{ ...btn, ...btnPri, textDecoration: 'none' }}>{platform === 'ios' ? 'Download on the App Store' : 'Get it on Google Play'}</a>
+          <button type="button" style={linkBtn} onClick={textMe} disabled={texted === 'sending' || texted === 'sent'}>
+            {texted === 'sent' ? 'Link texted — check your messages' : 'Text me the link for later'}
+          </button>
+        </>
+      )}
+      {texted !== 'idle' && texted !== 'sending' && texted !== 'sent' && <div role="alert" style={{ color: '#C4180F', fontSize: 14 }}>{texted}</div>}
+
+      <p style={{ ...sub, fontSize: 13, margin: 0 }}>
+        Can’t get the email code? Tap “Text me a code instead” in the app.{others.length ? ` ${others.map((o) => o.first_name).join(' and ')} will get their own email.` : ''}
+      </p>
+    </div>
   )
 }
 

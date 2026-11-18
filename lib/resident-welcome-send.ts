@@ -7,6 +7,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email-sender'
 import { renderResidentWelcomeEmail } from '@/lib/resident-welcome-email'
 
+const appBase = (process.env.NEXT_PUBLIC_APP_URL || 'https://portal.gateguard.co').replace(/\/$/, '')
+
 export async function sendResidentWelcome(accessId: string): Promise<{ ok: boolean; error?: string }> {
   const db = createServiceClient()
   const { data: row, error } = await db
@@ -25,8 +27,9 @@ export async function sendResidentWelcome(accessId: string): Promise<{ ok: boole
     propertyName: site?.name ?? 'your community',
     unit: row.unit_number,
     officePhone: site?.primary_contact_phone ?? null,
-    appStoreUrl: process.env.RESIDENT_APP_STORE_URL || undefined,
-    playStoreUrl: process.env.RESIDENT_PLAY_STORE_URL || undefined,
+    // One smart link (portal /app) sends each phone to the right store; direct store links win when set.
+    appStoreUrl: process.env.RESIDENT_APP_STORE_URL || `${appBase}/app`,
+    playStoreUrl: process.env.RESIDENT_PLAY_STORE_URL || `${appBase}/app`,
   })
   const sent = await sendEmail({ to: row.email, subject: mail.subject, html: mail.html })
   return sent.success ? { ok: true } : { ok: false, error: sent.error }
