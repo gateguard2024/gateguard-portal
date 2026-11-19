@@ -7,6 +7,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { type Any, Card, MUTED, Note, ORANGE, TEXT, fmtWhen, getJson, type SiteCtx } from './shared'
+import { BAND_LABEL, HEALTH_POINTS, type SiteHealth } from '@/lib/site-health-rules'
 
 type T = { jobs: number; visits: number; hours: number; avg_visit_mins: number | null; parts: number; parts_cost: number; return_trips: number; jobs_without_time: number }
 type ByOpening = { opening_id: string | null; jobs: number; visits: number; hours: number; parts_cost: number; return_trips: number; last_visit: string | null }
@@ -14,7 +15,7 @@ type Stats = { month: T; d90: T; year: T; by_opening?: ByOpening[]; last_visit: 
 
 const mins = (m: number | null) => (m == null ? '—' : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60 ? `${m % 60}m` : ''}`.trim() : `${m}m`)
 
-export function ServiceTab({ ctx }: { ctx: SiteCtx }) {
+export function ServiceTab({ ctx, health }: { ctx: SiteCtx; health?: SiteHealth | null }) {
   const [s, setS] = useState<Stats | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [ops, setOps] = useState<{ id: string; name: string; active?: boolean }[]>([])
@@ -44,8 +45,23 @@ export function ServiceTab({ ctx }: { ctx: SiteCtx }) {
   const th: React.CSSProperties = { textAlign: 'right', fontSize: 12, fontWeight: 600, color: MUTED, padding: '6px 10px', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { textAlign: 'right', fontSize: 14, padding: '9px 10px', fontVariantNumeric: 'tabular-nums', color: TEXT }
 
+  const bandColor = (b: string) => (b === 'good' ? '#1A7F37' : b === 'watch' ? ORANGE : '#D70015')
+  const healthCard = health ? (
+    <Card title={`Health ${health.score}`} sub={`${BAND_LABEL[health.band]} — starts at 100 and loses points for what’s wrong right now.`}>
+      {health.reasons.length === 0 ? <div style={{ fontSize: 14, color: MUTED }}>Nothing open — no gates left open, Faults, open jobs or requests.</div>
+        : health.reasons.map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid rgba(0,0,0,0.06)' : undefined, fontSize: 14, color: TEXT }}>
+            <span style={{ flex: 1 }}>{r.text}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: bandColor(health.band) }}>−{r.points}</span>
+          </div>
+        ))}
+      <div style={{ marginTop: 8, fontSize: 12, color: MUTED }}>Gate left open or Fault −{HEALTH_POINTS.gateLeftOpen} · can’t see a gate −{HEALTH_POINTS.gateBlind} · cameras offline up to −{HEALTH_POINTS.camerasMax} · urgent job −{HEALTH_POINTS.jobUrgent}, other job −{HEALTH_POINTS.jobOther}, overdue −{HEALTH_POINTS.jobOverdue} more · request −{HEALTH_POINTS.requestOther} (urgent −{HEALTH_POINTS.requestHigh}) · repeat visit −{HEALTH_POINTS.repeatVisit}</div>
+    </Card>
+  ) : null
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
+      {healthCard}
       <Card title="Service at this property" sub={s.last_visit ? `Last visit ${fmtWhen(s.last_visit)}` : s.last_job_at ? `Last job closed ${fmtWhen(s.last_job_at)} (no time logged)` : 'No finished jobs in the last 12 months'}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

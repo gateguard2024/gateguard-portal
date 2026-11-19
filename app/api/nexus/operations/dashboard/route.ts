@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { siteHealth, fleetHealth } from '@/lib/site-health'
 
 export const dynamic = 'force-dynamic'
 
@@ -204,7 +205,12 @@ export async function GET() {
     }
   }
 
+  // Property health across active properties (lib/site-health.ts) — the real "how healthy are we".
+  const activeIds = siteRows.filter((s) => (s.status ?? 'active') === 'active').map((s) => s.id as string)
+  const propertyHealth = fleetHealth(await siteHealth(activeIds).catch(() => new Map()), siteName)
+
   return NextResponse.json({
+    propertyHealth,
     fleet: {
       gates: cat.gate, cameras: cat.camera, readers: cat.reader, intercoms: cat.intercom, network: cat.network,
       devicesTotal, doors, panelsLive, panelsTotal,

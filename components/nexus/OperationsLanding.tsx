@@ -12,6 +12,8 @@
  */
 import { useEffect, useState } from 'react'
 import { OpsComingSoon } from '@/components/nexus/OpsComingSoon'
+import { openPropertyInSystems } from '@/components/nexus/sales/salesShared'
+import { healthLine, type SiteHealth } from '@/lib/site-health-rules'
 
 // ---- Light tokens (identical to SalesSurface's `L` / `CARD`) ----
 const L = { ink: '#1D1D1F', ink2: '#3A3A3C', ink3: '#6E6E73', line: 'rgba(0,0,0,0.08)', blue: '#0071E3', green: '#248A3D', amber: '#B25000', red: '#D70015', track: '#EEF0F4', font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif' }
@@ -24,6 +26,7 @@ type FleetHealth = { online: number; attention: number; offline: number }
 type OpsData = {
   fleet: { gates: number; cameras: number; readers: number; intercoms: number; network: number; devicesTotal: number; doors: number; panelsLive: number; panelsTotal: number; sitesActive: number; sitesTotal: number; units: number; health: FleetHealth; onlineTrackingLive: boolean; camerasOnline?: number; networkOnline?: number }
   response: { avgResponseHours: number | null; avgResolveDays: number | null; sampleSize: number }
+  propertyHealth?: { avg: number | null; good: number; watch: number; bad: number; worst: Array<SiteHealth & { site_id: string; name: string }> }
   requests: { open: number; items: Array<{ id: string; title: string; site: string | null; priority: string; ageHours: number | null }> }
   schedule: { todayCount: number; items: Array<{ id: string; title: string; site: string | null; tech: string | null; priority: string; status: string }> }
   openWorkOrders: { open: number; items: Array<{ id: string; wo: string | null; title: string; site: string | null; tech: string | null; priority: string; status: string; scheduled: string | null }> }
@@ -220,24 +223,43 @@ export function OperationsLanding({ onOpenTab, onOpenJob }: { onOpenTab: (tab: s
 
           {/* RIGHT */}
           <div className="flex min-w-0 flex-col gap-4">
-            <Card title="System health" right={<span className="text-[13px]" style={{ color: L.ink3 }}>{f?.devicesTotal ?? 0} devices</span>}>
-              <div className="flex items-center gap-4 px-[18px] py-4">
-                <svg width="92" height="92" viewBox="0 0 42 42" aria-hidden>
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={L.track} strokeWidth="5" />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.green} strokeWidth="5" strokeDasharray={`${onDash} ${100 - onDash}`} strokeDashoffset="25" />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.amber} strokeWidth="5" strokeDasharray={`${atDash} ${100 - atDash}`} strokeDashoffset={`${25 - onDash}`} />
-                  <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.red} strokeWidth="5" strokeDasharray={`${offDash} ${100 - offDash}`} strokeDashoffset={`${25 - onDash - atDash}`} />
-                  <text x="21" y="21" textAnchor="middle" fontSize="8" fill={L.ink} fontWeight="600">{healthPct}%</text>
-                  <text x="21" y="27" textAnchor="middle" fontSize="3.4" fill={L.ink3}>healthy</text>
-                </svg>
-                <div className="flex flex-col gap-1 text-[13px]" style={{ color: L.ink2 }}>
-                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.green }} />Online <b className="font-semibold" style={{ color: L.ink }}>{health.online}</b></span>
-                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.amber }} />Needs attention <b className="font-semibold" style={{ color: L.ink }}>{health.attention}</b></span>
-                  <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.red }} />Offline <b className="font-semibold" style={{ color: L.ink }}>{health.offline}</b></span>
-                </div>
-              </div>
-              <div className="px-[18px] pb-3.5 text-[12px]" style={{ color: L.ink3 }}>{live ? 'Cameras and network report live. Gates show last-service status.' : 'Status from last service. Live monitoring turns on after the first sync.'}</div>
-            </Card>
+            {/* Property health (lib/site-health.ts): 100 minus what's wrong now, per property. */}
+            {(() => {
+              const ph = d?.propertyHealth
+              const n = ph ? ph.good + ph.watch + ph.bad : 0
+              const pct = (v: number) => (n ? (v / n) * 100 : 0)
+              const g = pct(ph?.good ?? 0), w = pct(ph?.watch ?? 0), b = pct(ph?.bad ?? 0)
+              const col = (sc: number) => (sc >= 85 ? DOT.green : sc >= 60 ? DOT.amber : DOT.red)
+              return (
+                <Card title="Property health" right={<span className="text-[13px]" style={{ color: L.ink3 }}>{n} propert{n === 1 ? 'y' : 'ies'}</span>}>
+                  <div className="flex items-center gap-4 px-[18px] py-4">
+                    <svg width="92" height="92" viewBox="0 0 42 42" aria-hidden>
+                      <circle cx="21" cy="21" r="15.9" fill="none" stroke={L.track} strokeWidth="5" />
+                      {n > 0 && <>
+                        <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.green} strokeWidth="5" strokeDasharray={`${g} ${100 - g}`} strokeDashoffset="25" />
+                        <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.amber} strokeWidth="5" strokeDasharray={`${w} ${100 - w}`} strokeDashoffset={`${25 - g}`} />
+                        <circle cx="21" cy="21" r="15.9" fill="none" stroke={DOT.red} strokeWidth="5" strokeDasharray={`${b} ${100 - b}`} strokeDashoffset={`${25 - g - w}`} />
+                      </>}
+                      <text x="21" y="21" textAnchor="middle" fontSize="8" fill={L.ink} fontWeight="600">{loading || ph?.avg == null ? '—' : ph.avg}</text>
+                      <text x="21" y="27" textAnchor="middle" fontSize="3.4" fill={L.ink3}>average</text>
+                    </svg>
+                    <div className="flex flex-col gap-1 text-[13px]" style={{ color: L.ink2 }}>
+                      <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.green }} />Good <b className="font-semibold" style={{ color: L.ink }}>{ph?.good ?? 0}</b></span>
+                      <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.amber }} />Keep an eye on it <b className="font-semibold" style={{ color: L.ink }}>{ph?.watch ?? 0}</b></span>
+                      <span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: DOT.red }} />Needs attention <b className="font-semibold" style={{ color: L.ink }}>{ph?.bad ?? 0}</b></span>
+                    </div>
+                  </div>
+                  {(ph?.worst ?? []).length > 0
+                    ? <div>{ph!.worst.map((p, i) => (
+                      <Row key={p.site_id} first={i === 0} onClick={() => openPropertyInSystems(p.site_id)}
+                        left={<><span className="font-medium">{p.name}</span><span style={{ color: L.ink3 }}> · {healthLine(p, 2)}</span></>}
+                        right={<><b className="font-semibold tabular-nums" style={{ color: col(p.score) }}>{p.score}</b><span className="h-2 w-2 rounded-full" style={{ background: col(p.score) }} /></>} />
+                    ))}</div>
+                    : <div className="px-[18px] pb-3.5 text-[13px]" style={{ color: L.ink3 }}>{loading ? 'Loading…' : 'Every property is at 100 — nothing open.'}</div>}
+                  <div className="px-[18px] pb-3.5 pt-2 text-[12px]" style={{ color: L.ink3 }}>100 minus what’s wrong now: gates left open, Faults, open jobs and requests, repeat visits. Tap a property to see why.</div>
+                </Card>
+              )
+            })()}
 
             <Card title="Open requests" right={<span className="rounded-md px-2 py-0.5 text-[12px] font-medium" style={reqs > 0 ? { background: '#FFECEC', color: L.red } : { background: '#F5F5F7', color: L.ink3 }}>{reqs} open</span>}>
               {(d?.requests.items ?? []).length === 0

@@ -28,6 +28,7 @@ import CalendarViews from "@/components/nexus/CalendarViews";
 import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
 import { isInactive, statusOf } from "@/components/nexus/systems/Decommission";
 import { FinishJobSheet } from "@/components/nexus/ops/FinishJobSheet";
+import { openPropertyInSystems } from "@/components/nexus/sales/salesShared";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
@@ -417,7 +418,7 @@ export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boo
     <p className="oh-hint">{TAB_HINT[page]}</p>
     {loadError && <div style={{ ...card, padding: "12px 16px", marginBottom: 14, color: "#D70015", fontSize: 13 }}>{loadError} <button type="button" onClick={loadOps} style={{ ...btn2, padding: "4px 10px", marginLeft: 8 }}>Try again</button></div>}
 
-    {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} onFilter={goWO} />}
+    {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} onFilter={goWO} onRequests={() => setPage("Requests")} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onBulk={bulkUpdate} onOpen={setOpenId} createError={woError} filter={woFilter} setFilter={setWoFilter} newOpen={newOpen} setNewOpen={setNewOpen} />}
     {page === "Schedule" && <CalendarViews />}
     {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
@@ -434,7 +435,12 @@ export function OperationsHub({ embedded, initialTab, onBack }: { embedded?: boo
 }
 
 /* ── Dashboard: tap any count to see those work orders ───────────────────── */
-function Dashboard({ jobs, techs, loading, onOpen, onUpdate, onFilter }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onFilter: (f: string) => void }) {
+const reqAge = (iso?: string | null) => { if (!iso) return ""; const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; };
+function Dashboard({ jobs, techs, loading, onOpen, onUpdate, onFilter, onRequests }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onFilter: (f: string) => void; onRequests: () => void }) {
+  // Requests waiting to become jobs (Gate Watch, QR forms, property managers) — at a glance, tap to open.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [reqs, setReqs] = useState<any[] | null>(null);
+  useEffect(() => { fetch("/api/requests").then(r => r.ok ? r.json() : { requests: [] }).then(d => setReqs(d.requests ?? [])).catch(() => setReqs([])); }, []);
   const unassigned = jobs.filter(j => isOpenWO(j) && !j.assignedTechId).sort((a, b) => prRank(a) - prRank(b));
   const n = (f: (w: RealWO) => boolean) => (loading && !jobs.length ? "—" : String(jobs.filter(f).length));
   const attention = [
@@ -443,6 +449,7 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate, onFilter }: { jobs:
     { l: "Urgent", v: n(w => isOpenWO(w) && isUrgent(w)), s: "High or critical, still open", f: "urgent", dot: "#FF3B30" },
     { l: "Stuck", v: n(w => bucketOf(stOf(w)) === "Stuck"), s: "Blocked or on hold", f: "b:Stuck", dot: "#8E8E93" },
   ];
+  const reqHigh = (reqs ?? []).filter(r => ["urgent", "high"].includes(String(r.priority_requested))).length;
   return <div style={{ display: "grid", gap: 16 }}>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))", gap: 12 }}>
       {attention.map(a => <button key={a.l} type="button" className="oh-stat" style={card} onClick={() => onFilter(a.f)} title={`Show ${a.l.toLowerCase()} work orders`}>
@@ -450,7 +457,24 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate, onFilter }: { jobs:
         <div className="v">{a.v}</div>
         <div className="s">{a.s}</div>
       </button>)}
+      <button type="button" className="oh-stat" style={card} onClick={onRequests} title="Open requests">
+        <div className="l"><span className="oh-dot" style={{ background: reqHigh ? "#FF3B30" : "#0A84FF" }} />Requests</div>
+        <div className="v">{reqs == null ? "—" : reqs.length}</div>
+        <div className="s">{reqHigh ? `${reqHigh} urgent · waiting` : "Waiting to become jobs"}</div>
+      </button>
     </div>
+
+    {(reqs ?? []).length > 0 && <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div className="oh-row" style={{ padding: "14px 18px", borderBottom: `1px solid ${LINE}` }}>
+        <h2 className="oh-sec">Requests waiting</h2>
+        <button type="button" onClick={onRequests} style={{ border: 0, background: "none", color: "#0071E3", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>See all {reqs!.length}</button>
+      </div>
+      {reqs!.slice(0, 5).map((r, i) => <button key={r.id} type="button" onClick={onRequests} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 18px", border: 0, borderTop: i ? `1px solid ${LINE}` : 0, background: "none", cursor: "pointer", textAlign: "left", fontSize: 14, color: "inherit" }}>
+        <span className="oh-dot" style={{ background: ["urgent", "high"].includes(String(r.priority_requested)) ? "#FF3B30" : "#8E8E93" }} />
+        <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ fontWeight: 500 }}>{r.title}</b><span style={{ color: INK3 }}> · {r.site_name || "—"}</span></span>
+        <span style={{ color: INK3, fontSize: 12, flex: "none" }}>{reqAge(r.created_at)}</span>
+      </button>)}
+    </Card>}
 
     <Card style={{ padding: 0, overflow: "hidden" }}>
       <div className="oh-row" style={{ padding: "14px 18px", borderBottom: `1px solid ${LINE}` }}>
@@ -1804,19 +1828,57 @@ function Requests({ onConverted }: { onConverted: () => void }) {
     } catch (_) { /* ignore */ }
     setBusyId(null); load(); onConverted();
   }
+  // Close with a reason (false alarm / already fixed / duplicate) — saved on the request.
+  const [closing, setClosing] = useState<string | null>(null);
+  const [why, setWhy] = useState("False alarm");
+  const [whyText, setWhyText] = useState("");
+  const [more, setMore] = useState<Set<string>>(new Set());
+  const [err, setErr] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function close(r: any) {
+    if (busyId) return; setBusyId(r.id); setErr(null);
+    const reason = why === "Other" ? (whyText.trim() || "Other") : why + (whyText.trim() ? ` — ${whyText.trim()}` : "");
+    const res = await fetch("/api/request", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: r.id, status: "closed", note: reason }) }).catch(() => null);
+    setBusyId(null);
+    if (!res?.ok) { const d = res ? await res.json().catch(() => ({})) : {}; setErr(d?.error ?? "Couldn’t close it. Try again."); return; }
+    setClosing(null); setWhy("False alarm"); setWhyText(""); load(); onConverted();
+  }
+  // Gate Watch writes "Open … Check …" then "AI: …" — show the first part, AI reasoning under More.
+  const split = (d?: string | null) => {
+    const t = String(d ?? "").trim();
+    const i = t.search(/\n\s*AI:|What the AI saw:/);
+    return i > 0 ? { head: t.slice(0, i).trim(), rest: t.slice(i).replace(/^\s*(AI:|What the AI saw:)\s*/, "").replace(/\s*Gate Watch won.t alert again[^.]*\.?$/, "").trim() } : { head: t, rest: "" };
+  };
   if (loading) return <Card><Small>Loading requests…</Small></Card>;
-  if (items.length === 0) return <Card><Small>No open requests. New requests from QR forms or property managers will appear here.</Small></Card>;
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px,1fr))", gap: 14 }}>
-    {items.map(r => <Card key={r.id}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-        <b style={{ fontSize: 15 }}>{r.title}</b>
+  if (items.length === 0) return <Card><Small>No open requests. New requests from Gate Watch, QR forms or property managers will appear here.</Small></Card>;
+  return <div style={{ display: "grid", gap: 12 }}>
+    {err && <div role="alert" style={{ color: "#D70015", fontSize: 13 }}>{err}</div>}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px,1fr))", gap: 14 }}>
+    {items.map(r => { const d = split(r.description); const open = more.has(r.id); const gw = /gate watch/i.test(String(r.contact_name ?? "")) || /^Gate left open/i.test(String(r.title ?? ""));
+      return <Card key={r.id}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <b style={{ fontSize: 15, lineHeight: 1.3 }}>{r.title}</b>
         <Badge tone={["urgent", "high"].includes(String(r.priority_requested)) ? "urgent" : "default"}>{r.priority_requested || "normal"}</Badge>
       </div>
-      <Small>{r.site_name || "—"}{r.site_city ? ` · ${r.site_city}, ${r.site_state}` : ""}{r.area ? ` · ${r.area}` : ""}</Small>
-      {r.description && <p style={{ color: "#6E6E73", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
-      {(r.contact_name || r.contact_phone) && <p style={{ color: "#3A3A3C", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
-      <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, marginTop: 12, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to work order →"}</button>
-    </Card>)}
+      <Small>{r.site_name || "—"}{r.area && !String(r.title ?? "").includes(r.area) ? ` · ${r.area}` : ""} · {reqAge(r.created_at)}{gw ? " · Gate Watch" : r.contact_name ? ` · ${r.contact_name}` : ""}</Small>
+      {d.head && <p style={{ color: "#3A3A3C", fontSize: 13, margin: "8px 0 0", lineHeight: 1.4, ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }) }}>{d.head}</p>}
+      {open && d.rest && <p style={{ color: "#6E6E73", fontSize: 12.5, margin: "6px 0 0", lineHeight: 1.4 }}><b style={{ fontWeight: 600 }}>What the AI saw:</b> {d.rest}</p>}
+      {open && r.contact_phone && <p style={{ color: "#6E6E73", fontSize: 12.5, margin: "6px 0 0" }}>{r.contact_name || "Contact"} · {r.contact_phone}{r.contact_email ? ` · ${r.contact_email}` : ""}</p>}
+      {(d.rest || d.head.length > 120 || r.contact_phone) && <button type="button" onClick={() => setMore(m => { const n = new Set(m); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} style={{ border: 0, background: "none", padding: 0, marginTop: 4, color: "#0071E3", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{open ? "Less" : "More"}</button>}
+      {closing === r.id ? <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{["False alarm", "Already fixed", "Duplicate", "Other"].map(o => <button key={o} type="button" aria-pressed={why === o} onClick={() => setWhy(o)} style={{ border: `1px solid ${why === o ? "#1D1D1F" : "rgba(0,0,0,.16)"}`, background: why === o ? "#1D1D1F" : "#fff", color: why === o ? "#fff" : "#1D1D1F", borderRadius: 999, padding: "5px 11px", fontSize: 12.5, cursor: "pointer" }}>{o}</button>)}</div>
+        <input value={whyText} onChange={e => setWhyText(e.target.value)} placeholder={why === "Other" ? "Why are you closing it?" : "Add a note (optional)"} aria-label="Reason" style={{ ...sel, width: "100%", boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => close(r)} disabled={busyId === r.id || (why === "Other" && !whyText.trim())} style={{ ...btn, background: "#1D1D1F", opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Closing…" : "Close request"}</button>
+          <button type="button" onClick={() => setClosing(null)} style={{ ...btn2 }}>Cancel</button>
+        </div>
+      </div> : <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+        <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to job"}</button>
+        <button type="button" onClick={() => { setClosing(r.id); setWhy(gw ? "False alarm" : "Already fixed"); setWhyText(""); }} style={{ ...btn2 }}>Close…</button>
+        {gw && r.site_id && <button type="button" onClick={() => openPropertyInSystems(r.site_id)} style={{ ...btn2 }}>View gate</button>}
+      </div>}
+    </Card>; })}
+    </div>
   </div>;
 }
 

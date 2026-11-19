@@ -19,6 +19,7 @@ import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
 import { SetupTab } from '@/components/nexus/systems/SetupTab';
 import { PackagesTab } from '@/components/nexus/systems/PackagesTab';
 import { ServiceTab } from '@/components/nexus/systems/ServiceTab';
+import { withCameras, healthLine, type SiteHealth } from '@/lib/site-health-rules';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
 import { SiteConnections } from '@/components/nexus/SiteConnections';
@@ -32,7 +33,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'service', label: 'Service' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
   { id: 'setup', label: 'Setup' },
 ];
-type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number };
+type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number; health?: SiteHealth | null };
 
 const ICONS: Record<string, React.ReactNode> = {
   unlock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.8-1.2" /></svg>,
@@ -110,12 +111,12 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
   const today = todayET();
   const eventsToday = events ? events.filter(e => e.created_at && etDateOf(e.created_at) === today).length : null;
   const openFaults = summary?.faults?.open ?? 0;
-  const health = camTotal > 0
-    ? Math.max(0, Math.round(((camTotal - camOff) / camTotal) * 100 - openFaults * 4))
-    : (summary?.healthScore ?? null);
+  // Property health (lib/site-health-rules.ts): server score from open problems + live cameras here.
+  const hObj = summary?.health ? withCameras(summary.health, camTotal - camOff, camTotal) : null;
+  const health = hObj ? hObj.score : (summary?.healthScore ?? null);
   const hColor = health == null ? undefined : health >= 85 ? GREEN : health >= 60 ? ORANGE : RED;
   const tiles: { l: string; v: string; s: string; dot?: string; color?: string; go?: Tab }[] = [
-    { l: 'Health', v: health == null ? '—' : String(health), s: health == null ? 'Not enough data' : health >= 85 ? 'Good' : health >= 60 ? 'Keep an eye on it' : 'Needs attention', color: hColor, dot: health == null ? DOT.gray : health >= 85 ? DOT.green : health >= 60 ? DOT.orange : DOT.red, go: 'faults' },
+    { l: 'Health', v: health == null ? '—' : String(health), s: health == null ? 'Not enough data' : hObj ? healthLine(hObj, 1) : health >= 85 ? 'Good' : health >= 60 ? 'Keep an eye on it' : 'Needs attention', color: hColor, dot: health == null ? DOT.gray : health >= 85 ? DOT.green : health >= 60 ? DOT.orange : DOT.red, go: 'service' },
     { l: 'Cameras', v: cams == null ? '—' : camTotal ? `${camTotal - camOff}/${camTotal}` : '—', s: cams == null ? 'Loading…' : !camTotal ? 'None connected' : camOff ? `${camOff} offline` : 'All online', dot: camOff ? DOT.orange : DOT.blue, go: 'live' },
     gateSum?.watched
       // Gates = the ones Gate Watch is on for. Stuck open = down.
@@ -162,7 +163,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
         {tab === 'packages' && <PackagesTab ctx={ctx} />}
         {tab === 'activity' && <ActivityTab ctx={ctx} brivoEvents={events} brivoErr={eventErr} who={who} setWho={setWho} />}
         {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
-        {tab === 'service' && <ServiceTab ctx={ctx} />}
+        {tab === 'service' && <ServiceTab ctx={ctx} health={hObj} />}
         {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}
         {tab === 'controllers' && <SitePanels siteId={siteId} isCorporate={isCorporate} notify={notify} />}
         {tab === 'setup' && <SetupTab key={setupRound} ctx={ctx} cams={cams} doors={doors} doorErr={doorErr} relays={relays} camMap={camMap} onGo={setTab} />}

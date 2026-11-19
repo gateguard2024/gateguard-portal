@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { siteHealth } from '@/lib/site-health'
 
 export const dynamic = 'force-dynamic'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -77,9 +78,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
   const uptimePct = Math.round(Math.max(0, Math.min(100, 100 * (1 - downtimeMs / WINDOW_MS))) * 100) / 100
 
-  // Health score (0-100): device online ratio + fault penalty
-  const onlineRatio = devicesTotal ? health.online / devicesTotal : 1
-  const healthScore = Math.max(0, Math.round(onlineRatio * 100 - openFaults * 4))
+  // Health (lib/site-health.ts): 100 minus what's wrong now — Gate Watch, Faults, open jobs,
+  // requests, repeat visits. The page adds live cameras (withCameras). Reasons are shown.
+  const siteHealthRes = (await siteHealth([site.id]).catch(() => new Map())).get(site.id) ?? null
+  const healthScore = siteHealthRes?.score ?? Math.max(0, Math.round((devicesTotal ? health.online / devicesTotal : 1) * 100 - openFaults * 4))
 
   // Connected vendors
   const vendors: Record<string, boolean> = {}
@@ -92,6 +94,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     faults: { open: openFaults, uptimePct, timeSinceLastMs: lastStart ? now - lastStart : null },
     eventsToday: eventsRes.count ?? 0,
     healthScore,
+    health: siteHealthRes,
     vendors,
   })
 }

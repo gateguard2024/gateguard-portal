@@ -110,18 +110,24 @@ const REQ_STATUSES = ['new', 'acknowledged', 'converted', 'closed', 'declined', 
 export async function PATCH(req: NextRequest) {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-  const { request_id, status, converted_wo_id } = body as { request_id?: string; status?: string; converted_wo_id?: string }
+  const { request_id, status, converted_wo_id, note } = body as { request_id?: string; status?: string; converted_wo_id?: string; note?: string }
   if (!request_id) return NextResponse.json({ error: 'request_id required' }, { status: 400 })
   if (status && !REQ_STATUSES.includes(status)) return NextResponse.json({ error: 'Unknown status' }, { status: 400 })
 
   const user = await getCurrentUser()
   if (!user || user.id === 'anonymous') return NextResponse.json({ error: 'Sign in' }, { status: 401 })
-  const { data: cur, error: cErr } = await supabaseAdmin.from('wo_requests').select('id, site_id, area').eq('id', request_id).maybeSingle()
+  const { data: cur, error: cErr } = await supabaseAdmin.from('wo_requests').select('id, site_id, area, notes').eq('id', request_id).maybeSingle()
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
   if (!cur || !(await guardSite(req, cur.site_id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (status) update.status = status
+  // Closing note ("False alarm — …"), kept on the request with who + when.
+  if (typeof note === 'string' && note.trim()) {
+    const stamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    const line = `${status === 'closed' ? 'Closed' : 'Note'} by ${user.name ?? user.email ?? 'staff'} (${stamp}): ${note.trim().slice(0, 500)}`
+    update.notes = cur.notes ? `${cur.notes}\n${line}` : line
+  }
   if (converted_wo_id) {
     const { data: wo, error: wErr } = await supabaseAdmin.from('work_orders').select('id, site_id').eq('id', converted_wo_id).maybeSingle()
     if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 })

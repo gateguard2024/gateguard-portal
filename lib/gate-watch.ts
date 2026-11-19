@@ -203,13 +203,16 @@ export async function openGateTicket(g: Gate): Promise<{ request_id: string; wor
   return null
 }
 
+const howLong = (ms: number) => { const m = Math.max(1, Math.round(ms / 60e3)); return m < 90 ? `${m} min` : m < 48 * 60 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days` }
+
 export async function ensureServiceRequest(g: Gate, siteName: string | null, openMs: number, reason: string): Promise<void> {
   if (await openGateTicket(g)) return   // already ticketed — nothing new until that work is finished
   const stamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const { error } = await sb().from('wo_requests').insert({
     site_id: g.site_id, area: g.label, priority_requested: 'high', status: 'new',
     title: `Gate left open — ${g.label}`,
-    description: `Gate Watch saw ${g.label}${siteName ? ` at ${siteName}` : ''} open for ${mins(openMs)} minutes (${stamp}). Check the gate operator, loops, photo eyes and close limit. What the AI saw: ${reason}. Gate Watch won't alert again for this gate until this work is finished.`,
+    // Short: the card shows the first line; the AI's reasoning sits under "More".
+    description: `Open ${howLong(openMs)} as of ${stamp}. Check the operator, loops, photo eyes and close limit.\nAI: ${reason}`,
     contact_name: 'Gate Watch (AI)', contact_email: GATE_ALWAYS_EMAIL,
   })
   if (error) console.error('[gate-watch] service request failed:', error.message)
@@ -506,7 +509,7 @@ export async function gateWatchHealth(siteId?: string | null) {
     if (!refOpen || !refClosed) issues.push(`Not taught enough: ${refOpen ?? 0} open + ${refClosed ?? 0} closed example pictures. Teach at least 2 of each.`)
     const openReads = list.filter(c => c.verdict === 'open' || c.verdict === 'partial').length
     const lowConf = list.filter(c => c.verdict !== 'unclear' && c.confidence < 50).length
-    if (openReads && g.state === 'closed' && !g.pending_state) notes.push(`${openReads} of the last ${list.length} looks read OPEN but each was followed by a CLOSED read, so it never counted as left open (needs 2 open reads in a row, ~${mins((g.threshold_sec ?? 300) * 1000 + 60e3)} min apart).`)
+    if (openReads && g.state === 'closed' && !g.pending_state) notes.push(`${openReads} of the last ${list.length} looks read OPEN but each was followed by a CLOSED read, so it never counted as left open (needs ${OPEN_READS} clear open reads in a row: first look, ${mins((g.threshold_sec ?? 300) * 1000)} min later, then 1 min after that).`)
     if (lowConf >= 3) notes.push(`${lowConf} of the last ${list.length} reads were under 50% sure — those are ignored. More taught pictures help.`)
     if (g.state === 'open' && g.open_since) {
       const openMs = now.getTime() - Date.parse(g.open_since)
