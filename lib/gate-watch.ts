@@ -277,6 +277,7 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
   patch.last_reason = result.reason
   patch.last_frame = (await sharp(result.crop).resize({ width: 360, height: 360, fit: 'inside' }).jpeg({ quality: 70 }).toBuffer()).toString('base64')
   let alerted = false, cleared = false
+  let alertProblem: string | null = null
   const state = patch.state ?? g.state
   const openSince = patch.open_since !== undefined ? patch.open_since : g.open_since
 
@@ -301,13 +302,15 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
       const title = `Gate left open — ${g.label}`
       const description = `${g.label} has been open ${mins(openMs)} min (limit ${mins(limit)} min). Seen by Gate AI: ${result.reason}`
       const { data: site } = await db.from('sites').select('name, org_id').eq('id', g.site_id).maybeSingle()
-      const { data: inc, error: incErr } = await db.from('incidents').insert({
-        org_id: site?.org_id ?? null, site_id: g.site_id, title, description, severity: 'high', status: 'open',
-        category: 'gate', cause: 'stuck_open', source: 'ai', started_at: openSince, reported_by: 'Gate AI',
-      }).select('id').single()
-      if (incErr) throw new Error(`Couldn’t open the Fault: ${incErr.message}`)
-      patch.state = 'left_open'; patch.incident_id = inc.id; patch.alerted_at = now.toISOString()
-      const { error: evErr } = await db.from('site_events').insert({ site_id: g.site_id, event_type: 'gate_left_open', event_source: 'gate_ai', title, description, summary: title, severity: 'critical', metadata: { gate_id: g.id, minutes: mins(openMs), incident_id: inc.id } })
+      // A Fault that won't save must NEVER stop the alert (it used to throw here, so the gate was
+      // re-checked forever and nobody heard). Retry without the 167 columns, then alert anyway.
+      const base = { org_id: site?.org_id ?? null, site_id: g.site_id, title, description, severity: 'high', status: 'open', reported_by: 'Gate AI' }
+      let ins = await db.from('incidents').insert({ ...base, category: 'gate', cause: 'stuck_open', source: 'ai', started_at: openSince }).select('id').single()
+      if (ins.error && /column|schema cache/i.test(ins.error.message)) ins = await db.from('incidents').insert(base).select('id').single()
+      const incId: string | null = (ins.data as { id?: string } | null)?.id ?? null
+      if (ins.error) { alertProblem = `Fault not saved: ${ins.error.message}`; console.error('[gate-watch]', g.label, alertProblem) }
+      patch.state = 'left_open'; patch.incident_id = incId; patch.alerted_at = now.toISOString()
+      const { error: evErr } = await db.from('site_events').insert({ site_id: g.site_id, event_type: 'gate_left_open', event_source: 'gate_ai', title, description, summary: title, severity: 'critical', metadata: { gate_id: g.id, minutes: mins(openMs), incident_id: incId } })
       if (evErr) console.error('[gate-watch] site_events insert failed:', evErr.message)
       await textAll(g.notify_phones ?? [], `🚨 ${site?.name ?? 'Property'}: ${g.label} has been open ${mins(openMs)} min. ${APP_URL()}/?tab=systems&site=${g.site_id}`)
       await emailAll(g.notify_emails, `🚨 Gate left open — ${site?.name ?? 'Property'}: ${g.label}`, [
@@ -336,7 +339,8 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
     const pend = patch.pending_state !== undefined ? patch.pending_state : g.pending_state
     if (pend !== 'closed') patch.next_check_at = new Date(now.getTime() + 1800e3).toISOString()
     // The ticket's work is finished but the gate is still open → re-arm: the next check alerts as normal.
-    if (g.state === 'left_open' && !(await openGateTicket(g))) { patch.state = 'open'; patch.alerted_at = null; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
+    const recentlyAlerted = !!g.alerted_at && now.getTime() - Date.parse(g.alerted_at) < 1800e3
+    if (g.state === 'left_open' && !recentlyAlerted && !(await openGateTicket(g))) { patch.state = 'open'; patch.alerted_at = null; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
   }
   // Closed again after an alert → resolve.
   if (event === 'closed' && g.incident_id) {
@@ -356,10 +360,11 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
     cleared = true
   }
 
+  if (alertProblem) patch.last_reason = `${result.reason} ⚠ ${alertProblem}`
   const { error } = await db.from('gate_watches').update(patch).eq('id', g.id)
   if (error) throw new Error(`Couldn’t save the gate state: ${error.message}`)
   await recordDowntime(g, g.state, (patch.state ?? g.state) as string, now, { incident_id: (patch.incident_id ?? g.incident_id) as string | null, ticketed: !(patch.incident_id ?? g.incident_id) })
-  const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: result.reason, ms: result.ms, state_after: patch.state ?? g.state })
+  const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: alertProblem ? `${result.reason} ⚠ ${alertProblem}` : result.reason, ms: result.ms, state_after: patch.state ?? g.state })
   if (logErr) console.error('[gate-watch] check log failed:', logErr.message)
   if (!why && (patch.state ?? g.state) === 'closed') why = 'closed — next look in 30 min'
   return { result, state: patch.state ?? g.state, alerted, cleared, why }
@@ -398,8 +403,10 @@ export async function runDueGates(limit = 40): Promise<{ checked: number; alerts
           const r = await checkAndApply(g, frame, now)
           checked++; if (r.alerted) alerts++; if (r.cleared) cleared++
         } catch (e) {
-          errors.push(`${g.label}: ${e instanceof Error ? e.message : e}`)
-          await db.from('gate_watches').update({ next_check_at: new Date(Date.now() + 60e3).toISOString() }).eq('id', g.id)
+          const msg = e instanceof Error ? e.message : String(e)
+          errors.push(`${g.label}: ${msg}`)
+          // Record it on the gate (it used to be console-only, so a gate could fail silently for days).
+          await db.from('gate_watches').update({ last_checked_at: now.toISOString(), last_verdict: 'error', last_reason: `Check failed: ${msg}`, next_check_at: new Date(Date.now() + 120e3).toISOString() }).eq('id', g.id)
         }
       }
     }
@@ -460,7 +467,9 @@ export async function gateWatchHealth(siteId?: string | null) {
     if (g.enabled && g.next_check_at && now.getTime() - Date.parse(g.next_check_at) > 10 * 60e3) issues.push(`Overdue: it was due for a check ${ago(g.next_check_at)} — the schedule isn’t picking it up.`)
     if (g.state === 'blind') issues.push(`BLIND since ${ago(g.state_since)}: ${g.last_reason ?? 'no usable picture'}. Blind gates can’t alert.`)
     else if ((g.unclear_count ?? 0) >= 3) issues.push(`Last ${g.unclear_count} looks were unusable (${g.last_reason ?? 'no picture / unsure'}) — ${10 - g.unclear_count} more and it goes blind.`)
-    if (g.last_verdict === 'error') issues.push(`Last picture failed: ${g.last_reason}`)
+    if (g.last_verdict === 'error') issues.push(String(g.last_reason ?? '').startsWith('Check failed') ? `CHECK FAILING: ${g.last_reason}` : `Last picture failed: ${g.last_reason}`)
+    if (String(g.last_reason ?? '').includes('⚠')) issues.push(`ALERT PROBLEM: ${String(g.last_reason).split('⚠')[1].trim()}`)
+    if (g.enabled && (g.state === 'open' || g.pending_state === 'open') && g.last_checked_at && now.getTime() - Date.parse(g.last_checked_at) > 20 * 60e3) issues.push(`STUCK: it’s ${g.state === 'open' ? 'open' : 'possibly open'} but hasn’t been checked for ${ago(g.last_checked_at).replace(' ago', '')} — its checks keep failing before they save.`)
     if (!(g.notify_phones ?? []).length) notes.push('No phone numbers to text — alerts go by email only (info@gateguard.co + any added).')
     if (!Array.isArray(g.region) || !g.region.length) issues.push('No gate outline drawn — the AI is judging the whole picture. Draw the outline in setup.')
     const { count: refOpen } = await db.from('gate_watch_refs').select('id', { count: 'exact', head: true }).eq('gate_id', g.id).eq('state', 'open')
