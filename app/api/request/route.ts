@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { guardSite } from '@/lib/ops-scope'
+import { tagJobWithOpening } from '@/lib/openings'
 
 // Use anon key for public endpoint — RLS allows anon INSERT on wo_requests
 const supabase = createClient(
@@ -101,14 +104,30 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/request — update request status (convert to WO, close, etc.)
+// PATCH /api/request — staff only (Clerk): change a request's status / link the work order made from it.
+// Converting tags the job with the request's gate/door (Openings, migration 233) when it names one.
+const REQ_STATUSES = ['new', 'acknowledged', 'converted', 'closed', 'declined', 'cancelled']
 export async function PATCH(req: NextRequest) {
-  const body = await req.json()
-  const { request_id, status, converted_wo_id } = body
-
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  const { request_id, status, converted_wo_id } = body as { request_id?: string; status?: string; converted_wo_id?: string }
   if (!request_id) return NextResponse.json({ error: 'request_id required' }, { status: 400 })
+  if (status && !REQ_STATUSES.includes(status)) return NextResponse.json({ error: 'Unknown status' }, { status: 400 })
 
-  const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
-  if (converted_wo_id) update.converted_wo_id = converted_wo_id
+  const user = await getCurrentUser()
+  if (!user || user.id === 'anonymous') return NextResponse.json({ error: 'Sign in' }, { status: 401 })
+  const { data: cur, error: cErr } = await supabaseAdmin.from('wo_requests').select('id, site_id, area').eq('id', request_id).maybeSingle()
+  if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
+  if (!cur || !(await guardSite(req, cur.site_id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (status) update.status = status
+  if (converted_wo_id) {
+    const { data: wo, error: wErr } = await supabaseAdmin.from('work_orders').select('id, site_id').eq('id', converted_wo_id).maybeSingle()
+    if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 })
+    if (!wo || (wo.site_id && wo.site_id !== cur.site_id)) return NextResponse.json({ error: 'That work order isn’t at this request’s property.' }, { status: 400 })
+    update.converted_wo_id = converted_wo_id
+  }
 
   const { data, error } = await supabaseAdmin
     .from('wo_requests')
@@ -118,15 +137,20 @@ export async function PATCH(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ request: data })
+  let opening: string | null = null
+  if (converted_wo_id) opening = await tagJobWithOpening(converted_wo_id, cur.site_id, cur.area)
+  return NextResponse.json({ request: data, opening_id: opening })
 }
 
-// GET /api/request?site_id=xxx — admin only, list requests for a site
+// GET /api/request?site_id=xxx — staff only, list requests for a property they can see
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const site_id = searchParams.get('site_id')
 
   if (!site_id) return NextResponse.json({ error: 'site_id required' }, { status: 400 })
+  const user = await getCurrentUser()
+  if (!user || user.id === 'anonymous') return NextResponse.json({ error: 'Sign in' }, { status: 401 })
+  if (!(await guardSite(req, site_id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data, error } = await supabaseAdmin
     .from('wo_requests')

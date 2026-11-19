@@ -67,7 +67,9 @@ function isBypassPath(pathname: string): boolean {
     // show_leads capture uses /api/show-lead (already bypassed above), not /api/crm/.
     // Property request portal — public form for property managers (no Clerk)
     pathname.startsWith('/request/') ||
-    pathname.startsWith('/api/request') ||
+    // Only the form's POST is public (enforced in middleware() below). Exact path, so
+    // /api/requests (the staff Requests list) still goes through Clerk.
+    pathname === '/api/request' ||
     // E-sign pages — public signing UI, token IS the auth
     pathname.startsWith('/sign/') ||
     // Public signature token endpoints — GET doc info + POST sign (token-based, no Clerk)
@@ -168,6 +170,8 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 
 // Plain Next.js middleware — runs before Clerk
 export function middleware(req: NextRequest, event: NextFetchEvent) {
+  // The public request form only submits (POST). Listing or changing requests needs a sign-in.
+  if (req.nextUrl.pathname === '/api/request' && req.method !== 'POST') return clerkHandler(req, event)
   if (isBypassPath(req.nextUrl.pathname)) {
     return NextResponse.next()
   }

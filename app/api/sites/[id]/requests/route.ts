@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { guardSite } from '@/lib/ops-scope'
+import { tagJobWithOpening } from '@/lib/openings'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,5 +43,7 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ request: data })
+  // Converted → tag the job with the request's gate/door (Openings) when it names one.
+  const opening = converted_wo_id ? await tagJobWithOpening(String(converted_wo_id), params.id, (data as { area?: string | null } | null)?.area) : null
+  return NextResponse.json({ request: data, opening_id: opening })
 }

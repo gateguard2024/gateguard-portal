@@ -108,3 +108,30 @@ export async function createOpening(siteId: string, orgId: string | null, who: s
   }
   return { opening: data as Opening }
 }
+
+/**
+ * Which opening a request's `area` means: a Gate Watch gate's label (→ the opening
+ * that holds that gate), else an opening with the same name. null = no match.
+ */
+export async function openingForArea(siteId: string, area: string | null | undefined): Promise<string | null> {
+  const a = norm(String(area ?? ''))
+  if (!siteId || !a) return null
+  const { openings, needsMigration } = await listOpenings(siteId)
+  if (needsMigration || !openings.length) return null
+  const { data: gw } = await db().from('gate_watches').select('id, label').eq('site_id', siteId)
+  const gate = ((gw ?? []) as { id: string; label: string }[]).find((g) => norm(g.label) === a)
+  if (gate) { const o = openings.find((x) => x.gate_watch_ids.includes(gate.id)); if (o) return o.id }
+  return openings.find((o) => norm(o.name) === a)?.id ?? null
+}
+
+/** Tag a job with its opening (only if it has none yet). Never throws; returns the id set, or null. */
+export async function tagJobWithOpening(woId: string, siteId: string | null, area: string | null | undefined): Promise<string | null> {
+  try {
+    if (!siteId) return null
+    const id = await openingForArea(siteId, area)
+    if (!id) return null
+    const { data, error } = await db().from('work_orders').update({ opening_id: id, opening_property: false }).eq('id', woId).is('opening_id', null).select('id')
+    if (error) { console.error('[openings] tag job failed:', error.message); return null }
+    return data?.length ? id : null
+  } catch (e) { console.error('[openings] tag job failed:', e); return null }
+}
