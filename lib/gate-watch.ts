@@ -2,7 +2,9 @@
  * lib/gate-watch.ts — SERVER ONLY. Gate Watch: runs gate checks on a schedule,
  * keeps each gate's state, and raises / clears "gate left open" alerts.
  *
- * Schedule (driven by gate_watches.next_check_at, picked up every minute) — decided Nov 3 2026:
+ * Schedule (driven by gate_watches.next_check_at, picked up every minute) — decided Nov 3 2026,
+ * CHANGED Nov 18 2026: closed → every hour; seen open → recheck at the limit, then 1 min later, then alert
+ * (see NEXT / OPEN_READS below — the lines underneath describe the Nov 3 version):
  *   closed                       → every 30 min (30 min after its last check, so gates stay spread out)
  *   a check sees it OPEN         → ONE recheck at (alert limit + 1 min), e.g. 6 min for a 5-min limit
  *        recheck closed          → just a car passing: back to every 30 min, no alert
@@ -217,8 +219,14 @@ export async function ensureServiceRequest(g: Gate, siteName: string | null, ope
 // Cost (decided Nov 2 2026): a closed gate is checked every 30 minutes. As soon as a reading
 // says it's open, it's checked every minute until it closes, so the time limit, alerts and the
 // 5-minute service request run from when it was SEEN open. An unsure reading retries in 5 min.
-const NEXT = { closed: 1800, unknown: 300, blind: 1800, leftOpen: 1800, confirm: 60 }
-/** When to look next: open-ish gates get ONE recheck at limit + 1 min (from when first seen open). */
+// Cost schedule (decided Nov 18 2026, until alerts move onto the Jetson/Frigate edge device):
+//   closed → once an hour (GATE_WATCH_CLOSED_MIN to change) · seen open → look again at the gate's
+//   limit (5 min) → still open → one more look 1 min later → still open → ALERT (3 open reads).
+export const CLOSED_SEC = Math.max(300, Number(process.env.GATE_WATCH_CLOSED_MIN || 60) * 60)
+const NEXT = { closed: CLOSED_SEC, unknown: 300, blind: CLOSED_SEC, leftOpen: 1800, confirm: 60 }
+/** Reads in a row that must agree before a gate counts as OPEN (closing needs 2). */
+export const OPEN_READS = 3
+/** When to look next: seen open → recheck at the limit, then 1 min later (from when first seen open). */
 export function nextCheckAt(g: Gate, patch: Gate, now: Date): string {
   const thr = Math.max(60, Number(g.threshold_sec ?? 300)) * 1000
   const st = (patch.state ?? g.state) as string
@@ -226,7 +234,11 @@ export function nextCheckAt(g: Gate, patch: Gate, now: Date): string {
   const at = (ms: number) => new Date(Math.max(now.getTime() + 60_000, ms)).toISOString()
   if (st === 'left_open') return pend === 'closed' ? at(now.getTime() + NEXT.confirm * 1000) : at(now.getTime() + NEXT.leftOpen * 1000)
   if (st === 'open') return pend === 'closed' ? at(now.getTime() + NEXT.confirm * 1000) : at(Date.parse(String(patch.open_since ?? g.open_since ?? now.toISOString())) + thr + 60_000)
-  if (pend === 'open') return at(Date.parse(String(patch.pending_since ?? g.pending_since ?? now.toISOString())) + thr + 60_000)
+  if (pend === 'open') {
+    const n = Number(patch.pending_count ?? g.pending_count ?? 1)
+    // 1st open read → look again at the limit; 2nd → one more look a minute later.
+    return n <= 1 ? at(Date.parse(String(patch.pending_since ?? g.pending_since ?? now.toISOString())) + thr) : at(now.getTime() + NEXT.confirm * 1000)
+  }
   if (pend === 'closed') return at(now.getTime() + NEXT.confirm * 1000)
   return at(now.getTime() + NEXT.closed * 1000)
 }
@@ -253,11 +265,18 @@ export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 
     patch.pending_state = null; patch.pending_count = 0; patch.pending_since = null
     if (g.state === 'blind') patch.state = seen
   } else {
-    const count = g.pending_state === seen ? (g.pending_count ?? 0) + 1 : 1
-    const since = g.pending_state === seen && g.pending_since ? g.pending_since : now.toISOString()
+    // Readings only "agree" if they're close together: a pending change older than the limit + 10 min
+    // is stale (e.g. two "open" reads 3 hours apart) and starts over.
+    const thrMs = Math.max(60, Number(g.threshold_sec ?? 300)) * 1000
+    const fresh = g.pending_state === seen && !!g.pending_since && now.getTime() - Date.parse(String(g.pending_since)) <= thrMs + 10 * 60e3
+    const count = fresh ? (g.pending_count ?? 0) + 1 : 1
+    const since = fresh ? String(g.pending_since) : now.toISOString()
     // First reading after setup (state unknown) settles on one confident answer.
     // Check now (a person asked) settles on one confident reading, so a repair resets right away.
-    if (count >= 2 || sure || (settled === null && r.confidence >= 80) || (opts.manual && r.confidence >= 80)) {
+    // Opening needs OPEN_READS agreeing reads (limit, then +1 min) — one sure read is not enough.
+    // Closing needs 2 (or one very sure read). First reading after setup / Check now settle on one confident answer.
+    const enough = seen === 'open' ? count >= OPEN_READS : (count >= 2 || sure)
+    if (enough || (settled === null && r.confidence >= 80) || (opts.manual && r.confidence >= 80)) {
       patch.state = seen; patch.state_since = since; patch.pending_state = null; patch.pending_count = 0; patch.pending_since = null
       if (seen === 'open') { patch.open_since = since; event = 'opened' } else { patch.open_since = null; event = settled === 'open' ? 'closed' : null }
     } else { patch.pending_state = seen; patch.pending_count = count; patch.pending_since = since }
@@ -289,12 +308,16 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
     const held = openMs >= limit && !waitForVehicle && (inHoldHours(g.hold_open_hours, now) || await managerHold(g, now))
     // This reading says CLOSED (waiting for the 1-minute confirm) → don't alert on a gate that's probably shut.
     const closingNow = patch.pending_state === 'closed'
-    const due = openMs >= limit && !waitForVehicle && !held && !closingNow
+    // Only alert on a clear "open" reading NOW — never on an unclear / dark / blocked picture
+    // (the gate may have been marked open days ago and be shut now).
+    const seesOpen = (result.verdict === 'open' || result.verdict === 'partial') && result.confidence >= 50
+    const due = openMs >= limit && !waitForVehicle && !held && !closingNow && seesOpen
     const ticket = due ? await openGateTicket(g) : null
     if (openMs >= limit && waitForVehicle) { why = 'vehicle in the gate — looking again in 1 min'; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
     else if (held) { why = 'meant to be open right now (hold-open)'; patch.next_check_at = new Date(now.getTime() + NEXT.closed * 1000).toISOString() }
     else if (openMs < limit) why = `open ${mins(openMs)} of ${mins(limit)} min — recheck at the limit`
     else if (closingNow) why = 'reads closed now — confirming in 1 min before alerting'
+    else if (!seesOpen) why = 'can’t see it clearly right now — not alerting on this look'
     if (due && ticket) {
       // Already ticketed: mark it left open quietly — no Fault, text, email or new request — and
       // look again in 30 min instead of every minute.
@@ -309,7 +332,10 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
       // re-checked forever and nobody heard). Retry without the 167 columns, then alert anyway.
       const base = { org_id: site?.org_id ?? null, site_id: g.site_id, title, description, severity: 'high', status: 'open', reported_by: 'Gate AI' }
       let ins = await db.from('incidents').insert({ ...base, category: 'gate', cause: 'stuck_open', source: 'ai', started_at: openSince }).select('id').single()
-      if (ins.error && /column|schema cache/i.test(ins.error.message)) ins = await db.from('incidents').insert(base).select('id').single()
+      // Missing columns (167) or a check rule another app put on incidents (e.g. incidents_source_check
+      // doesn't allow 'ai' — migration 234 adds it): retry without the extra fields.
+      if (ins.error && /column|schema cache|check constraint/i.test(ins.error.message)) ins = await db.from('incidents').insert({ ...base, category: 'gate', cause: 'stuck_open', started_at: openSince }).select('id').single()
+      if (ins.error && /column|schema cache|check constraint/i.test(ins.error.message)) ins = await db.from('incidents').insert(base).select('id').single()
       const incId: string | null = (ins.data as { id?: string } | null)?.id ?? null
       if (ins.error) { alertProblem = `Fault not saved: ${ins.error.message}`; console.error('[gate-watch]', g.label, alertProblem) }
       patch.state = 'left_open'; patch.incident_id = incId; patch.alerted_at = now.toISOString()
@@ -369,7 +395,7 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
   await recordDowntime(g, g.state, (patch.state ?? g.state) as string, now, { incident_id: (patch.incident_id ?? g.incident_id) as string | null, ticketed: !(patch.incident_id ?? g.incident_id) })
   const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: alertProblem ? `${result.reason} ⚠ ${alertProblem}` : result.reason, ms: result.ms, state_after: patch.state ?? g.state })
   if (logErr) console.error('[gate-watch] check log failed:', logErr.message)
-  if (!why && (patch.state ?? g.state) === 'closed') why = 'closed — next look in 30 min'
+  if (!why && (patch.state ?? g.state) === 'closed') why = `closed — next look in ${mins(NEXT.closed * 1000)} min`
   return { result, state: patch.state ?? g.state, alerted, cleared, why }
 }
 

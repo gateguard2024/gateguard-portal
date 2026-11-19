@@ -28,7 +28,7 @@ import { getCurrentUser } from '@/lib/current-user'
 import { canOperate } from '@/lib/system-access'
 import { normalizeRole } from '@/lib/permissions'
 import { cropGate, signature, judgeGate } from '@/lib/gate-ai'
-import { checkAndApply, gateInfo, gateUptime, grabFrame, loadRefs, recordDowntime, sendGateTestEmail } from '@/lib/gate-watch'
+import { checkAndApply, gateInfo, gateUptime, grabFrame, loadRefs, recordDowntime, sendGateTestEmail, CLOSED_SEC } from '@/lib/gate-watch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -290,8 +290,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!teachOnly) { const lErr = await logFeedback(siteId, g, false, a.user.name); if (lErr) console.error('[gates] feedback log:', lErr) }
       const now = new Date().toISOString()
       const thrMs = Math.max(60, Number(g.threshold_sec ?? 300)) * 1000
-      // "No, it's closed" → back to every 30 min. "No, it's open" → keep the time it was first seen open, recheck at the limit.
-      const patch: Record<string, unknown> = { pending_state: null, pending_count: 0, pending_since: null, unclear_count: 0, next_check_at: new Date(Date.now() + 1800e3).toISOString() }
+      // "No, it's closed" → back to the closed schedule (hourly). "No, it's open" → keep the time it was first seen open, recheck at the limit.
+      const patch: Record<string, unknown> = { pending_state: null, pending_count: 0, pending_since: null, unclear_count: 0, next_check_at: new Date(Date.now() + CLOSED_SEC * 1000).toISOString() }
       if (correct === 'closed' && g.state !== 'closed') {
         patch.state = 'closed'; patch.state_since = now; patch.open_since = null; patch.alerted_at = null
         if (g.incident_id) {

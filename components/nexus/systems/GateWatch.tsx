@@ -4,7 +4,7 @@
  * state (Closed / Open 3 min / LEFT OPEN), the last close-up the AI looked at, and
  * "Wrong?" buttons that teach it. Setup: pick the camera, outline the gate on a
  * live picture, teach it what open and closed look like, test it.
- * Engine: lib/gate-ai.ts + lib/gate-watch.ts (closed every 30 min; seen open → one recheck at limit + 1 min → alert).
+ * Engine: lib/gate-ai.ts + lib/gate-watch.ts (closed every hour; seen open → recheck at the limit, then 1 min later → alert).
  * Right? Yes / No on each reading teaches it (Yes = confirmed example, No = corrected example) and counts accuracy.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
