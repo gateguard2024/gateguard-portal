@@ -8,17 +8,20 @@
  *   2. Parts used or replaced — add them, or tick "No parts used".
  *   3. Which gate or door (only at properties with openings set up) — so a
  *      repeat visit is counted on the right opening. "Whole property / other" is fine.
+ *   0. What it was (lib/service-taxonomy.ts) — visit type, what was worked on, the fix,
+ *      and the cause on repairs. "Remote reset" swaps time on site for remote minutes.
  * Corporate can close without them by giving a reason.
  *
  * Works in the portal and the field app: pass `headers` (e.g. x-tech-code) and the
  * host's own `complete` (the field app queues it offline).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Check, Clock, Package, Loader2, Trash2, Plus, MapPin } from 'lucide-react'
+import { X, Check, Clock, Package, Loader2, Trash2, Plus, MapPin, Wrench } from 'lucide-react'
+import { VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS, BILL_TO, NEEDS_CAUSE, BILLABLE_CAUSES, labelOf, type ServiceDetails } from '@/lib/service-taxonomy'
 
 type Entry = { id: string; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null; notes?: string | null }
 type Part = { id: string; name: string | null; qty: number | null; action: string | null }
-type Status = { ok: boolean; message: string; missing: string[]; time: { entries: number; minutes: number; running: number }; parts: { count: number; none: boolean }; opening?: { required: boolean; id: string | null; property: boolean; name: string | null; options: { id: string; name: string; kind: string }[] }; needsMigration?: boolean }
+type Status = { ok: boolean; message: string; missing: string[]; time: { entries: number; minutes: number; running: number }; parts: { count: number; none: boolean }; opening?: { required: boolean; id: string | null; property: boolean; name: string | null; options: { id: string; name: string; kind: string }[] }; details?: { required: boolean; values: Partial<ServiceDetails>; missing: string[]; suggested: { visit_type: string | null } }; needsMigration?: boolean }
 
 const INK = '#1D1D1F', MUTED = '#6E6E73', BLUE = '#0071E3', GREEN = '#1A7F37', ORANGE = '#B25000', RED = '#D70015', LINE = 'rgba(0,0,0,0.10)'
 
@@ -119,7 +122,22 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
     setErr(r); void load()
   }
 
-  const timeOk = !!st && st.time.entries > 0 && st.time.running === 0
+  // What it was (235). Each tap saves; the screen updates right away.
+  const dt = st?.details
+  const dv: Partial<ServiceDetails> = dt?.values ?? {}
+  const [remoteMins, setRemoteMins] = useState('')
+  useEffect(() => { if (dv.remote_minutes != null) setRemoteMins(String(dv.remote_minutes)) }, [dv.remote_minutes])
+  const setDetail = (patch: Partial<ServiceDetails>) => {
+    // Hit by a vehicle / abuse / resident error → suggest billing the property (if not picked yet).
+    if (patch.cause && BILLABLE_CAUSES.has(patch.cause) && !dv.bill_to) patch = { ...patch, bill_to: 'property' }
+    setSt((x) => (x?.details ? { ...x, details: { ...x.details, values: { ...x.details.values, ...patch } } } : x))
+    return call('details', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ details: patch }) })
+  }
+  const [showSecond, setShowSecond] = useState(false)
+  const remote = dv.resolution === 'remote_reset'
+  const needCause = !!dv.visit_type && NEEDS_CAUSE.has(dv.visit_type)
+  const detailsOk = !!dt && (!dt.required || dt.missing.length === 0)
+  const timeOk = remote ? Number(dv.remote_minutes) > 0 && !!st && st.time.running === 0 : !!st && st.time.entries > 0 && st.time.running === 0
   const partsOk = !!st && (st.parts.count > 0 || st.parts.none)
   const shownParts = parts.filter((p) => p.action !== 'returned')
   const op = st?.opening
@@ -140,9 +158,29 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
         <div style={{ padding: 14, display: 'grid', gap: 12 }}>
           {st?.needsMigration && <div style={{ fontSize: 12.5, color: ORANGE }}>“No parts used” needs migration 232 — until it runs, add the parts used.</div>}
 
-          {/* 1. Time on site */}
-          <section style={card}>
-            <Head n={1} ok={timeOk} icon={<Clock size={15} />} title="Time on site" sub={st ? (st.time.entries ? `${hm(st.time.minutes)} logged` : 'When did you arrive and leave?') : ''} />
+          {/* 1. What it was */}
+          {dt?.required && (
+            <section style={card}>
+              <Head n={1} ok={detailsOk} icon={<Wrench size={15} />} title="What was it?" sub={dv.visit_type ? [labelOf('visit_type', dv.visit_type), dv.system ? labelOf('system', dv.system) : null, dv.resolution ? labelOf('resolution', dv.resolution) : null].filter(Boolean).join(' · ') : 'A few taps — so we can see what our calls really are'} />
+              <Pick label="Visit type" items={VISIT_TYPES} value={dv.visit_type ?? null} suggested={!dv.visit_type ? dt.suggested.visit_type : null} onPick={(v) => void setDetail({ visit_type: v as ServiceDetails['visit_type'] })} />
+              <Pick label="What we worked on" items={SYSTEMS} value={dv.system ?? null} onPick={(v) => void setDetail({ system: v as ServiceDetails['system'], ...(dv.system_2 === v ? { system_2: null } : {}) })} />
+              {dv.system && (showSecond || dv.system_2) ? <Pick label="Also worked on (optional)" items={SYSTEMS.filter((x) => x.id !== dv.system)} value={dv.system_2 ?? null} clearable onPick={(v) => void setDetail({ system_2: (v || null) as ServiceDetails['system_2'] })} />
+                : dv.system ? <button type="button" onClick={() => setShowSecond(true)} style={{ ...ghost, border: 0, background: 'none', padding: '0 0 6px', color: BLUE }}>+ Also worked on something else</button> : null}
+              {needCause && <Pick label="Cause (why it failed)" items={CAUSES} value={dv.cause ?? null} onPick={(v) => void setDetail({ cause: v as ServiceDetails['cause'] })} />}
+              <Pick label="Fix" items={RESOLUTIONS} value={dv.resolution ?? null} onPick={(v) => void setDetail({ resolution: v as ServiceDetails['resolution'] })} />
+              {remote && (
+                <label style={{ ...lbl, marginBottom: 10 }}>Minutes spent remotely
+                  <input aria-label="Minutes spent remotely" inputMode="numeric" value={remoteMins} placeholder="e.g. 10" onChange={(x) => setRemoteMins(x.target.value.replace(/\D/g, ''))} onBlur={() => { if (remoteMins !== String(dv.remote_minutes ?? '')) void setDetail({ remote_minutes: remoteMins ? Number(remoteMins) : null }) }} style={{ ...inp, maxWidth: 160 }} />
+                </label>
+              )}
+              <Pick label="Who pays (optional)" items={BILL_TO} value={dv.bill_to ?? null} clearable onPick={(v) => void setDetail({ bill_to: (v || null) as ServiceDetails['bill_to'] })} />
+              {dv.bill_to === 'property' && <div style={{ fontSize: 12.5, color: ORANGE, marginTop: -4 }}>Marked ready for billing when the job is completed.</div>}
+            </section>
+          )}
+
+          {/* 2. Time on site (a remote reset logs remote minutes above instead) */}
+          {(!remote || (st?.time.running ?? 0) > 0) && <section style={card}>
+            <Head n={dt?.required ? 2 : 1} ok={timeOk} icon={<Clock size={15} />} title="Time on site" sub={st ? (st.time.entries ? `${hm(st.time.minutes)} logged` : 'When did you arrive and leave?') : ''} />
             {entries.map((e) => (
               <div key={e.id} style={{ borderTop: `1px solid ${LINE}`, padding: '8px 0', fontSize: 13.5 }}>
                 {editId === e.id ? (
@@ -178,11 +216,11 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
                 {busy === 'time' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {entries.length ? 'Add another visit' : 'Save time on site'}
               </button>
             </div>
-          </section>
+          </section>}
 
           {/* 2. Parts */}
           <section style={card}>
-            <Head n={2} ok={partsOk} icon={<Package size={15} />} title="Parts used or replaced" sub={st?.parts.none ? 'No parts used' : shownParts.length ? `${shownParts.length} part${shownParts.length === 1 ? '' : 's'}` : 'Add them, or tick “No parts used”'} />
+            <Head n={dt?.required ? 3 : 2} ok={partsOk} icon={<Package size={15} />} title="Parts used or replaced" sub={st?.parts.none ? 'No parts used' : shownParts.length ? `${shownParts.length} part${shownParts.length === 1 ? '' : 's'}` : 'Add them, or tick “No parts used”'} />
             {shownParts.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: `1px solid ${LINE}`, padding: '7px 0', fontSize: 13.5 }}>
                 <span style={{ flex: 1 }}>{p.name || 'Part'} <span style={{ color: MUTED }}>× {p.qty ?? 1}{p.action === 'installed' ? ' · replaced' : ''}</span></span>
@@ -210,7 +248,7 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
           {/* 3. Which gate or door — only where openings are set up */}
           {op?.required && (
             <section style={card}>
-              <Head n={3} ok={openingOk} icon={<MapPin size={15} />} title="Which gate or door?" sub={op.property ? 'Whole property / other' : op.name ?? 'So a repeat visit shows on the right one'} />
+              <Head n={dt?.required ? 4 : 3} ok={openingOk} icon={<MapPin size={15} />} title="Which gate or door?" sub={op.property ? 'Whole property / other' : op.name ?? 'So a repeat visit shows on the right one'} />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {[...op.options.map((o) => ({ v: o.id, l: o.name })), { v: 'property', l: 'Whole property / other' }].map(({ v, l }) => {
                   const on = v === 'property' ? op.property : op.id === v
@@ -243,6 +281,22 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
             ) : <button type="button" onClick={() => setSkip(true)} style={{ ...ghost, justifySelf: 'center', border: 0, background: 'none', color: MUTED, fontSize: 12.5 }}>Close without time and parts…</button>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** One row of tap-to-pick chips. */
+function Pick({ label, items, value, onPick, suggested, clearable }: { label: string; items: readonly { id: string; label: string }[]; value: string | null; onPick: (v: string) => void; suggested?: string | null; clearable?: boolean }) {
+  return (
+    <div role="group" aria-label={label} style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11.5, color: MUTED, fontWeight: 600, marginBottom: 5 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.map((it) => {
+          const on = value === it.id, sug = !value && suggested === it.id
+          return <button key={it.id} type="button" aria-pressed={on} onClick={() => onPick(on && clearable ? '' : it.id)}
+            style={{ border: `1px solid ${on ? INK : sug ? BLUE : 'rgba(0,0,0,0.16)'}`, background: on ? INK : '#fff', color: on ? '#fff' : sug ? BLUE : INK, borderRadius: 999, padding: '6px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{it.label}{sug ? ' ?' : ''}</button>
+        })}
       </div>
     </div>
   )

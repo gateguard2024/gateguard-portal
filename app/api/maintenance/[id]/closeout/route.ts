@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     org_id: signedIn ? user!.org_id ?? null : null,
     parts_none: typeof body.parts_none === 'boolean' ? body.parts_none : null,
     opening: typeof body.opening === 'string' && body.opening ? body.opening : null,
+    details: body.details && typeof body.details === 'object' ? body.details as Record<string, unknown> : null,
     who: (body.technician_name as string) || (signedIn ? user!.name || user!.email : null) || null,
   })
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })

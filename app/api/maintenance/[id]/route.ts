@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isTechRemoved } from '@/lib/tech-active'
 import { openingOnSite } from '@/lib/openings'
+import { DETAIL_KEYS, cleanDetails } from '@/lib/service-taxonomy'
 import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
 import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
@@ -150,6 +151,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!(await openingOnSite(String(body.opening_id), String(body.site_id ?? (current as { site_id?: string | null } | null)?.site_id ?? '')))) return NextResponse.json({ error: 'That gate or door isn’t at this job’s property.' }, { status: 400 })
     upd.opening_property = false
   }
+  // What it was (235): only known codes are saved from the job drawer.
+  if (DETAIL_KEYS.some((k) => k in body)) { const d = cleanDetails(body); for (const k of DETAIL_KEYS) { delete upd[k]; if (k in d) upd[k] = (d as Record<string, unknown>)[k] } }
   // Close-out rules: a job can't be completed without time on site and the parts
   // answer (lib/job-closeout.ts). Corporate may override with a reason.
   delete upd.closeout_override_reason

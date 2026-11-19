@@ -17,12 +17,13 @@
  *  - Parts        = work_order_parts not marked 'returned'; cost = qty × unit_cost.
  */
 import { createClient } from '@supabase/supabase-js'
+import { DETAIL_KEYS, VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS } from '@/lib/service-taxonomy'
 
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 const DAY = 86_400_000
 const RETURN_WINDOW = 30 * DAY
 
-export type WO = { id: string; opening_id?: string | null; site_id: string | null; assignee_id: string | null; assignee_name: string | null; status: string | null; completed_at: string | null; created_at: string | null; scheduled_date: string | null }
+export type WO = { id: string; opening_id?: string | null; visit_type?: string | null; system?: string | null; system_2?: string | null; cause?: string | null; resolution?: string | null; bill_to?: string | null; remote_minutes?: number | null; ready_to_bill_at?: string | null; site_id: string | null; assignee_id: string | null; assignee_name: string | null; status: string | null; completed_at: string | null; created_at: string | null; scheduled_date: string | null }
 export type TE = { work_order_id: string; technician_id: string | null; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null }
 export type PT = { work_order_id: string; qty: number | null; unit_cost: number | null; action: string | null }
 
@@ -78,10 +79,12 @@ export async function loadWork(filter: { siteIds?: string[]; orgIds?: string[] |
 export const spotOf = (j: WO) => (j.opening_id ? `o:${j.opening_id}` : j.site_id ? `s:${j.site_id}` : null)
 
 let hasOpeningCol: boolean | null = null
+let hasDetailCols: boolean | null = null
 async function woCols() {
   const base = 'id, site_id, assignee_id, assignee_name, status, completed_at, created_at, scheduled_date'
   if (hasOpeningCol === null) { const { error } = await db().from('work_orders').select('opening_id').limit(1); hasOpeningCol = !error }
-  return hasOpeningCol ? `${base}, opening_id` : base
+  if (hasDetailCols === null) { const { error } = await db().from('work_orders').select('visit_type, ready_to_bill_at').limit(1); hasDetailCols = !error }
+  return `${base}${hasOpeningCol ? ', opening_id' : ''}${hasDetailCols ? `, ${DETAIL_KEYS.join(', ')}, ready_to_bill_at` : ''}`
 }
 
 /** Ids of jobs that were a return trip (same property, a completed job in the 30 days before it was opened). */
@@ -279,5 +282,68 @@ export async function benchmark() {
     // Most visits still have no time logged until the Finish job rule has run a while.
     jobs_without_time: jobs.filter((j) => !jobSiteVisited.has(j.id)).length,
     jobs: jobs.length,
+  }
+}
+
+/**
+ * Service insight (migration 235 codes): what our calls really are, over `days`.
+ * Counts, hours on site and parts $ by visit type / system / cause / fix; remote-fix
+ * rate (truck rolls avoided); billable damage; gates/doors with the most repeat visits.
+ * Only jobs that were closed with the codes are in the breakdowns ("classified").
+ */
+export async function serviceInsight(orgIds: string[] | 'all', days = 90) {
+  const since = Date.now() - days * DAY
+  const { jobs: all, visits, parts } = await loadWork({ orgIds, since: new Date(since - 30 * DAY) })
+  const returns = returnTrips(all)
+  const jobs = all.filter((j) => new Date(j.completed_at!).getTime() >= since)
+  const vBy = byJob(visits), pBy = byJob(parts)
+  const hoursOf = (j: WO) => (vBy.get(j.id) ?? []).reduce((a, v) => a + (v.duration_mins ?? 0), 0) / 60
+  const costOf = (j: WO) => (pBy.get(j.id) ?? []).reduce((a, p) => a + (Number(p.qty) || 1) * (Number(p.unit_cost) || 0), 0)
+  const classified = jobs.filter((j) => j.visit_type)
+
+  const group = (field: 'visit_type' | 'system' | 'cause' | 'resolution', list: readonly { id: string; label: string }[]) => {
+    const rows = list.map(({ id, label }) => {
+      const js = classified.filter((j) => j[field] === id || (field === 'system' && j.system_2 === id))
+      const hrs = js.reduce((a, j) => a + hoursOf(j), 0)
+      return { id, label, jobs: js.length, pct: classified.length ? Math.round((js.length / classified.length) * 100) : 0, hours: r1(hrs), avg_hours: js.length ? r1(hrs / js.length) : null, parts_cost: Math.round(js.reduce((a, j) => a + costOf(j), 0)), return_trips: js.filter((j) => returns.has(j.id)).length }
+    }).filter((r) => r.jobs > 0)
+    return rows.sort((a, b) => b.jobs - a.jobs)
+  }
+
+  const remote = classified.filter((j) => j.resolution === 'remote_reset')
+  const onsite = classified.filter((j) => j.resolution && j.resolution !== 'remote_reset' && hoursOf(j) > 0)
+  const avgOnsite = onsite.length ? onsite.reduce((a, j) => a + hoursOf(j), 0) / onsite.length : null
+  const billable = classified.filter((j) => j.bill_to === 'property')
+
+  // Gates/doors with the most repeat visits (needs openings, 233).
+  const repeatBy = new Map<string, number>()
+  for (const j of jobs) if (j.opening_id && returns.has(j.id)) repeatBy.set(j.opening_id, (repeatBy.get(j.opening_id) ?? 0) + 1)
+  const topIds = Array.from(repeatBy.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  let repeats: { opening_id: string; name: string; site: string | null; repeats: number }[] = []
+  if (topIds.length) {
+    const { data: ops } = await db().from('site_openings').select('id, name, site_id').in('id', topIds.map(([id]) => id))
+    const siteIds = Array.from(new Set((ops ?? []).map((o: { site_id: string }) => o.site_id)))
+    const { data: sites } = siteIds.length ? await db().from('sites').select('id, name').in('id', siteIds) : { data: [] }
+    repeats = topIds.map(([id, n]) => {
+      const o = (ops ?? []).find((x: { id: string }) => x.id === id) as { name: string; site_id: string } | undefined
+      return { opening_id: id, name: o?.name ?? 'Gate/door', site: (sites ?? []).find((x: { id: string }) => x.id === o?.site_id)?.name ?? null, repeats: n }
+    })
+  }
+
+  return {
+    days, jobs: jobs.length, classified: classified.length,
+    by_visit_type: group('visit_type', VISIT_TYPES),
+    by_system: group('system', SYSTEMS),
+    by_cause: group('cause', CAUSES),
+    by_resolution: group('resolution', RESOLUTIONS),
+    remote: {
+      fixes: remote.length,
+      pct: classified.length ? Math.round((remote.length / classified.length) * 100) : null,
+      minutes: remote.reduce((a, j) => a + (Number(j.remote_minutes) || 0), 0),
+      // Each remote fix = a truck roll we didn't make; on-site hours saved ≈ the average on-site visit.
+      hours_saved: avgOnsite != null ? r1(remote.length * avgOnsite) : null,
+    },
+    billable: { jobs: billable.length, hours: r1(billable.reduce((a, j) => a + hoursOf(j), 0)), parts_cost: Math.round(billable.reduce((a, j) => a + costOf(j), 0)), ready: billable.filter((j) => j.ready_to_bill_at).length },
+    repeats,
   }
 }

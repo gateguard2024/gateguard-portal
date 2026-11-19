@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 import { guardSite } from '@/lib/ops-scope'
-import { siteStats, techStats, benchmark } from '@/lib/service-stats'
+import { siteStats, techStats, benchmark, serviceInsight } from '@/lib/service-stats'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -12,6 +12,7 @@ export const maxDuration = 60
  *   ?view=site&site_id=…   one property: visits, hours, parts, return trips (month / 90 d / 12 mo)
  *   ?view=techs[&days=90]   per tech for the caller's company (corporate: everyone)
  *   ?view=benchmark          network per-property-per-year averages by size (anonymous counts only)
+ *   ?view=insight[&days=90]  what the calls were: by visit type / system / cause / fix, remote fixes, billable
  * Definitions live in lib/service-stats.ts.
  */
 export async function GET(req: NextRequest) {
@@ -32,6 +33,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ days, techs: await techStats(scope.all ? 'all' : scope.ids.filter(Boolean), days) })
     }
     if (view === 'benchmark') return NextResponse.json(await benchmark())
+    if (view === 'insight') {
+      const scope = await resolveOrgScope(user)
+      const days = Math.min(365, Math.max(7, Number(url.searchParams.get('days')) || 90))
+      return NextResponse.json(await serviceInsight(scope.all ? 'all' : scope.ids.filter(Boolean), days))
+    }
     return NextResponse.json({ error: 'Unknown view' }, { status: 400 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Stats failed' }, { status: 500 })

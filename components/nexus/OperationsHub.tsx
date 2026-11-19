@@ -29,6 +29,7 @@ import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
 import { isInactive, statusOf } from "@/components/nexus/systems/Decommission";
 import { FinishJobSheet } from "@/components/nexus/ops/FinishJobSheet";
 import { openPropertyInSystems } from "@/components/nexus/sales/salesShared";
+import { VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS, BILL_TO, NEEDS_CAUSE, BILLABLE_CAUSES } from "@/lib/service-taxonomy";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null; rawStatus?: string | null; rawPriority?: string | null; createdAt?: string | null; dueDate?: string | null };
 type RealTech = { id: string; name: string };
@@ -1265,12 +1266,59 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 /* ── Analytics: tech utilization + re-work / first-time-fix ──────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ServiceInsight({ ins }: { ins: any }) {
+  if (!ins) return <Card><h2 style={{ fontSize: 15, marginBottom: 4 }}>What our calls were</h2><Small>Loading…</Small></Card>;
+  const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const table = (title: string, rows: any[], hint: string) => <Card style={{ padding: 0, overflow: "hidden" }}>
+    <div className="oh-row" style={{ padding: "12px 16px", borderBottom: `1px solid ${LINE}` }}><h2 className="oh-sec">{title}</h2><Small>{hint}</Small></div>
+    {rows.length === 0 ? <div style={{ padding: 16 }}><Small>No coded jobs yet.</Small></div> : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+      <thead><tr style={{ color: INK3, fontSize: 11.5, textAlign: "right" }}><th style={{ textAlign: "left", padding: "8px 16px", fontWeight: 600 }} /><th style={{ padding: 8, fontWeight: 600 }}>Jobs</th><th style={{ padding: 8, fontWeight: 600 }}>Avg hrs</th><th style={{ padding: 8, fontWeight: 600 }}>Parts $</th><th style={{ padding: "8px 16px 8px 8px", fontWeight: 600 }}>Repeats</th></tr></thead>
+      <tbody>{rows.map(r => <tr key={r.id} style={{ borderTop: `1px solid ${LINE}` }}>
+        <td style={{ padding: "8px 16px", minWidth: 180 }}><div>{r.label}</div><div style={{ height: 4, borderRadius: 2, background: "#EEF0F3", marginTop: 4 }}><div style={{ width: `${r.pct}%`, height: 4, borderRadius: 2, background: "#0A84FF" }} /></div></td>
+        <td style={{ padding: 8, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.jobs} <span style={{ color: INK3 }}>({r.pct}%)</span></td>
+        <td style={{ padding: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.avg_hours ?? "—"}</td>
+        <td style={{ padding: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(r.parts_cost)}</td>
+        <td style={{ padding: "8px 16px 8px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: r.return_trips ? "#B25000" : INK3, fontWeight: r.return_trips ? 600 : 400 }}>{r.return_trips}</td>
+      </tr>)}</tbody></table></div>}
+  </Card>;
+  const stat = (label: string, v: string, sub: string, color = INK) => <Card><Small>{label}</Small><div style={{ fontSize: 26, fontWeight: 600, color, marginTop: 4 }}>{v}</div><Small>{sub}</Small></Card>;
+  return <div style={{ display: "grid", gap: 12 }}>
+    <Card>
+      <div className="oh-row"><h2 style={{ fontSize: 16, fontWeight: 600 }}>What our calls were</h2><Small>{ins.classified} of {ins.jobs} finished jobs coded · last {ins.days} days</Small></div>
+      {ins.classified < ins.jobs && <div style={{ marginTop: 4 }}><Small>Jobs are coded at Finish job (visit type, what was worked on, the fix — the cause on repairs). Older jobs stay blank, so these numbers fill in over the next month or two.</Small></div>}
+    </Card>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 10 }}>
+      {stat("Fixed remotely", ins.remote.pct == null ? "—" : `${ins.remote.pct}%`, `${ins.remote.fixes} truck roll${ins.remote.fixes === 1 ? "" : "s"} avoided${ins.remote.hours_saved != null ? ` · ~${ins.remote.hours_saved} h saved` : ""}`, "#1A7F37")}
+      {stat("Bill the property", String(ins.billable.jobs), `${ins.billable.hours} h · ${money(ins.billable.parts_cost)} parts · ${ins.billable.ready} ready for billing`, ins.billable.jobs ? "#B25000" : INK)}
+      {stat("Top system", ins.by_system[0]?.label ?? "—", ins.by_system[0] ? `${ins.by_system[0].pct}% of calls` : "No coded jobs yet")}
+      {stat("Top cause", ins.by_cause[0]?.label ?? "—", ins.by_cause[0] ? `${ins.by_cause[0].jobs} repair${ins.by_cause[0].jobs === 1 ? "" : "s"}` : "Repairs only")}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px,1fr))", gap: 12 }}>
+      {table("By system", ins.by_system, "What we worked on")}
+      {table("By cause", ins.by_cause, "Repairs only")}
+      {table("By visit type", ins.by_visit_type, "Why we went")}
+      {table("By fix", ins.by_resolution, "What fixed it")}
+    </div>
+    {ins.repeats.length > 0 && <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div className="oh-row" style={{ padding: "12px 16px", borderBottom: `1px solid ${LINE}` }}><h2 className="oh-sec">Gates & doors we keep going back to</h2><Small>Repeat visits within 30 days</Small></div>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      {ins.repeats.map((r: any, i: number) => <div key={r.opening_id} className="oh-row" style={{ padding: "9px 16px", borderTop: i ? `1px solid ${LINE}` : 0, fontSize: 14 }}><span>{r.name}<span style={{ color: INK3 }}> · {r.site ?? "—"}</span></span><b style={{ color: "#B25000", fontWeight: 600 }}>{r.repeats}</b></div>)}
+    </Card>}
+  </div>;
+}
+
 function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
   const [days, setDays] = useState(30);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => { setLoading(true); fetch(`/api/dispatch/analytics?days=${days}`).then(r => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false)); }, [days]);
+  // Service insight (what the calls were — codes from Finish job, lib/service-taxonomy.ts).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [ins, setIns] = useState<any>(null);
+  useEffect(() => { setIns(null); fetch(`/api/service-stats?view=insight&days=${days}`).then(r => r.ok ? r.json() : null).then(setIns).catch(() => setIns(null)); }, [days]);
   const t = data?.totals ?? {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const perTech: any[] = data?.perTech ?? [];
@@ -1284,7 +1332,7 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", gap: 6 }}>{[7, 30, 90].map(rangeBtn)}</div>
+      <div style={{ display: "flex", gap: 6 }}>{[7, 30, 90, 365].map(rangeBtn)}</div>
       {loading ? <Card><Small>Crunching numbers…</Small></Card> : <>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 10 }}>
           {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "#6E6E73" : t.ftfPct >= 90 ? "#248A3D" : t.ftfPct >= 75 ? "#B25000" : "#D70015")}
@@ -1293,6 +1341,8 @@ function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
           {kpi("Hours logged", t.hours ?? 0, "#0071E3")}
           {kpi("Avg utilization", `${t.avgUtilizationPct ?? 0}%`, utilColor(t.avgUtilizationPct ?? 0))}
         </div>
+
+        <ServiceInsight ins={ins} />
 
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 10 }}>Technician utilization</h2>
@@ -3079,6 +3129,21 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
             <div style={{ flex: 1, minWidth: 140 }}><Small>Due by (promised to customer)</Small><input type="date" value={wo.due_date ? String(wo.due_date).slice(0, 10) : ""} onChange={e => patchField({ due_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Job type</Small><div style={{ ...sel, width: "100%", marginTop: 4, display: "flex", alignItems: "center", background: "#F7F8FA" }}>{wo.job_type || "—"}</div></div>
           </div>
+          {/* What it was (lib/service-taxonomy.ts, migration 235) — required at Finish job; can be set any time. */}
+          {wo && "visit_type" in wo && <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
+            <Small>What was it? <span style={{ color: "#8E8E93" }}>— required when finishing{wo.visit_type && NEEDS_CAUSE.has(String(wo.visit_type)) ? " (cause too, for repairs)" : ""}</span></Small>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+              {([["visit_type", "Visit type", VISIT_TYPES], ["system", "Worked on", SYSTEMS], ["cause", "Cause", CAUSES], ["resolution", "Fix", RESOLUTIONS], ["bill_to", "Who pays", BILL_TO]] as const).map(([k, label, list]) =>
+                <div key={k} style={{ flex: 1, minWidth: 150 }}><Small>{label}</Small>
+                  <select aria-label={label} value={String(wo[k] ?? "")} onChange={e => patchField({ [k]: e.target.value || null, ...(k === "cause" && BILLABLE_CAUSES.has(e.target.value) && !wo.bill_to ? { bill_to: "property" } : {}) })} style={{ ...sel, width: "100%", marginTop: 4 }}>
+                    <option value="">{k === "cause" && !(wo.visit_type && NEEDS_CAUSE.has(String(wo.visit_type))) ? "Not needed" : "Pick…"}</option>
+                    {list.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </div>)}
+            </div>
+            {wo.resolution === "remote_reset" && <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}><Small>Minutes spent remotely</Small><input aria-label="Minutes spent remotely" inputMode="numeric" defaultValue={wo.remote_minutes ?? ""} onBlur={e => { const v = e.target.value.replace(/\D/g, ""); if (v !== String(wo.remote_minutes ?? "")) patchField({ remote_minutes: v ? Number(v) : null }); }} style={{ ...sel, width: 90 }} /></div>}
+            {wo.bill_to === "property" && <div style={{ marginTop: 6, fontSize: 12, color: "#B25000" }}>{wo.ready_to_bill_at ? `Ready for billing since ${new Date(wo.ready_to_bill_at).toLocaleDateString()}` : "Will be marked ready for billing when it’s completed."}</div>}
+          </div>}
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6E6E73", cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
             <Mail size={14} style={{ flexShrink: 0 }} /> Email the tech &amp; customer when I change this job
