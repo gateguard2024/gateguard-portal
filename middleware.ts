@@ -152,6 +152,11 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (pathname.startsWith('/api/kb/')) {
     return NextResponse.next()
   }
+  // Gate Watch backup runner: called by Vercel Cron (Bearer CRON_SECRET, no session) or a
+  // signed-in corporate user ("run now"). Clerk is initialised; the route checks both itself.
+  if (pathname === '/api/cron/gate-watch') {
+    return NextResponse.next()
+  }
 
   const { userId } = await auth()
   if (!userId) {

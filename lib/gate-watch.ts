@@ -287,11 +287,14 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
     const limit = (g.threshold_sec ?? 300) * 1000
     const waitForVehicle = result.vehicle && openMs < limit * 2
     const held = openMs >= limit && !waitForVehicle && (inHoldHours(g.hold_open_hours, now) || await managerHold(g, now))
-    const due = openMs >= limit && !waitForVehicle && !held
+    // This reading says CLOSED (waiting for the 1-minute confirm) → don't alert on a gate that's probably shut.
+    const closingNow = patch.pending_state === 'closed'
+    const due = openMs >= limit && !waitForVehicle && !held && !closingNow
     const ticket = due ? await openGateTicket(g) : null
     if (openMs >= limit && waitForVehicle) { why = 'vehicle in the gate — looking again in 1 min'; patch.next_check_at = new Date(now.getTime() + 60e3).toISOString() }
     else if (held) { why = 'meant to be open right now (hold-open)'; patch.next_check_at = new Date(now.getTime() + NEXT.closed * 1000).toISOString() }
     else if (openMs < limit) why = `open ${mins(openMs)} of ${mins(limit)} min — recheck at the limit`
+    else if (closingNow) why = 'reads closed now — confirming in 1 min before alerting'
     if (due && ticket) {
       // Already ticketed: mark it left open quietly — no Fault, text, email or new request — and
       // look again in 30 min instead of every minute.

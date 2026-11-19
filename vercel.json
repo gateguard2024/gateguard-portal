@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/monthly-report",
       "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/cron/gate-watch",
+      "schedule": "* * * * *"
     }
   ]
 }
