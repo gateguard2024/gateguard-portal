@@ -111,7 +111,7 @@ export async function GET(
   // Build synthetic rows for auto-computed items (so UI can show them)
   const syntheticRows: Record<string, unknown>[] = []
   if (!hasManualLabor && autoLaborTotal > 0 && timeEntries && timeEntries.length > 0) {
-    const totalMins = timeEntries.reduce((sum, te) => sum + (te.duration_minutes ?? 0), 0)
+    const totalMins = timeEntries.reduce((sum, te) => sum + (te.duration_mins ?? 0), 0)
     syntheticRows.push({
       id: 'auto-labor',
       cost_type: 'labor',
