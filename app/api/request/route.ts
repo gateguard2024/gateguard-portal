@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { guardSite } from '@/lib/ops-scope'
 import { tagJobWithOpening } from '@/lib/openings'
+import { cleanCode, unitLabel } from '@/lib/assets'
 
 // Use anon key for public endpoint — RLS allows anon INSERT on wo_requests
 const supabase = createClient(
@@ -40,23 +41,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Property not found' }, { status: 404 })
   }
 
-  const { data, error } = await supabase
-    .from('wo_requests')
-    .insert({
-      site_id,
-      title:              title.trim(),
-      description:        description?.trim() ?? null,
-      area:               area?.trim()        ?? null,
-      priority_requested,
-      contact_name:       contact_name?.trim()  ?? null,
-      contact_email:      contact_email?.trim() ?? null,
-      contact_phone:      contact_phone?.trim() ?? null,
-      status:             'new',
-    })
-    .select()
-    .single()
+  // From a unit's QR label (/a/<code>, migration 237): the request names that exact unit.
+  let assetId: string | null = null
+  let unitArea: string | null = null
+  if (typeof body.unit === 'string' && body.unit.trim()) {
+    const { data: u } = await supabaseAdmin.from('site_assets').select('id, site_id, product_name, location_note, opening_id').eq('qr_code', cleanCode(body.unit)).maybeSingle()
+    const unit = u as { id: string; site_id: string; product_name: string; location_note: string | null; opening_id: string | null } | null
+    if (!unit || unit.site_id !== site_id) return NextResponse.json({ error: 'That label isn’t for this property.' }, { status: 400 })
+    let opName: string | null = null
+    if (unit.opening_id) { const { data: op } = await supabaseAdmin.from('site_openings').select('name').eq('id', unit.opening_id).maybeSingle(); opName = (op as { name?: string } | null)?.name ?? null }
+    assetId = unit.id
+    unitArea = unitLabel(unit, opName)
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const row: Record<string, unknown> = {
+    site_id,
+    title:              title.trim(),
+    description:        description?.trim() ?? null,
+    area:               area?.trim() || unitArea,
+    priority_requested,
+    contact_name:       contact_name?.trim()  ?? null,
+    contact_email:      contact_email?.trim() ?? null,
+    contact_phone:      contact_phone?.trim() ?? null,
+    status:             'new',
+  }
+  if (assetId) row.asset_id = assetId
+  let { data, error } = await supabase.from('wo_requests').insert(row).select().single()
+  // Before migration 237 there's no asset_id column — save the request without it.
+  if (error && assetId && /asset_id/.test(error.message)) {
+    delete row.asset_id
+    ;({ data, error } = await supabase.from('wo_requests').insert(row).select().single())
+  }
+
+  if (error || !data) return NextResponse.json({ error: error?.message ?? 'Couldn’t save the request' }, { status: 500 })
 
   // ── Email notifications (fire-and-forget) ────────────────────────────────────
   const refNumber  = data.id.slice(0, 8).toUpperCase()

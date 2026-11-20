@@ -7,6 +7,7 @@ import {
   stockReady, defaultBillTo, canSetBillTo, isPlanSite, isGateGuardJob, partCost,
   jobLocations, movePartForJob, reversePart, type PartBillTo,
 } from '@/lib/stock'
+import { installFromPart, undoInstall, unitsForJob } from '@/lib/assets'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,7 +82,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     for (const p of parts) p.from_location_name = typeof p.from_location_id === 'string' ? (names.get(p.from_location_id) ?? null) : null
   }
 
-  return NextResponse.json({ parts })
+  // Units at this job's property, the job's gate/door first — for "Which one did it replace?" (migration 237).
+  const { data: woRow } = await supabase.from('work_orders').select('*').eq('id', params.id).maybeSingle()
+  const units = woRow ? await unitsForJob(woRow as { site_id: string | null; opening_id?: string | null }) : []
+
+  return NextResponse.json({ parts, units })
 }
 
 /** Field app (tech code, no login) vs a signed-in office user. */
@@ -288,16 +293,38 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Take it out of (or put it back into) the place it came from.
   let warning: string | null = null
   const part = data as { id: string } | null
+
+  // A catalog part marked "Replaced" becomes a unit at the property (lib/assets.ts, migration 237).
+  let unit: { assetId: string | null; replaced: string | null } | null = null
+  if (part && productId && action === 'installed') {
+    try {
+      const { data: w } = await supabase.from('work_orders').select('*').eq('id', params.id).maybeSingle()
+      const wo = (w ?? {}) as { site_id?: string | null; org_id?: string | null; opening_id?: string | null }
+      const r = await installFromPart({
+        wo: { id: params.id, site_id: wo.site_id ?? null, org_id: wo.org_id ?? null, opening_id: wo.opening_id ?? null },
+        part: { id: part.id, name, sku, product_id: productId },
+        serial: typeof body.serial_number === 'string' ? body.serial_number : null,
+        replacesAssetId: body.replaces_asset_id ? String(body.replaces_asset_id) : null,
+        by: added_by,
+      })
+      if (r.error) warning = r.error
+      else if (r.assetId) unit = r
+    } catch (e) {
+      warning = `Saved on the job, but the unit wasn’t added to the property: ${e instanceof Error ? e.message : 'error'}`
+    }
+  }
   if (useStock && part && productId && fromLocationId && qty > 0) {
     try {
-      warning = (await movePartForJob({ orgId: jobOrg, productId, qty, action, locationId: fromLocationId, unitCost: frozenCost, woId: params.id, partId: part.id, by: added_by })).warning
+      const w = (await movePartForJob({ orgId: jobOrg, productId, qty, action, locationId: fromLocationId, unitCost: frozenCost, woId: params.id, partId: part.id, by: added_by })).warning
+      if (w) warning = warning ? `${warning} ${w}` : w
     } catch (e) {
       // The part is on the job; say plainly that stock didn't follow.
-      warning = `Saved on the job, but stock didn’t update: ${e instanceof Error ? e.message : 'error'}`
+      const w = `Saved on the job, but stock didn’t update: ${e instanceof Error ? e.message : 'error'}`
+      warning = warning ? `${warning} ${w}` : w
     }
   }
 
-  return NextResponse.json({ part: data, warning }, { status: 201 })
+  return NextResponse.json({ part: data, warning, unit }, { status: 201 })
 }
 
 // DELETE /api/maintenance/[id]/parts — legacy: remove by part_used_id in body
@@ -320,6 +347,7 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
 
   // Restore stock BEFORE deleting the part row — awaited so it actually lands in
   // serverless (a detached write would leave inventory drifting low over time).
+  try { await undoInstall(partId) } catch (e) { return NextResponse.json({ error: `Couldn’t undo the unit this part made: ${e instanceof Error ? e.message : 'error'}` }, { status: 500 }) }
   if (await stockReady()) {
     try { await reversePart(partId) } catch (e) { return NextResponse.json({ error: `Couldn’t put the part back in stock: ${e instanceof Error ? e.message : 'error'}` }, { status: 500 }) }
   } else if (part?.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {

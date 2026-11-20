@@ -67,6 +67,8 @@ function isBypassPath(pathname: string): boolean {
     // show_leads capture uses /api/show-lead (already bypassed above), not /api/crm/.
     // Property request portal — public form for property managers (no Clerk)
     pathname.startsWith('/request/') ||
+    // Unit QR labels (/a/<code>) — public "report a problem with this unit" page (migration 237)
+    pathname.startsWith('/a/') ||
     // Only the form's POST is public (enforced in middleware() below). Exact path, so
     // /api/requests (the staff Requests list) still goes through Clerk.
     pathname === '/api/request' ||

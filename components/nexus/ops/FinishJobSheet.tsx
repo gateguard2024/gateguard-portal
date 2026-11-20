@@ -8,7 +8,9 @@
  *   2. Parts used or replaced — add them, or tick "No parts used". Typing suggests catalog
  *      items with what's on the truck; a catalog part comes out of the picked place (the
  *      tech's truck by default). Each part shows who pays (lib/stock.ts) — the office can
- *      tap it to change; the field app can't mark a part billable.
+ *      tap it to change; the field app can't mark a part billable. A catalog part marked
+ *      "Replaced" asks for its serial + which unit it replaced → it becomes that unit at
+ *      the property (lib/assets.ts, migration 237).
  *   3. Which gate or door (only at properties with openings set up) — so a
  *      repeat visit is counted on the right opening. "Whole property / other" is fine.
  *   0. What it was (lib/service-taxonomy.ts) — visit type, what was worked on, the fix,
@@ -25,6 +27,7 @@ import { VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS, BILL_TO, NEEDS_CAUSE, BILLAB
 type Entry = { id: string; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null; notes?: string | null }
 type Part = { id: string; name: string | null; qty: number | null; action: string | null; bill_to?: string | null; from_location_name?: string | null }
 type Place = { id: string; name: string; kind: string }
+type Unit = { id: string; label: string; serial: string | null; here: boolean }
 type Match = { id: string; name: string; sku: string | null; brand: string | null; stock: Record<string, number> }
 const WHO: Record<string, string> = { plan: 'Covered by plan', property: 'Billable', warranty: 'Warranty', internal: 'Internal' }
 const WHO_NEXT: Record<string, string> = { plan: 'property', property: 'warranty', warranty: 'plan', internal: 'plan' }
@@ -78,6 +81,9 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const [places, setPlaces] = useState<Place[]>([])
   const [fromId, setFromId] = useState('')
   const [note, setNote] = useState<string | null>(null)
+  const [units, setUnits] = useState<Unit[]>([])
+  const [serial, setSerial] = useState('')
+  const [replaces, setReplaces] = useState('')
   const office = !headers?.['x-tech-code']
   // override
   const [skip, setSkip] = useState(false)
@@ -93,6 +99,7 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
     const list: Entry[] = Array.isArray(t?.entries) ? t.entries : []
     setEntries(list)
     setParts(Array.isArray(p?.parts) ? p.parts : [])
+    setUnits(Array.isArray(p?.units) ? p.units : [])
     // Pre-fill "arrive" from the earliest clock-in, else the scheduled time.
     setArrive((a) => a || toLocal(list.length ? list[list.length - 1].clock_in : scheduledAt ?? null))
   }, [woId, h, scheduledAt])
@@ -136,9 +143,9 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const addPart = async () => {
     if (!pName.trim()) return
     setNote(null)
-    const body = { name: pName.trim(), qty: Number(pQty) || 1, action: pAction, added_by: techName ?? undefined, ...(pProduct ? { product_id: pProduct.id, sku: pProduct.sku ?? undefined, ...(fromId ? { from_location_id: fromId } : {}) } : {}) }
+    const body = { name: pName.trim(), qty: Number(pQty) || 1, action: pAction, added_by: techName ?? undefined, ...(pProduct ? { product_id: pProduct.id, sku: pProduct.sku ?? undefined, ...(fromId ? { from_location_id: fromId } : {}), ...(pAction === 'installed' ? { serial_number: serial.trim() || undefined, replaces_asset_id: replaces || undefined } : {}) } : {}) }
     if (await call('part', `/api/maintenance/${woId}/parts`, { method: 'POST', body: JSON.stringify(body) })) {
-      setPName(''); setPQty('1'); setPProduct(null); setMatches([])
+      setPName(''); setPQty('1'); setPProduct(null); setMatches([]); setSerial(''); setReplaces('')
       if (st?.parts.none) await call('none', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ parts_none: false }) })
     }
   }
@@ -298,6 +305,19 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
                   {places.map((pl) => <option key={pl.id} value={pl.id}>{pl.name}{pProduct.stock[pl.id] != null ? ` (${pProduct.stock[pl.id]})` : ''}</option>)}
                 </select>
               </label>
+            )}
+            {!st?.parts.none && pProduct && pAction === 'installed' && (
+              <div style={{ ...two, marginTop: 8 }}>
+                <label style={lbl}>Serial number of the new one<input aria-label="Serial number" value={serial} onChange={(x) => setSerial(x.target.value)} placeholder="Optional" style={inp} /></label>
+                {units.length > 0 && (
+                  <label style={lbl}>Which one did it replace?
+                    <select aria-label="Which one did it replace?" value={replaces} onChange={(x) => setReplaces(x.target.value)} style={inp}>
+                      <option value="">Not sure / a new spot</option>
+                      {units.map((u) => <option key={u.id} value={u.id}>{u.label}{u.serial ? ` · ${u.serial}` : ''}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
             )}
             {note && <div role="status" style={{ marginTop: 6, fontSize: 12.5, color: ORANGE }}>{note}</div>}
             {!shownParts.length && (

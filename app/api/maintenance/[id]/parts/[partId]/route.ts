@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { guardWorkOrder } from '@/lib/ops-scope'
 import { stockReady, reversePart } from '@/lib/stock'
+import { undoInstall } from '@/lib/assets'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,10 @@ export async function DELETE(
     return NextResponse.json({ error: 'Part not found' }, { status: 404 })
   }
 
+  // A "Replaced" part made a unit at the property (237): remove it, restore the old one.
+  try { await undoInstall(params.partId) } catch (e) {
+    return NextResponse.json({ error: `Couldn’t undo the unit this part made: ${e instanceof Error ? e.message : 'error'}` }, { status: 500 })
+  }
   // Put it back where it came from (migration 236: undo its stock moves),
   // else the old inventory list.
   if (await stockReady()) {

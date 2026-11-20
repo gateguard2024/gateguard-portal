@@ -19,6 +19,7 @@ import { NetworkTab } from '@/components/nexus/systems/NetworkTab';
 import { SetupTab } from '@/components/nexus/systems/SetupTab';
 import { PackagesTab } from '@/components/nexus/systems/PackagesTab';
 import { ServiceTab } from '@/components/nexus/systems/ServiceTab';
+import { EquipmentTab } from '@/components/nexus/systems/EquipmentTab';
 import { withCameras, healthLine, type SiteHealth } from '@/lib/site-health-rules';
 import { SiteIncidents } from '@/components/nexus/SiteIncidents';
 import { SitePanels } from '@/components/nexus/SitePanels';
@@ -27,10 +28,10 @@ import { InactiveBanner, SiteStatusSheet, statusOf } from '@/components/nexus/sy
 import { PropertyPortalSetup } from '@/components/nexus/systems/PropertyPortal';
 import { todayET, etDateOf } from '@/lib/tz';
 
-type Tab = 'live' | 'doors' | 'people' | 'packages' | 'activity' | 'faults' | 'service' | 'network' | 'controllers' | 'setup';
+type Tab = 'live' | 'doors' | 'people' | 'packages' | 'activity' | 'faults' | 'service' | 'equipment' | 'network' | 'controllers' | 'setup';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: 'Live' }, { id: 'doors', label: 'Doors & gates' }, { id: 'people', label: 'People' }, { id: 'packages', label: 'Packages' },
-  { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'service', label: 'Service' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
+  { id: 'activity', label: 'Activity' }, { id: 'faults', label: 'Faults' }, { id: 'service', label: 'Service' }, { id: 'equipment', label: 'Equipment' }, { id: 'network', label: 'Network' }, { id: 'controllers', label: 'Controllers' },
   { id: 'setup', label: 'Setup' },
 ];
 type Summary = { devices?: Any; doors?: Any; faults?: { open: number; uptimePct: number; timeSinceLastMs: number | null }; eventsToday?: number; healthScore?: number; health?: SiteHealth | null };
@@ -43,10 +44,10 @@ const ICONS: Record<string, React.ReactNode> = {
   cam: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="2" y="6" width="14" height="12" rx="2" /><path d="m16 10 6-3v10l-6-3" /></svg>,
 };
 
-function readTab(): Tab { try { const t = localStorage.getItem('gg_systems_tab') as Tab | null; return t && TABS.some(x => x.id === t) ? t : 'live'; } catch { return 'live'; } }
+function readTab(): Tab { try { if (new URLSearchParams(window.location.search).get('asset')) return 'equipment'; const t = localStorage.getItem('gg_systems_tab') as Tab | null; return t && TABS.some(x => x.id === t) ? t : 'live'; } catch { return 'live'; } }
 
 /** The panel: status, quick actions and tabs for one property. */
-export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: { siteId: string; isCorporate: boolean; initialSetup?: boolean; setupRequest?: number }) {
+export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest, siteName }: { siteId: string; isCorporate: boolean; initialSetup?: boolean; setupRequest?: number; siteName?: string | null }) {
   const [flash, notify] = useFlash();
   const [tab, setTabState] = useState<Tab>('live');
   useEffect(() => { setTabState(readTab()); }, []);
@@ -164,6 +165,7 @@ export function SitePanel({ siteId, isCorporate, initialSetup, setupRequest }: {
         {tab === 'activity' && <ActivityTab ctx={ctx} brivoEvents={events} brivoErr={eventErr} who={who} setWho={setWho} />}
         {tab === 'faults' && <SiteIncidents siteId={siteId} notify={notify} onChanged={loadSummary} logRequest={faultReq} />}
         {tab === 'service' && <ServiceTab ctx={ctx} health={hObj} />}
+        {tab === 'equipment' && <EquipmentTab ctx={ctx} siteName={siteName} />}
         {tab === 'network' && <NetworkTab ctx={ctx} ov={net} />}
         {tab === 'controllers' && <SitePanels siteId={siteId} isCorporate={isCorporate} notify={notify} />}
         {tab === 'setup' && <SetupTab key={setupRound} ctx={ctx} cams={cams} doors={doors} doorErr={doorErr} relays={relays} camMap={camMap} onGo={setTab} />}
@@ -205,7 +207,7 @@ export function SiteCommand({ siteId, isCorporate, site, onBack, onStatusChange 
         </div>}
       </header>
       <InactiveBanner status={status} reason={reason} onManage={isCorporate ? () => setStatusOpen(true) : undefined} />
-      <SitePanel siteId={siteId} isCorporate={isCorporate} setupRequest={setupReq} />
+      <SitePanel siteId={siteId} isCorporate={isCorporate} setupRequest={setupReq} siteName={site?.name} />
       {statusOpen && isCorporate && (
         <SiteStatusSheet siteId={siteId} siteName={site?.name} onClose={() => setStatusOpen(false)}
           onChanged={(s, r) => { setStatus(s); setReason(r ?? null); onStatusChange?.(s); }}
