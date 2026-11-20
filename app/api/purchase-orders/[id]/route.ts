@@ -1,12 +1,17 @@
 /**
  * PATCH /api/purchase-orders/[id] — update a PO's status (draft → ordered → received)
  * or other top-level fields. Used by the Operations Hub Procurement tab.
+ * Marking it received (migration 236) puts what's still outstanding into stock:
+ * lines tagged to a property go on that property's spare shelf, the rest into
+ * `location_id` (optional) or the company warehouse.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }         from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { recordInScope } from '@/lib/ops-scope'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
+import { stockReady, receivePO, ownsPlace } from '@/lib/stock'
 
 function serviceDb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -32,11 +37,32 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const caller = await getCurrentUser()
   if (caller.isCorporate && body.org_id) patch.org_id = body.org_id   // corporate transfer
 
+  // Receiving → stock. Check the place first so a bad pick changes nothing.
+  const { data: before } = await serviceDb().from('purchase_orders').select('status, org_id').eq('id', params.id).maybeSingle()
+  const prev = before as { status?: string | null; org_id?: string | null } | null
+  const receiving = patch.status === 'received' && prev?.status !== 'received' && await stockReady()
+  let receiveAt: string | null = null
+  if (receiving && body.location_id) {
+    const scope = await resolveOrgScope(caller)
+    const { data: loc } = await serviceDb().from('stock_locations').select('id, org_id').eq('id', String(body.location_id)).maybeSingle()
+    const l = loc as { id: string; org_id: string | null } | null
+    if (!l || !ownsPlace(scope, l.org_id) || (l.org_id ?? null) !== (prev?.org_id ?? null)) return NextResponse.json({ error: 'Pick a place that belongs to the same company as this PO.' }, { status: 400 })
+    receiveAt = l.id
+  }
+
   // Drift-resilient (updated_at may not exist on some PO schemas)
   let attempt = { ...patch }
   for (let i = 0; i < 3; i++) {
     const { data, error } = await serviceDb().from('purchase_orders').update(attempt).eq('id', params.id).select('*, purchase_order_items(*)').single()
-    if (!error) return NextResponse.json({ record: data })
+    if (!error) {
+      if (!receiving) return NextResponse.json({ record: data })
+      try {
+        const r = await receivePO(params.id, { locationId: receiveAt, by: caller.name ?? caller.email ?? null })
+        return NextResponse.json({ record: data, received: r })
+      } catch (e) {
+        return NextResponse.json({ record: data, warning: `Marked received, but stock didn’t update: ${e instanceof Error ? e.message : 'error'}` })
+      }
+    }
     const m = /Could not find the '(\w+)' column|column "?(\w+)"? .* does not exist/.exec(error.message)
     const bad = m?.[1] || m?.[2]
     if ((error.code === 'PGRST204' || error.code === '42703') && bad && bad in attempt) { delete (attempt as Record<string, unknown>)[bad]; continue }

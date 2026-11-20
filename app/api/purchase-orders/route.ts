@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { guardSite } from '@/lib/ops-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,18 @@ export async function POST(req: NextRequest) {
 
   const org_id = scope.own_id
 
+  // A line tagged to a property (bought for its plan) must be a real property you work on.
+  const tagged = Array.from(new Set((items as Array<{ site_id?: string }>).map(it => it.site_id).filter((v): v is string => !!v)))
+  if (tagged.length) {
+    const { data: found } = await supabase.from('sites').select('id').in('id', tagged)
+    const real = new Set(((found ?? []) as { id: string }[]).map(s => s.id))
+    for (const sid of tagged) {
+      if (!real.has(sid) || !(await guardSite(req, sid))) {
+        return NextResponse.json({ error: 'One of the lines is tagged to a property you don’t work on.' }, { status: 400 })
+      }
+    }
+  }
+
   // Compute totals from items
   const subtotal = (items as Array<{ qty: number; unit_cost: number }>)
     .reduce((acc, item) => acc + (item.qty ?? 1) * (item.unit_cost ?? 0), 0)
@@ -91,6 +104,7 @@ export async function POST(req: NextRequest) {
       sku?: string
       qty: number
       unit_cost?: number
+      site_id?: string        // bought for this property's service plan (migration 236)
     }>).map(item => ({
       po_id:             po.id,
       inventory_item_id: item.inventory_item_id || null,
@@ -100,6 +114,7 @@ export async function POST(req: NextRequest) {
       qty:               item.qty               ?? 1,
       unit_cost:         item.unit_cost         ?? 0,
       received_qty:      0,
+      ...(item.site_id ? { site_id: item.site_id } : {}),
     }))
 
     const { error: itemsErr } = await supabase.from('purchase_order_items').insert(rows)

@@ -128,6 +128,10 @@ interface PartUsed {
   qty?: number
   action?: string
   added_by?: string | null
+  // migration 236: where it came from + who pays
+  from_location_id?: string | null
+  from_location_name?: string | null
+  bill_to?: string | null
   // legacy compat
   part_id?: string
   part_name?: string
@@ -872,6 +876,11 @@ export default function WorkOrderDetailPage() {
   }
 
   const handleMarkAsUsed = async (part: PartUsed) => {
+    // Parts added after migration 236 already came out of a stock place when they were added.
+    if (part.from_location_id) {
+      showToast(`Already taken from ${part.from_location_name ?? 'stock'} when it was added.`, 'success')
+      return
+    }
     const invId = part.inventory_item_id
     if (!invId) {
       showToast('This part has no linked inventory item — add it via inventory first.', 'warning')
@@ -1947,7 +1956,14 @@ export default function WorkOrderDetailPage() {
                             }
                             return (
                               <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 group">
-                                <td className="px-5 py-3 font-medium text-foreground">{np.name}</td>
+                                <td className="px-5 py-3 font-medium text-foreground">
+                                  {np.name}
+                                  {(p.bill_to || p.from_location_name) && (
+                                    <div className="text-[11px] font-normal text-muted-foreground">
+                                      {[p.bill_to ? ({ plan: 'Covered by plan', property: 'Billable', warranty: 'Warranty', internal: 'Internal' } as Record<string, string>)[p.bill_to] ?? p.bill_to : null, p.from_location_name ? `from ${p.from_location_name}` : null].filter(Boolean).join(' · ')}
+                                    </div>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{np.sku ?? '—'}</td>
                                 <td className="px-4 py-3">
                                   <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize', actionColors[np.action] ?? 'bg-slate-500/10 text-slate-400')}>
@@ -1959,7 +1975,7 @@ export default function WorkOrderDetailPage() {
                                 <td className="px-4 py-3 text-right font-medium">{np.unit_cost != null ? `$${(np.unit_cost * np.qty).toFixed(2)}` : '—'}</td>
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
-                                    {p.inventory_item_id && (
+                                    {p.inventory_item_id && !p.from_location_id && (
                                       <button
                                         title="Mark as Used — deducts from inventory"
                                         onClick={() => handleMarkAsUsed(p)}

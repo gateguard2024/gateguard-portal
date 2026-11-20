@@ -8,6 +8,7 @@
  *   • Select rows → bulk: change category, raise/lower price %, archive / make active, export
  *   • Import / export CSV (header-based), New product
  *   • Tap a product → ProductPage (full screen, deep link /?tab=catalog&product=<id>)
+ *   • Stock → StockPanel: places (warehouse, trucks, property shelves), counts, moves (migration 236)
  *
  * Data: /api/products (scoped catalog), /api/products/stats (stock),
  * /api/kb/coverage (manuals), /api/admin/product-costs (corporate only).
@@ -19,8 +20,9 @@ import {
 } from '@/components/nexus/catalog/shared'
 import { ProductEditor } from '@/components/nexus/catalog/ProductEditor'
 import { ProductPage } from '@/components/nexus/catalog/ProductPage'
+import { StockPanel } from '@/components/nexus/catalog/StockPanel'
 
-type Stock = Record<string, { onHand: number; onTruck: number; min: number; locations: number }>
+type Stock = Record<string, { onHand: number; onTruck: number; onSite?: number; min: number; locations: number }>
 type Kpi = 'active' | 'low' | 'noprice' | 'lowmargin' | 'nomanual' | 'archived'
 type Sort = 'name' | 'price' | 'margin' | 'updated' | 'stock'
 
@@ -118,6 +120,7 @@ export default function CatalogSurface() {
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pct, setPct] = useState('')
+  const [showStock, setShowStock] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setLoadErr(null)
@@ -272,6 +275,7 @@ export default function CatalogSurface() {
         <div className="sub">{counts.active} products — one list for quotes, jobs, drawings, stock and the tech app</div>
       </div>
       <div className="ct-acts">
+        <button type="button" className="ct-b dark" onClick={() => setShowStock(true)}>Stock</button>
         <button type="button" className="ct-b dark" onClick={() => setImporting(true)}>Import CSV</button>
         <button type="button" className="ct-b dark" onClick={() => download(`catalog-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(shown))} disabled={!shown.length}>Export</button>
         <button type="button" className="ct-b pri" onClick={() => setEditing(emptyForm())}>+ New product</button>
@@ -376,6 +380,7 @@ export default function CatalogSurface() {
     </div>}
 
     {editing && <ProductEditor initial={editing} catalog={products} isCorporate={isCorporate} onClose={() => setEditing(null)} onSaved={row => { upsertLocal(row); setEditing(null); setOpenId(row.id) }} />}
+    {showStock && <StockPanel catalog={products} onClose={() => setShowStock(false)} onChanged={() => { fetch('/api/products/stats', { cache: 'no-store' }).then(r => r.json()).then(j => setStock(j.stock ?? {})).catch(() => {}) }} />}
     {openId && <ProductPage id={openId} catalog={products} isCorporate={isCorporate} ggCosts={ggCosts} onClose={() => setOpenId(null)} onOpen={id => setOpenId(id)} onChanged={row => { if (row) upsertLocal(row); if (isCorporate) fetch('/api/admin/product-costs', { cache: 'no-store' }).then(r => r.json()).then(j => setGgCosts(j.costs ?? {})).catch(() => {}) }} />}
   </div>
 }

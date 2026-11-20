@@ -5,7 +5,10 @@
  * lib/job-closeout.ts). Two required answers, then Complete:
  *   1. Time on site — arrive / leave (filled from the clock if they used it;
  *      entries can be fixed or removed; a running clock must be stopped).
- *   2. Parts used or replaced — add them, or tick "No parts used".
+ *   2. Parts used or replaced — add them, or tick "No parts used". Typing suggests catalog
+ *      items with what's on the truck; a catalog part comes out of the picked place (the
+ *      tech's truck by default). Each part shows who pays (lib/stock.ts) — the office can
+ *      tap it to change; the field app can't mark a part billable.
  *   3. Which gate or door (only at properties with openings set up) — so a
  *      repeat visit is counted on the right opening. "Whole property / other" is fine.
  *   0. What it was (lib/service-taxonomy.ts) — visit type, what was worked on, the fix,
@@ -20,7 +23,11 @@ import { X, Check, Clock, Package, Loader2, Trash2, Plus, MapPin, Wrench } from 
 import { VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS, BILL_TO, NEEDS_CAUSE, BILLABLE_CAUSES, labelOf, type ServiceDetails } from '@/lib/service-taxonomy'
 
 type Entry = { id: string; technician_name: string | null; clock_in: string; clock_out: string | null; duration_mins: number | null; notes?: string | null }
-type Part = { id: string; name: string | null; qty: number | null; action: string | null }
+type Part = { id: string; name: string | null; qty: number | null; action: string | null; bill_to?: string | null; from_location_name?: string | null }
+type Place = { id: string; name: string; kind: string }
+type Match = { id: string; name: string; sku: string | null; brand: string | null; stock: Record<string, number> }
+const WHO: Record<string, string> = { plan: 'Covered by plan', property: 'Billable', warranty: 'Warranty', internal: 'Internal' }
+const WHO_NEXT: Record<string, string> = { plan: 'property', property: 'warranty', warranty: 'plan', internal: 'plan' }
 type Status = { ok: boolean; message: string; missing: string[]; time: { entries: number; minutes: number; running: number }; parts: { count: number; none: boolean }; opening?: { required: boolean; id: string | null; property: boolean; name: string | null; options: { id: string; name: string; kind: string }[] }; details?: { required: boolean; values: Partial<ServiceDetails>; missing: string[]; suggested: { visit_type: string | null } }; needsMigration?: boolean }
 
 const INK = '#1D1D1F', MUTED = '#6E6E73', BLUE = '#0071E3', GREEN = '#1A7F37', ORANGE = '#B25000', RED = '#D70015', LINE = 'rgba(0,0,0,0.10)'
@@ -66,6 +73,12 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const [pName, setPName] = useState('')
   const [pQty, setPQty] = useState('1')
   const [pAction, setPAction] = useState<'used' | 'installed'>('used')
+  const [pProduct, setPProduct] = useState<Match | null>(null)
+  const [matches, setMatches] = useState<Match[]>([])
+  const [places, setPlaces] = useState<Place[]>([])
+  const [fromId, setFromId] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const office = !headers?.['x-tech-code']
   // override
   const [skip, setSkip] = useState(false)
   const [reason, setReason] = useState('')
@@ -85,12 +98,33 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   }, [woId, h, scheduledAt])
   useEffect(() => { void load() }, [load])
 
+  // Stock places for this job (migration 236) — the tech's truck comes first.
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/stock?work_order_id=${woId}`, { headers: h, cache: 'no-store' }).then((r) => r.json()).then((d) => {
+      if (!alive || !d?.ready) return
+      setPlaces(Array.isArray(d.locations) ? d.locations : [])
+      setFromId((f) => f || d.defaultId || '')
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [woId, h])
+  // Catalog suggestions while typing a part name.
+  useEffect(() => {
+    const q = pName.trim()
+    if (pProduct || q.length < 2 || !places.length) { setMatches([]); return }
+    const t = setTimeout(() => {
+      fetch(`/api/stock?work_order_id=${woId}&q=${encodeURIComponent(q)}`, { headers: h, cache: 'no-store' }).then((r) => r.json()).then((d) => setMatches(Array.isArray(d?.products) ? d.products.slice(0, 6) : [])).catch(() => {})
+    }, 250)
+    return () => clearTimeout(t)
+  }, [pName, pProduct, places.length, woId, h])
+
   async function call(key: string, url: string, init: RequestInit): Promise<boolean> {
     setBusy(key); setErr(null)
     try {
       const r = await fetch(url, { ...init, headers: h })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) { setErr(d?.error ?? 'That didn’t save. Try again.'); return false }
+      if (d?.warning) setNote(d.warning)
       await load(); return true
     } catch { setErr('No connection — try again.'); return false } finally { setBusy(null) }
   }
@@ -101,12 +135,17 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
   const removeEntry = (e: Entry) => call(`del-${e.id}`, `/api/maintenance/${woId}/time?entry_id=${e.id}`, { method: 'DELETE' })
   const addPart = async () => {
     if (!pName.trim()) return
-    if (await call('part', `/api/maintenance/${woId}/parts`, { method: 'POST', body: JSON.stringify({ name: pName.trim(), qty: Number(pQty) || 1, action: pAction, added_by: techName ?? undefined }) })) {
-      setPName(''); setPQty('1')
+    setNote(null)
+    const body = { name: pName.trim(), qty: Number(pQty) || 1, action: pAction, added_by: techName ?? undefined, ...(pProduct ? { product_id: pProduct.id, sku: pProduct.sku ?? undefined, ...(fromId ? { from_location_id: fromId } : {}) } : {}) }
+    if (await call('part', `/api/maintenance/${woId}/parts`, { method: 'POST', body: JSON.stringify(body) })) {
+      setPName(''); setPQty('1'); setPProduct(null); setMatches([])
       if (st?.parts.none) await call('none', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ parts_none: false }) })
     }
   }
   const removePart = (p: Part) => call(`delp-${p.id}`, `/api/maintenance/${woId}/parts/${p.id}`, { method: 'DELETE' })
+  const nextWho = (p: Part) => call(`who-${p.id}`, `/api/maintenance/${woId}/parts`, { method: 'PATCH', body: JSON.stringify({ part_id: p.id, bill_to: WHO_NEXT[p.bill_to ?? 'plan'] ?? 'plan' }) })
+  const pick = (m: Match) => { setPProduct(m); setPName(m.name); setMatches([]) }
+  const placeName = (id: string) => places.find((x) => x.id === id)?.name ?? ''
   const setNone = (v: boolean) => { setSt((x) => (x ? { ...x, parts: { ...x.parts, none: v } } : x)); return call('none', `/api/maintenance/${woId}/closeout`, { method: 'POST', body: JSON.stringify({ parts_none: v, technician_name: techName ?? undefined }) }) }
 
   const setOpening = (v: string) => {
@@ -223,13 +262,16 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
             <Head n={dt?.required ? 3 : 2} ok={partsOk} icon={<Package size={15} />} title="Parts used or replaced" sub={st?.parts.none ? 'No parts used' : shownParts.length ? `${shownParts.length} part${shownParts.length === 1 ? '' : 's'}` : 'Add them, or tick “No parts used”'} />
             {shownParts.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: `1px solid ${LINE}`, padding: '7px 0', fontSize: 13.5 }}>
-                <span style={{ flex: 1 }}>{p.name || 'Part'} <span style={{ color: MUTED }}>× {p.qty ?? 1}{p.action === 'installed' ? ' · replaced' : ''}</span></span>
+                <span style={{ flex: 1, minWidth: 0 }}>{p.name || 'Part'} <span style={{ color: MUTED }}>× {p.qty ?? 1}{p.action === 'installed' ? ' · replaced' : ''}{p.from_location_name ? ` · from ${p.from_location_name}` : ''}</span></span>
+                {p.bill_to && (office
+                  ? <button type="button" title="Who pays — tap to change" aria-label={`Who pays: ${WHO[p.bill_to] ?? p.bill_to}. Tap to change.`} onClick={() => void nextWho(p)} disabled={busy === `who-${p.id}`} style={{ ...chip, ...(p.bill_to === 'property' ? chipBill : {}) }}>{WHO[p.bill_to] ?? p.bill_to}</button>
+                  : <span style={{ ...chip, cursor: 'default', ...(p.bill_to === 'property' ? chipBill : {}) }}>{WHO[p.bill_to] ?? p.bill_to}</span>)}
                 <button type="button" aria-label={`Remove ${p.name}`} onClick={() => void removePart(p)} disabled={busy === `delp-${p.id}`} style={{ ...ghost, padding: '5px 7px' }}><Trash2 size={13} /></button>
               </div>
             ))}
             {!st?.parts.none && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px auto auto', gap: 6, marginTop: shownParts.length ? 8 : 2 }}>
-                <input aria-label="Part name" placeholder="Part (e.g. gate operator board)" value={pName} onChange={(x) => setPName(x.target.value)} onKeyDown={(x) => { if (x.key === 'Enter') void addPart() }} style={inp} />
+                <input aria-label="Part name" placeholder="Part (e.g. gate operator board)" value={pName} onChange={(x) => { setPName(x.target.value); if (pProduct) setPProduct(null) }} onKeyDown={(x) => { if (x.key === 'Enter') void addPart() }} style={inp} />
                 <input aria-label="Quantity" inputMode="numeric" value={pQty} onChange={(x) => setPQty(x.target.value.replace(/\D/g, ''))} style={inp} />
                 <select aria-label="Used or replaced" value={pAction} onChange={(x) => setPAction(x.target.value as 'used' | 'installed')} style={{ ...inp, width: 'auto' }}>
                   <option value="used">Used</option><option value="installed">Replaced</option>
@@ -237,6 +279,27 @@ export function FinishJobSheet({ woId, title, onClose, onCompleted, complete, he
                 <button type="button" onClick={() => void addPart()} disabled={!pName.trim() || busy === 'part'} style={{ ...primary, opacity: pName.trim() ? 1 : 0.5 }}>Add</button>
               </div>
             )}
+            {!st?.parts.none && matches.length > 0 && (
+              <div role="listbox" aria-label="Catalog matches" style={{ marginTop: 6, border: `1px solid ${LINE}`, borderRadius: 10, overflow: 'hidden' }}>
+                {matches.map((m) => {
+                  const here = fromId ? m.stock[fromId] ?? 0 : 0
+                  return <button key={m.id} type="button" role="option" aria-selected={false} onClick={() => pick(m)}
+                    style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center', textAlign: 'left', border: 0, borderTop: `1px solid ${LINE}`, background: '#fff', padding: '8px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: INK }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name} <span style={{ color: MUTED }}>{[m.brand, m.sku].filter(Boolean).join(' · ')}</span></span>
+                    {fromId && <span style={{ fontSize: 12, color: here > 0 ? GREEN : MUTED, whiteSpace: 'nowrap' }}>{here > 0 ? `${here} in ${placeName(fromId)}` : `none in ${placeName(fromId)}`}</span>}
+                  </button>
+                })}
+              </div>
+            )}
+            {!st?.parts.none && pProduct && places.length > 0 && (
+              <label style={{ ...lbl, marginTop: 8, gridTemplateColumns: 'auto 1fr', alignItems: 'center', display: 'grid', gap: 8 }}>
+                <span>Taken from</span>
+                <select aria-label="Taken from" value={fromId} onChange={(x) => setFromId(x.target.value)} style={{ ...inp, width: 'auto', maxWidth: '100%' }}>
+                  {places.map((pl) => <option key={pl.id} value={pl.id}>{pl.name}{pProduct.stock[pl.id] != null ? ` (${pProduct.stock[pl.id]})` : ''}</option>)}
+                </select>
+              </label>
+            )}
+            {note && <div role="status" style={{ marginTop: 6, fontSize: 12.5, color: ORANGE }}>{note}</div>}
             {!shownParts.length && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 14, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!st?.parts.none} disabled={busy === 'none'} onChange={(x) => void setNone(x.target.checked)} style={{ width: 18, height: 18 }} />
@@ -319,4 +382,6 @@ const two: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat
 const lbl: React.CSSProperties = { display: 'grid', gap: 3, minWidth: 0, fontSize: 11.5, color: MUTED, fontWeight: 600 }
 const inp: React.CSSProperties = { width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 14, padding: '8px 9px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.16)', background: '#fff', color: INK, fontFamily: 'inherit' }
 const primary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 10, padding: '8px 13px', background: BLUE, color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }
+const chip: React.CSSProperties = { border: `1px solid ${LINE}`, borderRadius: 999, padding: '3px 9px', background: '#F5F5F7', color: MUTED, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
+const chipBill: React.CSSProperties = { background: 'rgba(178,80,0,0.10)', color: ORANGE, borderColor: 'rgba(178,80,0,0.25)' }
 const ghost: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${LINE}`, borderRadius: 8, padding: '5px 10px', background: '#fff', color: INK, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }

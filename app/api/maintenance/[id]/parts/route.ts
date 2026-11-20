@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { guardWorkOrder } from '@/lib/ops-scope'
+import { isTechAuthed } from '@/lib/tech-auth'
+import { getCurrentUser } from '@/lib/current-user'
+import {
+  stockReady, defaultBillTo, canSetBillTo, isPlanSite, isGateGuardJob, partCost,
+  jobLocations, movePartForJob, reversePart, type PartBillTo,
+} from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,11 +73,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     for (const p of parts) p.po = null
   }
 
+  // Where each part came from (migration 236) — names only.
+  const locIds = Array.from(new Set(parts.map(p => p.from_location_id).filter((v): v is string => typeof v === 'string' && v.length > 0)))
+  if (locIds.length) {
+    const { data: locs } = await supabase.from('stock_locations').select('id, name').in('id', locIds)
+    const names = new Map(((locs ?? []) as { id: string; name: string }[]).map(l => [l.id, l.name]))
+    for (const p of parts) p.from_location_name = typeof p.from_location_id === 'string' ? (names.get(p.from_location_id) ?? null) : null
+  }
+
   return NextResponse.json({ parts })
 }
 
+/** Field app (tech code, no login) vs a signed-in office user. */
+async function callerOf(req: NextRequest): Promise<{ techOnly: boolean; isCorporate: boolean; name: string | null }> {
+  const user = await getCurrentUser()
+  const signedIn = !!user.id && user.id !== 'anonymous'
+  if (signedIn) return { techOnly: false, isCorporate: !!user.isCorporate, name: user.name ?? null }
+  return { techOnly: await isTechAuthed(req), isCorporate: false, name: null }
+}
+
 // PATCH /api/maintenance/[id]/parts — update procurement fields on one part.
-// Body: { part_id, supply_status?, expected_at?, is_expendable?, po_id? }
+// Body: { part_id, supply_status?, expected_at?, is_expendable?, po_id?, bill_to? }
+// bill_to (who pays): Gate Guard on any job, a dealer on their own jobs (the guard
+// above already limits them to those), the field app never to 'property'.
 // Errors are returned, never swallowed — a status that silently doesn't save is
 // worse than an error message, because the tech drives out on a bad assumption.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -97,6 +121,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if ('is_expendable' in body) patch.is_expendable = Boolean(body.is_expendable)
   if ('po_id' in body)         patch.po_id = body.po_id || null
+  if ('bill_to' in body) {
+    const who = await callerOf(req)
+    const ok = canSetBillTo(who, String(body.bill_to ?? ''))
+    if (!ok.ok) return NextResponse.json({ error: ok.error }, { status: who.techOnly ? 403 : 400 })
+    patch.bill_to = body.bill_to
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
@@ -143,8 +173,46 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'invalid action' }, { status: 400 })
   }
 
-  // If linked to inventory and action consumes stock, decrement on_hand
-  if (inventory_item_id && (action === 'used' || action === 'installed')) {
+  // ── After migration 236: stock places + who pays + frozen cost (lib/stock.ts) ──
+  const useStock = await stockReady()
+  let productId: string | null = body.product_id ?? null
+  if (!productId && inventory_item_id) {
+    const { data: inv } = await supabase.from('inventory_items').select('product_id').eq('id', inventory_item_id).maybeSingle()
+    productId = (inv as { product_id?: string | null } | null)?.product_id ?? null
+  }
+  let fromLocationId: string | null = null
+  let billTo: PartBillTo | null = null
+  let costBasis: string | null = null
+  let frozenCost = unit_cost
+  let jobOrg: string | null = null
+
+  if (useStock) {
+    const { data: woRow } = await supabase.from('work_orders').select('*').eq('id', params.id).maybeSingle()
+    const wo = (woRow ?? {}) as { org_id?: string | null; site_id?: string | null; assignee_id?: string | null; bill_to?: string | null }
+    jobOrg = wo.org_id ?? null
+    const { data: site } = wo.site_id
+      ? await supabase.from('sites').select('status, billing_video_fee, billing_units').eq('id', wo.site_id).maybeSingle()
+      : { data: null }
+    if (body.bill_to != null && body.bill_to !== '') {
+      const who = await callerOf(req)
+      const ok = canSetBillTo(who, String(body.bill_to))
+      if (!ok.ok) return NextResponse.json({ error: ok.error }, { status: who.techOnly ? 403 : 400 })
+      billTo = body.bill_to as PartBillTo
+    } else {
+      billTo = defaultBillTo({ action, jobBillTo: wo.bill_to ?? null, planSite: isPlanSite(site as Parameters<typeof isPlanSite>[0]) })
+    }
+    const c = await partCost(productId, await isGateGuardJob(jobOrg), unit_cost)
+    frozenCost = c.unit_cost; costBasis = c.basis
+    if (productId) {
+      const { locations, defaultId } = await jobLocations({ org_id: jobOrg, assignee_id: wo.assignee_id ?? null, site_id: wo.site_id ?? null })
+      const asked = body.from_location_id ? String(body.from_location_id) : null
+      if (asked && !locations.some(l => l.id === asked)) {
+        return NextResponse.json({ error: 'That place isn’t one this job can take parts from.' }, { status: 400 })
+      }
+      fromLocationId = asked ?? defaultId
+    }
+  } else if (inventory_item_id && (action === 'used' || action === 'installed')) {
+    // Before migration 236: the old single-number inventory list.
     const { data: invItem, error: fetchErr } = await supabase
       .from('inventory_items')
       .select('on_hand')
@@ -186,12 +254,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     name,
     sku:               sku?.trim()  || null,
     qty,
-    unit_cost,
+    unit_cost:         frozenCost,
     unit_price,
     action,
     site_asset_id:     site_asset_id || null,
     notes,
     added_by,
+  }
+  if (productId) insertRow.product_id = productId
+  if (useStock) {
+    insertRow.bill_to = billTo
+    if (costBasis) insertRow.cost_basis = costBasis
+    if (fromLocationId) insertRow.from_location_id = fromLocationId
   }
   // Drift-resilient: strip any column this DB doesn't have yet (e.g. unit_price
   // before migration 135) and retry, so adding a part never silently fails.
@@ -211,7 +285,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ part: data }, { status: 201 })
+  // Take it out of (or put it back into) the place it came from.
+  let warning: string | null = null
+  const part = data as { id: string } | null
+  if (useStock && part && productId && fromLocationId && qty > 0) {
+    try {
+      warning = (await movePartForJob({ orgId: jobOrg, productId, qty, action, locationId: fromLocationId, unitCost: frozenCost, woId: params.id, partId: part.id, by: added_by })).warning
+    } catch (e) {
+      // The part is on the job; say plainly that stock didn't follow.
+      warning = `Saved on the job, but stock didn’t update: ${e instanceof Error ? e.message : 'error'}`
+    }
+  }
+
+  return NextResponse.json({ part: data, warning }, { status: 201 })
 }
 
 // DELETE /api/maintenance/[id]/parts — legacy: remove by part_used_id in body
@@ -234,7 +320,9 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
 
   // Restore stock BEFORE deleting the part row — awaited so it actually lands in
   // serverless (a detached write would leave inventory drifting low over time).
-  if (part?.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
+  if (await stockReady()) {
+    try { await reversePart(partId) } catch (e) { return NextResponse.json({ error: `Couldn’t put the part back in stock: ${e instanceof Error ? e.message : 'error'}` }, { status: 500 }) }
+  } else if (part?.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
     const { data: inv } = await supabase
       .from('inventory_items')
       .select('on_hand')

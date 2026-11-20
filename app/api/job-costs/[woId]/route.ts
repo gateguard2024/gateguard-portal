@@ -27,28 +27,34 @@ export async function GET(
 
   // 2. Auto-compute labor from time entries
   let autoLaborTotal = 0
+  // (Column is duration_mins — the old name made this query fail, so labor showed $0.)
   const { data: timeEntries } = await supabase
     .from('work_order_time_entries')
-    .select('id, duration_minutes, tech_name')
+    .select('id, duration_mins, technician_name')
     .eq('work_order_id', woId)
 
   if (timeEntries && timeEntries.length > 0) {
-    const totalMins = timeEntries.reduce((sum, te) => sum + (te.duration_minutes ?? 0), 0)
+    const totalMins = timeEntries.reduce((sum, te) => sum + (te.duration_mins ?? 0), 0)
     autoLaborTotal = (totalMins / 60) * DEFAULT_LABOR_RATE
   }
 
-  // 3. Auto-compute parts from work_order_parts
+  // 3. Auto-compute parts from work_order_parts (columns are name / qty — the old
+  //    part_name / quantity made this query fail, so parts showed $0). Split by who
+  //    pays (migration 236): covered by plan / billable / warranty / internal. Every
+  //    line is cost to us; only billable ever goes on an invoice.
   let autoPartsTotal = 0
-  const { data: partsUsed } = await supabase
-    .from('work_order_parts')
-    .select('id, part_name, quantity, unit_cost')
-    .eq('work_order_id', woId)
+  const partsBy: Record<string, number> = { plan: 0, property: 0, warranty: 0, internal: 0, unset: 0 }
+  type PartRow = { id: string; name: string | null; qty: number | null; unit_cost: number | null; action: string | null; bill_to?: string | null }
+  let partsRes = await supabase.from('work_order_parts').select('id, name, qty, unit_cost, action, bill_to').eq('work_order_id', woId)
+  if (partsRes.error) partsRes = await supabase.from('work_order_parts').select('id, name, qty, unit_cost, action').eq('work_order_id', woId) as typeof partsRes
+  const partsUsed = ((partsRes.data ?? []) as PartRow[]).filter(p => p.action !== 'returned')
 
-  if (partsUsed && partsUsed.length > 0) {
-    autoPartsTotal = partsUsed.reduce(
-      (sum, p) => sum + ((p.quantity ?? 1) * (p.unit_cost ?? 0)),
-      0
-    )
+  if (partsUsed.length > 0) {
+    for (const p of partsUsed) {
+      const line = (p.qty ?? 1) * (p.unit_cost ?? 0)
+      autoPartsTotal += line
+      partsBy[p.bill_to && p.bill_to in partsBy ? p.bill_to : 'unset'] += line
+    }
   }
 
   // 4. Get quoted total from linked quote (if any)
@@ -139,6 +145,12 @@ export async function GET(
       margin_dollars:  marginDollars,
       margin_percent:  marginPercent,
       status,
+      // Parts by who pays (cost to us). parts_billable is what can go on the invoice.
+      parts_plan:      partsBy.plan,
+      parts_billable:  partsBy.property,
+      parts_warranty:  partsBy.warranty,
+      parts_internal:  partsBy.internal,
+      parts_unset:     partsBy.unset,
     },
   })
 }

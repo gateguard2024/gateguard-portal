@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { guardWorkOrder } from '@/lib/ops-scope'
+import { stockReady, reversePart } from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,8 +29,13 @@ export async function DELETE(
     return NextResponse.json({ error: 'Part not found' }, { status: 404 })
   }
 
-  // Restore stock if this part consumed inventory
-  if (part.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
+  // Put it back where it came from (migration 236: undo its stock moves),
+  // else the old inventory list.
+  if (await stockReady()) {
+    try { await reversePart(params.partId) } catch (e) {
+      return NextResponse.json({ error: `Couldn’t put the part back in stock: ${e instanceof Error ? e.message : 'error'}` }, { status: 500 })
+    }
+  } else if (part.inventory_item_id && (part.action === 'used' || part.action === 'installed')) {
     const { data: inv } = await supabase
       .from('inventory_items')
       .select('on_hand')
@@ -56,6 +62,7 @@ export async function DELETE(
     .from('work_order_parts')
     .delete()
     .eq('id', params.partId)
+    .eq('work_order_id', params.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
