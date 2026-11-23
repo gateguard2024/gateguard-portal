@@ -25,8 +25,10 @@ function Inner({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [cat, setCat] = useState('all')
   const [q, setQ] = useState('')
+  const [days, setDays] = useState<7 | 30>(7)
 
-  useEffect(() => { fetch(`/api/portal/${slug}/events`).then(r => r.json()).then(j => { setEvents(j.events || []); setLoading(false) }).catch(() => setLoading(false)) }, [slug])
+  // Up to 30 days: stored history synced hourly from Brivo (migration 241) + a live top-up.
+  useEffect(() => { setLoading(true); fetch(`/api/portal/${slug}/events?days=${days}`).then(r => r.json()).then(j => { setEvents(j.events || []); setLoading(false) }).catch(() => setLoading(false)) }, [slug, days])
 
   const stats = useMemo(() => ({
     today: events.length,
@@ -40,7 +42,7 @@ function Inner({ slug }: { slug: string }) {
   }, [events, cat, q])
 
   const statCards = [
-    { v: stats.today, l: 'Events (last 7 days)', c: C.cyan, Icon: Zap },
+    { v: stats.today, l: `Events (last ${days} days)`, c: C.cyan, Icon: Zap },
     { v: stats.denied, l: 'Access denied', c: C.alert, Icon: XCircle },
     { v: stats.admin, l: 'Admin / manager actions', c: C.warn, Icon: ShieldCheck },
   ]
@@ -72,7 +74,7 @@ function Inner({ slug }: { slug: string }) {
 
       <div style={{ ...panel(), marginBottom: 20 }}>
         <div style={{ padding: '14px 16px', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <span style={{ ...chip(false), color: C.ink2 }}><span style={{ color: C.ink3 }}>Date:</span> Last 7 days <ChevronDown size={14} color={C.ink3} /></span>
+          <button type="button" onClick={() => setDays(days === 7 ? 30 : 7)} aria-label={`Showing the last ${days} days. Switch to ${days === 7 ? 30 : 7} days`} style={{ ...chip(false), color: C.ink2, cursor: 'pointer' }}><span style={{ color: C.ink3 }}>Date:</span> Last {days} days <ChevronDown size={14} color={C.ink3} /></button>
           {CATS.map(([k, label]) => <span key={k} onClick={() => setCat(k)} style={chip(cat === k)}>{label}</span>)}
         </div>
       </div>

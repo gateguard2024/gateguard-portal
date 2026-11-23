@@ -462,19 +462,46 @@ export async function listBrivoEvents(token: string, apiKey: string, pageSize = 
     const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize - rows.length), occurredAfter: iso(new Date(from)), occurredBefore: iso(new Date(end)) })
     rows.push(...((data.data ?? data.events ?? []) as unknown[]))
   }
-  return rows.map(e => ({
-    id: String(e.id ?? e.eventId ?? `${e.occurred ?? ''}-${Math.random().toString(36).slice(2, 7)}`),
-    occurred: e.occurred ?? e.occurredTime ?? e.created ?? e.timestamp ?? null,
-    action: e.securityAction?.actionName ?? e.eventType?.name ?? e.action ?? e.actionName ?? e.name ?? 'Access event',
-    actor: e.actor?.name ?? e.user?.name ?? ([e.actor?.firstName, e.actor?.lastName].filter(Boolean).join(' ') || e.credentialHolderName || null),
-    door: e.object?.name ?? e.accessPoint?.name ?? e.door?.name ?? e.objectName ?? null,
-  }))
+  return rows.map(mapBrivoEvent)
+}
+
+/** One Brivo event row → our shape, with a STABLE id (used as the storage key). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapBrivoEvent(e: any): BrivoEvent {
+  const occurred = e.occurred ?? e.occurredTime ?? e.created ?? e.timestamp ?? null
+  const action = e.securityAction?.actionName ?? e.eventType?.name ?? e.action ?? e.actionName ?? e.name ?? 'Access event'
+  const actor = e.actor?.name ?? e.user?.name ?? ([e.actor?.firstName, e.actor?.lastName].filter(Boolean).join(' ') || e.credentialHolderName || null)
+  const door = e.object?.name ?? e.accessPoint?.name ?? e.door?.name ?? e.objectName ?? null
+  const id = e.id ?? e.eventId ?? e.uuid ?? `${occurred ?? ''}|${action}|${actor ?? ''}|${door ?? ''}`
+  return { id: String(id), occurred, action, actor, door }
+}
+
+/** EVERY event between two times (oldest window first), in Brivo's 2-day windows,
+ * paging each window. Used by the hourly sync (lib/brivo-events-store.ts). */
+export async function listBrivoEventsRange(token: string, apiKey: string, fromMs: number, toMs: number, maxEvents = 20000): Promise<BrivoEvent[]> {
+  const iso = (d: number) => new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const CHUNK = 2 * 24 * 60 * 60 * 1000 - 60_000
+  const PAGE = 100
+  const out: BrivoEvent[] = []
+  for (let start = fromMs; start < toMs && out.length < maxEvents; start += CHUNK) {
+    const end = Math.min(toMs, start + CHUNK)
+    for (let offset = 0; offset < 5000; offset += PAGE) {
+      const data = await brivoGet(token, apiKey, '/events', { pageSize: String(PAGE), offset: String(offset), occurredAfter: iso(start), occurredBefore: iso(end) })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const page = (data.data ?? data.events ?? []) as any[]
+      out.push(...page.map(mapBrivoEvent))
+      if (page.length < PAGE) break
+    }
+  }
+  return out
 }
 
 /** Per-site convenience: recent Brivo access events for a property. */
-export async function listSiteBrivoEvents(siteId: string, pageSize = 40): Promise<BrivoEvent[]> {
-  const { token, apiKey } = await getSiteBrivoToken(siteId)
-  return listBrivoEvents(token, apiKey, pageSize)
+// Reads the stored 30-day history + a live top-up (lib/brivo-events-store.ts,
+// migration 241); falls back to asking Brivo live until 241 has run.
+export async function listSiteBrivoEvents(siteId: string, pageSize = 40, days = 7): Promise<BrivoEvent[]> {
+  const { recentSiteEvents } = await import('@/lib/brivo-events-store')
+  return recentSiteEvents(siteId, { days, limit: pageSize })
 }
 
 // ─── Resident credentials / Brivo Mobile Pass ───────────────────────────────

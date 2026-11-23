@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { portalCameraScope } from '@/lib/video'
 import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
-import { getSiteBrivoToken, listBrivoDoors, listBrivoEvents } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoDoors, listSiteBrivoEvents } from '@/lib/brivo'
 import { getQboAuth, qboApi } from '@/lib/qbo'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       doors = doorWhitelist ? allDoors.filter(d => doorWhitelist.has(d.id)) : allDoors
     } catch { /* doors optional */ }
     try {
-      const events = await listBrivoEvents(token, apiKey, 12)
+      const events = await listSiteBrivoEvents(siteId, 12, 2) // stored history + live top-up (241)
       activity = events.map(e => ({
         id: e.id,
         label: e.actor ? `${e.action} — ${e.actor}` : e.action,

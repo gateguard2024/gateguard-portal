@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getSiteBrivoToken, listBrivoEvents } from '@/lib/brivo'
+import { recentSiteEvents } from '@/lib/brivo-events-store'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,8 +15,8 @@ function categorize(action: string): { cat: 'access' | 'denied' | 'admin' | 'sch
 }
 
 // GET /api/portal/[slug]/events?days=7 — PIN-gated. Categorized access events
-// from the site's Brivo account (same source as the dashboard Event Tracker,
-// just more of them + buckets for the filter chips).
+// for the property: up to 30 days from the stored history (synced hourly from
+// Brivo, migration 241) + a live top-up — buckets for the filter chips.
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const v = await verifyPortal(req, params.slug)
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
@@ -25,8 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const days = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get('days') || 7)))
 
   try {
-    const { token, apiKey } = await getSiteBrivoToken(v.portal.site_id)
-    const raw = await listBrivoEvents(token, apiKey, 100, days)
+    const raw = await recentSiteEvents(v.portal.site_id, { days, limit: days > 7 ? 1000 : 300 })
     const events = raw.map(e => {
       const { cat, tone } = categorize(e.action)
       const d = e.occurred ? new Date(e.occurred) : null
