@@ -161,15 +161,17 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
           </div>
         </div>
 
-        {/* status: Open · Contacting · Stuck · Lost */}
+        {/* status: Open · Contacting · Stuck · Lost — or Won once it's an opportunity */}
         <div style={{ marginTop: 12 }}>
-          <LeadStatusBar status={leadStatusOf(lead)} reason={lead.stuck_reason} onSet={setStatus} />
+          {leadStatusOf(lead) === 'won'
+            ? <div style={{ padding: '8px 11px', borderRadius: 9, background: 'rgba(26,127,55,0.10)', color: '#1A7F37', fontSize: 13, fontWeight: 600 }}><Check size={13} style={{ verticalAlign: -2, marginRight: 4 }} />Won — this lead is now an opportunity</div>
+            : <LeadStatusBar status={leadStatusOf(lead)} reason={lead.stuck_reason} onSet={setStatus} />}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             {lead.bucket === 'sent_info' && <span style={{ ...chip, color: '#047857', background: 'rgba(16,185,129,0.12)' }}><Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Info sent</span>}
             <span style={{ flex: 1 }} />
             <button type="button" onClick={() => void onConvert()} disabled={!!busy}
               style={{ fontSize: 12.5, fontWeight: 650, padding: '7px 12px', border: 0, cursor: 'pointer', fontFamily: M.font, borderRadius: 8, background: N.brand, color: '#fff' }}>
-              Make it an opportunity →
+              {leadStatusOf(lead) === 'won' ? 'Open opportunity →' : 'Make it an opportunity →'}
             </button>
           </div>
         </div>

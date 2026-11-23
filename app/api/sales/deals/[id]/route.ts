@@ -20,6 +20,8 @@ const TEXT = ['name', 'account_name', 'management_co', 'owner_entity', 'property
   'forecast_cat', 'opp_type', 'source', 'description', 'notes', 'next_step', 'incumbent_vendor', 'dtv_package', 'isp_service', 'quote_url', 'quote_status', 'manager_name',
   'pain_points', 'budget_status']
 const BUDGET = ['confirmed', 'not_confirmed', 'unknown']
+// Columns added by migration 196 (deal qualification).
+const Q196 = ['decision_date', 'budget_status', 'pain_points', 'competing_vendors', 'target_install_date', 'year_built', 'buildings', 'occupancy_pct', 'aria_property_id']
 const INTS = ['units', 'vehicle_gates', 'pedestrian_gates', 'amenity_doors', 'existing_cameras', 'new_cameras', 'probability', 'year_built', 'buildings', 'occupancy_pct']
 const DATES = ['close_date', 'incumbent_contract_end', 'mdu_contract_expiry', 'decision_date', 'target_install_date']
 const ARRAYS = ['tags', 'interests', 'competing_vendors']
@@ -88,7 +90,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const upd: Row = {}
   const bad = (m: string) => NextResponse.json({ error: m }, { status: 400 })
   for (const [k, v] of Object.entries(body)) {
-    if (TEXT.includes(k)) upd[k] = v === null || v === '' ? null : String(v).slice(0, 4000)
+    if (k === 'name') {
+      const n = String(v ?? '').trim()
+      if (!n) return NextResponse.json({ error: 'The opportunity needs a name.' }, { status: 400 })
+      upd.name = n.slice(0, 200)
+    } else if (TEXT.includes(k)) upd[k] = v === null || v === '' ? null : String(v).slice(0, 4000)
     else if (INTS.includes(k) || MONEY.includes(k)) {
       if (MONEY.includes(k) && !user.canViewFinancials) return NextResponse.json({ error: 'You do not have access to deal values.' }, { status: 403 })
       if (v === null || v === '') upd[k] = null
@@ -123,7 +129,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   upd.updated_at = new Date().toISOString()
 
   const { data, error } = await sb.from('opportunities').update(upd).eq('id', deal.id).select('*').single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // A field whose column isn't in this database yet → say which update adds it.
+    const col = /Could not find the '([a-z_]+)' column/i.exec(error.message)?.[1] ?? /column "?([a-z_]+)"? .*does not exist/i.exec(error.message)?.[1]
+    if (col) {
+      const mig = Q196.includes(col) ? ' — run migration 196 (deal qualification) on this database' : ''
+      return NextResponse.json({ error: `${LABEL[col] ?? col.replace(/_/g, ' ')} can't be saved yet: the database is missing that column${mig}.` }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   const changed = Object.keys(upd).filter(k => !['updated_at', 'owner_name', 'owner_initials'].includes(k) && String(deal[k] ?? '') !== String(upd[k] ?? ''))
   if (changed.length) {

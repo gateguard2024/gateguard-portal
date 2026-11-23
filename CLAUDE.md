@@ -724,7 +724,7 @@ Remaining portal pages still to build in the approved style: **Doors/Gates**, **
 - ✅ **Inngest background enrichment** (`inngest/functions/enrich-property.ts`) — `aria-enrich-property` function; v4 API: `triggers` array in options object (not separate 3rd arg); calls `/api/aria/research/deep` with `x-service-key` header to bypass Clerk; 90s timeout; 2 retries
 - ✅ **Inngest infrastructure** — `inngest/client.ts` + `app/api/inngest/route.ts` (serves `enrichProperty`); `middleware.ts` bypasses Clerk for `/api/inngest`; Vercel integration connected (gateguard-portal only); `ARIA_SERVICE_KEY` env var added; custom production domain `portal.gateguard.co` configured in Inngest → avoids preview URL sync failure
 - ✅ **Supabase Realtime subscription** (`app/aria/page.tsx`) — `useEffect` on `cacheStatus === 're-enriching'`; `postgres_changes` UPDATE subscription on `aria_properties` filtered by `id=eq.${propertyId}`; fires `applyFreshResult()` (re-fetches cache, updates UI, sets `cacheStatus → 'fresh'`); 30s fallback poll detects freshness via `cache_age_hours < 1` OR `< snapshotAgeHours - 0.5`; 3-minute hard timeout; channel cleaned up on unmount
-- ✅ **`aria_properties` added to `supabase_realtime` publication** — done on prod Supabase (Database → Publications → supabase_realtime → Add tables → aria_properties). Beta Supabase still needs this step
+- ✅ **`aria_properties` added to `supabase_realtime` publication** — done on prod AND beta Supabase (confirmed Nov 23 2026 — re-adding errors 42710 "already member")
 - ✅ **2035 PipelinePanel redesign** (`app/aria/page.tsx`) — dark radial navy-to-black HUD background; 48px grid overlay; animated scan line; HUD corner brackets; `PIPELINE_PARTICLES` fixed array (no `Math.random()` — prevents position teleporting on re-render); central ARIA logo with 3 orbital rings at 7s/13s/21s speeds (middle: reverse, different colors); 5 phase nodes with inline gradient styles; connector beams with `aria-fill`/`aria-shimmer` animations; status pill; "Claude Sonnet · Synthesis Mode Active" footer in phase 5
 
 ### Completed — May 31, 2026 (session 12) — ARIA v7.4: Data Quality + Provider Catalog
@@ -762,8 +762,6 @@ Remaining portal pages still to build in the approved style: **Doors/Gates**, **
 - Migration 103: run on beta then prod (`ALTER TABLE tracker_groups ADD COLUMN entity_type, entity_id; DROP NOT NULL org_id`)
 - Migration 104: run on beta then prod (`ALTER TABLE tracker_items ADD COLUMN owner_user_id, due_date`)
 
-### Pending — Beta Supabase Realtime
-- Add `aria_properties` to `supabase_realtime` publication on **beta** Supabase project (only done on prod)
 
 ### Completed — May 29, 2026 (session 9) — ARIA v7.2: dbPhase2Seed Fix + SCOUT 6-Month Campaign
 - ✅ ARIA engine v7.2 (`app/api/aria/research/deep/route.ts`):

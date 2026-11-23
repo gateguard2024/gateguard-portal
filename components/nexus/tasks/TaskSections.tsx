@@ -25,6 +25,8 @@ const CSS = `
 .tks-x{opacity:0;border:0;background:none;color:${T.ink3};cursor:pointer;width:28px;height:28px;border-radius:6px;font-size:16px;flex:none}
 .tks-ck:hover .tks-x,.tks-sub:hover .tks-x,.tks-file:hover .tks-x,.tks-x:focus-visible{opacity:1}
 .tks-x:hover{background:rgba(0,0,0,.06)}
+.tks-edit{flex:1;min-width:0;border:1px solid ${T.blue};border-radius:6px;padding:4px 8px;font-family:inherit;font-size:14px;color:${T.ink};outline:none;background:#fff}
+@media (hover:none){.tks-x{opacity:1}}
 .tks-add{display:flex;align-items:center;gap:10px;padding:0 6px}
 .tks-add input{border:0;font-family:inherit;font-size:14px;min-height:36px;flex:1;outline:none;background:none;color:${T.ink}}
 .tks-sub{display:grid;grid-template-columns:20px 1fr auto auto auto 28px;gap:10px;align-items:center;min-height:42px;padding:0 6px;border-bottom:1px solid rgba(0,0,0,.05)}
@@ -71,6 +73,8 @@ export function Checklist({ taskId, items, canEdit, onChanged, onFail }: { taskI
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [local, setLocal] = useState<ChecklistItem[] | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
   const list = local ?? items
   const done = list.filter(i => i.done).length
   const shown = hideDone ? list.filter(i => !i.done) : list
@@ -80,6 +84,13 @@ export function Checklist({ taskId, items, canEdit, onChanged, onFail }: { taskI
   const toggle = (i: ChecklistItem) => { setLocal(list.map(x => (x.id === i.id ? { ...x, done: !x.done } : x))); void run(() => api('PATCH', url, { item_id: i.id, done: !i.done })) }
   const remove = (i: ChecklistItem) => { setLocal(list.filter(x => x.id !== i.id)); void run(() => api('DELETE', `${url}?item_id=${i.id}`)) }
   const add = () => { const t = draft.trim(); if (!t) return; setDraft(''); void run(() => api('POST', url, { title: t })) }
+  const startEdit = (i: ChecklistItem) => { if (!canEdit) return; setEditId(i.id); setEditText(i.title) }
+  const saveEdit = (i: ChecklistItem) => {
+    const t = editText.trim(); setEditId(null)
+    if (!t || t === i.title) return
+    setLocal(list.map(x => (x.id === i.id ? { ...x, title: t } : x)))
+    void run(() => api('PATCH', url, { item_id: i.id, title: t }))
+  }
   const drop = (targetId: string) => {
     if (!dragId || dragId === targetId) return
     const order = list.map(x => x.id).filter(id => id !== dragId)
@@ -95,11 +106,16 @@ export function Checklist({ taskId, items, canEdit, onChanged, onFail }: { taskI
       <div>
         {shown.map(i => (
           <div key={i.id} className={`tks-ck${overId === i.id ? ' drag-over' : ''}`}
-            draggable={canEdit} onDragStart={() => setDragId(i.id)} onDragEnd={() => { setDragId(null); setOverId(null) }}
+            draggable={canEdit && editId !== i.id} onDragStart={() => setDragId(i.id)} onDragEnd={() => { setDragId(null); setOverId(null) }}
             onDragOver={e => { if (dragId) { e.preventDefault(); setOverId(i.id) } }} onDragLeave={() => setOverId(null)} onDrop={e => { e.preventDefault(); drop(i.id); setOverId(null) }}>
             {canEdit && <span className="tks-grip" aria-hidden="true">⋮⋮</span>}
             <input type="checkbox" checked={i.done} disabled={!canEdit} onChange={() => toggle(i)} aria-label={`${i.done ? 'Uncheck' : 'Check'}: ${i.title}`} />
-            <span style={{ flex: 1, ...(i.done ? { color: T.ink3, textDecoration: 'line-through' } : {}) }}>{i.title}</span>
+            {editId === i.id
+              ? <input className="tks-edit" autoFocus value={editText} aria-label="Edit checklist item" onChange={e => setEditText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(i) } if (e.key === 'Escape') setEditId(null) }} onBlur={() => saveEdit(i)} />
+              : <span style={{ flex: 1, cursor: canEdit ? 'text' : undefined, ...(i.done ? { color: T.ink3, textDecoration: 'line-through' } : {}) }}
+                  onClick={() => startEdit(i)} title={canEdit ? 'Click to edit' : undefined}>{i.title}</span>}
+            {canEdit && editId !== i.id && <button type="button" className="tks-x" onClick={() => startEdit(i)} aria-label={`Edit ${i.title}`} title="Edit">✎</button>}
             {canEdit && <button type="button" className="tks-x" onClick={() => remove(i)} aria-label={`Remove ${i.title}`}>×</button>}
           </div>
         ))}
@@ -121,7 +137,14 @@ export function Subtasks({ taskId, items, canEdit, onOpen, onChanged, onAdded, o
 }) {
   const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
   const done = items.filter(s => s.status === 'done').length
+  const rename = async (s: Subtask) => {
+    const t = editText.trim(); setEditId(null)
+    if (!t || t === s.title) return
+    try { await api('PATCH', `/api/todos/${s.id}`, { title: t }); onChanged(s.id, { title: t }) } catch (e) { onFail(e) }
+  }
   const toggle = async (s: Subtask) => {
     const status = s.status === 'done' ? 'open' : 'done'
     try { await api('PATCH', `/api/todos/${s.id}`, { status }); onChanged(s.id, { status }) } catch (e) { onFail(e) }
@@ -140,13 +163,16 @@ export function Subtasks({ taskId, items, canEdit, onOpen, onChanged, onAdded, o
           return (
             <div key={s.id} className="tks-sub">
               <input type="checkbox" checked={s.status === 'done'} disabled={!canEdit} onChange={() => void toggle(s)} aria-label={`Done: ${s.title}`} />
-              <button type="button" className="tks-title" onClick={() => onOpen(s.id)} style={s.status === 'done' ? { color: T.ink3, textDecoration: 'line-through' } : undefined}>
-                <span className="tks-key">{s.key}</span>{s.title}
-              </button>
+              {editId === s.id
+                ? <input className="tks-edit" autoFocus value={editText} aria-label="Edit subtask title" onChange={e => setEditText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void rename(s) } if (e.key === 'Escape') setEditId(null) }} onBlur={() => void rename(s)} />
+                : <button type="button" className="tks-title" onClick={() => onOpen(s.id)} title="Open the subtask (date, owner, details)" style={s.status === 'done' ? { color: T.ink3, textDecoration: 'line-through' } : undefined}>
+                    <span className="tks-key">{s.key}</span>{s.title}
+                  </button>}
               <StatusPill s={s.status} />
               <span className="tk-av" title={s.assigned_to_name ?? 'Unassigned'}>{initials(s.assigned_to_name)}</span>
               <span className={`tk-due${late ? ' late' : ''}`}>{fmtDue(s.due_date)}</span>
-              <span />
+              {canEdit && editId !== s.id ? <button type="button" className="tks-x" onClick={() => { setEditId(s.id); setEditText(s.title) }} aria-label={`Rename ${s.title}`} title="Rename">✎</button> : <span />}
             </div>
           )
         })}

@@ -211,17 +211,26 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // ── Lead conversion: mark the lead converted + carry its history forward ────
+    // ── Lead conversion: close the lead as Won (off the lists, into Leads → Won) ──
+    // + carry its history forward. Awaited and checked — a lead left open after it
+    // became an opportunity shows up twice.
     if (lead_id && data?.id) {
-      try {
-        await supabase.from('leads')
-          .update({ opportunity_id: data.id, converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      const nowIso = new Date().toISOString()
+      const { error: leadErr } = await supabase.from('leads')
+        .update({ opportunity_id: data.id, stage: 'converted', converted_at: nowIso, stuck_at: null, stuck_reason: null, updated_at: nowIso })
+        .eq('id', lead_id)
+      if (leadErr) {
+        // Older database without the Stuck columns → retry without them.
+        const { error: retryErr } = await supabase.from('leads')
+          .update({ opportunity_id: data.id, stage: 'converted', converted_at: nowIso, updated_at: nowIso })
           .eq('id', lead_id)
-        await Promise.all([
-          supabase.from('crm_activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
-          supabase.from('attachments').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
-        ])
-      } catch { /* conversion bookkeeping is best-effort */ }
+        if (retryErr) console.error('opportunities: lead not closed as won', retryErr.message)
+      }
+      const moved = await Promise.all([
+        supabase.from('crm_activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
+        supabase.from('attachments').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
+      ])
+      for (const m of moved) if (m.error) console.error('opportunities: lead history not carried over', m.error.message)
     }
 
     return NextResponse.json(data, { status: 201 })

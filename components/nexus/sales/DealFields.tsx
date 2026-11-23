@@ -107,6 +107,7 @@ export function DealFields({ dealId, d, save, contactCall, onChanged, reload, se
 
   const deal_ = (
     <section className="dp-sec"><h4>Deal</h4><div className="dp-grid">
+      <Field label="Opportunity name" k="name" value={deal.name} onSave={save} />
       <Field label="Expected close" k="close_date" kind="date" value={deal.close_date} onSave={save} />
       {can.reassign
         ? <Field label="Owner" k="rep_id" kind={{ options: d.reps.map(r => ({ value: r.id, label: r.name })) }} value={deal.rep_id} onSave={save} />

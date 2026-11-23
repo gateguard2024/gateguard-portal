@@ -122,7 +122,9 @@ export function DealPanel({ dealId, onClose, onMoveRequest, onChanged, onOpenFul
 
   const steps_ = (
     <section className="dp-sec"><h4>Next steps</h4>
-      {openSteps.length === 0 && <div className="sb-act none" style={{ marginBottom: 8 }}>! No next step planned</div>}
+      {openSteps.length === 0 && (card.next?.type === 'task'
+        ? <div className="sb-act" style={{ marginBottom: 8 }}>Task: {card.next.subject}{card.next.due_at ? ` · ${fmtDate(String(card.next.due_at).slice(0, 10))}` : ''}</div>
+        : <div className="sb-act none" style={{ marginBottom: 8 }}>! No next step planned</div>)}
       {openSteps.map(a => {
         const late = a.due_at && new Date(a.due_at).getTime() < Date.now() && localISO(new Date(a.due_at)) < localISO()
         return (

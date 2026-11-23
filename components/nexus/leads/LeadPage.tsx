@@ -3,7 +3,7 @@
 /**
  * Lead page — the full-screen lead record, same look as a deal's page (DealPage).
  *   Header: name, who / where / rep, Call · Email · Text · ARIA · Not now · Make it an opportunity
- *   Status: Open · Contacting · Stuck · Lost (LeadStatusBar — Stuck / Lost ask why)
+ *   Status: Open · Contacting · Stuck · Lost (LeadStatusBar — Stuck / Lost ask why); Won once it's an opportunity
  *   Numbers: score, est. $/mo, next step, last touch, touches, added, rep
  *   Left:   details (edit) + sizing      Middle: log call / note / follow-up + coming up + timeline
  *   Right:  emails & texts with them (Nexus Mail) · why the score · related opportunities / surveys / files
@@ -196,14 +196,14 @@ export function LeadPage({ leadId, canReassign, onClose, onOpenDeal }: {
         {lead.email && <a className="dpg-dark" href={`mailto:${lead.email}`}>✉ Email</a>}
         {lead.phone && <a className="dpg-dark" href={`sms:${lead.phone}`}>💬 Text</a>}
         <a className="dpg-dark" href={`/aria?q=${encodeURIComponent([lead.name, lead.location].filter(Boolean).join(' '))}`}>{lead.researched ? 'ARIA intel' : 'Research in ARIA'}</a>
-        {!lead.snoozed_until && status !== 'lost' && <button type="button" className="dpg-dark" onClick={() => setSnz(!snz)}>Not now…</button>}
+        {!lead.snoozed_until && status !== 'lost' && status !== 'won' && <button type="button" className="dpg-dark" onClick={() => setSnz(!snz)}>Not now…</button>}
         {dealId
           ? <button type="button" className="dpg-dark g" onClick={() => onOpenDeal(String(dealId))}>Open the opportunity →</button>
           : <button type="button" className="dpg-dark b" disabled={busy === 'deal'} onClick={() => void convert()}>{busy === 'deal' ? 'Making the opportunity…' : 'Make it an opportunity →'}</button>}
       </div>
     </div>
 
-    <div className="lpg-st"><LeadStatusBar status={status} reason={lead.stuck_reason} onSet={setStatus} size="lg" dark /></div>
+    {!dealId && <div className="lpg-st"><LeadStatusBar status={status} reason={lead.stuck_reason} onSet={setStatus} size="lg" dark /></div>}
 
     {status === 'lost' && <div className="lpg-ban lost">This lead is <b>Lost</b>{lostReason ? ` — ${lostReason.replace(/^Lost — /, '')}` : ''}. It’s off your lists; pick Open or Contacting above to bring it back.</div>}
     {lead.snoozed_until && (
@@ -212,7 +212,7 @@ export function LeadPage({ leadId, canReassign, onClose, onOpenDeal }: {
         <button type="button" className="dpg-dark" disabled={busy === 'snooze'} onClick={() => void act('snooze', { months: 0 }, 'Back on the list')}>Bring back now</button>
       </div>
     )}
-    {dealId && <div className="lpg-ban deal">This lead is already an opportunity — work it from the opportunity page.</div>}
+    {dealId && <div className="lpg-ban deal"><span style={{ flex: 1 }}>This lead is <b>Won</b> — it became an opportunity. It’s off your working lists and in Leads → Won; work it from the opportunity page.</span><button type="button" className="dpg-dark g" onClick={() => onOpenDeal(String(dealId))}>Open the opportunity →</button></div>}
     {snz && (
       <div className="dpg-card" style={{ padding: 14, maxWidth: 640 }}>
         <div className="dpg-ut">Not now — bring it back in</div>

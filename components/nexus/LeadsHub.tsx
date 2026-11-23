@@ -8,14 +8,15 @@
  *     the reasons shown, so you work the right ones first.
  *   • Every lead shows its NEXT STEP — and leads with none (or overdue) are called out.
  *   • Speed to lead, pipeline $/mo and conversion at the top.
- *   • Views: Hot, No next step, Overdue, New, Stale, by stage, Mine.
+ *   • Views: Hot, No next step, Overdue, New, Stale, by stage, Mine — plus Closed:
+ *     Won (made an opportunity, automatically) and Lost (?closed=won|lost).
  *   • List or Board (drag a card to change stage, or onto "Opportunity" to convert).
  *   • Lead panel: call / email / text, log a call in two taps, follow-up chips,
  *     sizing → est. MRR, timeline, their emails from Nexus Mail, ARIA research.
  * Reads /api/nexus/leads; actions go through /api/nexus/opps/lead-window/[id].
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, X, Loader2, Phone, Mail, Filter, RefreshCw } from 'lucide-react'
+import { Search, Plus, X, Loader2, Phone, Mail, Filter, RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
 import { M, N } from '@/components/nexus/mail/mailShared'
 import { LeadPanel } from '@/components/nexus/leads/LeadPanel'
 import { NewLeadModal, FoundRow, type FoundLead } from '@/components/nexus/leads/NewLeadModal'
@@ -32,9 +33,11 @@ export type LeadRow = {
   next_step: { title: string; due: string; kind: string } | null; overdue: boolean; score: number; why: string[]; researched: boolean
   snoozed_until?: string | null; snooze_reason?: string | null
   /** Open · Contacting · Stuck (blocked, still worked) · Lost — set by the rep. */
-  status?: 'open' | 'contacting' | 'stuck' | 'lost'; stuck_since?: string | null; stuck_reason?: string | null; opportunity_id?: string | null
+  status?: 'open' | 'contacting' | 'stuck' | 'lost' | 'won'; stuck_since?: string | null; stuck_reason?: string | null; opportunity_id?: string | null
 }
-type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'stuck' | 'identified' | 'contacted' | 'sent_info' | 'stale' | 'snoozed', number>
+type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'stuck' | 'identified' | 'contacted' | 'sent_info' | 'stale' | 'snoozed' | 'won' | 'lost', number>
+/** A closed lead (Won / Lost list) — light row from GET /api/nexus/leads?closed=won|lost. */
+type ClosedLead = { id: string; name: string; company: string | null; contact: string | null; location: string | null; owner: string | null; mrr: number | null; status: 'won' | 'lost'; closed_at: string | null; reason: string | null; opportunity_id: string | null }
 type Kpis = { open: number; new_week: number; speed_hours: number | null; due_today: number; pipeline_mrr: number; conversion_pct: number; converted_90: number }
 type View = keyof Counts
 
@@ -51,7 +54,10 @@ const VIEWS: { id: View; label: string; color: string; icon: unknown; hint: stri
   { id: 'sent_info', label: 'Info sent', color: '#34D399', icon: Send, hint: '' },
   { id: 'stale', label: 'Gone quiet (14+ days)', color: '#8FA3B8', icon: Snowflake, hint: '' },
   { id: 'snoozed', label: 'Not now (snoozed)', color: '#64748B', icon: ClockI, hint: 'Comes back on its revisit date' },
+  { id: 'won', label: 'Won', color: '#30D158', icon: CheckCircle2, hint: 'Made into an opportunity' },
+  { id: 'lost', label: 'Lost', color: '#8E8E93', icon: XCircle, hint: 'Marked lost' },
 ]
+const isClosedView = (v: View): v is 'won' | 'lost' => v === 'won' || v === 'lost'
 const STAGES: { id: LeadRow['bucket']; label: string; color: string; set: string }[] = [
   { id: 'identified', label: 'Open', color: '#94A3B8', set: 'new' },
   { id: 'contacted', label: 'Contacting', color: '#38BDF8', set: 'contacted' },
@@ -104,6 +110,25 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
   const [toast, setToast] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  // Won / Lost lists load when you open them.
+  const [closed, setClosed] = useState<{ kind: 'won' | 'lost'; rows: ClosedLead[] } | null>(null)
+  const [closedBusy, setClosedBusy] = useState(false)
+  const loadClosed = useCallback(async (kind: 'won' | 'lost') => {
+    setClosedBusy(true)
+    try {
+      const r = await fetch(`/api/nexus/leads?closed=${kind}`, { cache: 'no-store' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(d?.error ?? 'Could not load those leads.'); return }
+      setClosed({ kind, rows: Array.isArray(d.leads) ? d.leads : [] })
+    } finally { setClosedBusy(false) }
+  }, [])
+  useEffect(() => { if (isClosedView(view)) { setSelId(null); void loadClosed(view) } }, [view, loadClosed])
+  const closedRows = useMemo(() => {
+    if (!isClosedView(view) || closed?.kind !== view) return []
+    const t = q.trim().toLowerCase()
+    return t ? closed.rows.filter((l) => [l.name, l.company, l.contact, l.location, l.owner, l.reason].some((v) => String(v ?? '').toLowerCase().includes(t))) : closed.rows
+  }, [closed, view, q])
+  const openClosed = (l: ClosedLead) => { if (l.status === 'won' && l.opportunity_id) setDealId(l.opportunity_id); else setPageId(l.id) }
 
   useEffect(() => { try { const v = localStorage.getItem('gg_leads_layout'); if (v === 'board' || v === 'list') setLayout(v) } catch { /* ignore */ } }, [])
   const saveLayout = (l: 'list' | 'board') => { setLayout(l); try { localStorage.setItem('gg_leads_layout', l) } catch { /* ignore */ } }
@@ -224,8 +249,9 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
     void load(true)
   }
 
-  if (dealId) return <DealPage dealId={dealId} onClose={() => { setDealId(null); void load(true) }} />
-  if (pageId) return <LeadPage leadId={pageId} canReassign={canReassign} onClose={() => { setPageId(null); void load(true) }}
+  const reloadAll = () => { void load(true); if (isClosedView(view)) void loadClosed(view) }
+  if (dealId) return <DealPage dealId={dealId} onClose={() => { setDealId(null); reloadAll() }} />
+  if (pageId) return <LeadPage leadId={pageId} canReassign={canReassign} onClose={() => { setPageId(null); reloadAll() }}
     onOpenDeal={(id) => { setPageId(null); setDealId(id); void load(true) }} />
 
   const kpi = (label: string, value: string, sub: string, color: string, icon: React.ReactNode) => (
@@ -267,6 +293,7 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
             return (
               <React.Fragment key={v.id}>
                 {i === 11 && <div style={{ height: 10 }} />}
+                {i === 12 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>Closed</div>}
                 {i === 7 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>By stage</div>}
                 <button type="button" onClick={() => setView(v.id)} title={v.hint || undefined} aria-current={on ? 'page' : undefined} className={on ? '' : 'hover:bg-white/[0.06]'}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 2, borderRadius: 9, border: 0, cursor: 'pointer', background: on ? N.sel : 'transparent', boxShadow: on ? `inset 3px 0 0 ${v.color}` : undefined, color: on ? '#fff' : N.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 500, textAlign: 'left' }}>
@@ -330,7 +357,16 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
             {err && <div role="alert" style={{ margin: '0 14px 8px', padding: '9px 12px', borderRadius: 10, background: '#FDECEA', color: M.red, fontSize: 13 }}>{err}</div>}
 
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 4px 20px' }}>
-              {loading && !rows.length ? (
+              {isClosedView(view) ? (
+                closedBusy && closed?.kind !== view
+                  ? <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={20} className="animate-spin" /></div>
+                  : closedRows.length === 0
+                  ? <div style={{ padding: '50px 20px', textAlign: 'center', color: M.ink3, fontSize: 13.5 }}>{q ? 'No match in this list.' : view === 'won' ? 'No won leads yet. A lead lands here when you make it an opportunity.' : 'No lost leads.'}</div>
+                  : <>
+                      <div style={{ margin: '0 10px 4px', fontSize: 12.5, color: M.ink3 }}>{view === 'won' ? 'Leads made into opportunities — tap one to open its opportunity.' : 'Leads marked lost — tap one to see it, or bring it back.'}{(counts?.[view] ?? 0) > closedRows.length && !q ? ` Showing the newest ${closedRows.length}.` : ''}</div>
+                      {closedRows.map((l) => <ClosedCard key={l.id} l={l} onOpen={() => openClosed(l)} />)}
+                    </>
+              ) : loading && !rows.length ? (
                 <div style={{ padding: 40, textAlign: 'center', color: M.ink3 }}><Loader2 size={20} className="animate-spin" /></div>
               ) : layout === 'list' ? (
                 <>
@@ -432,6 +468,31 @@ function LeadCard({ l, selected, compact, onOpen }: { l: LeadRow; selected: bool
             {!l.phone && l.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Mail size={11} /> {l.email}</span>}
           </span>
         )}
+      </span>
+    </button>
+  )
+}
+
+function ClosedCard({ l, onOpen }: { l: ClosedLead; onOpen: () => void }) {
+  const t = tint(l.name)
+  const won = l.status === 'won'
+  const when = l.closed_at ? new Date(l.closed_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : null
+  return (
+    <button type="button" onClick={onOpen} id={`lead-${l.id}`}
+      style={{ display: 'flex', gap: 12, width: 'calc(100% - 20px)', margin: '6px 10px', padding: '12px 14px', textAlign: 'left', cursor: 'pointer', fontFamily: M.font, background: '#fff', borderRadius: 12, border: `1px solid ${N.cardLine}`, boxShadow: N.cardShadow }}>
+      <span aria-hidden style={{ width: 40, height: 40, borderRadius: 40, background: `linear-gradient(140deg, ${t}, ${t}B3)`, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 650, flexShrink: 0, opacity: won ? 1 : 0.6 }}>{initials(l.name)}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 650, color: M.ink, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{l.name}</span>
+        <span style={{ display: 'block', fontSize: 12.5, color: M.ink2, marginTop: 2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {[l.contact, l.company && l.company !== l.name ? l.company : null, l.location].filter(Boolean).join(' · ') || 'No contact'}
+        </span>
+        <span style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ ...chip, color: won ? '#1A7F37' : '#3A3A3C', background: won ? 'rgba(48,209,88,0.14)' : '#EEF1F6' }}>{won ? 'Won' : 'Lost'}{when ? ` · ${when}` : ''}</span>
+          {!won && l.reason && <span style={{ ...chip }}>{l.reason}</span>}
+          {l.mrr != null && <span style={{ ...chip, color: '#047857', background: 'rgba(16,185,129,0.12)' }}>{money(l.mrr)}/mo</span>}
+          {l.owner && <span style={{ fontSize: 11.5, color: M.ink3 }}>Rep: {l.owner}</span>}
+          {won && <span style={{ fontSize: 12, fontWeight: 600, color: '#0071E3', marginLeft: 'auto' }}>{l.opportunity_id ? 'Open opportunity →' : 'Open lead →'}</span>}
+        </span>
       </span>
     </button>
   )

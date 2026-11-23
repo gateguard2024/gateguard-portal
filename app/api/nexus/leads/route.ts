@@ -11,10 +11,17 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 const DAY = 86400_000
 const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason, stuck_at, stuck_reason, lost_at, opportunity_id'
 type Bucket = 'identified' | 'contacted' | 'sent_info'
-/** The status a rep sets: Open (not contacted yet) · Contacting · Stuck (blocked, still worked) · Lost. */
-type LeadStatus = 'open' | 'contacting' | 'stuck' | 'lost'
-function statusOf(l: { stuck_at?: string | null; lost_at?: string | null; stage?: string | null }, bucket: Bucket): LeadStatus {
-  if (l.lost_at || /^(lost|dead)$/i.test(l.stage ?? '')) return 'lost'
+/** The status a rep sets: Open (not contacted yet) · Contacting · Stuck (blocked, still worked) · Lost.
+ *  Won is never picked — a lead is Won the moment it's made an opportunity. Won and Lost
+ *  leads are closed: off the working lists, on their own Won / Lost lists (?closed=won|lost). */
+type LeadStatus = 'open' | 'contacting' | 'stuck' | 'lost' | 'won'
+const LOST_STAGE = /^(lost|dead|closed|closed[_ ]?lost)$/i
+const WON_STAGE = /^(converted|won|closed[_ ]?won)$/i
+const LOST_STAGES = 'lost,dead,closed,closed_lost'
+const WON_STAGES = 'converted,won,closed_won'
+function statusOf(l: { stuck_at?: string | null; lost_at?: string | null; stage?: string | null; opportunity_id?: string | null }, bucket: Bucket): LeadStatus {
+  if (l.opportunity_id || WON_STAGE.test(l.stage ?? '')) return 'won'
+  if (l.lost_at || LOST_STAGE.test(l.stage ?? '')) return 'lost'
   if (l.stuck_at) return 'stuck'
   return bucket === 'identified' ? 'open' : 'contacting'
 }
@@ -59,6 +66,11 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams
   const find = sp.get('find')
   if (find != null) return findLeads(find)
+  const closed = sp.get('closed')
+  if (closed != null) {
+    if (closed !== 'won' && closed !== 'lost') return NextResponse.json({ error: 'closed must be won or lost.' }, { status: 400 })
+    return closedLeads(closed)
+  }
   // ?id=<lead> → that one lead, scored, whatever its status (open, stuck, lost, snoozed, a deal) — for the lead page.
   const oneId = sp.get('id')
   if (oneId != null && !/^[0-9a-f-]{36}$/i.test(oneId)) return NextResponse.json({ error: 'Bad lead id.' }, { status: 400 })
@@ -84,6 +96,17 @@ export async function GET(req: Request) {
   convQ = applyOrgScope(convQ, scope)
   convQ = applyAssignedScope(convQ, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
   const convP = convQ
+  // Won / Lost list sizes for the view tabs (head counts, run alongside the list).
+  const closedCountQ = (kind: 'won' | 'lost') => {
+    let q = supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null)
+    q = kind === 'won'
+      ? q.or(`opportunity_id.not.is.null,stage.in.(${WON_STAGES})`)
+      : q.is('opportunity_id', null).or(`lost_at.not.is.null,stage.in.(${LOST_STAGES})`)
+    q = applyOrgScope(q, scope)
+    return applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
+  }
+  const wonCountP = oneId ? Promise.resolve({ count: 0 }) : closedCountQ('won')
+  const lostCountP = oneId ? Promise.resolve({ count: 0 }) : closedCountQ('lost')
   let { data: rows, error } = await listQ(LEAD_COLS)
   if (error && /column|does not exist|schema cache/i.test(error.message ?? '')) ({ data: rows, error } = await listQ('*'))
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -121,7 +144,7 @@ export async function GET(req: Request) {
     const res = await Promise.all(batch.map((h) => supabase.from('leads').update({ opportunity_id: h.opp }).eq('id', h.lead).is('opportunity_id', null)))
     for (const r of res) if (r.error) console.error('leads: link to deal failed', r.error.message)
   }
-  const leads = oneId ? allOpen : allOpen.filter((l) => !asDeal.has(l.id))
+  const leads = oneId ? allOpen : allOpen.filter((l) => !asDeal.has(l.id) && !LOST_STAGE.test(l.stage ?? '') && !WON_STAGE.test(l.stage ?? ''))
   const ids = leads.map((l) => l.id)
   const now = Date.now()
   const todayIso = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
@@ -199,7 +222,7 @@ export async function GET(req: Request) {
       // "Not now": off the working lists until this date (then back, with a revisit due).
       snoozed_until: l.snoozed_until && String(l.snoozed_until) > todayIso ? String(l.snoozed_until).slice(0, 10) : null,
       snooze_reason: l.snooze_reason ?? null,
-      status: statusOf(l, bucket),
+      status: statusOf({ ...l, opportunity_id: l.opportunity_id ?? (asDeal.has(l.id) ? linkedDeal.get(l.id) ?? 'deal' : null) }, bucket),
       stuck_since: l.stuck_at ?? null,
       stuck_reason: l.stuck_reason ?? null,
       opportunity_id: l.opportunity_id ?? (asDeal.has(l.id) ? linkedDeal.get(l.id) ?? null : null),
@@ -227,6 +250,8 @@ export async function GET(req: Request) {
     stale: out.filter((l) => (l.last_touch ? now - Date.parse(l.last_touch) > 14 * DAY : now - Date.parse(l.created_at) > 14 * DAY)).length,
     snoozed: snoozed.length,
     stuck: out.filter((l) => l.status === 'stuck').length,
+    won: (await wonCountP).count ?? 0,
+    lost: (await lostCountP).count ?? 0,
   }
 
   // Speed to lead: median hours from created → first contact, leads from the last 60 days.
@@ -249,6 +274,59 @@ export async function GET(req: Request) {
     converted_90: converted ?? 0,
   }
   return NextResponse.json({ leads: [...out, ...snoozed], counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+}
+
+// GET /api/nexus/leads?closed=won|lost → the closed leads, newest first (max 500).
+// Won = made into an opportunity (or an old converted/won stage). Lost = marked lost
+// (or an old lost/dead/closed stage) and never made an opportunity.
+async function closedLeads(kind: 'won' | 'lost') {
+  const user = await getCurrentUser()
+  if (!user.canViewCRM) return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
+  const scope = await resolveOrgScope(user)
+  const cols = 'id, property_name, company_name, contact_name, location, city, state, stage, unit_count, cameras, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, converted_at, lost_at, opportunity_id'
+  const run = (c: string) => {
+    let q = supabase.from('leads').select(c).is('deleted_at', null)
+    q = kind === 'won'
+      ? q.or(`opportunity_id.not.is.null,stage.in.(${WON_STAGES})`)
+      : q.is('opportunity_id', null).or(`lost_at.not.is.null,stage.in.(${LOST_STAGES})`)
+    q = applyOrgScope(q, scope)
+    q = applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (q as any).order('updated_at', { ascending: false }).limit(500)
+  }
+  let { data, error } = await run(cols)
+  if (error && /column|does not exist|schema cache/i.test(error.message ?? '')) ({ data, error } = await run('*'))
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data ?? []) as any[]
+
+  // Why it was lost = the newest "Status: Lost" note (set_status writes "Lost — <reason>").
+  const why = new Map<string, string>()
+  if (kind === 'lost' && rows.length) {
+    const ids = rows.map((l) => l.id)
+    for (let i = 0; i < ids.length; i += 150) {
+      const { data: acts, error: aErr } = await supabase.from('crm_activities').select('lead_id, body, created_at')
+        .in('lead_id', ids.slice(i, i + 150)).ilike('subject', 'Status: Lost%').order('created_at', { ascending: false }).limit(2000)
+      if (aErr) { console.error('closed leads: lost reasons', aErr.message); break }
+      for (const a of acts ?? []) if (!why.has(a.lead_id) && a.body) why.set(a.lead_id, String(a.body).replace(/^Lost\s*—\s*/, '').replace(/^Lead marked Lost\.$/, ''))
+    }
+  }
+  const leads = rows.map((l) => ({
+    id: l.id,
+    name: l.property_name || l.company_name || l.contact_name || 'Unnamed lead',
+    company: l.company_name ?? null,
+    contact: l.contact_name ?? null,
+    location: l.location || [l.city, l.state].filter(Boolean).join(', ') || null,
+    owner: l.assigned_to_name ?? null,
+    owner_id: l.assigned_to_user_id ?? null,
+    mrr: estMrr(l.unit_count ?? null, l.cameras ?? null, l.mrr ?? null),
+    status: kind,
+    closed_at: (kind === 'won' ? l.converted_at : l.lost_at) ?? l.updated_at ?? l.created_at,
+    reason: kind === 'lost' ? (why.get(l.id) || null) : null,
+    opportunity_id: l.opportunity_id ?? null,
+    created_at: l.created_at,
+  }))
+  return NextResponse.json({ leads, kind })
 }
 
 // GET /api/nexus/leads?find=wynne → every lead matching that name / contact / phone /
@@ -288,7 +366,7 @@ async function findLeads(raw: string) {
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
   const matches = rows.map((l) => {
     const dealId = l.opportunity_id || byLead.get(l.id) || byName.get(norm(l.property_name || l.company_name)) || null
-    const status = dealId ? 'deal' : l.lost_at || /^(lost|dead)$/i.test(l.stage ?? '') ? 'lost' : l.snoozed_until && String(l.snoozed_until) > today ? 'snoozed' : 'open'
+    const status = dealId || WON_STAGE.test(l.stage ?? '') ? 'deal' : l.lost_at || LOST_STAGE.test(l.stage ?? '') ? 'lost' : l.snoozed_until && String(l.snoozed_until) > today ? 'snoozed' : 'open'
     return {
       id: l.id, name: l.property_name || l.company_name || l.contact_name || 'Unnamed lead',
       contact: l.contact_name ?? null, company: l.company_name ?? null, location: l.location || [l.city, l.state].filter(Boolean).join(', ') || null,

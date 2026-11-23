@@ -28,6 +28,7 @@ export async function dealCtx(user: PortalUser): Promise<DealCtx> {
 }
 
 const NO_MATCH = '00000000-0000-0000-0000-000000000000'
+const chunks = <T,>(a: T[], n = 150): T[][] => { const o: T[][] = []; for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n)); return o }
 
 /** Apply the visibility rules to an opportunities query. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,17 +126,53 @@ export async function profileNames(ids: string[]): Promise<Record<string, string
   return out
 }
 
+/**
+ * Open next steps for deals, earliest first: open dated activities (calls, meetings,
+ * follow-ups) AND open tasks linked to the deal (the "Task" tab / "Add step" on the deal
+ * page makes a task — those used to be ignored, so the deal kept saying "No next step").
+ * A task with no date still counts as planned (sorted last, never overdue).
+ * Returns per deal: the next step + how many are overdue.
+ */
+export async function nextSteps(oppIds: string[]): Promise<{ error: string | null; next: Record<string, Row>; overdue: Record<string, number> }> {
+  const next: Record<string, Row> = {}, overdue: Record<string, number> = {}
+  if (!oppIds.length) return { error: null, next, overdue }
+  const steps: Row[] = []
+  const now = Date.now()
+  const todayET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
+  for (const part of chunks(oppIds)) {
+    const [a, t] = await Promise.all([
+      sb.from('crm_activities').select('id, opportunity_id, type, subject, due_at').in('opportunity_id', part).is('completed_at', null).not('due_at', 'is', null),
+      sb.from('todos').select('id, linked_id, title, due_date, status').eq('linked_type', 'opportunity').in('linked_id', part).neq('status', 'done'),
+    ])
+    if (a.error) return { error: a.error.message, next, overdue }
+    for (const r of (a.data ?? []) as Row[]) steps.push({ ...r, late: new Date(r.due_at).getTime() < now })
+    // A task list problem must not hide the deal's calls/meetings — log it and go on.
+    if (t.error) console.error('[sales] deal tasks:', t.error.message)
+    else for (const r of (t.data ?? []) as Row[]) {
+      if (r.status === 'cancelled') continue
+      const day = r.due_date ? String(r.due_date).slice(0, 10) : null
+      steps.push({ id: `task:${r.id}`, opportunity_id: r.linked_id, type: 'task', subject: r.title ?? 'Task', due_at: day ? `${day}T17:00:00.000Z` : null, late: !!day && day < todayET })
+    }
+  }
+  steps.sort((x, y) => String(x.due_at ?? '9999').localeCompare(String(y.due_at ?? '9999')))
+  for (const s of steps) {
+    const id = s.opportunity_id as string
+    if (!next[id]) next[id] = s
+    if (s.late) overdue[id] = (overdue[id] ?? 0) + 1
+  }
+  return { error: null, next, overdue }
+}
+
 /** Board card for one deal, with its live next step / overdue count / job flag. */
 export async function cardFor(deal: Row, ctx: DealCtx) {
-  const [acts, wo, names] = await Promise.all([
-    sb.from('crm_activities').select('id, type, subject, due_at').eq('opportunity_id', deal.id).is('completed_at', null).not('due_at', 'is', null).order('due_at', { ascending: true }),
+  const [steps, wo, names] = await Promise.all([
+    nextSteps([deal.id as string]),
     sb.from('work_orders').select('id').eq('opportunity_id', deal.id).limit(1),
     profileNames([deal.rep_id]),
   ])
-  const list = (acts.data ?? []) as Row[]
-  const now = Date.now()
+  if (steps.error) console.error('[sales] deal next steps:', steps.error)
   return shapeDeal(deal, ctx, {
-    next: list[0] ?? null, overdue: list.filter(a => new Date(a.due_at).getTime() < now).length,
+    next: steps.next[deal.id as string] ?? null, overdue: steps.overdue[deal.id as string] ?? 0,
     ownerName: ownerFor(deal, names), hasJob: !wo.error && (wo.data ?? []).length > 0,
     dealerName: await orgName(deal.dealer_org_id),
   })

@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { dealCtx, orgNames, ownerFor, profileNames, scopeDeals, sb, shapeDeal, type Row } from '@/lib/sales-deals'
+import { dealCtx, nextSteps, orgNames, ownerFor, profileNames, scopeDeals, sb, shapeDeal, type Row } from '@/lib/sales-deals'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,26 +24,13 @@ export async function GET() {
     const rows = (data ?? []) as Row[]
     const ids = rows.map(r => r.id as string)
 
-    // Open next steps (earliest first) + won deals that already have a job.
-    const acts: Row[] = []
+    // Open next steps (earliest first — dated activities + open tasks) + won deals that already have a job.
     const jobs = new Set<string>()
-    for (const part of chunks(ids)) {
-      const [a, w] = await Promise.all([
-        sb.from('crm_activities').select('id, opportunity_id, type, subject, due_at').in('opportunity_id', part).is('completed_at', null).not('due_at', 'is', null).order('due_at', { ascending: true }),
-        sb.from('work_orders').select('opportunity_id').in('opportunity_id', part),
-      ])
-      if (a.error) return NextResponse.json({ error: a.error.message }, { status: 500 })
-      acts.push(...((a.data ?? []) as Row[]))
-      if (!w.error) for (const r of (w.data ?? []) as Row[]) if (r.opportunity_id) jobs.add(r.opportunity_id)
-    }
-    const now = Date.now()
-    const nextBy: Record<string, Row> = {}
-    const overdueBy: Record<string, number> = {}
-    for (const a of acts) {
-      const id = a.opportunity_id as string
-      if (!nextBy[id]) nextBy[id] = a
-      if (new Date(a.due_at).getTime() < now) overdueBy[id] = (overdueBy[id] ?? 0) + 1
-    }
+    const [steps, ...woParts] = await Promise.all([nextSteps(ids), ...chunks(ids).map(part => sb.from('work_orders').select('opportunity_id').in('opportunity_id', part))])
+    if (steps.error) return NextResponse.json({ error: steps.error }, { status: 500 })
+    for (const w of woParts) if (!w.error) for (const r of (w.data ?? []) as Row[]) if (r.opportunity_id) jobs.add(r.opportunity_id)
+    const nextBy = steps.next
+    const overdueBy = steps.overdue
 
     const repIds = [...new Set(rows.map(r => r.rep_id as string).filter(Boolean))]
     const [names, reps] = await Promise.all([

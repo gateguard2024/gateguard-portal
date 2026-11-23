@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Lead status — Open · Contacting · Stuck · Lost. One control, used by the lead panel and
+ * Lead status — Open · Contacting · Stuck · Lost (+ Won, set automatically when the lead is made an opportunity). One control, used by the lead panel and
  * the full lead page. Stuck and Lost ask why (chips + optional note) before saving.
  *   Open        = not contacted yet
  *   Contacting  = talking to them (keeps "Info sent" if it got that far)
@@ -12,7 +12,8 @@
 import React, { useState } from 'react'
 import { Loader2, Check } from 'lucide-react'
 
-export type LeadStatusId = 'open' | 'contacting' | 'stuck' | 'lost'
+/** 'won' is never picked here — a lead turns Won when it's made an opportunity. */
+export type LeadStatusId = 'open' | 'contacting' | 'stuck' | 'lost' | 'won'
 
 export const LEAD_STATUSES: { id: LeadStatusId; label: string; color: string; hint: string }[] = [
   { id: 'open', label: 'Open', color: '#0071E3', hint: 'Not contacted yet' },
@@ -20,13 +21,15 @@ export const LEAD_STATUSES: { id: LeadStatusId; label: string; color: string; hi
   { id: 'stuck', label: 'Stuck', color: '#D70015', hint: 'Blocked — still working it' },
   { id: 'lost', label: 'Lost', color: '#6E6E73', hint: 'Dead — off the lists' },
 ]
+export const WON_STATUS = { id: 'won' as LeadStatusId, label: 'Won', color: '#1A7F37', hint: 'Made an opportunity' }
 export const STUCK_REASONS = ['No reply', 'Waiting on owner / decision maker', 'Can’t reach the right person', 'Under contract with someone', 'Budget not approved', 'Waiting on us']
 export const LOST_REASONS = ['Went with someone else', 'Not interested', 'No budget', 'Property sold', 'Not a fit', 'Duplicate lead']
 
-export const statusMeta = (s: LeadStatusId | undefined | null) => LEAD_STATUSES.find((x) => x.id === s) ?? LEAD_STATUSES[0]
+export const statusMeta = (s: LeadStatusId | undefined | null) => s === 'won' ? WON_STATUS : LEAD_STATUSES.find((x) => x.id === s) ?? LEAD_STATUSES[0]
 
 /** Status from a lead row (works before the API sends `status`). */
-export function leadStatusOf(l: { status?: LeadStatusId | null; bucket?: string }): LeadStatusId {
+export function leadStatusOf(l: { status?: LeadStatusId | null; bucket?: string; opportunity_id?: string | null }): LeadStatusId {
+  if (l.opportunity_id) return 'won'
   return l.status ?? (l.bucket === 'identified' ? 'open' : 'contacting')
 }
 
