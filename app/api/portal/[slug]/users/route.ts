@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getSiteBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser, issueBrivoMobilePass, assignBrivoFob, assignBrivoPin } from '@/lib/brivo'
+import { getPortalManager } from '@/lib/portal-manager'
+import { getSiteBrivoToken, listBrivoUsers, listBrivoGroups, listBrivoSiteGroupIds, createBrivoUser, issueBrivoMobilePass, assignBrivoFob, assignBrivoPin } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
   const siteId = v.portal.site_id
   if (!siteId) return NextResponse.json({ error: 'Portal not linked to a site.' }, { status: 400 })
+  // Adding a person gives them gate access — it must name a real manager (personal PIN).
+  const manager = await getPortalManager(req, params.slug)
+  if (!manager) return NextResponse.json({ error: 'Sign in with your personal PIN to add people.', need_manager: true }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const firstName = String(body.firstName ?? '').trim()
@@ -52,7 +56,13 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   if (!firstName || !lastName) return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 })
 
   try {
-    const { token, apiKey } = await getSiteBrivoToken(siteId)
+    const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+    // Only this property's own access groups.
+    if (body.groupId && brivoSiteId) {
+      const ids = await listBrivoSiteGroupIds(token, apiKey, brivoSiteId).catch(() => [] as string[])
+      if (!ids.includes(String(body.groupId))) return NextResponse.json({ error: 'That access group isn’t at this property.' }, { status: 400 })
+    }
+    if (body.pin && !/^\d{4,8}$/.test(String(body.pin).trim())) return NextResponse.json({ error: 'The gate PIN must be 4 to 8 digits.' }, { status: 400 })
     const created = await createBrivoUser(token, apiKey, {
       firstName, lastName, email, phone,
       externalId: body.unit ? String(body.unit).trim() : null,
@@ -75,14 +85,15 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       catch (e) { credentials.pin = `failed: ${e instanceof Error ? e.message : 'error'}` }
     }
 
-    supabase.from('site_events').insert({
+    const { error: logErr } = await supabase.from('site_events').insert({
       site_id: siteId, event_type: 'access_admin', event_source: 'brivo',
       title: `User added: ${firstName} ${lastName}`,
-      description: `Added from the customer portal (${params.slug}) by the site manager`,
-      summary: `User added via customer portal`,
+      description: `Added from the property portal (${params.slug}) by ${manager.name}`,
+      summary: `User added by ${manager.name}`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      metadata: { brivo_user_id: created.id, via: 'customer_portal', portal_slug: params.slug } as any,
-    }).then(() => {}, () => {})
+      metadata: { brivo_user_id: created.id, via: 'customer_portal', portal_slug: params.slug, by_name: manager.name, manager_id: manager.id } as any,
+    })
+    if (logErr) console.error('[portal users] audit log failed:', logErr.message)
     return NextResponse.json({ ok: true, user_id: created.id, credentials })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not add user' }, { status: 502 })

@@ -1,82 +1,247 @@
 'use client'
 
 /**
- * ResidentsClient — move-in compliance, concession code blocks, and site settings
- * from GateCard's move-in tables (via the residents adapter). Shows a "sample data"
- * badge until the live GateCard tables are wired in lib/portal-residents.ts.
+ * ResidentsClient — property portal → Residents. The real people with access at
+ * this property, straight from its Brivo account (/api/portal/[slug]/users):
+ * search, filter by access group, open a person to see their PINs / passes / fobs
+ * and change them, add a resident. Viewing = portal access code; every change =
+ * the manager's personal PIN (names a person, logged in site_events).
+ * (Replaced the sample move-in / compliance / concession screen, Nov 23 2026.)
  */
-import { useEffect, useState } from 'react'
-import { OpsShell, C } from '@/components/portal/ops/OpsShell'
-import type { ResidentsData } from '@/lib/portal-residents'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
-const { UserPlus, ClipboardCheck, Ticket, Settings } = require('lucide-react') as any
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
+import { OK_CSS, Sheet, Dot, DOT, useToast, call, type Any } from '@/components/portal/ops/opsKit'
 
-function card(): React.CSSProperties { return { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 } }
-const chip = (bg: string, fg: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap' })
-
-function statusChip(s: string) {
-  const map: Record<string, [string, string, string]> = {
-    complete: ['Complete', 'rgba(16,185,129,0.14)', C.safe], ok: ['OK', 'rgba(16,185,129,0.14)', C.safe], active: ['Active', 'rgba(16,185,129,0.14)', C.safe],
-    in_progress: ['In progress', 'rgba(0,163,224,0.14)', C.cyan], scheduled: ['Scheduled', 'rgba(0,163,224,0.14)', C.cyan],
-    pending: ['Pending', 'rgba(245,158,11,0.14)', C.warn], depleted: ['Depleted', 'rgba(245,158,11,0.14)', C.warn],
-    missing: ['Missing', 'rgba(239,68,68,0.14)', C.alert], expired: ['Expired', 'rgba(239,68,68,0.14)', C.alert],
-  }
-  const [lbl, bg, fg] = map[s] || [s, C.surface, C.ink2]
-  return <span style={chip(bg, fg)}>{lbl}</span>
-}
+type Person = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; unitNumber: string | null; active: boolean; groupIds: string[]; groupNames: string[] }
+type Group = { id: string; name: string }
+const nameOf = (p: Person) => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || 'No name'
 
 function Inner({ slug }: { slug: string }) {
-  const [d, setD] = useState<ResidentsData | null>(null)
-  useEffect(() => { fetch(`/api/portal/${slug}/residents`).then(r => r.json()).then(setD).catch(() => {}) }, [slug])
-  if (!d) return <div style={{ color: C.ink2, fontSize: 13 }}>Loading…</div>
+  const { manager, requireSignIn } = useOpsManager()
+  const [toast, flash] = useToast()
+  const [people, setPeople] = useState<Person[] | null>(null)
+  const [groups, setGroups] = useState<Group[]>([])
+  const [err, setErr] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [group, setGroup] = useState<string>('all')
+  const [show, setShow] = useState<'active' | 'off' | 'all'>('active')
+  const [open, setOpen] = useState<Person | null>(null)
+  const [adding, setAdding] = useState(false)
 
-  const thtd: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', fontSize: 12.5, color: C.ink, borderBottom: `1px solid ${C.border}` }
-  const th: React.CSSProperties = { ...thtd, fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink2 }
+  const load = useCallback(async () => {
+    const r = await call(`/api/portal/${slug}/users?groups=1`)
+    setPeople(Array.isArray(r.data.users) ? r.data.users : [])
+    setGroups(Array.isArray(r.data.groups) ? r.data.groups : [])
+    setErr(r.ok ? (r.data.needs_site_id ? 'This property’s Brivo site isn’t set yet — ask Gate Guard to finish its setup.' : null) : (r.data.error || 'Could not load residents from Brivo.'))
+  }, [slug])
+  useEffect(() => { void load() }, [load])
+
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase()
+    return (people ?? [])
+      .filter(p => show === 'all' || (show === 'active' ? p.active !== false : p.active === false))
+      .filter(p => group === 'all' || (p.groupIds ?? []).includes(group))
+      .filter(p => !s || [nameOf(p), p.email ?? '', p.phone ?? '', p.unitNumber ?? ''].some(f => f.toLowerCase().includes(s)))
+      .sort((a, b) => (a.unitNumber ?? '').localeCompare(b.unitNumber ?? '', undefined, { numeric: true }) || nameOf(a).localeCompare(nameOf(b)))
+  }, [people, q, group, show])
+
+  const total = people?.length ?? 0
+  const active = (people ?? []).filter(p => p.active !== false).length
+  const units = new Set((people ?? []).map(p => p.unitNumber).filter(Boolean)).size
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {d.source === 'mock' && <div style={{ fontSize: 11.5, color: C.warn, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '8px 12px' }}>Sample data — connect GateCard&rsquo;s move-in tables to go live (one-file swap in the residents adapter).</div>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Move-ins */}
-        <div style={card()}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><UserPlus size={16} color={C.cyan} /><span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Upcoming move-ins</span></div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}>Unit</th><th style={th}>Resident</th><th style={th}>Date</th><th style={th}>Status</th></tr></thead>
-            <tbody>{d.moveIns.map(m => <tr key={m.id}><td style={{ ...thtd, fontWeight: 700 }}>{m.unit}</td><td style={thtd}>{m.resident}</td><td style={{ ...thtd, color: C.ink2 }}>{m.date}</td><td style={thtd}>{statusChip(m.status)}</td></tr>)}</tbody>
-          </table>
-        </div>
-
-        {/* Site settings */}
-        <div style={card()}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><Settings size={16} color={C.cyan} /><span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Site settings</span></div>
-          {d.siteSettings.map((st, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 0', borderBottom: i < d.siteSettings.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 12.5 }}><span style={{ color: C.ink2 }}>{st.label}</span><span style={{ color: C.ink, fontWeight: 600, textAlign: 'right' }}>{st.value}</span></div>)}
-        </div>
+    <div className="ok-wrap">
+      <style dangerouslySetInnerHTML={{ __html: OK_CSS }} />
+      <div className="ok-kpis">
+        <div className="ok-kpi"><div className="ok-k"><Dot c={DOT.blue} />People</div><div className="ok-num">{people ? total : '—'}</div><div className="ok-s">In Brivo for this property</div></div>
+        <div className="ok-kpi"><div className="ok-k"><Dot c={DOT.green} />Access on</div><div className="ok-num">{people ? active : '—'}</div><div className="ok-s">{people ? `${total - active} turned off` : ' '}</div></div>
+        <div className="ok-kpi"><div className="ok-k"><Dot c={DOT.gray} />Units</div><div className="ok-num">{people ? units : '—'}</div><div className="ok-s">With at least one person</div></div>
+        <div className="ok-kpi"><div className="ok-k"><Dot c={DOT.blue} />Access groups</div><div className="ok-num">{people ? groups.length : '—'}</div><div className="ok-s">What each person can open</div></div>
       </div>
 
-      {/* Compliance */}
-      <div style={card()}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><ClipboardCheck size={16} color={C.cyan} /><span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Move-in compliance</span></div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={th}>Unit</th><th style={th}>Resident</th><th style={th}>Requirement</th><th style={th}>Due</th><th style={th}>Status</th></tr></thead>
-          <tbody>{d.compliance.map(c => <tr key={c.id}><td style={{ ...thtd, fontWeight: 700 }}>{c.unit}</td><td style={thtd}>{c.resident}</td><td style={thtd}>{c.item}</td><td style={{ ...thtd, color: C.ink2 }}>{c.due || '—'}</td><td style={thtd}>{statusChip(c.status)}</td></tr>)}</tbody>
-        </table>
+      <div className="ok-card">
+        <div className="ok-hd">
+          <div><h3>Residents</h3><div className="sub">Live from Brivo. Open a person to add a gate PIN, send a mobile pass or turn access off.</div></div>
+          <button type="button" className="ok-btn pri" onClick={() => manager ? setAdding(true) : requireSignIn()}>+ Add resident</button>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <input className="ok-in" style={{ maxWidth: 320 }} placeholder="Search name, unit, email or phone" value={q} onChange={e => setQ(e.target.value)} aria-label="Search residents" />
+          <div className="ok-seg" role="group" aria-label="Show">
+            {(['active', 'off', 'all'] as const).map(k => <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>{k === 'active' ? 'Access on' : k === 'off' ? 'Turned off' : 'Everyone'}</button>)}
+          </div>
+          {groups.length > 0 && (
+            <select className="ok-in" style={{ maxWidth: 240 }} value={group} onChange={e => setGroup(e.target.value)} aria-label="Access group">
+              <option value="all">All access groups</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          )}
+        </div>
+        {err && <div className="ok-note red" role="alert">{err}</div>}
+        {!people ? <div className="ok-empty">Loading residents from Brivo…</div> : !list.length ? (
+          <div className="ok-empty">{total ? 'Nobody matches that search.' : 'No residents in Brivo yet. Use “Add resident”.'}</div>
+        ) : (
+          <div className="ok-tw">
+            <table className="ok-tbl">
+              <thead><tr><th>Unit</th><th>Name</th><th>Contact</th><th>Access groups</th><th>Status</th></tr></thead>
+              <tbody>
+                {list.map(p => (
+                  <tr key={p.id} className="click" onClick={() => setOpen(p)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setOpen(p) }}>
+                    <td style={{ fontWeight: 600 }}>{p.unitNumber || '—'}</td>
+                    <td>{nameOf(p)}</td>
+                    <td style={{ color: C.ink3 }}>{[p.email, p.phone].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{ color: C.ink2 }}>{(p.groupNames ?? []).join(', ') || '—'}</td>
+                    <td><span className="ok-pill"><Dot c={p.active !== false ? DOT.green : DOT.gray} />{p.active !== false ? 'On' : 'Off'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!manager && <div style={{ fontSize: 12.5, color: C.ink3, marginTop: 10 }}>Sign in with your personal PIN to add people or change their access.</div>}
       </div>
 
-      {/* Concession blocks */}
-      <div style={card()}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><Ticket size={16} color={C.cyan} /><span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>Concession code blocks</span></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-          {d.concessionBlocks.map(b => (
-            <div key={b.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}><span style={{ fontSize: 15, fontWeight: 800, color: C.ink, letterSpacing: '0.04em' }}>{b.code}</span>{statusChip(b.status)}</div>
-              <div style={{ fontSize: 12, color: C.ink2 }}>{b.used} of {b.units} used · expires {b.expires}</div>
-              <div style={{ height: 6, borderRadius: 999, background: C.canvas, marginTop: 8, overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.round((b.used / Math.max(1, b.units)) * 100))}%`, background: b.status === 'active' ? C.cyan : C.warn }} /></div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {open && <PersonSheet slug={slug} person={open} groups={groups} onClose={() => setOpen(null)} onChanged={load} flash={flash} />}
+      {adding && <AddSheet slug={slug} groups={groups} onClose={() => setAdding(false)} onDone={() => { setAdding(false); void load() }} flash={flash} />}
+      {toast}
     </div>
+  )
+}
+
+function PersonSheet({ slug, person, groups, onClose, onChanged, flash }: { slug: string; person: Person; groups: Group[]; onClose: () => void; onChanged: () => void; flash: (t: string, ok?: boolean) => void }) {
+  const { manager, requireSignIn } = useOpsManager()
+  const [d, setD] = useState<Any | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [form, setForm] = useState<'pin' | 'fob' | null>(null)
+  const [pin, setPin] = useState('')
+  const [card, setCard] = useState(''); const [fc, setFc] = useState('')
+  const url = `/api/portal/${slug}/users/${person.id}`
+  const load = useCallback(async () => {
+    const r = await call(url)
+    if (!r.ok) { setErr(r.data.error || 'Could not load this person.'); return }
+    setD(r.data); setErr(null)
+  }, [url])
+  useEffect(() => { void load() }, [load])
+
+  async function act(body: Any) {
+    if (!manager) { requireSignIn(); return }
+    setBusy(true)
+    const r = await call(url, { method: 'POST', body: JSON.stringify({ ...body, name: nameOf(person), email: person.email }) })
+    setBusy(false)
+    if (!r.ok) { if (r.data.need_manager) requireSignIn(); flash(r.data.error || 'That didn’t work.', false); return }
+    flash(r.data.summary || 'Done.'); setForm(null); setPin(''); setCard(''); setFc('')
+    void load(); onChanged()
+  }
+  const inGroup = new Set((d?.groups ?? []).map((g: Any) => g.id))
+  const creds: Any[] = d?.credentials ?? []
+  const off = d?.suspended === true
+
+  return (
+    <Sheet title={nameOf(person)} sub={[person.unitNumber ? `Unit ${person.unitNumber}` : null, person.email, person.phone].filter(Boolean).join(' · ') || undefined} onClose={onClose} width={600}>
+      {err && <div className="ok-note red">{err}</div>}
+      {!d && !err ? <div className="ok-empty">Loading…</div> : d && (
+        <>
+          {off && <div className="ok-note orange">This person’s access is turned off. Nothing they carry opens a gate or door.</div>}
+          <div>
+            <div className="ok-hd" style={{ marginBottom: 4 }}>
+              <h3 style={{ margin: 0, fontSize: 15 }}>How they get in</h3>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="ok-btn sm" disabled={busy} onClick={() => manager ? setForm(form === 'pin' ? null : 'pin') : requireSignIn()}>+ Gate PIN</button>
+                <button type="button" className="ok-btn sm" disabled={busy || !person.email} title={person.email ? undefined : 'Needs an email in Brivo'} onClick={() => void act({ action: 'mobile_pass' })}>Send mobile pass</button>
+                <button type="button" className="ok-btn sm" disabled={busy} onClick={() => manager ? setForm(form === 'fob' ? null : 'fob') : requireSignIn()}>+ Fob</button>
+              </div>
+            </div>
+            {form === 'pin' && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', margin: '8px 0' }}>
+                <label style={{ flex: '0 1 200px' }}><span className="ok-lbl">Gate PIN (4–8 digits)</span><input className="ok-in" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} /></label>
+                <button type="button" className="ok-btn pri" disabled={busy || !/^\d{4,8}$/.test(pin)} onClick={() => void act({ action: 'set_pin', pin })}>Add PIN</button>
+              </div>
+            )}
+            {form === 'fob' && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', margin: '8px 0' }}>
+                <label style={{ flex: '1 1 160px' }}><span className="ok-lbl">Card / fob number</span><input className="ok-in" value={card} onChange={e => setCard(e.target.value.trim())} /></label>
+                <label style={{ flex: '0 1 140px' }}><span className="ok-lbl">Facility code (optional)</span><input className="ok-in" value={fc} onChange={e => setFc(e.target.value.trim())} /></label>
+                <button type="button" className="ok-btn pri" disabled={busy || !card} onClick={() => void act({ action: 'add_fob', card_number: card, facility_code: fc || null })}>Add fob</button>
+              </div>
+            )}
+            {!creds.length ? <div className="ok-empty">No PIN, pass or fob yet.</div> : creds.map(c => (
+              <div key={c.id} className="ok-row">
+                <div className="main"><div className="t">{c.isPass ? 'Mobile pass' : c.label}</div><div className="m">{c.type}</div></div>
+                <span className="ok-pill"><Dot c={c.active ? DOT.green : DOT.gray} />{c.active ? 'On' : 'Off'}</span>
+                <button type="button" className={`ok-btn sm${c.active ? ' warn' : ''}`} disabled={busy} onClick={() => void act({ action: c.active ? 'credential_off' : 'credential_on', credential_id: c.id })}>{c.active ? 'Turn off' : 'Turn on'}</button>
+              </div>
+            ))}
+            <div style={{ fontSize: 12, color: C.ink3, marginTop: 6 }}>For safety we never show a PIN once it’s set. To change one, turn the old PIN off and add a new one.</div>
+          </div>
+
+          {groups.length > 0 && (
+            <div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>What they can open</h3>
+              <div className="ok-chips">
+                {groups.map(g => {
+                  const on = inGroup.has(g.id)
+                  return <button key={g.id} type="button" className="ok-chip" aria-pressed={on} disabled={busy} onClick={() => void act({ action: on ? 'remove_group' : 'add_group', group_id: g.id, group_name: g.name })}>{g.name}</button>
+                })}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className={`ok-btn${off ? ' go' : ' warn'}`} disabled={busy} onClick={() => void act({ action: off ? 'reactivate' : 'suspend' })}>{off ? 'Turn access back on' : 'Turn off all access'}</button>
+          </div>
+        </>
+      )}
+    </Sheet>
+  )
+}
+
+function AddSheet({ slug, groups, onClose, onDone, flash }: { slug: string; groups: Group[]; onClose: () => void; onDone: () => void; flash: (t: string, ok?: boolean) => void }) {
+  const { requireSignIn } = useOpsManager()
+  const [f, setF] = useState({ firstName: '', lastName: '', unit: '', email: '', phone: '', groupId: groups.length === 1 ? groups[0].id : '', pin: '', mobilePass: true, fob: '' })
+  const [busy, setBusy] = useState(false)
+  const set = (k: keyof typeof f, v: string | boolean) => setF(x => ({ ...x, [k]: v }))
+  const pinBad = !!f.pin && !/^\d{4,8}$/.test(f.pin)
+  async function save() {
+    setBusy(true)
+    const r = await call(`/api/portal/${slug}/users`, { method: 'POST', body: JSON.stringify({
+      firstName: f.firstName, lastName: f.lastName, unit: f.unit || null, email: f.email || null, phone: f.phone || null,
+      groupId: f.groupId || null, pin: f.pin || null, mobilePass: f.mobilePass && !!f.email, fobCardNumber: f.fob || null,
+    }) })
+    setBusy(false)
+    if (!r.ok) { if (r.data.need_manager) requireSignIn(); flash(r.data.error || 'Could not add them.', false); return }
+    const failed = Object.entries((r.data.credentials ?? {}) as Record<string, string>).filter(([, v]) => v.startsWith('failed'))
+    flash(failed.length ? `Added — but ${failed.map(([k]) => k.replace('_', ' ')).join(', ')} didn’t go through. Open them to try again.` : `${f.firstName} added.`, !failed.length)
+    onDone()
+  }
+  return (
+    <Sheet title="Add a resident" sub="They’re added to this property’s Brivo account." onClose={onClose} width={600}>
+      <div className="ok-grid2">
+        <label><span className="ok-lbl">First name</span><input className="ok-in" value={f.firstName} onChange={e => set('firstName', e.target.value)} autoFocus /></label>
+        <label><span className="ok-lbl">Last name</span><input className="ok-in" value={f.lastName} onChange={e => set('lastName', e.target.value)} /></label>
+        <label><span className="ok-lbl">Unit</span><input className="ok-in" value={f.unit} onChange={e => set('unit', e.target.value)} /></label>
+        <label><span className="ok-lbl">Access group</span>
+          <select className="ok-in" value={f.groupId} onChange={e => set('groupId', e.target.value)}>
+            <option value="">{groups.length ? 'Pick what they can open' : 'No groups found'}</option>
+            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </label>
+        <label><span className="ok-lbl">Email</span><input className="ok-in" type="email" value={f.email} onChange={e => set('email', e.target.value)} /></label>
+        <label><span className="ok-lbl">Phone</span><input className="ok-in" type="tel" value={f.phone} onChange={e => set('phone', e.target.value)} /></label>
+      </div>
+      <div className="ok-grid2">
+        <label><span className="ok-lbl">Gate PIN (optional, 4–8 digits)</span><input className="ok-in" inputMode="numeric" autoComplete="off" value={f.pin} onChange={e => set('pin', e.target.value.replace(/\D/g, ''))} /></label>
+        <label><span className="ok-lbl">Fob number (optional)</span><input className="ok-in" value={f.fob} onChange={e => set('fob', e.target.value.trim())} /></label>
+      </div>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5 }}>
+        <input type="checkbox" checked={f.mobilePass && !!f.email} disabled={!f.email} onChange={e => set('mobilePass', e.target.checked)} />
+        Email them a Brivo mobile pass {f.email ? '' : '(needs an email)'}
+      </label>
+      {!f.groupId && <div className="ok-note orange">Without an access group they won’t be able to open anything yet.</div>}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button type="button" className="ok-btn" onClick={onClose}>Cancel</button>
+        <button type="button" className="ok-btn pri" disabled={busy || !f.firstName.trim() || !f.lastName.trim() || pinBad} onClick={() => void save()}>{busy ? 'Adding…' : 'Add resident'}</button>
+      </div>
+    </Sheet>
   )
 }
 
