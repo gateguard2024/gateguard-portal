@@ -449,12 +449,19 @@ export async function listBrivoEvents(token: string, apiKey: string, pageSize = 
   // Brivo /events REQUIRES a time window (uuid, occurredAfter, or occurredBefore) —
   // without one it 400s. Default to the last `sinceDays` up to now.
   // Brivo wants ISO 8601 WITHOUT milliseconds (…ssZ). The .000Z form is rejected on some accounts.
+  // Brivo also refuses a window longer than 2 days ("Requested Occurred range was
+  // longer than days: 2", Nov 23 2026) — so ask in 2-day pieces, newest first, and
+  // stop as soon as we have pageSize events.
   const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z')
-  const occurredBefore = iso(new Date())
-  const occurredAfter = iso(new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000))
-  const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize), occurredAfter, occurredBefore })
+  const CHUNK = 2 * 24 * 60 * 60 * 1000 - 60_000
+  const start = Date.now() - Math.max(0, sinceDays) * 24 * 60 * 60 * 1000
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (data.data ?? data.events ?? []) as any[]
+  const rows: any[] = []
+  for (let end = Date.now(); end > start && rows.length < pageSize; end -= CHUNK) {
+    const from = Math.max(start, end - CHUNK)
+    const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize - rows.length), occurredAfter: iso(new Date(from)), occurredBefore: iso(new Date(end)) })
+    rows.push(...((data.data ?? data.events ?? []) as unknown[]))
+  }
   return rows.map(e => ({
     id: String(e.id ?? e.eventId ?? `${e.occurred ?? ''}-${Math.random().toString(36).slice(2, 7)}`),
     occurred: e.occurred ?? e.occurredTime ?? e.created ?? e.timestamp ?? null,
