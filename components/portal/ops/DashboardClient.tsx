@@ -17,7 +17,8 @@ type Cam = { id: string; name: string; online?: boolean | null }
 type Door = { id: string; name: string }
 type Act = { id: string; label: string; where: string; time: string; tone?: string }
 type Summary = { cameras?: Cam[]; doors?: Door[]; activity?: Act[]; events_today?: number; credentials_active?: number }
-type Billing = { model: 'bulk' | 'resident'; balance: number; lines: { label: string; amount: number }[]; unpaid: { unit: string; name: string; amount: number; days_overdue: number }[]; source: string }
+// Real invoices for this property (lib/portal-billing.ts) — no sample data.
+type Billing = { balance: number; overdue: number; due_next: { date: string; amount: number } | null; paid_90: number; invoices: { id: string; number: string; status: string; due_date: string | null; balance: number; days_late: number; pay_url: string | null }[] }
 
 const toneColor: Record<string, string> = { safe: C.safe, cyan: C.cyan, warn: C.warn, alert: C.alert }
 const ICON_UNLOCK = <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-1.9" /></svg>
@@ -258,36 +259,31 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
         </div>
       </div>
 
-      {/* Billing */}
-      {bill && (
+      {/* Billing — real invoices; full list on the Billing page */}
+      {bill && Array.isArray(bill.invoices) && (
         <div style={{ ...panel(), marginBottom: 20 }}>
-          {phead('Billing & Payments', <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 10px', borderRadius: 999, background: 'rgba(0,113,227,.08)', color: C.blue, border: '1px solid rgba(0,113,227,.3)' }}>{bill.model === 'resident' ? 'Resident-funded' : 'Bulk-funded'}</span>)}
+          {phead('Billing & Payments', <a href={`/portal/${slug}/billing`} style={{ fontSize: 12, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>All invoices →</a>)}
           <div style={{ padding: 18 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 26, alignItems: 'start' }} className="gg-bill">
               <div style={{ background: C.well, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.ink3 }}>Account balance</div>
-                <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em', margin: '8px 0 12px' }}>${bill.balance.toLocaleString()}</div>
-                {bill.lines.map((ln, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '7px 0', borderTop: `1px solid ${C.border}`, color: C.ink2 }}><span>{ln.label}</span><b style={{ color: C.ink, fontWeight: 600 }}>${ln.amount.toLocaleString()}</b></div>)}
-                <button onClick={() => flash('Opening secure payment — Stripe')} style={{ marginTop: 14, width: '100%', background: BRAND, color: '#fff', border: 0, borderRadius: 12, padding: 12, fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>Pay balance</button>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.ink3 }}>Balance</div>
+                <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.02em', margin: '8px 0 10px' }}>${bill.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '7px 0', borderTop: `1px solid ${C.border}`, color: C.ink2 }}><span>Past due</span><b style={{ color: bill.overdue > 0 ? C.alert : C.ink, fontWeight: 600 }}>${bill.overdue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '7px 0', borderTop: `1px solid ${C.border}`, color: C.ink2 }}><span>Next due</span><b style={{ color: C.ink, fontWeight: 600 }}>{bill.due_next ? `$${bill.due_next.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} · ${new Date(`${bill.due_next.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '—'}</b></div>
+                <a href={`/portal/${slug}/billing`} style={{ display: 'block', textAlign: 'center', textDecoration: 'none', marginTop: 14, width: '100%', boxSizing: 'border-box', background: BRAND, color: '#fff', borderRadius: 12, padding: 12, fontWeight: 600, fontSize: 13.5 }}>{bill.balance > 0 ? 'View & pay' : 'View invoices'}</a>
               </div>
-              {bill.model === 'resident' && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}><span style={{ fontSize: 12.5, fontWeight: 700 }}>Unpaid residents</span><span style={{ fontSize: 11.5, color: C.ink3 }}>{bill.unpaid.length} behind · ${bill.unpaid.reduce((a, b) => a + b.amount, 0)} outstanding</span></div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr>{['Unit', 'Resident', 'Amount', 'Overdue', ''].map((h, i) => <th key={i} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.ink3, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
-                    <tbody>{bill.unpaid.map(r => { const t = r.days_overdue >= 10 ? C.alert : r.days_overdue >= 5 ? C.warn : C.cyan; return (
-                      <tr key={r.unit}>
-                        <td style={{ padding: '9px 10px', fontSize: 12.5, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>{r.unit}</td>
-                        <td style={{ padding: '9px 10px', fontSize: 12.5, borderBottom: `1px solid ${C.border}` }}>{r.name}</td>
-                        <td style={{ padding: '9px 10px', fontSize: 12.5, borderBottom: `1px solid ${C.border}` }}>${r.amount}</td>
-                        <td style={{ padding: '9px 10px', borderBottom: `1px solid ${C.border}` }}><span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: `${t}22`, color: t }}>{r.days_overdue}d</span></td>
-                        <td style={{ padding: '9px 10px', borderBottom: `1px solid ${C.border}`, textAlign: 'right' }}><button onClick={() => flash(`Payment reminder sent to Unit ${r.unit}`)} style={{ fontSize: 11, fontWeight: 700, color: C.cyan, background: 'rgba(0,113,227,.08)', border: '1px solid rgba(0,113,227,.3)', borderRadius: 8, padding: '5px 10px', cursor: 'pointer' }}>Remind</button></td>
-                      </tr>) })}
-                    </tbody>
-                  </table>
-                  {bill.source === 'mock' && <div style={{ fontSize: 11, color: C.ink3, marginTop: 10 }}>Sample resident data — live once the billing tables are wired.</div>}
-                </div>
-              )}
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>Open invoices</div>
+                {bill.invoices.filter(i => i.balance > 0).length === 0 ? <div style={{ fontSize: 13, color: C.ink3 }}>You’re all paid up.</div> : bill.invoices.filter(i => i.balance > 0).slice(0, 5).map(i => (
+                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: i.status === 'overdue' ? '#FF3B30' : '#0A84FF', flex: 'none' }} />
+                    <span style={{ fontWeight: 600 }}>{i.number}</span>
+                    <span style={{ color: C.ink3, flex: 1 }}>{i.days_late > 0 ? `${i.days_late} days past due` : i.due_date ? `Due ${new Date(`${i.due_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
+                    <b style={{ fontWeight: 600 }}>${i.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                    {i.pay_url && <a href={i.pay_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>Pay</a>}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
