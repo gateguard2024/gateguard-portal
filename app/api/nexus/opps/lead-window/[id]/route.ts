@@ -586,6 +586,48 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: `Lead assigned to ${assigneeName || 'the selected user'}.` })
   }
 
+  // ── set_status: Open · Contacting · Stuck · Lost (the status a rep picks) ──
+  if (action === 'set_status') {
+    const status = clean(body.status)
+    if (!['open', 'contacting', 'stuck', 'lost'].includes(status)) {
+      return NextResponse.json({ success: false, message: 'Pick Open, Contacting, Stuck or Lost.' }, { status: 400 })
+    }
+    const reason = clean(body.reason).slice(0, 300)
+    const L = lead as unknown as Record<string, unknown>
+    const nowIso = new Date().toISOString()
+    const bucket = leadBucket(L.stage as string | null)
+    const wasLost = !!L.lost_at || /^(lost|dead)$/i.test(String(L.stage ?? ''))
+    const u: Record<string, unknown> = { updated_at: nowIso }
+    if (status === 'open') {
+      Object.assign(u, { stage: 'new', lost_at: null, contacted_at: null, sent_info_at: null })
+      if (L.stuck_at) Object.assign(u, { stuck_at: null, stuck_reason: null })
+    } else if (status === 'contacting') {
+      // Keep "Info sent" if it got that far; otherwise it's now Contacted.
+      if (wasLost || bucket === 'identified' || bucket === 'converted') u.stage = 'contacted'
+      if (!L.contacted_at) u.contacted_at = nowIso
+      u.lost_at = null
+      if (L.stuck_at) Object.assign(u, { stuck_at: null, stuck_reason: null })
+    } else if (status === 'stuck') {
+      Object.assign(u, { stuck_at: L.stuck_at ?? nowIso, stuck_reason: reason || null, lost_at: null })
+      if (wasLost) u.stage = 'contacted'
+    } else {
+      Object.assign(u, { stage: 'lost', lost_at: nowIso })
+      if (L.stuck_at) Object.assign(u, { stuck_at: null, stuck_reason: null })
+    }
+    const { error: upErr } = await supabase.from('leads').update(u).eq('id', lead.id)
+    if (upErr) {
+      const missing = /stuck_at|stuck_reason/.test(upErr.message ?? '') || String(upErr.code) === '42703'
+      return NextResponse.json({ success: false, message: missing ? 'Stuck needs database update 238 — ask Gate Guard to run migration 238.' : upErr.message }, { status: missing ? 409 : 500 })
+    }
+    const label = { open: 'Open', contacting: 'Contacting', stuck: 'Stuck', lost: 'Lost' }[status]
+    const { error: actErr } = await supabase.from('crm_activities').insert({
+      dealer_org_id: lead.org_id, created_by: profileId, type: 'note', subject: `Status: ${label}`,
+      body: reason ? `${label} — ${reason}` : `Lead marked ${label}.`, lead_id: lead.id,
+    })
+    if (actErr) console.error('lead set_status: activity not saved', actErr.message)
+    return NextResponse.json({ success: true, message: `Marked ${label}.`, status })
+  }
+
   if (action === 'update_status') {
     const stage = clean(body.stage)
 
@@ -608,6 +650,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (stage === 'lost' || stage === 'dead') updates.lost_at = new Date().toISOString()
     // Brought back from lost → clear it, or the lead stays hidden from the open lists.
     else if ((lead as unknown as Record<string, unknown>).lost_at) updates.lost_at = null
+    // Moving a Stuck lead to a stage (or losing it) means it's no longer stuck.
+    if ((lead as unknown as Record<string, unknown>).stuck_at) { updates.stuck_at = null; updates.stuck_reason = null }
 
     // First-entry stage timestamps → time-in-stage reporting (never overwrite the first touch).
     const Lrec = lead as unknown as Record<string, unknown>

@@ -50,7 +50,7 @@ const FILE_CATS = [
   { key: 'install_photo', label: 'Install photos' }, { key: 'service_photo', label: 'Service photos' },
 ]
 
-const PAGE_CSS = `
+export const PAGE_CSS = `
 .dpg{position:fixed;inset:0;z-index:97;overflow-y:auto}
 .dpg .sb-main{gap:12px}
 .dpg-hd{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
@@ -560,11 +560,11 @@ export function DealPage({ dealId, onClose, onChanged }: { dealId: string; onClo
 
         <div className="dpg-card">
           <div className="dpg-ch">Related</div>
-          {d.lead && <div className="dpg-rel"><span className="sb-pill mid">Lead</span>{d.lead.contact_name || d.lead.company_name || 'Lead'}<a href={`/crm/leads/${d.lead.id}`}>Open</a></div>}
+          {d.lead && <div className="dpg-rel"><span className="sb-pill mid">Lead</span>{d.lead.contact_name || d.lead.company_name || 'Lead'}<a href={`/?tab=opps&lead=${d.lead.id}`}>Open</a></div>}
           {d.aria && <div className="dpg-rel"><span className="sb-pill mid">ARIA</span>{d.aria.property_name}{d.aria.buy_score != null ? ` · score ${d.aria.buy_score}` : ''}<a href="/aria">Open</a></div>}
           {d.surveys.map(s => <div key={s.id} className="dpg-rel"><span className="sb-pill mid">Survey</span>{s.survey_number ?? 'Site survey'} · {fmtDate(s.survey_date ?? s.created_at?.slice(0, 10))}{Array.isArray(s.devices) ? ` · ${s.devices.length} devices` : ''}<a href="/survey">Open</a></div>)}
           {d.invoices.map(i => <div key={i.id} className="dpg-rel"><span className="sb-pill early">Invoice</span>{i.invoice_number}{can.money && i.total != null ? ` · ${money(i.total, false)}` : ''} · {i.paid_at ? 'paid' : i.status}<a href="/billing">Open</a></div>)}
-          {d.jobs.map(j => <div key={j.id} className="dpg-rel"><span className="sb-pill late-stage">Job</span>{j.wo_number ? `${j.wo_number} · ` : ''}{j.title}<a href={`/maintenance/${j.id}`}>Open</a></div>)}
+          {d.jobs.map(j => <div key={j.id} className="dpg-rel"><span className="sb-pill late-stage">Job</span>{j.wo_number ? `${j.wo_number} · ` : ''}{j.title}<a href={`/?tab=jobs&job=${j.id}`}>Open</a></div>)}
           {d.todos.filter(t => t.status !== 'done').length > 0 && <div className="dpg-rel"><span className="sb-pill mid">Tasks</span>{d.todos.filter(t => t.status !== 'done').length} open task{d.todos.filter(t => t.status !== 'done').length === 1 ? '' : 's'}<a href={`/?tab=my-day`}>Tasks</a></div>}
           {!d.lead && !d.aria && !d.surveys.length && !d.invoices.length && !d.jobs.length && <div className="sb-sub" style={{ padding: 16 }}>Nothing linked yet.</div>}
           <div className="dpg-rel" style={{ color: '#6E6E73' }}><span className="sb-av">{initials(d.owner)}</span>Owner · {d.owner ?? '—'}{d.threads > 0 && <span className="sb-sub" style={{ marginLeft: 'auto' }}>{d.threads} email thread{d.threads === 1 ? '' : 's'}</span>}</div>

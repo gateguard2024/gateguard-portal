@@ -155,7 +155,7 @@ export function DealPanel({ dealId, onClose, onMoveRequest, onChanged, onOpenFul
     <section className="dp-sec"><h4>Related</h4>
       {d.jobs.map(j => <div key={j.id} className="dp-row"><span className="sb-pill late-stage">Job</span><span style={{ flex: 1 }}>{j.wo_number ? `${j.wo_number} · ` : ''}{j.title}</span><span className="sb-sub">{j.status}</span><a className="sb-link sm" href={`/maintenance/${j.id}`}>Open</a></div>)}
       {deal.quote_url && <div className="dp-row"><span className="sb-pill mid">Quote</span><span style={{ flex: 1 }}>{deal.quote_status ?? 'Attached'}{deal.quote_total ? ` · ${money(deal.quote_total, false)}` : ''}</span><a className="sb-link sm" href={deal.quote_url} target="_blank" rel="noreferrer">Open</a></div>}
-      {deal.lead_id && <div className="dp-row"><span className="sb-pill early">Lead</span><span style={{ flex: 1 }}>Came from a lead</span><a className="sb-link sm" href={`/crm/leads/${deal.lead_id}`}>Open</a></div>}
+      {deal.lead_id && <div className="dp-row"><span className="sb-pill early">Lead</span><span style={{ flex: 1 }}>Came from a lead</span><a className="sb-link sm" href={`/?tab=opps&lead=${deal.lead_id}`}>Open</a></div>}
       <button type="button" className="sb-link" onClick={() => onOpenFull(deal.id)}>Open full deal page (timeline, quotes, files) →</button>
     </section>
   )

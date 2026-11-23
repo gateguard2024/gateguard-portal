@@ -69,6 +69,9 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/request/') ||
     // Unit QR labels (/a/<code>) — public "report a problem with this unit" page (migration 237)
     pathname.startsWith('/a/') ||
+    // Vendor job links (/v/<secret>) — outside vendors work one job, no login; the secret is the access (migration 239)
+    pathname.startsWith('/v/') ||
+    pathname.startsWith('/api/v/') ||
     // Only the form's POST is public (enforced in middleware() below). Exact path, so
     // /api/requests (the staff Requests list) still goes through Clerk.
     pathname === '/api/request' ||

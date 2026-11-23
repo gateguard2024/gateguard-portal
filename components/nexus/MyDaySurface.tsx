@@ -562,7 +562,7 @@ export function MyDaySurface() {
           { l: 'Open tasks', v: openTasksList.length, s: `${taskHigh} high priority`, pct: Math.min(100, (openTasksList.length / 20) * 100), col: L.blue, red: false, onClick: () => openTasks('all') },
           { l: 'Overdue', v: taskOverdue.length, s: taskOverdue.length ? 'Needs attention' : 'All clear', pct: Math.min(100, (taskOverdue.length / 12) * 100), col: '#FF3B30', red: taskOverdue.length > 0, onClick: () => openTasks('overdue') },
           { l: 'Due today', v: taskToday.length, s: taskToday.length ? 'Due today' : 'Nothing due today', pct: Math.min(100, (taskToday.length / 8) * 100), col: L.blue, red: false, onClick: () => openTasks('today') },
-          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: L.green, red: false, onClick: () => { window.location.href = '/crm/leads' } },
+          { l: 'Leads', v: leads.length, s: `${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`, pct: Math.min(100, (leads.length / 20) * 100), col: L.green, red: false, onClick: () => { window.location.href = '/?tab=opps&hub=leads' } },
         ].map(m => (
           <button key={m.l} type="button" onClick={m.onClick} className="flex w-full min-w-0 items-center gap-2.5 p-3 text-left transition-transform hover:-translate-y-0.5 sm:gap-3.5 sm:px-[18px] sm:py-4" style={CARD}>
             <MyRing size={46} pct={m.pct} color={m.col} stroke={4.5}><span /></MyRing>

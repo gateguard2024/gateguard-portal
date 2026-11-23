@@ -273,6 +273,13 @@ function SetupSection({ status, reload }: { status: Row; reload: () => void }) {
             {s.sync_commissions && <Field label="Expense account for commissions"><Select value={s.commission_account_id} onChange={v => setS({ ...s, commission_account_id: v || null })} options={look?.expense ?? []} placeholder="Pick an expense account…" /></Field>}
           </div>
         </Card>
+        <Card title="Outside vendors">
+          <div style={{ display: 'grid', gap: 16 }}>
+            <Field label="Expense account for vendor bills" hint="When you approve a vendor’s invoice on a Gate Guard job, it becomes a bill to that vendor (created as a QuickBooks vendor if needed), tagged to the property. When the bill is paid in QuickBooks, the job shows it paid. Dealer vendors are never sent here.">
+              <Select value={s.vendor_account_id ?? null} onChange={v => setS({ ...s, vendor_account_id: v || null })} options={look?.expense ?? []} placeholder="Pick an expense account…" />
+            </Field>
+          </div>
+        </Card>
         <Card title="Automatic sync">
           <div style={{ display: 'grid', gap: 16 }}>
             <Toggle on={!!s.auto_create_customers} onChange={v => setS({ ...s, auto_create_customers: v })} label="Create missing customers" hint="If an invoice’s property isn’t linked yet, create it as a QuickBooks customer instead of stopping." />

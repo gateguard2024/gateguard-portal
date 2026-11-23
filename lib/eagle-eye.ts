@@ -11,7 +11,7 @@
  *   token response includes refresh_token + httpsBaseUrl.hostname
  *   cameras: GET https://<hostname>/api/v3.0/cameras  (Bearer)
  */
-import { getSiteVendorCreds, mergeSiteVendorCreds } from '@/lib/site-integrations'
+import { getSiteVendorCreds, mergeSiteVendorCreds, markIntegrationTest } from '@/lib/site-integrations'
 
 const EEN_AUTH_BASE = 'https://auth.eagleeyenetworks.com/oauth2'
 export const EEN_SCOPE = 'vms.all'
@@ -94,12 +94,26 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
     try {
       const t = await eagleEyeRefresh(c.client_id as string, c.client_secret as string, c.refresh_token as string)
       const baseHost = t.httpsBaseUrl?.hostname || c.base_host
-      await mergeSiteVendorCreds(siteId, 'eagle_eye', {
+      // Eagle Eye has now retired the old refresh token — the new one MUST be saved, or
+      // this property's connection is dead for good (Nov 23 2026: every site went
+      // "token_invalid / invalid_grant"). Retry the save; if it still fails, flag the
+      // connection in Setup & keys so it's visible, and use the token for this hour.
+      const patch = {
         access_token: t.access_token,
         refresh_token: t.refresh_token || c.refresh_token,
         expires_at: new Date(Date.now() + (t.expires_in ?? 3600) * 1000).toISOString(),
         base_host: baseHost,
-      })
+      }
+      let saveErr: string | null = null
+      for (let i = 0; i < 3; i++) {
+        saveErr = (await mergeSiteVendorCreds(siteId, 'eagle_eye', patch)).error
+        if (!saveErr) break
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)))
+      }
+      if (saveErr) {
+        console.error(`[eagle-eye] site ${siteId}: refreshed but couldn't save the new sign-in: ${saveErr}`)
+        await markIntegrationTest(siteId, 'eagle_eye', false, `Eagle Eye refreshed but the new sign-in couldn’t be saved (${saveErr}). It will stop working within the hour — reconnect Eagle Eye.`).catch(() => {})
+      }
       return { token: t.access_token, baseHost }
     } catch (e) {
       // A sibling request (possibly on another serverless instance) may have just
@@ -113,6 +127,14 @@ export async function getSiteEagleEyeAccess(siteId: string): Promise<{ token: st
         if (c2?.access_token && c2.base_host && exp2 - Date.now() > 60_000) {
           return { token: c2.access_token, baseHost: c2.base_host }
         }
+      }
+      // invalid_grant = the saved refresh token was already used or revoked (a failed
+      // save, another app/database refreshing the same login, or the Eagle Eye user
+      // removed the app). Only reconnecting fixes it — say so plainly and flag it.
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/invalid_grant|token_invalid/.test(msg)) {
+        await markIntegrationTest(siteId, 'eagle_eye', false, 'Eagle Eye sign-in expired or was replaced — reconnect Eagle Eye (Setup & keys).').catch(() => {})
+        throw new Error('Eagle Eye sign-in for this property expired or was replaced — Gate Guard needs to reconnect it: Systems → Setup & keys → Connect Eagle Eye.')
       }
       throw e
     } finally {
@@ -142,6 +164,23 @@ export async function eagleEyePreviewFrame(token: string, baseHost: string, devi
     if (!res.ok) return null
     const buf = Buffer.from(await res.arrayBuffer())
     return buf.length > 0 ? buf : null
+  } catch { return null }
+}
+
+/** A full-resolution (main stream) picture from the last `maxAgeSec` seconds, or null.
+ * EEN v3 `/media/recordedImage.jpeg?type=main&timestamp__gte=…` — the first recorded main
+ * frame at/after that time, so it is never older than maxAgeSec. Only works while the
+ * camera records in full resolution (continuous main recording); Eagle Eye rate-limits
+ * `main`, so use it for occasional checks (Gate Watch), never for a live wall. */
+export async function eagleEyeRecentMainFrame(token: string, baseHost: string, deviceId: string, maxAgeSec = 90): Promise<Buffer | null> {
+  const since = new Date(Date.now() - maxAgeSec * 1000).toISOString().replace('Z', '+00:00')
+  try {
+    const res = await fetch(`https://${baseHost}/api/v3.0/media/recordedImage.jpeg?deviceId=${encodeURIComponent(deviceId)}&type=main&timestamp__gte=${encodeURIComponent(since)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'image/jpeg' }, signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return buf.length > 1000 && buf[0] === 0xff && buf[1] === 0xd8 ? buf : null
   } catch { return null }
 }
 

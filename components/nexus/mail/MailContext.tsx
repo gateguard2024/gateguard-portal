@@ -79,7 +79,7 @@ export default function MailContext({ row, onLinked, onClose }: { row: ThreadRow
 
   const badge = row.linked_type ? RECORD_BADGE[row.linked_type] : null
   const recordHref = (type: string | null, id: string | null) => !id ? null
-    : type === 'opportunity' ? `/crm/opportunities/${id}` : type === 'lead' ? `/crm/leads/${id}` : type === 'job' ? `/maintenance/${id}` : null
+    : type === 'opportunity' ? `/?tab=opps&deal=${id}` : type === 'lead' ? `/?tab=opps&lead=${id}` : type === 'job' ? `/?tab=jobs&job=${id}` : null
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: N.canvas, borderLeft: `1px solid ${N.cardLine}`, fontFamily: M.font, padding: '12px 12px 20px' }}>

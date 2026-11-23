@@ -79,6 +79,7 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
   const [edit, setEdit] = useState<Any | 'new' | null>(null)
   const [presetCam, setPresetCam] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [health, setHealth] = useState(false)
   const load = useCallback(async () => {
     const r = await getJson(`/api/sites/${siteId}/gates`)
     if (r.ok) { setGates(r.data.gates ?? []); setSummary(r.data.summary ?? null); setCanSetup(!!r.data.can_setup); setErr(null) } else { setGates([]); setErr(r.data.error || 'Gate Watch unavailable.') }
@@ -100,7 +101,10 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
       <style>{CSS}</style>
       <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Gate Watch (AI){left > 0 && <span className="gw-pill red">{left} down</span>}</span>}
         sub={summary?.watched ? `${summary.watched} gate${summary.watched === 1 ? '' : 's'} · ${summary.down ? `${summary.down} down` : 'all up'}${summary.up_pct != null ? ` · ${summary.up_pct}% up (30 days)` : ''}${summary.avg_down_ms != null ? ` · average ${fmtDur(summary.avg_down_ms)} down` : ''}${summary.blind ? ` · ${summary.blind} can’t be seen` : ''}` : 'Watches each gate camera and alerts when a gate stays open too long — no one has to look.'}
-        right={canSetup ? <button type="button" className="sy-b pri sm" onClick={() => { setPresetCam(null); setEdit('new') }}>Add a gate</button> : undefined}>
+        right={(canSetup || ctx.isCorporate) ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {ctx.isCorporate && <button type="button" className="sy-b line sm" onClick={() => setHealth(true)}>Health check</button>}
+          {canSetup && <button type="button" className="sy-b pri sm" onClick={() => { setPresetCam(null); setEdit('new') }}>Add a gate</button>}
+        </div> : undefined}>
         {err && <div style={{ marginBottom: 8 }}><Note tone="orange">{err}</Note></div>}
         {gates == null ? <div className="sy-empty">Loading…</div>
           : !gates.length ? <div className="sy-empty">{canSetup ? 'No gates watched yet. Add one: pick its camera, outline the gate, and show it what open and closed look like.' : 'No gates are being watched here yet.'}</div>
@@ -140,6 +144,7 @@ export function GateWatch({ ctx, doors }: { ctx: SiteCtx; doors: Any[] | null })
             )
           })}
       </Card>
+      {health && <HealthSheet siteId={siteId} onClose={() => setHealth(false)} />}
       {edit && <GateSetup key={edit === 'new' ? `new-${presetCam ?? ''}` : edit.id} ctx={ctx} gate={edit === 'new' ? null : edit} presetCamera={edit === 'new' ? presetCam : null} others={gates ?? []} doors={doors ?? []}
         onClose={() => { setEdit(null); setPresetCam(null); void load() }}
         onAddAnother={cam => { setPresetCam(cam); setEdit('new'); void load() }} />}
@@ -379,6 +384,67 @@ function GateSetup({ ctx, gate, presetCamera, others, doors, onClose, onAddAnoth
             : <button type="button" className="sy-b warn sm" onClick={() => setConfirmDel(true)}>Remove gate</button>}
         </div>
       </>}
+    </Sheet>
+  )
+}
+
+/**
+ * Health check (Gate Guard only — /api/gate-watch/health is corporate-only): why a gate
+ * is or isn't alerting, in plain English. This property by default, all properties on a
+ * switch; "Raw data" opens the same report as JSON in a new tab.
+ */
+function HealthSheet({ siteId, onClose }: { siteId: string; onClose: () => void }) {
+  const [all, setAll] = useState(false)
+  const [d, setD] = useState<Any | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const url = all ? '/api/gate-watch/health' : `/api/gate-watch/health?site_id=${siteId}`
+  const load = useCallback(async () => {
+    setD(null); setErr(null)
+    const r = await getJson(url)
+    if (r.ok) setD(r.data); else setErr(r.data?.error ?? 'Health check failed.')
+  }, [url])
+  useEffect(() => { void load() }, [load])
+  const gates: Any[] = d?.gates ?? []
+  const bad = gates.filter((g) => !g.ok).length
+  return (
+    <Sheet title="Gate Watch health" sub={d ? `Checked ${new Date(d.checked_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · last look anywhere ${d.last_check_anywhere} · ${gates.length} gate${gates.length === 1 ? '' : 's'}${bad ? ` · ${bad} need attention` : ' · all OK'}` : 'Loading…'} onClose={onClose} width={720}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <div className="sy-chips" role="group" aria-label="Which gates">
+          <button type="button" className="sy-chip" aria-pressed={!all} onClick={() => setAll(false)}>This property</button>
+          <button type="button" className="sy-chip" aria-pressed={all} onClick={() => setAll(true)}>All properties</button>
+        </div>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="sy-b line sm" onClick={() => void load()}>Refresh</button>
+        <a className="sy-b line sm" href={url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>Raw data ↗</a>
+      </div>
+      {err && <Note tone="red">{err}</Note>}
+      {!d && !err && <div className="sy-empty">Checking every gate…</div>}
+      {d && (d.system ?? []).length > 0 && (
+        <div style={{ marginBottom: 12 }}><Note tone="red"><b style={{ fontWeight: 600 }}>Setup problems (affect every gate):</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{(d.system as string[]).map((x, i) => <li key={i}>{x}</li>)}</ul></Note></div>
+      )}
+      {d && gates.length === 0 && <div className="sy-empty">No Gate Watch gates {all ? 'anywhere' : 'at this property'} yet.</div>}
+      {gates.map((g) => (
+        <details key={g.gate_id} open={!g.ok} style={{ borderTop: '1px solid rgba(0,0,0,0.08)', padding: '10px 0' }}>
+          <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, listStyle: 'none' }}>
+            <Dot c={g.ok ? DOT.green : g.issues.some((x: string) => /SILENCED|OFF|hold/i.test(x)) && g.issues.length === 1 ? DOT.orange : DOT.red} />
+            <span style={{ flex: 1, fontWeight: 600 }}>{all ? `${g.site} — ` : ''}{g.gate}</span>
+            <span style={{ fontSize: 12.5, color: MUTED }}>{g.state}{g.pending ? ` (maybe ${g.pending})` : ''} · last look {g.last_check}</span>
+          </summary>
+          <div style={{ paddingLeft: 18, marginTop: 8, display: 'grid', gap: 6, fontSize: 13.5 }}>
+            {g.issues.length === 0 && <div style={{ color: GREEN }}>Nothing is stopping this gate from alerting.</div>}
+            {g.issues.map((x: string, i: number) => <div key={'i' + i} style={{ color: RED }}>• {x}</div>)}
+            {g.notes.map((x: string, i: number) => <div key={'n' + i} style={{ color: MUTED }}>• {x}</div>)}
+            <div style={{ color: MUTED }}>Last read: {g.last_read ?? '—'}{g.last_reason ? ` — ${g.last_reason}` : ''}</div>
+            <div style={{ color: MUTED }}>Alerts after {g.threshold_min} min open · emails {g.emails.join(', ')} · {g.phones} phone{g.phones === 1 ? '' : 's'}{g.next_check ? ` · next look ${new Date(g.next_check).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}</div>
+            {(g.recent ?? []).length > 0 && (
+              <details>
+                <summary style={{ cursor: 'pointer', color: BLUE }}>Last {g.recent.length} looks</summary>
+                <div style={{ marginTop: 4, fontSize: 12.5, color: MUTED, display: 'grid', gap: 2, fontVariantNumeric: 'tabular-nums' }}>{(g.recent as string[]).map((x, i) => <div key={i}>{x}</div>)}</div>
+              </details>
+            )}
+          </div>
+        </details>
+      ))}
     </Sheet>
   )
 }

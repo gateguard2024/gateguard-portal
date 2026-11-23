@@ -9,8 +9,15 @@ export const runtime = 'nodejs'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const DAY = 86400_000
-const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason'
+const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason, stuck_at, stuck_reason, lost_at, opportunity_id'
 type Bucket = 'identified' | 'contacted' | 'sent_info'
+/** The status a rep sets: Open (not contacted yet) · Contacting · Stuck (blocked, still worked) · Lost. */
+type LeadStatus = 'open' | 'contacting' | 'stuck' | 'lost'
+function statusOf(l: { stuck_at?: string | null; lost_at?: string | null; stage?: string | null }, bucket: Bucket): LeadStatus {
+  if (l.lost_at || /^(lost|dead)$/i.test(l.stage ?? '')) return 'lost'
+  if (l.stuck_at) return 'stuck'
+  return bucket === 'identified' ? 'open' : 'contacting'
+}
 function bucketOf(stage: string | null | undefined): Bucket {
   const s = String(stage ?? '').toLowerCase()
   if (/proposal|propose|sent|negoti/.test(s)) return 'sent_info'
@@ -49,8 +56,12 @@ function scoreLead(l: {
 // step, last touch and est. MRR, plus the counts for each view and the top numbers.
 // The screen filters / sorts on the client (it's at most a few thousand rows).
 export async function GET(req: Request) {
-  const find = new URL(req.url).searchParams.get('find')
+  const sp = new URL(req.url).searchParams
+  const find = sp.get('find')
   if (find != null) return findLeads(find)
+  // ?id=<lead> → that one lead, scored, whatever its status (open, stuck, lost, snoozed, a deal) — for the lead page.
+  const oneId = sp.get('id')
+  if (oneId != null && !/^[0-9a-f-]{36}$/i.test(oneId)) return NextResponse.json({ error: 'Bad lead id.' }, { status: 400 })
 
   const user = await getCurrentUser()
   if (!user.canViewCRM) return NextResponse.json({ error: 'CRM access denied.' }, { status: 403 })
@@ -60,7 +71,8 @@ export async function GET(req: Request) {
   // made the page slow). If an environment is missing one of the newer columns,
   // fall back to '*' so it still works.
   const listQ = (cols: string) => {
-    let q = supabase.from('leads').select(cols).is('deleted_at', null).is('lost_at', null).is('opportunity_id', null)
+    let q = supabase.from('leads').select(cols).is('deleted_at', null)
+    q = oneId ? q.eq('id', oneId) : q.is('lost_at', null).is('opportunity_id', null)
     q = applyOrgScope(q, scope)
     q = applyAssignedScope(q, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -94,8 +106,9 @@ export async function GET(req: Request) {
     oppNamesQ.limit(10000),
   ])
   const heal: { lead: string; opp: string }[] = []
+  const linkedDeal = new Map<string, string>()
   for (const r of linkRes) for (const o of r.data ?? []) {
-    if (o.lead_id && !asDeal.has(o.lead_id)) { asDeal.add(o.lead_id); heal.push({ lead: o.lead_id, opp: o.id }) }
+    if (o.lead_id && !asDeal.has(o.lead_id)) { asDeal.add(o.lead_id); linkedDeal.set(o.lead_id, o.id); heal.push({ lead: o.lead_id, opp: o.id }) }
   }
   const dealNames = new Set<string>()
   for (const o of namesRes.data ?? []) for (const n of [o.name, o.account_name]) { const k = norm(n); if (k.length >= 4) dealNames.add(k) }
@@ -108,7 +121,7 @@ export async function GET(req: Request) {
     const res = await Promise.all(batch.map((h) => supabase.from('leads').update({ opportunity_id: h.opp }).eq('id', h.lead).is('opportunity_id', null)))
     for (const r of res) if (r.error) console.error('leads: link to deal failed', r.error.message)
   }
-  const leads = allOpen.filter((l) => !asDeal.has(l.id))
+  const leads = oneId ? allOpen : allOpen.filter((l) => !asDeal.has(l.id))
   const ids = leads.map((l) => l.id)
   const now = Date.now()
   const todayIso = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
@@ -186,8 +199,17 @@ export async function GET(req: Request) {
       // "Not now": off the working lists until this date (then back, with a revisit due).
       snoozed_until: l.snoozed_until && String(l.snoozed_until) > todayIso ? String(l.snoozed_until).slice(0, 10) : null,
       snooze_reason: l.snooze_reason ?? null,
+      status: statusOf(l, bucket),
+      stuck_since: l.stuck_at ?? null,
+      stuck_reason: l.stuck_reason ?? null,
+      opportunity_id: l.opportunity_id ?? (asDeal.has(l.id) ? linkedDeal.get(l.id) ?? null : null),
     }
   })
+  if (oneId) {
+    const one = outAll[0]
+    if (!one) return NextResponse.json({ error: 'Lead not found or outside your access.' }, { status: 404 })
+    return NextResponse.json({ lead: one, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+  }
   const snoozed = outAll.filter((l) => l.snoozed_until)
   const out = outAll.filter((l) => !l.snoozed_until)
 
@@ -204,6 +226,7 @@ export async function GET(req: Request) {
     sent_info: out.filter((l) => l.bucket === 'sent_info').length,
     stale: out.filter((l) => (l.last_touch ? now - Date.parse(l.last_touch) > 14 * DAY : now - Date.parse(l.created_at) > 14 * DAY)).length,
     snoozed: snoozed.length,
+    stuck: out.filter((l) => l.status === 'stuck').length,
   }
 
   // Speed to lead: median hours from created → first contact, leads from the last 60 days.

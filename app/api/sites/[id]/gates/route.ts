@@ -236,12 +236,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (action === 'test' || action === 'check_now') {
       const g = await getGate(siteId, b.id); if (!g) return bad('Gate not found.', 404)
-      const { frame, error: fErr, stale } = await grabFrame(siteId, g.camera_key)
+      const { frame, error: fErr, stale, source } = await grabFrame(siteId, g.camera_key)
       if (!frame) return bad(fErr ?? 'No picture from the camera.', 502)
       if (action === 'check_now') {
         // Check now (e.g. after a repair) settles on one confident reading and resets the schedule.
         if (stale) return bad('Eagle Eye only gave an old stored picture, so this check was skipped. Try again in a minute.', 502)
-        const r = await checkAndApply(g, frame, new Date(), { manual: true })
+        const r = await checkAndApply(g, frame, new Date(), { manual: true, source })
         const { crop, sig, ...rest } = r.result; void sig
         return NextResponse.json({ ...rest, state: r.state, alerted: r.alerted, cleared: r.cleared, why: r.why ?? null, image: crop.toString('base64') })
       }

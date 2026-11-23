@@ -28,6 +28,7 @@ import CalendarViews from "@/components/nexus/CalendarViews";
 import { UPDATE_PRESETS, blanksIn, type UpdateCtx } from "@/lib/wo-updates";
 import { isInactive, statusOf } from "@/components/nexus/systems/Decommission";
 import { FinishJobSheet } from "@/components/nexus/ops/FinishJobSheet";
+import { VendorCard } from "@/components/nexus/ops/VendorCard";
 import { openPropertyInSystems } from "@/components/nexus/sales/salesShared";
 import { VISIT_TYPES, SYSTEMS, CAUSES, RESOLUTIONS, BILL_TO, NEEDS_CAUSE, BILLABLE_CAUSES } from "@/lib/service-taxonomy";
 
@@ -3175,6 +3176,9 @@ export function JobDetailDrawer({ id, techs: techsProp, onClose, onUpdate: onUpd
 
         {/* Equipment removal (taking a property offline) — where each device went. */}
         {String(wo.job_type ?? "").toLowerCase() === "removal" && wo.site_id && <RemovalCard woId={id} onChanged={() => load(true)} />}
+
+        {/* Outside vendor — send this job by private link (no login), their progress + invoice (migration 239). */}
+        <VendorCard woId={id} onChanged={() => load(true)} />
 
         {/* Two-way texts with the customer (Twilio) — replies land here. */}
         <JobTexts woId={id} />

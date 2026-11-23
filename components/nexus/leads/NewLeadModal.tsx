@@ -19,7 +19,7 @@ const STATUS: Record<FoundLead['status'], { label: string; color: string; bg: st
   open: { label: 'Open lead', color: '#0B5CAD', bg: 'rgba(74,140,255,0.12)', action: 'Open it' },
   snoozed: { label: 'Not now', color: '#475569', bg: '#E7ECF3', action: 'Open it' },
   lost: { label: 'Marked lost', color: '#9A5B00', bg: 'rgba(245,165,36,0.16)', action: 'Bring it back' },
-  deal: { label: 'Already a deal', color: '#6D4FD8', bg: 'rgba(139,92,246,0.12)', action: 'Open the deal' },
+  deal: { label: 'Already an opportunity', color: '#6D4FD8', bg: 'rgba(139,92,246,0.12)', action: 'Open the opportunity' },
 }
 /** One found lead: who it is, where it sits (open / lost / not now / deal) and the button to get there. */
 export function FoundRow({ m, onGo }: { m: FoundLead; onGo: (m: FoundLead) => void }) {

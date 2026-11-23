@@ -105,6 +105,7 @@ export function SalesSurface() {
   const [oppWindowId, setOppWindowId] = useState<string | null>(null)
   const [oppWindowData, setOppWindowData] = useState<Record<string, unknown> | null>(null)
   const [leadsHub, setLeadsHub] = useState(false)
+  const [leadPage, setLeadPage] = useState<string | null>(null)   // ?lead=<id> → that lead's full page
   const [oppsHub, setOppsHub] = useState(false)
 
   const [followups, setFollowups] = useState<Activity[]>([])
@@ -162,6 +163,9 @@ export function SalesSurface() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const hub = params.get('hub'); if (hub === 'leads' || hub === 'opps') { if (hub === 'leads') setLeadsHub(true); else setOppsHub(true); params.delete('hub'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/') }
+    // ?lead=<id> (from a deal, Mail, Events, an old /crm/leads link) opens that lead's full page.
+    const lead = params.get('lead')
+    if (lead && /^[0-9a-f-]{36}$/i.test(lead)) { params.delete('lead'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/'); setLeadPage(lead); setLeadsHub(true) }
     // ?deal=<id> (e.g. from the Admin Sales report) opens that deal's window.
     const deal = params.get('deal')
     if (deal && /^[0-9a-f-]{36}$/i.test(deal)) { params.delete('deal'); const qs = params.toString(); window.history.replaceState({}, '', qs ? `/?${qs}` : '/'); void openLifecycle(deal) }
@@ -321,7 +325,7 @@ export function SalesSurface() {
         </div>
       )}
 
-      {leadsHub && <LeadsHub onClose={() => { setLeadsHub(false); void loadDashboard() }} />}
+      {leadsHub && <LeadsHub openLeadId={leadPage} onClose={() => { setLeadsHub(false); setLeadPage(null); void loadDashboard() }} />}
       {oppsHub && (
         <SalesBoard
           onClose={() => { setOppsHub(false); void loadDashboard() }}

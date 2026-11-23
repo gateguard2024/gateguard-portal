@@ -50,7 +50,7 @@ export async function GET() {
   })
 }
 
-const FIELDS = ['auto_sync', 'sync_start_date', 'default_item_id', 'item_map', 'income_account_id', 'deposit_account_id', 'commission_account_id', 'sync_commissions', 'auto_create_customers'] as const
+const FIELDS = ['auto_sync', 'sync_start_date', 'default_item_id', 'item_map', 'income_account_id', 'deposit_account_id', 'commission_account_id', 'sync_commissions', 'vendor_account_id', 'auto_create_customers'] as const
 
 export async function PATCH(req: NextRequest) {
   const c = await corp(); if (c.error) return c.error

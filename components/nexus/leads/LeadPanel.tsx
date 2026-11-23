@@ -4,7 +4,7 @@
  * LeadPanel — the light lead drawer for Nexus Leads.
  * Everything a rep does on a lead, in two taps: call / email, log a call with an
  * outcome, set the next step, mark info sent, size it (→ est. MRR + EMC), turn it
- * into a deal, see the timeline and every email with them from Nexus Mail.
+ * into an opportunity, see the timeline and every email with them from Nexus Mail.
  * Reads + writes through /api/nexus/opps/lead-window/[id] (same rules as before).
  */
 import React, { useCallback, useEffect, useState } from 'react'
@@ -12,8 +12,9 @@ import { X, Loader2, Phone, Mail, MapPin, Check, Calendar, MessageSquare, Send, 
 import { M, N } from '@/components/nexus/mail/mailShared'
 import MailApp from '@/components/nexus/mail/MailApp'
 import { type LeadRow, ago, chip, dueText, initials, money, scoreColor, scoreLabel, tint } from '@/components/nexus/LeadsHub'
+import { LeadStatusBar, leadStatusOf, type LeadStatusId } from '@/components/nexus/leads/LeadStatus'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Flame, StickyNote, Target, Sparkles, UserCheck, Edit2, Clock: ClockI } = require('lucide-react') as any
+const { Flame, StickyNote, Target, Sparkles, UserCheck, Edit2, Clock: ClockI, Maximize2 } = require('lucide-react') as any
 
 type Activity = { id: string; type: string | null; subject: string | null; body: string | null; outcome: string | null; due_at: string | null; completed_at: string | null; created_at: string }
 type Todo = { id: string; title: string | null; body: string | null; status: string | null; due_date: string | null; created_at: string }
@@ -21,24 +22,22 @@ type MailHit = { id: string; subject: string; preview: string; last_at: string; 
 type Detail = { lead: Record<string, unknown>; activity: { activities: Activity[] }; todos: Todo[] }
 type Tool = null | 'call' | 'note' | 'follow' | 'more' | 'edit' | 'snooze'
 
-const STEPS: { id: LeadRow['bucket']; label: string }[] = [
-  { id: 'identified', label: 'Identified' }, { id: 'contacted', label: 'Contacted' }, { id: 'sent_info', label: 'Info sent' },
-]
-const SNOOZE_REASONS = ['Not interested right now', 'Under contract with someone', 'No budget this year', 'Bad timing', 'Just installed a system', 'Can’t reach the right person']
-function snoozeDate(months: number): string { const d = new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) }
-const OUTCOMES = ['Talked — interested', 'Left voicemail', 'No answer', 'Call back later', 'Not interested', 'Wrong number']
+export const SNOOZE_REASONS = ['Not interested right now', 'Under contract with someone', 'No budget this year', 'Bad timing', 'Just installed a system', 'Can’t reach the right person']
+export function snoozeDate(months: number): string { const d = new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) }
+export const OUTCOMES = ['Talked — interested', 'Left voicemail', 'No answer', 'Call back later', 'Not interested', 'Wrong number']
 const ACT_COLOR: Record<string, string> = { call: '#22C1EE', email: '#4A8CFF', meeting: '#8B5CF6', note: '#94A3B8', task: '#F5A524', visit: '#10B981' }
 
-function dateIn(days: number): string {
+export function dateIn(days: number): string {
   const d = new Date(); d.setDate(d.getDate() + days)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-function nextMonday(): string { const d = new Date(); const add = ((8 - d.getDay()) % 7) || 7; return dateIn(add) }
+export function nextMonday(): string { const d = new Date(); const add = ((8 - d.getDay()) % 7) || 7; return dateIn(add) }
 
-export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, onToast, onRemoved, onStage }: {
+export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, onToast, onRemoved, onStage, onOpenFull }: {
   lead: LeadRow; canReassign: boolean
   onClose: () => void; onChanged: () => Promise<void> | void; onConvert: () => Promise<void> | void
   onToast: (t: string) => void; onRemoved: () => void; onStage: (b: LeadRow['bucket']) => Promise<void> | void
+  onOpenFull?: () => void
 }) {
   const [detail, setDetail] = useState<Detail | null>(null)
   const [mail, setMail] = useState<MailHit[] | null>(null)
@@ -92,6 +91,12 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
     } finally { setBusy(null) }
   }
 
+  async function setStatus(st: LeadStatusId, reason?: string): Promise<boolean> {
+    const ok = await act('set_status', { status: st, reason }, st === 'lost' ? 'Marked lost — it leaves your lists' : `Marked ${st === 'stuck' ? 'Stuck' : st === 'open' ? 'Open' : 'Contacting'}`)
+    if (ok && st === 'lost') onRemoved()
+    return ok
+  }
+
   async function saveCall() {
     const summary = [callOutcome, callNote.trim()].filter(Boolean).join(' — ')
     if (!(await act('log_call', { summary, outcome: callOutcome }, 'Call logged'))) return
@@ -127,7 +132,6 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
 
   const t = tint(lead.name)
   const sc = scoreColor(lead.score)
-  const stepIdx = STEPS.findIndex((s) => s.id === lead.bucket)
   const timeline = [
     ...(detail?.activity.activities ?? []).map((a) => ({ id: a.id, kind: (a.type ?? 'note').toLowerCase(), title: a.subject || a.type || 'Activity', body: a.body, at: a.completed_at ?? a.created_at, upcoming: !!a.due_at && !a.completed_at, due: a.due_at })),
     ...(detail?.todos ?? []).map((d) => ({ id: d.id, kind: 'task', title: d.title || 'Task', body: d.body, at: d.created_at, upcoming: d.status !== 'done' && !!d.due_date, due: d.due_date, done: d.status === 'done' })),
@@ -144,6 +148,7 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
             <div style={{ fontSize: 13, color: M.ink3, marginTop: 3 }}>{[lead.contact && `${lead.contact}${lead.title ? `, ${lead.title}` : ''}`, lead.company && lead.company !== lead.name ? lead.company : null].filter(Boolean).join(' · ') || 'No contact yet'}</div>
             {lead.location && <div style={{ fontSize: 12.5, color: M.ink3, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}><MapPin size={12} /> {lead.location}</div>}
           </div>
+          {onOpenFull && <button type="button" onClick={onOpenFull} aria-label="Open full page" title="Open full page" style={{ border: 0, background: '#EEF1F6', color: M.ink2, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Maximize2 size={15} /></button>}
           <button type="button" onClick={onClose} aria-label="Close lead" style={{ border: 0, background: '#EEF1F6', color: M.ink2, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
         </div>
 
@@ -156,22 +161,17 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
           </div>
         </div>
 
-        {/* stage stepper */}
-        <div role="group" aria-label="Stage" style={{ display: 'flex', gap: 4, marginTop: 12 }}>
-          {STEPS.map((s, i) => {
-            const done = i <= stepIdx
-            return (
-              <button key={s.id} type="button" onClick={() => void onStage(s.id)} aria-pressed={s.id === lead.bucket}
-                style={{ flex: 1, fontSize: 12, fontWeight: 600, padding: '7px 4px', border: 0, cursor: 'pointer', fontFamily: M.font, borderRadius: i === 0 ? '8px 3px 3px 8px' : '3px',
-                  background: done ? N.accent : '#E7ECF3', color: done ? '#fff' : M.ink3 }}>
-                {i < stepIdx && <Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}{s.label}
-              </button>
-            )
-          })}
-          <button type="button" onClick={() => void onConvert()} disabled={!!busy}
-            style={{ flex: 1.2, fontSize: 12, fontWeight: 650, padding: '7px 4px', border: 0, cursor: 'pointer', fontFamily: M.font, borderRadius: '3px 8px 8px 3px', background: N.brand, color: '#fff' }}>
-            Make it a deal →
-          </button>
+        {/* status: Open · Contacting · Stuck · Lost */}
+        <div style={{ marginTop: 12 }}>
+          <LeadStatusBar status={leadStatusOf(lead)} reason={lead.stuck_reason} onSet={setStatus} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            {lead.bucket === 'sent_info' && <span style={{ ...chip, color: '#047857', background: 'rgba(16,185,129,0.12)' }}><Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Info sent</span>}
+            <span style={{ flex: 1 }} />
+            <button type="button" onClick={() => void onConvert()} disabled={!!busy}
+              style={{ fontSize: 12.5, fontWeight: 650, padding: '7px 12px', border: 0, cursor: 'pointer', fontFamily: M.font, borderRadius: 8, background: N.brand, color: '#fff' }}>
+              Make it an opportunity →
+            </button>
+          </div>
         </div>
 
         {/* contact */}
@@ -351,7 +351,7 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
         {/* more */}
         <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
           <button type="button" onClick={() => void openUsers()} style={{ ...smallBtn, display: 'inline-flex', alignItems: 'center', gap: 5 }}><MoreHorizontal size={14} /> More</button>
-          <a href={`/crm/leads/${lead.id}`} style={{ ...smallBtn, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><ExternalLink size={13} /> Full record</a>
+          {onOpenFull && <button type="button" onClick={onOpenFull} style={{ ...smallBtn, display: 'inline-flex', alignItems: 'center', gap: 5 }}><ExternalLink size={13} /> Open full page</button>}
         </div>
         {tool === 'more' && (
           <Card>
@@ -367,7 +367,6 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button type="button" disabled={busy === 'update_status'} onClick={async () => { if (await act('update_status', { stage: 'lost' }, 'Marked lost')) onRemoved() }} style={{ ...smallBtn, color: '#9A5B00' }}>Mark lost</button>
               {!confirmDel
                 ? <button type="button" onClick={() => setConfirmDel(true)} style={{ ...smallBtn, color: M.red, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Trash2 size={13} /> Delete</button>
                 : <button type="button" onClick={() => void del()} disabled={busy === 'delete'} style={{ ...smallBtn, background: M.red, color: '#fff' }}>{busy === 'delete' ? 'Deleting…' : 'Yes, delete this lead'}</button>}

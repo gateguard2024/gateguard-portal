@@ -28,7 +28,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
-import { getSiteEagleEyeAccess, eagleEyeFullFrame, eagleEyeLiveFrame } from '@/lib/eagle-eye'
+import { getSiteEagleEyeAccess, eagleEyeFullFrame, eagleEyeLiveFrame, eagleEyeRecentMainFrame } from '@/lib/eagle-eye'
 import { getSiteEdge, edgeImage } from '@/lib/edge'
 import { judgeGate, type CheckResult, type GateInfo, type Pt, type Ref } from '@/lib/gate-ai'
 import { sendEmail } from '@/lib/email-sender'
@@ -46,23 +46,32 @@ const mins = (ms: number) => Math.max(1, Math.round(ms / 60000))
  * when nobody is watching), so read a frame off the live feed instead — the main
  * (full-resolution) feed first, then the preview feed — and only fall back to the
  * stored still if both fail (`stale: true`). */
-export async function grabFrame(siteId: string, cameraKey: string): Promise<{ frame: Buffer | null; error?: string; stale?: boolean }> {
+/** Where a picture came from: full = Eagle Eye full-resolution recording (≤90 s old),
+ * live = the live feed (usually Eagle Eye's low-res preview), still = an old stored still,
+ * edge = Gate Guard Edge. */
+export type FrameSource = 'full' | 'live' | 'still' | 'edge'
+
+export async function grabFrame(siteId: string, cameraKey: string): Promise<{ frame: Buffer | null; error?: string; stale?: boolean; source?: FrameSource }> {
   try {
     if (cameraKey.startsWith('een:')) {
       const a = await getSiteEagleEyeAccess(siteId)
       const id = cameraKey.slice(4)
+      // 1. Full resolution from the last 90 s (only while the camera records full res).
+      const full = await eagleEyeRecentMainFrame(a.token, a.baseHost, id, 90)
+      if (full) return { frame: full, source: 'full' }
+      // 2. The live feed (falls back to the low-res preview feed when there's no main one).
       const main = await eagleEyeLiveFrame(a.token, a.baseHost, id, [], 5000, 'main')
-      if (main) return { frame: main }
+      if (main) return { frame: main, source: 'live' }
       const prev = await eagleEyeLiveFrame(a.token, a.baseHost, id, [], 7000, 'preview')
-      if (prev) return { frame: prev }
+      if (prev) return { frame: prev, source: 'live' }
       const f = await eagleEyeFullFrame(a.token, a.baseHost, id)
-      return f ? { frame: f, stale: true } : { frame: null, error: 'Eagle Eye returned no picture for this camera.' }
+      return f ? { frame: f, stale: true, source: 'still' } : { frame: null, error: 'Eagle Eye returned no picture for this camera.' }
     }
     if (cameraKey.startsWith('edge:')) {
       const e = await getSiteEdge(siteId)
       if (!e) return { frame: null, error: 'No Gate Guard Edge device at this property.' }
       const f = await edgeImage(e, siteId, cameraKey.slice(5))
-      return f ? { frame: f } : { frame: null, error: 'The Edge device returned no picture for this camera.' }
+      return f ? { frame: f, source: 'edge' } : { frame: null, error: 'The Edge device returned no picture for this camera.' }
     }
     return { frame: null, error: 'Unknown camera.' }
   } catch (e) { return { frame: null, error: e instanceof Error ? e.message : 'Couldn’t get a picture.' } }
@@ -288,8 +297,19 @@ export function decide(g: Gate, r: Pick<CheckResult, 'verdict' | 'confidence' | 
   return { patch, event }
 }
 
+/** " [full 1920×1080, gate 240×160px]" — logged on every check so the health check can tell
+ * whether a gate is big and sharp enough in the picture to read reliably. */
+export function picTag(r: CheckResult, source?: FrameSource): string {
+  if (!r.px) return ''
+  return ` [${source ?? 'picture'} ${r.px.fw}×${r.px.fh}, gate ${r.px.gw}×${r.px.gh}px]`
+}
+export function parsePicTag(reason: string | null | undefined): { source: string; fw: number; fh: number; gw: number; gh: number } | null {
+  const m = /\[(\w+) (\d+)×(\d+), gate (\d+)×(\d+)px\]/.exec(reason ?? '')
+  return m ? { source: m[1], fw: +m[2], fh: +m[3], gw: +m[4], gh: +m[5] } : null
+}
+
 /** Run one check on one gate (frame given), save it, raise/clear alerts. */
-export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), opts: { manual?: boolean } = {}): Promise<{ result: CheckResult; state: string; alerted: boolean; cleared: boolean; why?: string }> {
+export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), opts: { manual?: boolean; source?: FrameSource } = {}): Promise<{ result: CheckResult; state: string; alerted: boolean; cleared: boolean; why?: string }> {
   const db = sb()
   const refs = await loadRefs(g.id)
   const settled = g.state === 'open' || g.state === 'left_open' ? 'open' : g.state === 'closed' ? 'closed' : null
@@ -396,7 +416,7 @@ export async function checkAndApply(g: Gate, frame: Buffer, now = new Date(), op
   const { error } = await db.from('gate_watches').update(patch).eq('id', g.id)
   if (error) throw new Error(`Couldn’t save the gate state: ${error.message}`)
   await recordDowntime(g, g.state, (patch.state ?? g.state) as string, now, { incident_id: (patch.incident_id ?? g.incident_id) as string | null, ticketed: !(patch.incident_id ?? g.incident_id) })
-  const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: alertProblem ? `${result.reason} ⚠ ${alertProblem}` : result.reason, ms: result.ms, state_after: patch.state ?? g.state })
+  const { error: logErr } = await db.from('gate_watch_checks').insert({ gate_id: g.id, checked_at: now.toISOString(), method: result.method, verdict: result.verdict, confidence: result.confidence, vehicle: result.vehicle, reason: `${alertProblem ? `${result.reason} ⚠ ${alertProblem}` : result.reason}${picTag(result, opts.source)}`, ms: result.ms, state_after: patch.state ?? g.state })
   if (logErr) console.error('[gate-watch] check log failed:', logErr.message)
   if (!why && (patch.state ?? g.state) === 'closed') why = `closed — next look in ${mins(NEXT.closed * 1000)} min`
   return { result, state: patch.state ?? g.state, alerted, cleared, why }
@@ -432,7 +452,7 @@ export async function runDueGates(limit = 40): Promise<{ checked: number; alerts
             if (uErr) errors.push(uErr.message)
             continue
           }
-          const r = await checkAndApply(g, frame, now)
+          const r = await checkAndApply(g, frame, now, { source: got.source })
           checked++; if (r.alerted) alerts++; if (r.cleared) cleared++
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -510,6 +530,16 @@ export async function gateWatchHealth(siteId?: string | null) {
     const openReads = list.filter(c => c.verdict === 'open' || c.verdict === 'partial').length
     const lowConf = list.filter(c => c.verdict !== 'unclear' && c.confidence < 50).length
     if (openReads && g.state === 'closed' && !g.pending_state) notes.push(`${openReads} of the last ${list.length} looks read OPEN but each was followed by a CLOSED read, so it never counted as left open (needs ${OPEN_READS} clear open reads in a row: first look, ${mins((g.threshold_sec ?? 300) * 1000)} min later, then 1 min after that).`)
+    // How big / sharp is the gate in the pictures we're getting?
+    const pic = list.map(c => parsePicTag(c.reason)).find(Boolean)
+    if (pic) {
+      const src = pic.source === 'full' ? 'full-resolution recording' : pic.source === 'live' ? 'live feed' : pic.source === 'edge' ? 'Edge camera' : pic.source
+      const small = pic.gw < 60 || pic.gh < 40, smallish = pic.gw < 120 || pic.gh < 80
+      const line = `Pictures: ${src}, ${pic.fw}×${pic.fh}; the gate's outline is ${pic.gw}×${pic.gh} px of it.`
+      if (small) issues.push(`${line} That's too small to read reliably — ${pic.source === 'live' ? 'turn on full-resolution (continuous) recording for this camera in Eagle Eye so Gate Watch can use full-size pictures, or ' : ''}use a camera closer to the gate.`)
+      else notes.push(smallish ? `${line} Small — readable, but a closer camera${pic.source === 'live' ? ' or full-resolution recording' : ''} would make it more accurate.` : line)
+      if (pic.source === 'live' && !small) notes.push('Using the live feed — Eagle Eye had no full-resolution recording from the last 90 s for this camera (it may only record full resolution on motion).')
+    }
     if (lowConf >= 3) notes.push(`${lowConf} of the last ${list.length} reads were under 50% sure — those are ignored. More taught pictures help.`)
     if (g.state === 'open' && g.open_since) {
       const openMs = now.getTime() - Date.parse(g.open_since)

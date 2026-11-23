@@ -21,7 +21,9 @@ export type Verdict = 'open' | 'closed' | 'partial' | 'unclear'
 export type Method = 'quick' | 'fast_ai' | 'strong_ai'
 export interface Ref { state: 'open' | 'closed'; image: string; sig: number[] }
 export interface GateInfo { label: string; gate_type: GateType; region: Pt[] | null; notes?: string | null }
-export interface CheckResult { verdict: Verdict; confidence: number; vehicle: boolean; reason: string; method: Method; crop: Buffer; sig: number[]; ms: number }
+/** Picture size and how big the gate's outline is in it (source pixels). */
+export interface PicSize { fw: number; fh: number; gw: number; gh: number }
+export interface CheckResult { verdict: Verdict; confidence: number; vehicle: boolean; reason: string; method: Method; crop: Buffer; sig: number[]; ms: number; px?: PicSize }
 
 const FAST_MODEL = process.env.GATE_AI_FAST_MODEL || 'claude-haiku-4-5-20251001'
 const STRONG_MODEL = process.env.GATE_AI_STRONG_MODEL || 'claude-sonnet-4-6'
@@ -167,11 +169,26 @@ let client: Anthropic | null = null
 const ai = () => (client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }))
 const img = (b64: string): Anthropic.ImageBlockParam => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } })
 
-/** Pick up to `n` taught pictures per state, preferring the most recent and feedback-corrected ones. */
-export function pickRefs(refs: (Ref & { source?: string; created_at?: string })[], n = 2): Ref[] {
+/**
+ * Pick up to `n` taught pictures per state to show the AI. First the newest one a person
+ * corrected or confirmed (feedback / confirmed), then the ones that LOOK MOST LIKE RIGHT NOW
+ * (fingerprint closest to the current close-up — same light: day, dusk, night infrared),
+ * so a night check is compared with night examples. Without a fingerprint: newest first.
+ */
+export function pickRefs(refs: (Ref & { source?: string; created_at?: string })[], n = 2, sig?: number[]): Ref[] {
   const out: Ref[] = []
-  for (const s of ['closed', 'open'] as const) {
-    out.push(...refs.filter(r => r.state === s).sort((a, b) => (b.source === 'feedback' ? 1 : 0) - (a.source === 'feedback' ? 1 : 0) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))).slice(0, n))
+  const newest = (a: { created_at?: string }, b: { created_at?: string }) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+  for (const st of ['closed', 'open'] as const) {
+    const pool = refs.filter(r => r.state === st)
+    const human = pool.filter(r => r.source === 'feedback' || r.source === 'confirmed').sort(newest)
+    const chosen: typeof pool = human.slice(0, 1)
+    const rest = pool.filter(r => !chosen.includes(r))
+    const usable = sig?.length ? rest.filter(r => r.sig?.length === sig.length) : []
+    const ranked = usable.length
+      ? [...usable.sort((a, b) => similarity(sig!, b.sig) - similarity(sig!, a.sig)), ...rest.filter(r => !usable.includes(r)).sort(newest)]
+      : rest.sort((a, b) => Number(b.source === 'feedback') - Number(a.source === 'feedback') || newest(a, b))
+    chosen.push(...ranked.slice(0, Math.max(0, n - chosen.length)))
+    out.push(...chosen.slice(0, n))
   }
   return out
 }
@@ -216,17 +233,30 @@ export async function judgeGate(frame: Buffer, gate: GateInfo, refs: (Ref & { so
   const t0 = Date.now()
   const crop = await cropGate(frame, gate.region)
   const sig = await signature(crop, gate.region)
+  const px = await picSize(frame, gate.region)
   if (opts?.allowQuick !== false) {
     const q = quickVerdict(sig, refs)
-    if (q) return { verdict: q.verdict, confidence: q.confidence, vehicle: false, reason: `Matches the taught ${q.verdict} picture (${Math.round(Math.max(q.closed, q.open) * 100)}% alike).`, method: 'quick', crop, sig, ms: Date.now() - t0 }
+    if (q) return { verdict: q.verdict, confidence: q.confidence, vehicle: false, reason: `Matches the taught ${q.verdict} picture (${Math.round(Math.max(q.closed, q.open) * 100)}% alike).`, method: 'quick', crop, sig, ms: Date.now() - t0, px }
   }
   const context = await contextFrame(frame, gate.region)
-  const chosen = pickRefs(refs)
+  const chosen = pickRefs(refs, 2, sig)
   let r = await askAI(FAST_MODEL, gate, crop, context, chosen)
   let method: Method = 'fast_ai'
   const changing = !!expect && (r.verdict === 'open' || r.verdict === 'closed') && r.verdict !== expect
   if (r.confidence < 80 || r.verdict === 'unclear' || r.verdict === 'partial' || (changing && r.confidence < 92)) {
-    try { r = await askAI(STRONG_MODEL, gate, crop, context, pickRefs(refs, 3)); method = 'strong_ai' } catch { /* keep the fast answer */ }
+    try { r = await askAI(STRONG_MODEL, gate, crop, context, pickRefs(refs, 3, sig)); method = 'strong_ai' } catch { /* keep the fast answer */ }
   }
-  return { ...r, method, crop, sig, ms: Date.now() - t0 }
+  return { ...r, method, crop, sig, ms: Date.now() - t0, px }
+}
+
+/** How big the picture is and how many of its pixels the gate's outline covers. */
+export async function picSize(frame: Buffer, region: Pt[] | null): Promise<PicSize | undefined> {
+  try {
+    const m = await sharp(frame).rotate().metadata()
+    const fw = (m.orientation ?? 1) >= 5 ? (m.height ?? 0) : (m.width ?? 0), fh = (m.orientation ?? 1) >= 5 ? (m.width ?? 0) : (m.height ?? 0)
+    if (!fw || !fh) return undefined
+    if (!region || region.length < 3) return { fw, fh, gw: fw, gh: fh }
+    const xs = region.map(p => p.x), ys = region.map(p => p.y)
+    return { fw, fh, gw: Math.round((Math.max(...xs) - Math.min(...xs)) * fw), gh: Math.round((Math.max(...ys) - Math.min(...ys)) * fh) }
+  } catch { return undefined }
 }

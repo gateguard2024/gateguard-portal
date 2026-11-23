@@ -721,7 +721,7 @@ function GuestsTab({ eventId, guests, addItem, updItem, delItem, say, reload }: 
                   <td><Inline value={g.email ?? ''} placeholder="Email" onSave={v => void updItem('guest', g.id, { email: v })} style={{ fontSize: 13, width: '100%' }} ariaLabel="Email" /><Inline value={g.phone ?? ''} placeholder="Phone" onSave={v => void updItem('guest', g.id, { phone: v })} style={{ fontSize: 12.5, color: MUTED, width: '100%' }} ariaLabel="Phone" /></td>
                   <td><select className="ev-in" style={{ height: 30, fontSize: 13 }} value={g.rsvp ?? 'invited'} onChange={e => void updItem('guest', g.id, { rsvp: e.target.value })} aria-label="RSVP">{RSVPS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></td>
                   <td><button className={`ev-b sm ${inNow ? '' : 'line'}`} style={inNow ? { background: '#E8F5EC', color: GREEN } : undefined} onClick={() => checkIn(g)}>{inNow ? '✓ Here' : 'Check in'}</button></td>
-                  <td>{g.lead_id ? <a href={`/crm/leads/${g.lead_id}`} style={{ color: BRAND, fontSize: 13, textDecoration: 'none' }}>Open ›</a> : <span className="ev-note">—</span>}</td>
+                  <td>{g.lead_id ? <a href={`/?tab=opps&lead=${g.lead_id}`} style={{ color: BRAND, fontSize: 13, textDecoration: 'none' }}>Open ›</a> : <span className="ev-note">—</span>}</td>
                   <td><button className="ep-del" aria-label="Remove guest" onClick={() => void delItem('guest', g.id)}>×</button></td>
                 </tr>
               )
@@ -830,7 +830,7 @@ function ResultsTab({ d, stats, patchEvent, say, reload }: { d: Detail; stats: S
           <h2><span>Leads from this event</span><button className="ev-b line sm" disabled={busy} onClick={makeLeads}>Turn guests into leads</button></h2>
           <div className="hint">Everyone who said yes or checked in becomes a lead in Sales, with a note naming this event.</div>
           {!leads.length ? <div className="ev-note">No leads yet.</div> : leads.map(g => (
-            <a key={g.id} className="ep-row" href={`/crm/leads/${g.lead_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+            <a key={g.id} className="ep-row" href={`/?tab=opps&lead=${g.lead_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
               <span style={{ flex: 1 }}><b>{g.name}</b>{g.company ? <span className="ev-note"> · {g.company}</span> : null}</span><span style={{ color: BRAND, fontSize: 13 }}>Open ›</span>
             </a>
           ))}

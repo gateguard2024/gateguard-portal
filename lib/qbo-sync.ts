@@ -9,9 +9,10 @@
  *
  *   To QuickBooks : customers (find or create) · catalog items · invoices (create,
  *                   update while unpaid, void) · payments (the new amount only) ·
- *                   approved dealer commissions as vendor bills.
+ *                   approved dealer commissions as vendor bills · approved outside-vendor
+ *                   (subcontractor) invoices on Gate Guard's own jobs as vendor bills.
  *   From QuickBooks: invoice balances/paid state, QuickBooks-made invoices for linked
- *                   customers, deleted/voided invoices, commission bills paid.
+ *                   customers, deleted/voided invoices, commission + vendor bills paid.
  *
  * Safety:
  *   - Nothing is sent until auto-sync is on (or someone presses "Sync now"), and
@@ -44,9 +45,10 @@ export interface QboSettings {
   deposit_account_id: string | null
   commission_account_id: string | null
   sync_commissions: boolean
+  vendor_account_id: string | null
   auto_create_customers: boolean
 }
-const DEFAULTS: QboSettings = { auto_sync: false, sync_start_date: null, default_item_id: null, item_map: {}, income_account_id: null, deposit_account_id: null, commission_account_id: null, sync_commissions: false, auto_create_customers: true }
+const DEFAULTS: QboSettings = { auto_sync: false, sync_start_date: null, default_item_id: null, item_map: {}, income_account_id: null, deposit_account_id: null, commission_account_id: null, sync_commissions: false, vendor_account_id: null, auto_create_customers: true }
 
 export async function getSettings(): Promise<QboSettings> {
   const { data, error } = await qdb().from('qbo_settings').select('*').eq('id', 1).maybeSingle()
@@ -335,6 +337,77 @@ export async function pushCommission(auth: Auth, payoutId: string, settings: Qbo
   return { ok: true, qboId: id }
 }
 
+// ── Outside vendors (subcontractors) ─────────────────────────────────────────
+/** Gate Guard's own vendor (no company, or the corporate company) — only these are billed in QuickBooks. */
+export async function isGateGuardVendor(orgId: string | null | undefined): Promise<boolean> {
+  if (!orgId) return true
+  const { data } = await qdb().from('organizations').select('org_tier').eq('id', orgId).maybeSingle()
+  return data?.org_tier === 'corporate'
+}
+
+async function ensureSubVendor(auth: Auth, subId: string): Promise<{ id: string } | { error: string }> {
+  const db = qdb()
+  const { data: v, error } = await db.from('subcontractors').select('id, name, company, email, phone, qbo_vendor_id').eq('id', subId).maybeSingle()
+  if (error || !v) return { error: error?.message ?? 'Vendor not found' }
+  if (v.qbo_vendor_id) return { id: String(v.qbo_vendor_id) }
+  const name = String(v.company || v.name)
+  const q = await qboQuery<Row>(auth, `select Id from Vendor where DisplayName = '${esc(displayName(name))}'`)
+  if (!q.ok) return { error: `Couldn’t look up the vendor in QuickBooks: ${q.error}` }   // never create on a failed lookup (duplicate)
+  let id = q.rows[0]?.Id ? String(q.rows[0].Id) : null
+  if (!id) {
+    const body: Row = { DisplayName: displayName(name), CompanyName: name.slice(0, 100) }
+    if (v.email) body.PrimaryEmailAddr = { Address: String(v.email) }
+    if (v.phone) body.PrimaryPhone = { FreeFormNumber: String(v.phone) }
+    let r = await qboJson<Row>(auth, '/vendor', { method: 'POST', body })
+    if (!r.ok && r.code === '6240') r = await qboJson<Row>(auth, '/vendor', { method: 'POST', body: { ...body, DisplayName: displayName(`${name} (Vendor)`) } })
+    if (!r.ok) return { error: `Couldn’t create the vendor in QuickBooks: ${r.error}` }
+    id = String(r.data.Vendor.Id)
+    await logSync('to_qb', 'vendor', 'ok', `Created vendor “${name}”`, v.id, id)
+  }
+  const { error: uErr } = await db.from('subcontractors').update({ qbo_vendor_id: id }).eq('id', v.id)
+  if (uErr) return { error: uErr.message }
+  return { id }
+}
+
+/** Approved vendor invoice on a Gate Guard job → a vendor bill in QuickBooks (pay it there). */
+export async function pushVendorBill(auth: Auth, linkId: string, settings: QboSettings): Promise<{ ok: true; qboId: string } | { ok: false; error: string; skipped?: boolean }> {
+  const db = qdb()
+  const { data: l, error } = await db.from('work_order_subcontractors').select('*').eq('id', linkId).maybeSingle()
+  if (error || !l) return { ok: false, error: error?.message ?? 'Vendor job not found' }
+  if (l.qb_bill_id) return { ok: true, qboId: String(l.qb_bill_id) }
+  if (l.invoice_status !== 'approved') return { ok: false, error: 'The invoice isn’t approved.', skipped: true }
+  const { data: v } = await db.from('subcontractors').select('id, org_id, name, company').eq('id', l.subcontractor_id).maybeSingle()
+  if (!v) return { ok: false, error: 'Vendor not found' }
+  if (!(await isGateGuardVendor(v.org_id))) return { ok: false, error: 'Dealer vendor — paid by the dealer, not in Gate Guard’s QuickBooks.', skipped: true }
+  const fail = async (msg: string) => { await db.from('work_order_subcontractors').update({ qb_sync_error: msg }).eq('id', l.id); await logSync('to_qb', 'bill', 'error', msg, l.id); return { ok: false as const, error: msg } }
+  if (!settings.vendor_account_id) return fail('Pick the expense account for vendor bills on the QuickBooks page.')
+  const ven = await ensureSubVendor(auth, v.id)
+  if ('error' in ven) return fail(ven.error)
+  const { data: wo } = await db.from('work_orders').select('wo_number, title, site_id').eq('id', l.work_order_id).maybeSingle()
+  let customerRef: Row | undefined
+  if (wo?.site_id) { const c = await ensureCustomer(auth, { siteId: wo.site_id }, settings); if ('id' in c) customerRef = { value: c.id } }
+  const ref = (l.invoice_number ? String(l.invoice_number) : `VEN-${String(l.id).slice(0, 8)}`).slice(0, 21)
+  // Already created on an earlier attempt? (vendor + DocNumber)
+  const q = await qboQuery<Row>(auth, `select Id from Bill where DocNumber = '${esc(ref)}' and VendorRef = '${esc(ven.id)}'`)
+  let id = q.ok && q.rows[0]?.Id ? String(q.rows[0].Id) : null
+  if (!id) {
+    const job = [wo?.wo_number, wo?.title].filter(Boolean).join(' · ')
+    const body = {
+      VendorRef: { value: ven.id }, DocNumber: ref, TxnDate: todayET(),
+      PrivateNote: `Gate Guard Nexus vendor job ${job} (${l.id})`.slice(0, 4000),
+      Line: [{ DetailType: 'AccountBasedExpenseLineDetail', Amount: money(l.invoice_amount), Description: `${job || 'Service job'}${l.invoice_note ? ` — ${l.invoice_note}` : ''}`.slice(0, 4000),
+        AccountBasedExpenseLineDetail: { AccountRef: { value: settings.vendor_account_id }, ...(customerRef ? { CustomerRef: customerRef } : {}) } }],
+    }
+    const r = await qboJson<Row>(auth, '/bill', { method: 'POST', body })
+    if (!r.ok) return fail(r.error)
+    id = String(r.data.Bill.Id)
+  }
+  const { error: uErr } = await db.from('work_order_subcontractors').update({ qb_bill_id: id, qb_sync_error: null, updated_at: new Date().toISOString() }).eq('id', l.id)
+  if (uErr) return { ok: false, error: uErr.message }
+  await logSync('to_qb', 'bill', 'ok', `Vendor bill $${money(l.invoice_amount).toFixed(2)} (${ref})`, l.id, id)
+  return { ok: true, qboId: id }
+}
+
 // ── From QuickBooks ──────────────────────────────────────────────────────────
 /** Apply one QuickBooks invoice to Nexus: update a linked invoice, or bring in a new one for a linked customer. */
 export async function applyQboInvoice(qi: Row): Promise<'updated' | 'created' | 'skipped' | 'error'> {
@@ -408,7 +481,19 @@ export async function releaseHeldCommissions(invoiceId: string) {
 async function applyQboBill(b: Row): Promise<'updated' | 'skipped' | 'error'> {
   const db = qdb()
   const { data: p } = await db.from('commission_payouts').select('id, status').eq('qb_bill_id', String(b.Id)).maybeSingle()
-  if (!p) return 'skipped'
+  if (!p) {
+    // A vendor (subcontractor) bill paid in QuickBooks → mark their invoice paid here.
+    const { data: l } = await db.from('work_order_subcontractors').select('id, invoice_status').eq('qb_bill_id', String(b.Id)).maybeSingle()
+    if (!l) return 'skipped'
+    if (b.status !== 'Deleted' && money(b.Balance) <= 0 && l.invoice_status !== 'paid') {
+      const now = new Date().toISOString()
+      const { error } = await db.from('work_order_subcontractors').update({ invoice_status: 'paid', paid_at: now, updated_at: now }).eq('id', l.id)
+      if (error) return 'error'
+      await logSync('from_qb', 'bill', 'ok', 'Vendor bill paid in QuickBooks', l.id, String(b.Id))
+      return 'updated'
+    }
+    return 'skipped'
+  }
   if (b.status !== 'Deleted' && money(b.Balance) <= 0 && p.status !== 'paid') {
     const { error } = await db.from('commission_payouts').update({ status: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', p.id)
     if (error) return 'error'
@@ -515,6 +600,17 @@ export async function runSync(opts: { force?: boolean; budgetMs?: number } = {})
           if (left() < 5000) { more = true; break }
           const r = await pushPayment(auth, p.id, settings)
           if (r.ok) { if (r.amount > 0) pushed.payments++ } else pushed.errors++
+        }
+        // Approved outside-vendor invoices on Gate Guard jobs → bills.
+        if (settings.vendor_account_id) {
+          const { data: vls, error: vlErr } = await db.from('work_order_subcontractors').select('id')
+            .is('qb_bill_id', null).eq('invoice_status', 'approved').gte('invoice_approved_at', settings.sync_start_date).limit(40)
+          if (vlErr && !/column|schema cache/i.test(vlErr.message)) pushed.errors++
+          for (const v of (vls ?? []) as Row[]) {
+            if (left() < 4000) { more = true; break }
+            const r = await pushVendorBill(auth, v.id, settings)
+            if (r.ok) pushed.bills++; else if (!r.skipped) pushed.errors++
+          }
         }
         // Approved dealer commissions → bills.
         if (settings.sync_commissions) {
