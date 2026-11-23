@@ -1,111 +1,153 @@
+/**
+ * /api/portal/[slug]/users/[id] — one person at the property (a Brivo user).
+ *   GET  (portal PIN)                → { groups, credentials, suspended }
+ *   POST (portal PIN + manager PIN)  { action, ... }
+ *     set_pin { pin }               — add a gate PIN (4–8 digits)
+ *     mobile_pass                   — send a Brivo mobile pass to their email
+ *     add_fob { card_number, facility_code? }
+ *     credential_off / credential_on { credential_id }
+ *     suspend / reactivate          — turn the whole person off / back on
+ *     add_group / remove_group { group_id }  — this property's groups only
+ *     update { firstName?, lastName?, email?, phone? }
+ * (Replaced the old unscoped PATCH route here — it needed no manager PIN, Nov 23 2026.)
+ * Only people in this property's Brivo groups can be read or changed.
+ * Every change is logged to site_events with the manager's name.
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { getPortalManager } from '@/lib/portal-manager'
 import {
-  getSiteBrivoToken, getBrivoUser, updateBrivoUser, getBrivoUserGroups,
-  getBrivoUserCredentialSummary, issueBrivoMobilePass, resendBrivoMobilePass, revokeBrivoMobilePass,
-  setBrivoUserSuspended,
+  getSiteBrivoToken, listBrivoSiteGroupIds, getBrivoUserGroups, getBrivoUser, getBrivoUserCredentialSummary,
+  assignBrivoPin, issueBrivoMobilePass, assignBrivoFob, setBrivoCredentialSuspended, setBrivoUserSuspended,
+  assignBrivoUserToGroup, removeBrivoUserFromGroup, updateBrivoUser,
 } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const bad = (error: string, status = 400, extra: Record<string, unknown> = {}) => NextResponse.json({ error, ...extra }, { status })
 
-function brivoEmailOf(u: Record<string, unknown>): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const emails = (u as any).emails as any[] | undefined
-  if (Array.isArray(emails) && emails.length) return emails[0].address ?? emails[0].email ?? null
-  return null
-}
-function brivoPhoneOf(u: Record<string, unknown>): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nums = (u as any).phoneNumbers as any[] | undefined
-  if (Array.isArray(nums) && nums.length) return nums[0].number ?? null
-  return null
+/** Brivo login for the portal's property + proof this person belongs to it. */
+async function scoped(siteId: string, userId: string) {
+  const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+  const [siteGroups, userGroups] = await Promise.all([
+    brivoSiteId ? listBrivoSiteGroupIds(token, apiKey, brivoSiteId) : Promise.resolve([] as string[]),
+    getBrivoUserGroups(token, apiKey, userId),
+  ])
+  const siteSet = new Set(siteGroups)
+  // No site groups known (account = this property only) → the account itself is the scope.
+  const inSite = siteSet.size === 0 || userGroups.some(g => siteSet.has(g.id))
+  return { token, apiKey, siteSet, userGroups, inSite }
 }
 
-// GET /api/portal/[slug]/users/[id] — full user detail (name/email/phone + groups + credentials).
 export async function GET(req: NextRequest, { params }: { params: { slug: string; id: string } }) {
   const v = await verifyPortal(req, params.slug)
-  if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
-  if (!v.portal.site_id) return NextResponse.json({ error: 'Portal not linked to a site.' }, { status: 400 })
-
+  if (!v.ok) return bad(v.error, v.status)
+  if (!v.portal.site_id) return bad('Portal not linked to a site.')
   try {
-    const { token, apiKey } = await getSiteBrivoToken(v.portal.site_id)
-    const [raw, groups, credentials] = await Promise.all([
-      getBrivoUser(token, apiKey, params.id),
-      getBrivoUserGroups(token, apiKey, params.id).catch(() => []),
-      getBrivoUserCredentialSummary(token, apiKey, params.id).catch(() => []),
+    const s = await scoped(v.portal.site_id, params.id)
+    if (!s.inSite) return bad('That person isn’t at this property.', 404)
+    const [credentials, raw] = await Promise.all([
+      getBrivoUserCredentialSummary(s.token, s.apiKey, params.id).catch(() => []),
+      getBrivoUser(s.token, s.apiKey, params.id).catch(() => null),
     ])
-    const user = {
-      id: String(raw.id ?? params.id),
-      firstName: raw.firstName ?? '',
-      lastName: raw.lastName ?? '',
-      email: brivoEmailOf(raw),
-      phone: brivoPhoneOf(raw),
-      active: raw.suspended !== true,
-    }
-    return NextResponse.json({ user, groups, credentials })
+    return NextResponse.json({
+      groups: s.userGroups.filter(g => s.siteSet.size === 0 || s.siteSet.has(g.id)),
+      credentials,
+      suspended: raw ? raw.suspended === true : null,
+    })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load user' }, { status: 502 })
+    return bad(e instanceof Error ? e.message : 'Could not load that person.', 502)
   }
 }
 
-// PATCH /api/portal/[slug]/users/[id]  { action, ... }
-//   action 'update'      { firstName, lastName, email?, phone? }
-//   action 'issue_pass'  { email }        → revoke old + email a fresh mobile pass
-//   action 'revoke_pass'                  → turn off all mobile passes
-export async function PATCH(req: NextRequest, { params }: { params: { slug: string; id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: { slug: string; id: string } }) {
   const v = await verifyPortal(req, params.slug)
-  if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
+  if (!v.ok) return bad(v.error, v.status)
   const siteId = v.portal.site_id
-  if (!siteId) return NextResponse.json({ error: 'Portal not linked to a site.' }, { status: 400 })
+  if (!siteId) return bad('Portal not linked to a site.')
+  const manager = await getPortalManager(req, params.slug)
+  if (!manager) return bad('Sign in with your personal PIN to make changes.', 403, { need_manager: true })
 
-  const body = await req.json().catch(() => ({}))
-  const action = String(body.action ?? '')
-
+  const b = await req.json().catch(() => ({}))
+  const action = String(b.action ?? '')
+  const who = String(b.name ?? 'a resident').slice(0, 80)
   try {
-    const { token, apiKey } = await getSiteBrivoToken(siteId)
-
-    if (action === 'update') {
-      await updateBrivoUser(token, apiKey, params.id, {
-        firstName: body.firstName ?? undefined,
-        lastName: body.lastName ?? undefined,
-        email: body.email !== undefined ? (body.email || null) : undefined,
-        phone: body.phone !== undefined ? (body.phone || null) : undefined,
-      })
-    } else if (action === 'issue_pass') {
-      const email = body.email ? String(body.email).trim() : null
-      if (!email) return NextResponse.json({ error: 'An email is required to send the pass.' }, { status: 400 })
-      // resend = revoke any existing pass then issue+email a fresh one
-      await resendBrivoMobilePass(token, apiKey, params.id, email)
-      audit(siteId, params.slug, `Mobile pass issued to user ${params.id}`)
-    } else if (action === 'issue_pass_new') {
-      const email = body.email ? String(body.email).trim() : null
-      await issueBrivoMobilePass(token, apiKey, params.id, email)
-    } else if (action === 'revoke_pass') {
-      await revokeBrivoMobilePass(token, apiKey, params.id)
-      audit(siteId, params.slug, `Mobile pass revoked for user ${params.id}`)
-    } else if (action === 'suspend' || action === 'reactivate') {
-      const suspend = action === 'suspend'
-      await setBrivoUserSuspended(token, apiKey, params.id, suspend)
-      audit(siteId, params.slug, `User ${params.id} ${suspend ? 'suspended' : 'reactivated'}`)
-    } else {
-      return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+    const s = await scoped(siteId, params.id)
+    if (!s.inSite) return bad('That person isn’t at this property.', 404)
+    const { token, apiKey } = s
+    let summary = ''
+    switch (action) {
+      case 'set_pin': {
+        const pin = String(b.pin ?? '').trim()
+        if (!/^\d{4,8}$/.test(pin)) return bad('The gate PIN must be 4 to 8 digits.')
+        await assignBrivoPin(token, apiKey, params.id, pin)
+        summary = 'Gate PIN added'
+        break
+      }
+      case 'mobile_pass':
+        await issueBrivoMobilePass(token, apiKey, params.id, b.email ? String(b.email) : null)
+        summary = 'Mobile pass sent'
+        break
+      case 'add_fob': {
+        const card = String(b.card_number ?? '').trim()
+        if (!card) return bad('Enter the fob or card number.')
+        await assignBrivoFob(token, apiKey, params.id, card, b.facility_code ? String(b.facility_code) : null)
+        summary = `Fob added (#${card})`
+        break
+      }
+      case 'credential_off':
+      case 'credential_on': {
+        const id = String(b.credential_id ?? '')
+        if (!id) return bad('credential_id required')
+        const creds = await getBrivoUserCredentialSummary(token, apiKey, params.id)
+        if (!creds.some(c => c.id === id)) return bad('That credential isn’t on this person.', 404)
+        await setBrivoCredentialSuspended(token, apiKey, id, action === 'credential_off')
+        summary = action === 'credential_off' ? 'Credential turned off' : 'Credential turned back on'
+        break
+      }
+      case 'suspend':
+      case 'reactivate':
+        await setBrivoUserSuspended(token, apiKey, params.id, action === 'suspend')
+        summary = action === 'suspend' ? 'Access turned off' : 'Access turned back on'
+        break
+      case 'add_group':
+      case 'remove_group': {
+        const gid = String(b.group_id ?? '')
+        if (!gid) return bad('group_id required')
+        if (s.siteSet.size && !s.siteSet.has(gid)) return bad('That access group isn’t at this property.')
+        if (action === 'add_group') await assignBrivoUserToGroup(token, apiKey, gid, params.id)
+        else await removeBrivoUserFromGroup(token, apiKey, gid, params.id)
+        summary = action === 'add_group' ? `Added to ${String(b.group_name ?? 'a group')}` : `Removed from ${String(b.group_name ?? 'a group')}`
+        break
+      }
+      case 'update': {
+        const ch: { firstName?: string; lastName?: string; email?: string | null; phone?: string | null } = {}
+        if (typeof b.firstName === 'string' && b.firstName.trim()) ch.firstName = b.firstName.trim()
+        if (typeof b.lastName === 'string' && b.lastName.trim()) ch.lastName = b.lastName.trim()
+        if ('email' in b) ch.email = b.email ? String(b.email).trim() : null
+        if ('phone' in b) ch.phone = b.phone ? String(b.phone).trim() : null
+        if (!Object.keys(ch).length) return bad('Nothing to change.')
+        await updateBrivoUser(token, apiKey, params.id, ch)
+        summary = 'Details updated'
+        break
+      }
+      default:
+        return bad('Unknown action.')
     }
 
-    return NextResponse.json({ ok: true })
+    const { error: logErr } = await db().from('site_events').insert({
+      site_id: siteId, event_type: 'access_admin', event_source: 'brivo',
+      title: `${summary}: ${who}`,
+      description: `From the property portal (${params.slug}) by ${manager.name}`,
+      summary: `${summary} by ${manager.name}`,
+      metadata: { brivo_user_id: params.id, action, via: 'customer_portal', portal_slug: params.slug, by_name: manager.name, manager_id: manager.id, credential_id: b.credential_id ?? null, group_id: b.group_id ?? null },
+    })
+    if (logErr) console.error('[portal user] audit log failed:', logErr.message)
+    return NextResponse.json({ ok: true, summary })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Update failed' }, { status: 502 })
+    return bad(e instanceof Error ? e.message : 'That didn’t work.', 502)
   }
-}
-
-function audit(siteId: string, slug: string, title: string) {
-  supabase.from('site_events').insert({
-    site_id: siteId, event_type: 'access_admin', event_source: 'brivo',
-    title, description: `From the customer portal (${slug}) by the site manager`, summary: title,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    metadata: { via: 'customer_portal', portal_slug: slug } as any,
-  }).then(() => {}, () => {})
 }
