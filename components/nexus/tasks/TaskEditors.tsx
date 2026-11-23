@@ -6,7 +6,7 @@
  * Every pop-up carries data-tk-pop so Escape closes the pop-up before the panel.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { STATUS, T, addDays, localISO, type Person, type Task, type TaskStatus } from './shared'
+import { STATUS, T, addDays, localISO, tagColor, type Person, type Task, type TaskStatus } from './shared'
 
 const CSS = `
 .tkp-pop{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:260px;max-width:min(360px,calc(100vw - 32px));background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 16px 40px -12px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;gap:2px}
@@ -214,7 +214,7 @@ export function TagsEditor({ tags, suggestions, onSave, onClose }: { tags: strin
       <form onSubmit={e => { e.preventDefault(); add(q) }}>
         <label><span className="tk-sr">Add a tag</span><input autoFocus className="tkp-srch" placeholder="Add a tag — press Enter" value={q} onChange={e => setQ(e.target.value)} /></label>
       </form>
-      {sugg.map(s => <button key={s} type="button" className="tkp-opt" onClick={() => add(s)}><span className="tk-tag" style={{ background: '#EFEAFB', color: '#5B3BB0' }}>{s}</span></button>)}
+      {sugg.map(s => <button key={s} type="button" className="tkp-opt" onClick={() => add(s)}><span className="tk-tag" style={tagColor(s)}>{s}</span></button>)}
     </Pop>
   )
 }

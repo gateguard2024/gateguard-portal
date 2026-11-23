@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, isInScope, getProfileId } from '@/lib/org-scope'
+import { normalizeRole } from '@/lib/permissions'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +36,7 @@ export async function opportunityInScope(id: string): Promise<boolean> {
 export async function leadInScope(rawId: string): Promise<boolean> {
   const user = await getCurrentUser()
   const scope = await resolveOrgScope(user)
-  if (scope.all) return true
+  if (scope.all && normalizeRole(user.role) !== 'user') return true
   const uuid = rawId.replace(/^show_/, '')
   const { data } = await supabase
     .from('leads')
@@ -45,5 +46,8 @@ export async function leadInScope(rawId: string): Promise<boolean> {
   const row = data as { org_id?: string | null; assigned_to_user_id?: string | null } | null
   if (!row) return false
   if (row.assigned_to_user_id && row.assigned_to_user_id === user.id) return true
+  // Plain users (not admin / supervisor) see only leads assigned to them — same rule as
+  // the Leads screen (applyAssignedScope 'leads'). Decided Nov 23 2026: leads only, not jobs.
+  if (normalizeRole(user.role) === 'user') return false
   return isInScope(scope, row.org_id)
 }

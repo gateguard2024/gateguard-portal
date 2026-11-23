@@ -12,7 +12,7 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import type { PortalUser } from '@/lib/current-user'
-import { applyOrgScope, type OrgScope } from '@/lib/org-scope'
+import { applyOrgScope, applyAssignedScope, type OrgScope } from '@/lib/org-scope'
 import { dealCtx, scopeDeals, STALLED_DAYS, type DealCtx } from '@/lib/sales-deals'
 import { searchKnowledge } from '@/lib/vectorize'
 import { searchGuide } from '@/lib/lexi/nexus-guide'
@@ -312,12 +312,13 @@ export async function runReadTool(name: string, input: Row, ctx: LexiCtx): Promi
     }
     case 'find_leads': {
       let q = scoped('leads', 'id, company_name, contact_name, email, phone, stage, source, unit_count, location, created_at', ctx).is('deleted_at', null)
+      q = applyAssignedScope(q, ctx.user.role, { clerkUserId: ctx.user.id, profileId: null }, 'leads')   // plain users: only their own leads
       if (!input.include_lost) q = q.not('stage', 'eq', 'lost')
       if (has(input.query)) q = q.or(`company_name.ilike.${like(input.query)},contact_name.ilike.${like(input.query)}`)
       const { data, error } = await q.order('created_at', { ascending: false }).limit(clamp(input.limit, 10))
       if (error) return { data: { error: error.message } }
       const rows = (data ?? []) as Row[]
-      return { data: rows, cards: rows.slice(0, 6).map(l => ({ kind: 'lead', id: l.id, title: l.company_name || l.contact_name || 'Lead', sub: [l.contact_name, l.stage, l.location].filter(Boolean).join(' · '), href: `/crm/leads/${l.id}` })) }
+      return { data: rows, cards: rows.slice(0, 6).map(l => ({ kind: 'lead', id: l.id, title: l.company_name || l.contact_name || 'Lead', sub: [l.contact_name, l.stage, l.location].filter(Boolean).join(' · '), href: `/?tab=opps&lead=${l.id}` })) }
     }
     case 'find_customers': {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

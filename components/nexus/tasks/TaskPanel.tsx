@@ -8,7 +8,7 @@
  * edit; watchers can comment.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { PAGE_BG, PRIORITY, STATUS, T, addDays, fmtDue, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, type Person, type Task, type TaskPriority, type TaskStatus } from './shared'
+import { PAGE_BG, PRIORITY, STATUS, T, addDays, fmtDue, initials, isOverdue, linkTypeLabel, localISO, PriorityIcon, tagColor, type Person, type Task, type TaskPriority, type TaskStatus } from './shared'
 import { DatesEditor, OptionsEditor, PeoplePicker, Pop, RecordSearch, StatusEditor, TagsEditor, TaskSearch, WAITING_ON, type RecordHit } from './TaskEditors'
 import { ActivitySection, Checklist, Description, Files, SectionStyles, Subtasks, type Activity, type ChecklistItem, type Comment, type FileRow, type Subtask } from './TaskSections'
 
@@ -304,7 +304,7 @@ export function TaskPanel({ taskId, row, allTasks, people, me, expanded, onExpan
         <PeoplePicker label="Watchers" multi people={people} me={me} selected={t.watcher_ids ?? []} onClose={close} onPick={toggleWatcher} />)}
       {chipProp('tags', I.tag, 'Tags',
         <>{(t.tags ?? []).map(tag => (
-          <span key={tag} className="tkp-chip" style={{ background: '#EFEAFB', color: '#5B3BB0' }}>{tag}
+          <span key={tag} className="tkp-chip" style={tagColor(tag)}>{tag}
             {can.edit && <button type="button" aria-label={`Remove tag ${tag}`} onClick={() => void save({ tags: (t.tags ?? []).filter(x => x !== tag) })}>×</button>}</span>
         ))}</>,
         '+ Tag', '+ Add a tag', (t.tags ?? []).length > 0,

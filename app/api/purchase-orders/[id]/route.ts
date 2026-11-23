@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }         from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
-import { recordInScope } from '@/lib/ops-scope'
+import { recordInScope, guardSite } from '@/lib/ops-scope'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 import { stockReady, receivePO, ownsPlace } from '@/lib/stock'
@@ -27,6 +27,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  // Tag (or untag) ONE line as bought for a property's service plan (migration 236):
+  // { tag_line: { item_id, site_id | null } }. Only before the PO is received — receiving
+  // is what puts tagged lines on that property's spare shelf.
+  if (body.tag_line && typeof body.tag_line === 'object') {
+    const t = body.tag_line as { item_id?: unknown; site_id?: unknown }
+    const itemId = typeof t.item_id === 'string' ? t.item_id : ''
+    const siteId = typeof t.site_id === 'string' && t.site_id ? t.site_id : null
+    const db = serviceDb()
+    const [{ data: po }, { data: item }] = await Promise.all([
+      db.from('purchase_orders').select('status').eq('id', params.id).maybeSingle(),
+      db.from('purchase_order_items').select('id').eq('id', itemId).eq('po_id', params.id).maybeSingle(),
+    ])
+    if (!item) return NextResponse.json({ error: 'That line isn’t on this PO.' }, { status: 404 })
+    if (['received', 'closed', 'cancelled'].includes(String((po as { status?: string } | null)?.status ?? ''))) {
+      return NextResponse.json({ error: 'This PO is already received or closed — tag lines before receiving.' }, { status: 400 })
+    }
+    if (siteId) {
+      const { data: site } = await db.from('sites').select('id').eq('id', siteId).maybeSingle()
+      if (!site || !(await guardSite(req, siteId))) return NextResponse.json({ error: 'Pick a property you work on.' }, { status: 400 })
+    }
+    const { error: tErr } = await db.from('purchase_order_items').update({ site_id: siteId }).eq('id', itemId)
+    if (tErr) return NextResponse.json({ error: /site_id/.test(tErr.message) ? 'Needs migration 236.' : tErr.message }, { status: 500 })
+    const { data: rec, error: rErr } = await db.from('purchase_orders').select('*, purchase_order_items(*)').eq('id', params.id).single()
+    if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
+    return NextResponse.json({ record: rec })
+  }
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (typeof body.status === 'string' && ALLOWED_STATUS.includes(body.status)) patch.status = body.status

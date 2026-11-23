@@ -67,6 +67,25 @@ export const PRIORITY: Record<TaskPriority, { label: string; color: string }> = 
   low: { label: 'Low', color: '#0071E3' },
 }
 const LINK_LABEL: Record<string, string> = { work_order: 'Work order', site: 'Site', property: 'Site', lead: 'Lead', opportunity: 'Opportunity', customer: 'Customer', dealer: 'Dealer' }
+/** Each task tag gets its own soft color, always the same for the same name (any case). */
+const TAG_COLORS: { bg: string; fg: string }[] = [
+  { bg: '#E8F1FD', fg: '#0058B0' }, // blue
+  { bg: '#E6F6EC', fg: '#1A7F37' }, // green
+  { bg: '#FFF1E0', fg: '#9A4A00' }, // orange
+  { bg: '#F2EAFB', fg: '#6A3DB8' }, // purple
+  { bg: '#FDE9EC', fg: '#B4233A' }, // red
+  { bg: '#E4F6F8', fg: '#0E6E7A' }, // teal
+  { bg: '#FCF5DC', fg: '#7D6000' }, // yellow
+  { bg: '#FCE8F4', fg: '#A0306E' }, // pink
+  { bg: '#EAEDF7', fg: '#3D4A8C' }, // indigo
+  { bg: '#EFEFF2', fg: '#4A4A55' }, // gray
+]
+export function tagColor(tag: string): { background: string; color: string } {
+  let h = 0
+  for (const ch of tag.trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const c = TAG_COLORS[h % TAG_COLORS.length]
+  return { background: c.bg, color: c.fg }
+}
 export const linkTypeLabel = (t?: string | null) => (t ? LINK_LABEL[t] ?? t : '')
 
 // Local calendar dates (not UTC) so "today" is right in the evening.

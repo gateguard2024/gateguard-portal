@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +40,7 @@ export async function GET() {
       .is('lost_at', null)
       .is('opportunity_id', null)
     openQ = applyOrgScope(openQ, scope)
+    openQ = applyAssignedScope(openQ, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: openRows, error: openErr } = await (openQ as any).order('updated_at', { ascending: false })
     if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 })
@@ -49,6 +50,7 @@ export async function GET() {
     // Converted count → conversion %
     let convQ = supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('opportunity_id', 'is', null)
     convQ = applyOrgScope(convQ, scope)
+    convQ = applyAssignedScope(convQ, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
     const { count: convertedCount } = await convQ
     const converted = convertedCount ?? 0
 

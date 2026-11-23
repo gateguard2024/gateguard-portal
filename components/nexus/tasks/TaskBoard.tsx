@@ -3,7 +3,7 @@
 /** Tasks · Board view — one column per status; drag a card to change its status.
  *  The Done column is only a drop target: finished tasks live on the Completed tab. */
 import { useState } from 'react'
-import { STATUS, T, fmtDue, initials, isOverdue, linkTypeLabel, PriorityIcon, type Task, type TaskStatus } from './shared'
+import { STATUS, T, fmtDue, initials, isOverdue, linkTypeLabel, PriorityIcon, tagColor, type Task, type TaskStatus } from './shared'
 
 const CSS = `
 .tkb-cols{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:14px;overflow-x:auto;align-items:start;padding-bottom:4px}
@@ -88,7 +88,7 @@ export function TaskBoard({ tasks, openId, onOpen, onMove, onAdd, doneCount = 0,
                       {t.parent_task_id && <span className="tk-tag">Subtask</span>}
                       {t.linked_label && <span className="tk-tag">{t.linked_label}</span>}
                       {t.linked_type && t.linked_type !== 'site' && t.linked_type !== 'property' && <span className={`tk-tag${t.linked_type === 'work_order' ? ' wo' : ''}`}>{linkTypeLabel(t.linked_type)}</span>}
-                      {(t.tags ?? []).slice(0, 3).map(tag => <span key={tag} className="tk-tag" style={{ background: '#EFEAFB', color: '#5B3BB0' }}>{tag}</span>)}
+                      {(t.tags ?? []).slice(0, 3).map(tag => <span key={tag} className="tk-tag" style={tagColor(tag)}>{tag}</span>)}
                     </span>
                   )}
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

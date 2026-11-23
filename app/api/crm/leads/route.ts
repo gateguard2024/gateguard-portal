@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { normalizeRole } from '@/lib/permissions'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,7 +25,10 @@ export async function GET(req: NextRequest) {
       .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .order('created_at', { ascending: false })
 
-    if (!scope.all) {
+    if (normalizeRole(user.role) === 'user') {
+      // Plain users (not admin / supervisor) see only leads assigned to them (Nov 23 2026).
+      query = query.eq('assigned_to_user_id', user.id)
+    } else if (!scope.all) {
       // Fail-closed: org's leads in my subtree + any lead ASSIGNED to me (covers
       // ARIA-imported cross-org leads). Never an unfiltered query, and no longer
       // exposes legacy null-org leads to every tenant.

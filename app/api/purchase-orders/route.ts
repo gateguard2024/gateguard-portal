@@ -119,7 +119,11 @@ export async function POST(req: NextRequest) {
 
     const { error: itemsErr } = await supabase.from('purchase_order_items').insert(rows)
     if (itemsErr) {
+      // Don't leave a PO with no lines behind and say it worked.
       console.error('[purchase-orders POST] items insert error:', itemsErr.message)
+      const { error: delErr } = await supabase.from('purchase_orders').delete().eq('id', po.id)
+      if (delErr) console.error('[purchase-orders POST] cleanup failed:', delErr.message)
+      return NextResponse.json({ error: `Couldn’t save the PO lines: ${itemsErr.message}` }, { status: 500 })
     }
   }
 

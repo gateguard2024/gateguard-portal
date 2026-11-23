@@ -15,7 +15,6 @@ import { ThemeProvider } from 'next-themes'
 import { Sidebar }          from '@/components/layout/Sidebar'
 import { GlassNavDrawer }   from '@/components/layout/GlassNavDrawer'
 import { AddToL10Button }   from '@/components/layout/AddToL10Button'
-import { NexusAssistant }   from '@/components/layout/NexusAssistant'
 import { MobileNav }        from '@/components/layout/MobileNav'
 import { AdminLauncher }    from '@/components/layout/AdminLauncher'
 
@@ -36,9 +35,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isLegal      = pathname.startsWith('/privacy') || pathname.startsWith('/terms') // public legal pages
   const isMoveIn     = pathname.startsWith('/move-in/') || pathname === '/app' // resident move-in + app link — public, own chrome
   const isDealerAdmin = pathname.startsWith('/admin/dealers') // dealer network — steel, full-screen, own chrome
+  // Public no-login pages people reach from a link or QR code — never show Nexus chrome:
+  // unit QR label (/a/), outside-vendor job link (/v/), property service request form (/request/)
+  const isPublicLink = pathname.startsWith('/a/') || pathname.startsWith('/v/') || pathname.startsWith('/request/')
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin || isMoveIn
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas || isPortal || isLegal || isDealerAdmin || isMoveIn || isPublicLink
     // Proposal builder + the public proposal/approve pages run full-screen, no sidebar.
     || /^\/quotes\/[^/]+(\/proposal|\/approve|\/build|\/partnership|\/agreement)(\/|$)/.test(pathname)
     // Survey record editor + the public survey document run full-screen, no sidebar.
@@ -61,7 +63,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         overscrollBehavior: 'none',
       }}>
         {/* No admin launcher on the public booking page (prospect-facing) */}
-        {!isSchedule && <AdminLauncher />}
+        {!isSchedule && !isPublicLink && <AdminLauncher />}
         {/* Full-glass pages (ARIA) render outside the sidebar — give them the main
             nav as a left-edge slide-out drawer so it's always one click away. */}
         {isAria && <GlassNavDrawer />}
@@ -93,11 +95,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         {/* Ambient EOS L10 button — floats on every portal page (desktop only) */}
         <div className="hidden md:block">
           <AddToL10Button />
-        </div>
-
-        {/* NEXUS Personal AI Assistant — bottom-right on every portal page (desktop only for now) */}
-        <div className="hidden md:block">
-          <NexusAssistant />
         </div>
 
         {/* Mobile bottom tab bar — only shown on mobile */}

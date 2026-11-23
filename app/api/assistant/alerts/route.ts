@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyAssignedScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,14 +44,14 @@ export async function GET() {
         .select('id', { count: 'exact', head: true })
         .in('status', ['open', 'in_progress'])),
       // SCOUT: leads that opened the ARIA email but rep hasn't engaged yet
-      scoped(supabase
+      applyAssignedScope(scoped(supabase
         .from('leads')
         .select('id, property_name, scout_opened_at', { count: 'exact' })
         .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
         .eq('scout_status', 'opened')
         .in('stage', ['new', 'contacted'])
         .order('scout_opened_at', { ascending: false })
-        .limit(5)),
+        .limit(5)), user.role, { clerkUserId: user.id, profileId: null }, 'leads'),
     ])
 
     const scoutOpened = scoutOpenedRes.data ?? []

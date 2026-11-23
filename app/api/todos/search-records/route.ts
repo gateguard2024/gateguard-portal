@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -108,6 +108,7 @@ export async function GET(req: NextRequest) {
         let lq = supabase.from('leads').select('*').is('deleted_at', null)
           .or(fields.map((f) => `${f}.ilike.${like}`).join(',')).order('updated_at', { ascending: false }).limit(12)
         lq = applyOrgScope(lq, scope, 'org_id')
+        lq = applyAssignedScope(lq, caller.role, { clerkUserId: caller.id, profileId: null }, 'leads')
         return lq
       }
       let { data, error } = await run(['property_name', 'company_name', 'contact_name'])

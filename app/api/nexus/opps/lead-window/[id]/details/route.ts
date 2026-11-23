@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +37,7 @@ async function getScopedLead(leadId: string, user: Awaited<ReturnType<typeof get
     .is('deleted_at', null)              // soft-deleted leads are in Deleted Items — not editable here
 
   query = applyOrgScope(query, scope)
+  query = applyAssignedScope(query, user.role, { clerkUserId: user.id, profileId: null }, 'leads')
 
   const { data, error } = await query.maybeSingle()
   if (error) return { lead: null, error: error.message }

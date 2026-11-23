@@ -1942,15 +1942,31 @@ function Procurement() {
   const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ supplier: "", po_number: "", notes: "" });
-  const [lines, setLines] = useState<{ name: string; qty: string; unit_cost: string }[]>([{ name: "", qty: "1", unit_cost: "" }]);
+  const [lines, setLines] = useState<{ name: string; qty: string; unit_cost: string; site_id: string }[]>([{ name: "", qty: "1", unit_cost: "", site_id: "" }]);
+  const [poErr, setPoErr] = useState<string | null>(null);
+  // Properties a line can be tagged to ("bought for this property's service plan" — counts in its Spending vs plan).
+  const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/purchase-orders").then(r => r.json()).then(d => setPos(d.records ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { fetch("/api/sites?limit=500").then(r => r.json()).then(d => { const list = Array.isArray(d) ? d : (d.sites ?? d.records ?? []); setSites(list.filter((s: { status?: string }) => !["inactive", "decommissioned"].includes(String(s.status ?? ""))).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })).sort((a: { name: string }, b: { name: string }) => String(a.name).localeCompare(String(b.name)))); }).catch(() => setSites([])); }, []);
+  const siteName = (id?: string | null) => sites.find(s => s.id === id)?.name ?? "a property";
+  async function tagLine(poId: string, itemId: string, siteId: string) {
+    setPoErr(null);
+    const r = await fetch(`/api/purchase-orders/${poId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tag_line: { item_id: itemId, site_id: siteId || null } }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok) { setPoErr(d.error ?? "Couldn’t tag that line."); return; }
+    load();
+  }
   const linesTotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0), 0);
   async function create() {
     if (!form.supplier.trim() || busy) return; setBusy(true);
-    const items = lines.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), qty: Number(l.qty) || 1, unit_cost: Number(l.unit_cost) || 0 }));
-    await fetch("/api/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: form.supplier.trim(), po_number: form.po_number.trim() || null, notes: form.notes.trim() || null, items }) }).catch(() => {});
-    setForm({ supplier: "", po_number: "", notes: "" }); setLines([{ name: "", qty: "1", unit_cost: "" }]); setShowNew(false); setBusy(false); load();
+    const items = lines.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), qty: Number(l.qty) || 1, unit_cost: Number(l.unit_cost) || 0, ...(l.site_id ? { site_id: l.site_id } : {}) }));
+    setPoErr(null);
+    const r = await fetch("/api/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: form.supplier.trim(), po_number: form.po_number.trim() || null, notes: form.notes.trim() || null, items }) }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    if (!r || !r.ok) { setPoErr(d.error ?? "Couldn’t create the PO."); return; }
+    setForm({ supplier: "", po_number: "", notes: "" }); setLines([{ name: "", qty: "1", unit_cost: "", site_id: "" }]); setShowNew(false); load();
   }
   async function setStatus(id: string, status: string) { await fetch(`/api/purchase-orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }).catch(() => {}); load(); }
   const poTone = (s: string) => s === "received" || s === "closed" ? "good" : s === "draft" ? "default" : "high";
@@ -1968,12 +1984,18 @@ function Procurement() {
           <input placeholder="Item" value={l.name} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, flex: 2 }} />
           <input type="number" placeholder="Qty" value={l.qty} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 64 }} />
           <input type="number" placeholder="$ ea" value={l.unit_cost} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, unit_cost: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 80 }} />
+          <select aria-label="Bought for (property plan)" value={l.site_id} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, site_id: e.target.value } : x))} style={{ ...sel, fontSize: 12.5, flex: 1.4, minWidth: 0 }}>
+            <option value="">For stock</option>
+            {sites.map(s => <option key={s.id} value={s.id}>For {s.name}</option>)}
+          </select>
           {lines.length > 1 && <button onClick={() => setLines(ls => ls.filter((_, j) => j !== i))} style={{ ...btn2, color: "#D70015", padding: "0 10px" }}>×</button>}
         </div>)}
-        <button onClick={() => setLines(ls => [...ls, { name: "", qty: "1", unit_cost: "" }])} style={{ ...btn2, justifySelf: "start", padding: "6px 12px" }}>+ Add line</button>
+        <div style={{ color: "#6E6E73", fontSize: 11.5 }}>“For &lt;property&gt;” = bought for that property’s service plan: it goes on its spare shelf when received and counts in its Spending vs plan.</div>
+        <button onClick={() => setLines(ls => [...ls, { name: "", qty: "1", unit_cost: "", site_id: "" }])} style={{ ...btn2, justifySelf: "start", padding: "6px 12px" }}>+ Add line</button>
         <input placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={input} />
         <button onClick={create} disabled={!form.supplier.trim() || busy} style={{ ...btn, opacity: form.supplier.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : `Create PO · ${money(linesTotal)}`}</button>
       </div>}
+      {poErr && <div role="alert" style={{ color: "#D70015", fontSize: 12.5, marginTop: 8 }}>{poErr}</div>}
     </Card>
     {loading ? <Card><Small>Loading…</Small></Card> : pos.length === 0 ? <Card><Small>No purchase orders yet.</Small></Card> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
@@ -1984,7 +2006,18 @@ function Procurement() {
           </div>
           <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
           <div style={{ fontSize: 22, fontWeight: 600, color: "#0071E3", margin: "8px 0 0" }}>{money(num(p.total))}</div>
-          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "#6E6E73" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
+          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 12).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number; site_id?: string | null }, i: number) => {
+            const open = !["received", "closed", "cancelled"].includes(String(p.status));
+            return <div key={it.id || i} style={{ display: "flex", alignItems: "center", gap: 6, margin: "3px 0", fontSize: 13, color: "#6E6E73", flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: 120 }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</span>
+              {open && it.id && "site_id" in it
+                ? <select aria-label={`Bought for — ${it.name || "item"}`} value={it.site_id ?? ""} onChange={e => tagLine(p.id, it.id!, e.target.value)} style={{ ...sel, fontSize: 12, maxWidth: 170 }}>
+                    <option value="">For stock</option>
+                    {sites.map(s => <option key={s.id} value={s.id}>For {s.name}</option>)}
+                  </select>
+                : it.site_id ? <span style={{ fontSize: 12, color: "#0058B0", background: "#E8F1FD", borderRadius: 6, padding: "1px 7px" }}>For {siteName(it.site_id)}</span> : null}
+            </div>;
+          })}</div>}
           {p.notes && <p style={{ color: "#3A3A3C", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
             {p.status === "draft" && <button onClick={() => setStatus(p.id, "ordered")} style={{ ...btn, padding: "6px 12px" }}>Mark ordered</button>}
