@@ -244,6 +244,8 @@ export function PropertyPortalSetup({ siteId, siteName, notify, onChanged }: { s
         )}
       </Card>
 
+      {portal && <PortalManagers portalId={portal.id} notify={notify} />}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button type="button" className="sy-b pri" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : portal ? 'Save' : 'Turn on portal'}</button>
         {portal && portal.status !== 'live' && <button type="button" className="sy-b go" disabled={busy} onClick={() => void setStatus('live')}>Turn on</button>}
@@ -257,5 +259,96 @@ export function PropertyPortalSetup({ siteId, siteName, notify, onChanged }: { s
         </>}
       </div>
     </div>
+  )
+}
+
+/** People who can CONTROL this portal (open gates, lockdown, packages…) with their own PIN. */
+function PortalManagers({ portalId, notify }: { portalId: string; notify: (m: string, ok?: boolean) => void }) {
+  const url = `/api/admin/portals/${portalId}/managers`
+  const [rows, setRows] = useState<Any[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [f, setF] = useState({ name: '', email: '', pin: '' })
+  const [resetId, setResetId] = useState<string | null>(null)
+  const [newPin, setNewPin] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(async () => {
+    const r = await getJson(url)
+    setRows(Array.isArray(r.data.managers) ? r.data.managers : []); setErr(r.ok ? null : (r.data.error || 'Could not load managers.'))
+  }, [url])
+  useEffect(() => { void load() }, [load])
+
+  async function add() {
+    setBusy(true)
+    const r = await send(url, 'POST', { name: f.name, email: f.email || null, pin: f.pin })
+    setBusy(false)
+    if (!r.ok) return notify(r.data.error || 'Could not add them.', false)
+    notify(`${f.name} can now sign in with their PIN.`); setF({ name: '', email: '', pin: '' }); setAdding(false); void load()
+  }
+  async function patch(body: Any, ok: string) {
+    setBusy(true)
+    const r = await send(url, 'PATCH', body)
+    setBusy(false)
+    if (!r.ok) return notify(r.data.error || 'That didn’t work.', false)
+    notify(ok); setResetId(null); setNewPin(''); void load()
+  }
+  async function remove(m: Any) {
+    setBusy(true)
+    const r = await send(url, 'DELETE', { manager_id: m.id })
+    setBusy(false)
+    if (!r.ok) return notify(r.data.error || 'Could not remove them.', false)
+    notify(`${m.name} removed.`); void load()
+  }
+  const pinOk = (p: string) => /^\d{4,8}$/.test(p)
+
+  return (
+    <Card title="Managers" sub="People who can open gates, lock down and log packages. Each signs in with their own PIN."
+      right={!adding ? <button type="button" className="sy-b blue sm" onClick={() => setAdding(true)}>+ Add a manager</button> : undefined}>
+      {err && <Note tone="red">{err}</Note>}
+      {rows == null ? <div className="sy-empty">Loading…</div> : !rows.length && !adding ? (
+        <Note tone="orange">No managers yet — nobody can open gates from this portal until you add one.</Note>
+      ) : (
+        <div>
+          {rows.map(m => (
+            <div key={m.id} className="sy-row" style={{ flexWrap: 'wrap' }}>
+              <div className="main">
+                <div className="t">{m.name}</div>
+                <div className="m">{m.email || 'No email'}</div>
+              </div>
+              <span className="sy-pill"><Dot c={m.active ? DOT.green : DOT.gray} />{m.active ? 'Active' : 'Off'}</span>
+              {resetId === m.id ? (
+                <>
+                  <input className="sy-in" style={{ width: 120 }} inputMode="numeric" autoComplete="off" placeholder="New PIN" value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} aria-label={`New PIN for ${m.name}`} />
+                  <button type="button" className="sy-b pri sm" disabled={busy || !pinOk(newPin)} onClick={() => void patch({ manager_id: m.id, pin: newPin }, `${m.name}’s PIN changed.`)}>Save</button>
+                  <button type="button" className="sy-b line sm" onClick={() => { setResetId(null); setNewPin('') }}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="sy-b line sm" disabled={busy} onClick={() => { setResetId(m.id); setNewPin('') }}>New PIN</button>
+                  <button type="button" className="sy-b line sm" disabled={busy} onClick={() => void patch({ manager_id: m.id, active: !m.active }, m.active ? `${m.name} turned off.` : `${m.name} turned on.`)}>{m.active ? 'Turn off' : 'Turn on'}</button>
+                  <button type="button" className="sy-b warn sm" disabled={busy} onClick={() => void remove(m)}>Remove</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {adding && (
+        <div className="sy-stack" style={{ marginTop: 12 }}>
+          <div className="sy-grid2">
+            <Field label="Name"><input className="sy-in" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="Jane Smith" /></Field>
+            <Field label="Email (optional)"><input className="sy-in" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} placeholder="jane@property.com" /></Field>
+          </div>
+          <Field label="Their personal PIN (4–8 digits)">
+            <input className="sy-in" inputMode="numeric" autoComplete="off" value={f.pin} onChange={e => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} placeholder="e.g. 4921" style={{ maxWidth: 200 }} />
+          </Field>
+          <div style={{ fontSize: 12, color: MUTED }}>Give them this PIN. We can’t show it again later — use “New PIN” if it’s lost.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="sy-b pri" disabled={busy || !f.name.trim() || !pinOk(f.pin)} onClick={() => void add()}>{busy ? 'Adding…' : 'Add manager'}</button>
+            <button type="button" className="sy-b line" onClick={() => { setAdding(false); setF({ name: '', email: '', pin: '' }) }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
