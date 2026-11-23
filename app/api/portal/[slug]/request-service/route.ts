@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { getPortalManager } from '@/lib/portal-manager'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 export const dynamic = 'force-dynamic'
@@ -14,17 +15,21 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   if (!v.portal.site_id) return NextResponse.json({ error: 'This portal has no site linked.' }, { status: 400 })
 
   const b = await req.json().catch(() => ({}))
-  const title = String(b.title ?? '').trim()
+  const title = String(b.title ?? '').trim().slice(0, 200)
   if (!title) return NextResponse.json({ error: 'Describe the issue.' }, { status: 400 })
+  // A signed-in manager is the contact unless someone else is named.
+  const manager = await getPortalManager(req, params.slug)
 
   const { data, error } = await supabase
     .from('wo_requests')
     .insert({
       site_id: v.portal.site_id,
       title,
-      description: b.description ? String(b.description).trim() : null,
+      description: b.description ? String(b.description).trim().slice(0, 4000) : null,
+      area: b.area ? String(b.area).trim().slice(0, 120) : null,
       priority_requested: ['urgent', 'high', 'normal', 'low'].includes(b.priority) ? b.priority : 'normal',
-      contact_name: b.contact_name ? String(b.contact_name).trim() : null,
+      contact_name: b.contact_name ? String(b.contact_name).trim() : (manager?.name ?? null),
+      contact_email: b.contact_email ? String(b.contact_email).trim() : (manager?.email ?? null),
       contact_phone: b.contact_phone ? String(b.contact_phone).trim() : null,
       status: 'new',
     })
