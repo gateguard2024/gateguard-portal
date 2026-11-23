@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { carryForward } from '@/lib/relationship'
+import { stopLeadRuns } from '@/lib/lead-sequences'
 import { getCurrentUser, type PortalUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope, applyAssignedScope, getProfileId as resolveProfileIdFromLib } from '@/lib/org-scope'
 
@@ -625,6 +626,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       body: reason ? `${label} — ${reason}` : `Lead marked ${label}.`, lead_id: lead.id,
     })
     if (actErr) console.error('lead set_status: activity not saved', actErr.message)
+    // Lost or Stuck → any email sequence on this lead stops (never blocks the status change).
+    if (status === 'lost' || status === 'stuck') await stopLeadRuns(lead.id, status, user.name)
     return NextResponse.json({ success: true, message: `Marked ${label}.`, status })
   }
 
@@ -691,6 +694,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       body: `Lead moved to ${stage}.`,
       lead_id: lead.id,
     })
+    if (stage === 'lost' || stage === 'dead') await stopLeadRuns(lead.id, 'lost', user.name)
+    else if (stage === 'converted' || stage === 'won') await stopLeadRuns(lead.id, 'won', user.name)
 
     return NextResponse.json({ success: true, message: 'Status updated.', lead: data })
   }
@@ -743,6 +748,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           return NextResponse.json({ success: false, message: linkError.message }, { status: 500 })
         }
       }
+      await stopLeadRuns(lead.id, 'won', user.name)
       await carryForward(supabase, { from: 'lead', fromId: lead.id, to: 'opportunity', toId: existingByLeadId.id, label: String(existingByLeadId.name ?? leadLabel(lead)) })
       return NextResponse.json({
         success: true,
@@ -836,6 +842,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (leadUpdateError) {
       return NextResponse.json({ success: false, message: leadUpdateError.message }, { status: 500 })
     }
+    await stopLeadRuns(lead.id, 'won', user.name)
 
     // Log conversion activity — awaited: must be committed before response
     const { error: activityError } = await supabase

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope, applyAssignedScope } from '@/lib/org-scope'
+import { runsForLeads, canManage as canManageSequences } from '@/lib/lead-sequences'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -9,7 +10,7 @@ export const runtime = 'nodejs'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const DAY = 86400_000
-const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason, stuck_at, stuck_reason, lost_at, opportunity_id'
+const LEAD_COLS = 'id, property_name, company_name, contact_name, contact_title, email, phone, location, city, state, stage, source, lead_type, unit_count, cameras, entry_points, mrr, assigned_to_user_id, assigned_to_name, created_at, updated_at, contacted_at, sent_info_at, visited_at, snoozed_until, snooze_reason, stuck_at, stuck_reason, lost_at, opportunity_id, do_not_email'
 type Bucket = 'identified' | 'contacted' | 'sent_info'
 /** The status a rep sets: Open (not contacted yet) · Contacting · Stuck (blocked, still worked) · Lost.
  *  Won is never picked — a lead is Won the moment it's made an opportunity. Won and Lost
@@ -149,6 +150,9 @@ export async function GET(req: Request) {
   const now = Date.now()
   const todayIso = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
 
+  // Email sequence each lead is in (empty before migration 240).
+  const seqP = runsForLeads(ids)
+
   // Next step (earliest open follow-up) + last touch (newest activity) per lead.
   const nextStep = new Map<string, { title: string; due: string; kind: string }>()
   const lastTouch = new Map<string, string>()
@@ -180,6 +184,7 @@ export async function GET(req: Request) {
     }
   }
 
+  const seqBy = await seqP
   const outAll = leads.map((l) => {
     const units = l.unit_count ?? null
     const cams = l.cameras ?? null
@@ -226,6 +231,8 @@ export async function GET(req: Request) {
       stuck_since: l.stuck_at ?? null,
       stuck_reason: l.stuck_reason ?? null,
       opportunity_id: l.opportunity_id ?? (asDeal.has(l.id) ? linkedDeal.get(l.id) ?? null : null),
+      do_not_email: !!l.do_not_email,
+      sequence: seqBy.get(l.id) ?? null,
     }
   })
   if (oneId) {
@@ -250,6 +257,7 @@ export async function GET(req: Request) {
     stale: out.filter((l) => (l.last_touch ? now - Date.parse(l.last_touch) > 14 * DAY : now - Date.parse(l.created_at) > 14 * DAY)).length,
     snoozed: snoozed.length,
     stuck: out.filter((l) => l.status === 'stuck').length,
+    sequence: out.filter((l) => l.sequence).length,
     won: (await wonCountP).count ?? 0,
     lost: (await lostCountP).count ?? 0,
   }
@@ -273,7 +281,7 @@ export async function GET(req: Request) {
     conversion_pct: conv,
     converted_90: converted ?? 0,
   }
-  return NextResponse.json({ leads: [...out, ...snoozed], counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate })
+  return NextResponse.json({ leads: [...out, ...snoozed], counts, kpis, hidden_as_deals: asDeal.size, me: user.id, can_reassign: user.role === 'admin' || user.isCorporate, can_manage_sequences: canManageSequences(user) })
 }
 
 // GET /api/nexus/leads?closed=won|lost → the closed leads, newest first (max 500).

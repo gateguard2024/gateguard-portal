@@ -13,6 +13,7 @@ import { M, N } from '@/components/nexus/mail/mailShared'
 import MailApp from '@/components/nexus/mail/MailApp'
 import { type LeadRow, ago, chip, dueText, initials, money, scoreColor, scoreLabel, tint } from '@/components/nexus/LeadsHub'
 import { LeadStatusBar, leadStatusOf, type LeadStatusId } from '@/components/nexus/leads/LeadStatus'
+import { SequenceCard } from '@/components/nexus/leads/SequenceCard'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Flame, StickyNote, Target, Sparkles, UserCheck, Edit2, Clock: ClockI, Maximize2 } = require('lucide-react') as any
 
@@ -220,6 +221,9 @@ export function LeadPanel({ lead, canReassign, onClose, onChanged, onConvert, on
             </div>
           )}
         </Card>
+
+        {/* email sequence */}
+        {leadStatusOf(lead) !== 'won' && <div style={{ marginTop: 10 }}><SequenceCard leadId={lead.id} onToast={onToast} onChanged={() => void onChanged()} /></div>}
 
         {/* quick actions */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, margin: '10px 0' }}>

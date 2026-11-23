@@ -18,6 +18,7 @@ import MailApp from '@/components/nexus/mail/MailApp'
 import { type LeadRow, ago, dueText, money, scoreColor, scoreLabel } from '@/components/nexus/LeadsHub'
 import { OUTCOMES, SNOOZE_REASONS, dateIn, nextMonday, snoozeDate } from '@/components/nexus/leads/LeadPanel'
 import { LeadStatusBar, leadStatusOf, statusMeta, type LeadStatusId } from '@/components/nexus/leads/LeadStatus'
+import { SequenceCard } from '@/components/nexus/leads/SequenceCard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -358,6 +359,7 @@ export function LeadPage({ leadId, canReassign, onClose, onOpenDeal }: {
 
       {/* right — mail, score, related */}
       <div className="dpg-right" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!dealId && <SequenceCard leadId={leadId} onToast={flash} onChanged={() => void load()} />}
         <div className="dpg-card">
           <div className="dpg-ch">Emails &amp; texts with them</div>
           {mail == null ? <div className="sb-sub" style={{ padding: 16 }}>Looking in Nexus Mail…</div>

@@ -22,6 +22,7 @@ import { LeadPanel } from '@/components/nexus/leads/LeadPanel'
 import { NewLeadModal, FoundRow, type FoundLead } from '@/components/nexus/leads/NewLeadModal'
 import { DealPage } from '@/components/nexus/sales/DealPage'
 import { LeadPage } from '@/components/nexus/leads/LeadPage'
+import { SequencesAdmin } from '@/components/nexus/leads/SequencesAdmin'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Flame, Clock: ClockI, AlarmClock, Sparkles, Users: UsersI, Inbox, Snowflake, LayoutList, LayoutGrid, UserCheck, Send, Target, TrendingUp: Trend } = require('lucide-react') as any
 
@@ -34,8 +35,10 @@ export type LeadRow = {
   snoozed_until?: string | null; snooze_reason?: string | null
   /** Open · Contacting · Stuck (blocked, still worked) · Lost — set by the rep. */
   status?: 'open' | 'contacting' | 'stuck' | 'lost' | 'won'; stuck_since?: string | null; stuck_reason?: string | null; opportunity_id?: string | null
+  /** Email sequence it's in (active or paused). */
+  sequence?: { run_id: string; name: string; sent: number; total: number; status: string; next_send_at: string | null } | null; do_not_email?: boolean
 }
-type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'stuck' | 'identified' | 'contacted' | 'sent_info' | 'stale' | 'snoozed' | 'won' | 'lost', number>
+type Counts = Record<'all' | 'mine' | 'new' | 'hot' | 'no_next' | 'overdue' | 'stuck' | 'identified' | 'contacted' | 'sent_info' | 'stale' | 'snoozed' | 'won' | 'lost' | 'sequence', number>
 /** A closed lead (Won / Lost list) — light row from GET /api/nexus/leads?closed=won|lost. */
 type ClosedLead = { id: string; name: string; company: string | null; contact: string | null; location: string | null; owner: string | null; mrr: number | null; status: 'won' | 'lost'; closed_at: string | null; reason: string | null; opportunity_id: string | null }
 type Kpis = { open: number; new_week: number; speed_hours: number | null; due_today: number; pipeline_mrr: number; conversion_pct: number; converted_90: number }
@@ -47,6 +50,7 @@ const VIEWS: { id: View; label: string; color: string; icon: unknown; hint: stri
   { id: 'overdue', label: 'Overdue', color: '#F04438', icon: AlarmClock, hint: 'Follow-up date has passed' },
   { id: 'no_next', label: 'No next step', color: '#F5A524', icon: Target, hint: 'Nothing scheduled — set one' },
   { id: 'stuck', label: 'Stuck', color: '#D70015', icon: AlarmClock, hint: 'Blocked — still working it' },
+  { id: 'sequence', label: 'In a sequence', color: '#0A84FF', icon: Send, hint: 'Getting follow-up emails from a sequence' },
   { id: 'new', label: 'New (14 days)', color: '#22C1EE', icon: Sparkles, hint: '' },
   { id: 'mine', label: 'Mine', color: '#A78BFA', icon: UserCheck, hint: 'Assigned to you' },
   { id: 'identified', label: 'Open (not contacted)', color: '#94A3B8', icon: UsersI, hint: '' },
@@ -95,6 +99,8 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [me, setMe] = useState<string | null>(null)
   const [canReassign, setCanReassign] = useState(false)
+  const [canSeq, setCanSeq] = useState(false)
+  const [showSeq, setShowSeq] = useState(false)
   const [asDeals, setAsDeals] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -134,8 +140,8 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
   const saveLayout = (l: 'list' | 'board') => { setLayout(l); try { localStorage.setItem('gg_leads_layout', l) } catch { /* ignore */ } }
   const flash = (t: string) => { setToast(t); window.setTimeout(() => setToast((x) => (x === t ? null : x)), 3000) }
 
-  const apply = (d: { leads?: LeadRow[]; counts?: Counts; kpis?: Kpis; me?: string; can_reassign?: boolean; hidden_as_deals?: number }) => {
-    setAsDeals(d.hidden_as_deals ?? 0)
+  const apply = (d: { leads?: LeadRow[]; counts?: Counts; kpis?: Kpis; me?: string; can_reassign?: boolean; hidden_as_deals?: number; can_manage_sequences?: boolean }) => {
+    setAsDeals(d.hidden_as_deals ?? 0); setCanSeq(!!d.can_manage_sequences)
     setRows(Array.isArray(d.leads) ? d.leads : [])
     setCounts(d.counts ?? null); setKpis(d.kpis ?? null); setMe(d.me ?? null); setCanReassign(!!d.can_reassign)
   }
@@ -169,6 +175,7 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
         case 'no_next': return !l.next_step
         case 'overdue': return l.overdue
         case 'stuck': return l.status === 'stuck'
+        case 'sequence': return !!l.sequence
         case 'identified': case 'contacted': case 'sent_info': return l.bucket === view
         case 'stale': return l.last_touch ? now - Date.parse(l.last_touch) > 14 * 86400_000 : now - Date.parse(l.created_at) > 14 * 86400_000
         default: return true
@@ -276,6 +283,7 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
           <span className="hidden sm:inline" style={{ fontSize: 11, color: N.label, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Nexus</span>
         </span>
         <span style={{ flex: 1 }} />
+        {canSeq && <button type="button" onClick={() => setShowSeq(true)} className="hover:bg-white/[0.08]" style={navBtnLg}><Send size={14} /> <span className="hidden sm:inline">Sequences</span></button>}
         <button type="button" onClick={() => void load()} className="hover:bg-white/[0.08]" style={navBtnLg} aria-label="Refresh">{loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}</button>
         <button type="button" onClick={() => setShowNew(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 600, color: '#fff', background: N.brand, border: 0, borderRadius: 10, padding: '8px 14px', cursor: 'pointer', boxShadow: '0 8px 20px -10px rgba(74,140,255,0.9)', fontFamily: M.font }}>
           <Plus size={15} /> New lead
@@ -286,15 +294,15 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
         {/* views */}
         <nav aria-label="Lead views" className="hidden lg:flex" style={{ width: 236, flexShrink: 0, flexDirection: 'column', borderRight: `1px solid ${N.line}`, padding: '12px 10px', overflowY: 'auto' }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '4px 10px 6px' }}>Work these</div>
-          {VIEWS.map((v, i) => {
+          {VIEWS.map((v) => {
             const on = view === v.id
             const Icon = v.icon as React.ComponentType<{ size?: number }>
             const c = counts?.[v.id] ?? 0
             return (
               <React.Fragment key={v.id}>
-                {i === 11 && <div style={{ height: 10 }} />}
-                {i === 12 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>Closed</div>}
-                {i === 7 && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>By stage</div>}
+                {v.id === 'snoozed' && <div style={{ height: 10 }} />}
+                {v.id === 'won' && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>Closed</div>}
+                {v.id === 'identified' && <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: N.label, padding: '14px 10px 6px' }}>By stage</div>}
                 <button type="button" onClick={() => setView(v.id)} title={v.hint || undefined} aria-current={on ? 'page' : undefined} className={on ? '' : 'hover:bg-white/[0.06]'}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 2, borderRadius: 9, border: 0, cursor: 'pointer', background: on ? N.sel : 'transparent', boxShadow: on ? `inset 3px 0 0 ${v.color}` : undefined, color: on ? '#fff' : N.ink, fontFamily: M.font, fontSize: 13.5, fontWeight: on ? 600 : 500, textAlign: 'left' }}>
                   <span aria-hidden style={{ width: 26, height: 26, borderRadius: 8, background: `${v.color}26`, color: v.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} /></span>
@@ -418,6 +426,7 @@ export function LeadsHub({ onClose, openLeadId }: { onClose: () => void; openLea
         </div>
       </div>
 
+      {showSeq && <SequencesAdmin onClose={() => setShowSeq(false)} />}
       {showNew && <NewLeadModal onClose={() => setShowNew(false)} onOpenExisting={(m) => void goTo(m)}
         onCreated={async (id) => { setShowNew(false); await load(true); setSelId(id); flash('Lead added') }} />}
 
@@ -454,6 +463,8 @@ function LeadCard({ l, selected, compact, onOpen }: { l: LeadRow; selected: bool
             : l.next_step
             ? <span style={{ ...chip, color: l.overdue ? '#C4302B' : '#0B5CAD', background: l.overdue ? 'rgba(240,68,56,0.12)' : 'rgba(74,140,255,0.12)' }}>{l.overdue ? 'Overdue: ' : 'Next: '}{l.next_step.title} · {dueText(l.next_step.due)}</span>
             : <span style={{ ...chip, color: '#9A5B00', background: 'rgba(245,165,36,0.16)' }}>No next step</span>}
+          {l.sequence && <span title={`${l.sequence.name} — email ${l.sequence.sent} of ${l.sequence.total} sent`} style={{ ...chip, color: l.sequence.status === 'paused' ? '#9A5B00' : '#0058B0', background: l.sequence.status === 'paused' ? 'rgba(245,165,36,0.16)' : 'rgba(10,132,255,0.12)' }}>{l.sequence.status === 'paused' ? 'Sequence paused' : 'Sequence'} · {Math.min(l.sequence.sent, l.sequence.total)}/{l.sequence.total}</span>}
+          {l.do_not_email && <span style={{ ...chip, color: '#B4141E', background: 'rgba(215,0,21,0.08)' }}>Do not email</span>}
           {l.status === 'stuck' && <span title={l.stuck_reason ?? undefined} style={{ ...chip, color: '#B4141E', background: 'rgba(215,0,21,0.10)' }}>Stuck{l.stuck_reason ? ` · ${l.stuck_reason}` : ''}</span>}
           {!compact && <span style={{ ...chip, color: STAGES.find((s) => s.id === l.bucket)!.color === '#94A3B8' ? '#5B6B80' : '#0F766E', background: '#EEF1F6' }}>{STAGES.find((s) => s.id === l.bucket)!.label}</span>}
           {l.mrr != null && <span style={{ ...chip, color: '#047857', background: 'rgba(16,185,129,0.12)' }}>{money(l.mrr)}/mo</span>}
@@ -500,6 +511,7 @@ function ClosedCard({ l, onOpen }: { l: ClosedLead; onOpen: () => void }) {
 
 function Empty({ view, onNew }: { view: View; onNew: () => void }) {
   const msg: Partial<Record<View, string>> = {
+    sequence: 'No leads in a sequence. Open a lead and press “Start a sequence” to send a few follow-up emails from your Gmail.',
     stuck: 'Nothing stuck. Mark a lead Stuck when it’s blocked (no reply, waiting on the owner…) — it stays on your list with the reason.',
     overdue: 'Nothing overdue. Nice work.', no_next: 'Every lead has a next step.', hot: 'No hot leads right now — log calls and set follow-ups to warm them up.',
     stale: 'Nothing has gone quiet.', mine: 'No leads assigned to you yet.', snoozed: 'Nothing snoozed. Use “Not now” on a lead to park it for 3, 6 or 12 months.',

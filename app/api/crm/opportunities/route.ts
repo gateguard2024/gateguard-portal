@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { stopLeadRuns } from '@/lib/lead-sequences'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope, getProfileId, applyAssignedScope } from '@/lib/org-scope'
@@ -231,6 +232,7 @@ export async function POST(req: NextRequest) {
         supabase.from('attachments').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
       ])
       for (const m of moved) if (m.error) console.error('opportunities: lead history not carried over', m.error.message)
+      await stopLeadRuns(String(lead_id), 'won', user.name)
     }
 
     return NextResponse.json(data, { status: 201 })
