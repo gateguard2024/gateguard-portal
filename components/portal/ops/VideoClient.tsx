@@ -230,7 +230,7 @@ function Inner({ slug }: { slug: string }) {
           </div>
         )}
 
-      {open && <Viewer siteId={slug} api={api} cam={open.cam} cams={list} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} />}
+      {open && <Viewer siteId={slug} api={api} cam={open.cam} cams={list} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} backLabel="Vision" />}
     </div>
   )
 }

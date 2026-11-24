@@ -67,7 +67,19 @@ export const siteViewerApi = (siteId: string): ViewerApi => ({
   live: (camId, n) => `/api/eagle-eye/live?site_id=${encodeURIComponent(siteId)}&camera_id=${encodeURIComponent(camId)}&n=${n}`,
 })
 
-export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void }) {
+export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose: closeNow, backLabel }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void; backLabel?: string }) {
+  // The browser's Back button (and a mouse back button) closes the viewer instead of
+  // leaving the page: opening adds a history step; Back pops it → close. Our own
+  // Back / Escape go through history too, so there's never a stray step left behind.
+  const closeRef = useRef(closeNow); closeRef.current = closeNow
+  const pushed = useRef(false)
+  useEffect(() => {
+    try { window.history.pushState({ ...(window.history.state ?? {}), ggViewer: true }, ''); pushed.current = true } catch { /* sandboxed */ }
+    const onPop = () => { pushed.current = false; closeRef.current() }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const onClose = () => { if (pushed.current) { pushed.current = false; try { window.history.back(); return } catch { /* fall through */ } } closeRef.current() }
   const api = useMemo(() => apiProp ?? siteViewerApi(siteId), [apiProp, siteId])
   const [cam, setCam] = useState<Cam>(firstCam)
   const isEdge = cam.provider === 'edge'
@@ -216,7 +228,7 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
   return (
     <div className="cv" role="dialog" aria-modal="true" aria-label={cam.name}>
       <div className="cv-hd">
-        <button type="button" className="cv-btn" onClick={onClose} aria-label="Back to cameras">‹ Done</button>
+        <button type="button" className="cv-btn" onClick={onClose} aria-label={backLabel ? `Back to ${backLabel}` : 'Back to cameras'}>‹ {backLabel ? `Back to ${backLabel}` : 'Done'}</button>
         <div className="cv-title">
           <div className="cv-t">{cam.name}</div>
           <div className="cv-s"><span className="dot" style={{ background: cam.online === false ? DOT.orange : DOT.green }} />{isEdge ? 'Gate Guard Edge' : 'Eagle Eye'} · {mode === 'live' ? 'Live' : `Playback · ${fmtT(pos, true)}`}</div>
