@@ -67,7 +67,14 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const c = await gate(req, params.slug); if (c instanceof NextResponse) return c
   const { data, error } = await db().from('portal_managers').select('id, name, email, active, created_at, created_by').eq('client_portal_id', c.portalId).order('created_at', { ascending: true })
   if (error) return bad(error.message, 500)
-  return NextResponse.json({ me: c.me, staff: c.staff, managers: data ?? [] })
+  // Last sign-in per manager, from the sign-in log (site_events 'portal_sign_in').
+  const last: Record<string, string> = {}
+  if (c.siteId) {
+    const { data: ev, error: eErr } = await db().from('site_events').select('created_at, metadata').eq('site_id', c.siteId).eq('event_type', 'portal_sign_in').order('created_at', { ascending: false }).limit(1000)
+    if (eErr) console.error('[portal managers] sign-in log:', eErr.message)
+    for (const e of (ev ?? []) as { created_at: string; metadata: { manager_id?: string } | null }[]) { const id = e.metadata?.manager_id; if (id && !last[id]) last[id] = e.created_at }
+  }
+  return NextResponse.json({ me: c.me, staff: c.staff, managers: (data ?? []).map(m => ({ ...m, last_sign_in: last[m.id] ?? null })) })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {

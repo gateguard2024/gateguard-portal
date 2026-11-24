@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
-import { OK_CSS, Sheet, Dot, DOT, call, day, useToast, type Any } from '@/components/portal/ops/opsKit'
+import { OK_CSS, Sheet, Dot, DOT, call, day, when, useToast, type Any } from '@/components/portal/ops/opsKit'
 
 const onlyDigits = (s: string) => s.replace(/\D/g, '').slice(0, 8)
 
@@ -126,12 +126,13 @@ function Inner({ slug }: { slug: string }) {
           </div>
         ) : err ? <div className="ok-note red">{err}</div> : !d ? <div className="ok-empty">Loading…</div> : (
           <div className="ok-tw"><table className="ok-tbl">
-            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Added</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Last signed in</th><th>Added</th><th /></tr></thead>
             <tbody>{list.map(m => (
               <tr key={m.id} className="click" tabIndex={0} onClick={() => setOpen(m)} onKeyDown={e => { if (e.key === 'Enter') setOpen(m) }}>
                 <td style={{ fontWeight: 600 }}>{m.name}{m.id === meId ? <span style={{ color: C.ink3, fontWeight: 400 }}> · you</span> : null}</td>
                 <td style={{ color: C.ink2 }}>{m.email || '—'}</td>
                 <td><span className="ok-pill"><Dot c={m.active ? DOT.green : DOT.gray} />{m.active ? 'Can sign in' : 'Turned off'}</span></td>
+                <td style={{ color: m.last_sign_in ? C.ink2 : C.ink3 }}>{m.last_sign_in ? when(m.last_sign_in) : 'Never'}</td>
                 <td style={{ color: C.ink3 }}>{day(m.created_at)}</td>
                 <td style={{ textAlign: 'right' }}><span className="ok-btn sm">{m.id === meId ? 'My PIN' : 'Manage'}</span></td>
               </tr>))}</tbody>

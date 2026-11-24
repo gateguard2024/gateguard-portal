@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
-import { OK_CSS, Sheet, Dot, DOT, useToast, call, type Any } from '@/components/portal/ops/opsKit'
+import { OK_CSS, Sheet, Dot, DOT, useToast, call, when, type Any } from '@/components/portal/ops/opsKit'
 
 type Person = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; unitNumber: string | null; active: boolean; groupIds: string[]; groupNames: string[] }
 type Group = { id: string; name: string }
@@ -27,11 +27,13 @@ function Inner({ slug }: { slug: string }) {
   const [show, setShow] = useState<'active' | 'off' | 'all'>('active')
   const [open, setOpen] = useState<Person | null>(null)
   const [adding, setAdding] = useState(false)
+  const [lastUsed, setLastUsed] = useState<Record<string, string> | null>(null)
 
   const load = useCallback(async () => {
     const r = await call(`/api/portal/${slug}/users?groups=1`)
     setPeople(Array.isArray(r.data.users) ? r.data.users : [])
     setGroups(Array.isArray(r.data.groups) ? r.data.groups : [])
+    setLastUsed(r.data.last_used && typeof r.data.last_used === 'object' ? r.data.last_used : null)
     setErr(r.ok ? (r.data.needs_site_id ? 'This property’s Brivo site isn’t set yet — ask Gate Guard to finish its setup.' : null) : (r.data.error || 'Could not load residents from Brivo.'))
   }, [slug])
   useEffect(() => { void load() }, [load])
@@ -82,7 +84,7 @@ function Inner({ slug }: { slug: string }) {
         ) : (
           <div className="ok-tw">
             <table className="ok-tbl">
-              <thead><tr><th>Unit</th><th>Name</th><th>Contact</th><th>Access groups</th><th>Status</th></tr></thead>
+              <thead><tr><th>Unit</th><th>Name</th><th>Contact</th><th>Access groups</th>{lastUsed && <th title="Last time they used a door or gate (last 30 days)">Last used</th>}<th>Status</th></tr></thead>
               <tbody>
                 {list.map(p => (
                   <tr key={p.id} className="click" onClick={() => setOpen(p)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setOpen(p) }}>
@@ -90,6 +92,7 @@ function Inner({ slug }: { slug: string }) {
                     <td>{nameOf(p)}</td>
                     <td style={{ color: C.ink3 }}>{[p.email, p.phone].filter(Boolean).join(' · ') || '—'}</td>
                     <td style={{ color: C.ink2 }}>{(p.groupNames ?? []).join(', ') || '—'}</td>
+                    {lastUsed && <td style={{ color: lastUsed[p.id] ? C.ink2 : C.ink3, whiteSpace: 'nowrap' }}>{lastUsed[p.id] ? when(lastUsed[p.id]) : 'Not in 30 days'}</td>}
                     <td><span className="ok-pill"><Dot c={p.active !== false ? DOT.green : DOT.gray} />{p.active !== false ? 'On' : 'Off'}</span></td>
                   </tr>
                 ))}
