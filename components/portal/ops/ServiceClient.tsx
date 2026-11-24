@@ -90,6 +90,12 @@ function Inner({ slug }: { slug: string }) {
             {open.tech && <div><span style={{ color: C.ink3 }}>Tech: </span>{open.tech}</div>}
             {open.done && <div><span style={{ color: C.ink3 }}>Finished: </span>{when(open.done)}</div>}
           </div>
+          {open.photos?.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {open.photos.map((u: string) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="Photo of the problem" style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(0,0,0,.08)' }} /></a>)}
+            </div>
+          )}
           {open.ai && <div className="ok-note blue">Gate Guard’s AI spotted this from the cameras and opened the ticket — no call needed.</div>}
         </Sheet>
       )}
@@ -102,12 +108,28 @@ function Inner({ slug }: { slug: string }) {
 function RequestSheet({ slug, managerName, onClose, onDone, flash }: { slug: string; managerName: string | null; onClose: () => void; onDone: () => void; flash: (t: string, ok?: boolean) => void }) {
   const [f, setF] = useState({ title: '', area: '', description: '', priority: 'normal', contact_name: managerName ?? '', contact_phone: '' })
   const [busy, setBusy] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
+  const [updates, setUpdates] = useState(true)
+  const [step, setStep] = useState<string | null>(null)
   const set = (k: keyof typeof f, v: string) => setF(x => ({ ...x, [k]: v }))
   async function send() {
     setBusy(true)
-    const r = await call(`/api/portal/${slug}/request-service`, { method: 'POST', body: JSON.stringify(f) })
-    setBusy(false)
-    if (!r.ok) { flash(r.data.error || 'Could not send it.', false); return }
+    const r = await call(`/api/portal/${slug}/request-service`, { method: 'POST', body: JSON.stringify({ ...f, updates }) })
+    if (!r.ok) { setBusy(false); flash(r.data.error || 'Could not send it.', false); return }
+    // Photos: each goes straight to storage (signed upload), then is added to the request.
+    let failed = 0
+    for (let i = 0; i < files.length; i++) {
+      setStep(`Adding photo ${i + 1} of ${files.length}…`)
+      const file = files[i]
+      const sign = await call(`/api/portal/${slug}/request-photo`, { method: 'POST', body: JSON.stringify({ request_id: r.data.id, action: 'sign', file_name: file.name, content_type: file.type }) })
+      if (!sign.ok) { failed++; continue }
+      const up = await fetch(sign.data.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }).catch(() => null)
+      if (!up?.ok) { failed++; continue }
+      const at = await call(`/api/portal/${slug}/request-photo`, { method: 'POST', body: JSON.stringify({ request_id: r.data.id, action: 'attach', url: sign.data.url }) })
+      if (!at.ok) failed++
+    }
+    setBusy(false); setStep(null)
+    if (failed) flash(`Request sent, but ${failed} photo${failed === 1 ? '' : 's'} didn’t upload.`, false)
     onDone()
   }
   return (
@@ -125,7 +147,13 @@ function RequestSheet({ slug, managerName, onClose, onDone, flash }: { slug: str
         <label><span className="ok-lbl">Your name</span><input className="ok-in" value={f.contact_name} onChange={e => set('contact_name', e.target.value)} /></label>
         <label><span className="ok-lbl">Best phone</span><input className="ok-in" type="tel" value={f.contact_phone} onChange={e => set('contact_phone', e.target.value)} /></label>
       </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+      <label><span className="ok-lbl">Photos (optional, up to 5)</span>
+        <input className="ok-in" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple capture="environment" onChange={e => setFiles(Array.from(e.target.files ?? []).filter(x => x.size <= 15 * 1024 * 1024).slice(0, 5))} />
+        {files.length > 0 && <span style={{ fontSize: 12, color: C.ink3 }}>{files.length} photo{files.length === 1 ? '' : 's'} ready</span>}
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" checked={updates} onChange={e => setUpdates(e.target.checked)} /> Send me updates as this moves (email{f.contact_phone ? ' and text' : ''})</label>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+        {step && <span style={{ fontSize: 12.5, color: C.ink3, marginRight: 'auto' }}>{step}</span>}
         <button type="button" className="ok-btn" onClick={onClose}>Cancel</button>
         <button type="button" className="ok-btn pri" disabled={busy || !f.title.trim()} onClick={() => void send()}>{busy ? 'Sending…' : 'Send request'}</button>
       </div>

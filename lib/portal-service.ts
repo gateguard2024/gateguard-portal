@@ -30,15 +30,18 @@ export type ServiceItem = {
   scheduled: string | null
   done: string | null
   tech: string | null       // first name only
+  photos?: string[]
 }
 export type ServiceData = { open: ServiceItem[]; history: ServiceItem[]; counts: { open: number; working: number; ai_30d: number; done_30d: number }; error?: string }
 
 const WO_DONE = ['completed', 'complete', 'closed', 'done', 'invoiced', 'cancelled', 'canceled']
 const isAiRequest = (r: Row) => /\(ai\)/i.test(String(r.contact_name ?? '')) || /(^|\n)AI:/.test(String(r.description ?? ''))
-const firstLine = (s: unknown) => { const t = String(s ?? '').split('\n').map(x => x.trim()).find(x => x && !/^AI:/.test(x)); return t ? t.slice(0, 240) : null }
+const firstLine = (s: unknown) => { const t = String(s ?? '').split('\n').map(x => x.trim()).find(x => x && !/^AI:/.test(x) && !/^Photo: /.test(x)); return t ? t.slice(0, 240) : null }
+/** Photos added from the portal are kept as "Photo: <url>" lines in the request (no migration). */
+export const photosOf = (s: unknown) => String(s ?? '').split('\n').map(x => x.trim()).filter(x => /^Photo: https:\/\//.test(x)).map(x => x.slice(7)).slice(0, 10)
 const firstName = (s: unknown) => { const t = String(s ?? '').trim(); return t ? t.split(/\s+/)[0] : null }
 
-function jobStage(status: string): { stage: ServiceItem['stage']; label: string } {
+export function jobStage(status: string): { stage: ServiceItem['stage']; label: string } {
   const s = status.toLowerCase().replace(/[\s-]+/g, '_')
   if (['cancelled', 'canceled'].includes(s)) return { stage: 'closed', label: 'Cancelled' }
   if (WO_DONE.includes(s)) return { stage: 'done', label: 'Done' }
@@ -47,7 +50,7 @@ function jobStage(status: string): { stage: ServiceItem['stage']; label: string 
   if (['scheduled', 'assigned', 'dispatched'].includes(s)) return { stage: 'scheduled', label: 'Scheduled' }
   return { stage: 'received', label: 'Received' }
 }
-function requestStage(status: string): { stage: ServiceItem['stage']; label: string } {
+export function requestStage(status: string): { stage: ServiceItem['stage']; label: string } {
   const s = status.toLowerCase()
   if (s === 'closed') return { stage: 'closed', label: 'Closed' }
   if (s === 'acknowledged') return { stage: 'received', label: 'Being reviewed' }
@@ -87,7 +90,7 @@ export async function getServiceData(siteId: string | null): Promise<ServiceData
       opened: req?.created_at ?? j.created_at ?? null,
       scheduled: j.scheduled_date ?? j.scheduled_at ?? null,
       done: st.stage === 'done' ? (j.completed_at ?? j.updated_at ?? null) : null,
-      tech: firstName(j.assignee_name),
+      tech: firstName(j.assignee_name), photos: req ? photosOf(req.description) : [],
     })
   }
   for (const r of requests) {
@@ -97,7 +100,7 @@ export async function getServiceData(siteId: string | null): Promise<ServiceData
       id: String(r.id), kind: 'request', number: null, title: String(r.title ?? 'Service request'), where: r.area ?? null,
       details: firstLine(r.description), status: st.label, stage: st.stage, priority: r.priority_requested ?? null,
       ai: isAiRequest(r), from_request: true, opened: r.created_at ?? null, scheduled: null,
-      done: st.stage === 'closed' ? (r.updated_at ?? null) : null, tech: null,
+      done: st.stage === 'closed' ? (r.updated_at ?? null) : null, tech: null, photos: photosOf(r.description),
     })
   }
   const closed = (i: ServiceItem) => i.stage === 'done' || i.stage === 'closed'

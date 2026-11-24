@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getPortalManager } from '@/lib/portal-manager'
+import { logPortalRequest } from '@/lib/service-updates'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 export const dynamic = 'force-dynamic'
@@ -37,5 +38,11 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Updates by email / text as the request moves (lib/service-updates.ts) — unless they said no.
+  if (data?.id && b.updates !== false) {
+    const email = b.contact_email ? String(b.contact_email).trim() : (manager?.email ?? null)
+    const phone = b.contact_phone ? String(b.contact_phone).trim() : null
+    await logPortalRequest(v.portal.site_id, params.slug, String(data.id), title, email, phone)
+  }
   return NextResponse.json({ ok: true, id: data?.id })
 }
