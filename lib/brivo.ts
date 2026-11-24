@@ -130,6 +130,13 @@ export interface SiteBrivoToken { token: string; apiKey: string; brivoSiteId: st
 // the per-site path to parity. In-memory (per warm instance) is enough: the burst
 // that triggers the bug happens inside a single invocation.
 const siteBrivoTokenCache = new Map<string, { token: string; apiKey: string; brivoSiteId: string; credentialValue?: string; exp: number }>()
+const tokenSite = new Map<string, string>() // token → site, so an expired one can be renewed
+function siteForToken(token: string): string | null {
+  const hit = tokenSite.get(token)
+  if (hit) return hit
+  for (const [site, c] of Array.from(siteBrivoTokenCache.entries())) if (c.token === token) return site
+  return null
+}
 
 export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken> {
   const cached = siteBrivoTokenCache.get(siteId)
@@ -160,9 +167,11 @@ export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken>
     method: 'POST',
     headers: { Authorization: `Basic ${authBasic}`, 'api-key': apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'password', username: creds.username, password: creds.password }).toString(),
+    cache: 'no-store',
   })
   if (!res.ok) throw new Error(`Brivo auth failed (${res.status})`)
   const tokens = await res.json()
+  if (tokens?.access_token) { tokenSite.set(tokens.access_token, siteId); if (tokenSite.size > 500) tokenSite.delete(tokenSite.keys().next().value as string) }
   const brivoSiteId = String(creds.site_id ?? '')
   const credentialValue = creds.credential_value || undefined
   const ttlSec = Number(tokens.expires_in) > 0 ? Number(tokens.expires_in) : 900
@@ -217,42 +226,60 @@ async function handleBrivoResponse(res: Response, label: string): Promise<any> {
   return res.json()
 }
 
+// ─── Expired sign-in → sign in again and retry once ─────────────────────────
+// Brivo can end a sign-in before its expires_in (another login on the same account
+// from another server, a sync, or the Brivo website ends the older one) and answers
+// 401 "invalid_token / Access token expired". Every Brivo call goes through brivoSend,
+// so all of them recover on their own: find which site the token belongs to, sign
+// that site in again, retry once. `renewed` maps old → new token so a loop that keeps
+// passing the old token (event paging) uses the new one.
+const renewed = new Map<string, string>()
+const latest = (t: string) => { let x = t; for (let i = 0; i < 5 && renewed.has(x); i++) x = renewed.get(x)!; return x }
+const expired = (status: number, text: string) => status === 401 && /invalid_token|expired|unauthori/i.test(text)
+
+async function brivoSend(method: string, token: string, apiKey: string, url: string, body?: Record<string, any>): Promise<any> {
+  const send = (t: string) => fetch(url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+  const label = `${method} ${url.replace(BRIVO_API_BASE, '').split('?')[0]}`
+  let t = latest(token)
+  let res = await send(t)
+  if (res.status === 401) {
+    const text = await res.text()
+    const siteId = expired(res.status, text) ? siteForToken(t) : null
+    if (!siteId) throw new Error(`Brivo ${label} failed (401): ${text}`)
+    siteBrivoTokenCache.delete(siteId)
+    const fresh = await getSiteBrivoToken(siteId)
+    renewed.set(t, fresh.token)
+    if (token !== t) renewed.set(token, fresh.token)
+    t = fresh.token
+    res = await send(t)
+  }
+  return handleBrivoResponse(res, label)
+}
+
 export async function brivoGet(
   token: string, apiKey: string, path: string, params?: Record<string, string>
 ): Promise<any> {
   const url = new URL(`${BRIVO_API_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  const res = await fetch(url.toString(), { headers: brivoHeaders(token, apiKey) })
-  return handleBrivoResponse(res, `GET ${path}`)
+  return brivoSend('GET', token, apiKey, url.toString())
 }
 
 export async function brivoPost(
   token: string, apiKey: string, path: string, body?: Record<string, any>
 ): Promise<any> {
-  const res = await fetch(`${BRIVO_API_BASE}${path}`, {
-    method: 'POST', headers: brivoHeaders(token, apiKey),
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return handleBrivoResponse(res, `POST ${path}`)
+  return brivoSend('POST', token, apiKey, `${BRIVO_API_BASE}${path}`, body)
 }
 
 export async function brivoPut(
   token: string, apiKey: string, path: string, body?: Record<string, any>
 ): Promise<any> {
-  const res = await fetch(`${BRIVO_API_BASE}${path}`, {
-    method: 'PUT', headers: brivoHeaders(token, apiKey),
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return handleBrivoResponse(res, `PUT ${path}`)
+  return brivoSend('PUT', token, apiKey, `${BRIVO_API_BASE}${path}`, body)
 }
 
 export async function brivoDelete(
   token: string, apiKey: string, path: string
 ): Promise<any> {
-  const res = await fetch(`${BRIVO_API_BASE}${path}`, {
-    method: 'DELETE', headers: brivoHeaders(token, apiKey),
-  })
-  return handleBrivoResponse(res, `DELETE ${path}`)
+  return brivoSend('DELETE', token, apiKey, `${BRIVO_API_BASE}${path}`)
 }
 
 // ─── Domain helpers ───────────────────────────────────────────────────────────
