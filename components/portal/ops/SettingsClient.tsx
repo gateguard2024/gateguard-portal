@@ -99,11 +99,13 @@ function Inner({ slug }: { slug: string }) {
   const [adding, setAdding] = useState(false)
   const [open, setOpen] = useState<Any | null>(null)
   const [toast, show] = useToast()
+  const [needSignIn, setNeedSignIn] = useState(false)
+  // Load even when not PIN-signed-in: Gate Guard staff signed in to Nexus can add the first manager.
   const load = useCallback(async () => {
-    if (!manager) { setD(null); return }
     const r = await call(`/api/portal/${slug}/managers`)
-    setD(r.ok ? r.data : null); setErr(r.ok ? null : (r.data.error || 'Could not load managers.'))
-  }, [slug, manager])
+    setNeedSignIn(!r.ok && r.data.code === 'sign_in')
+    setD(r.ok ? r.data : null); setErr(r.ok || r.data.code === 'sign_in' ? null : (r.data.error || 'Could not load managers.'))
+  }, [slug, manager]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void load() }, [load])
 
   const meId = d?.me?.id
@@ -114,9 +116,10 @@ function Inner({ slug }: { slug: string }) {
       <div className="ok-card">
         <div className="ok-hd">
           <div><h3>Managers</h3><div className="sub">People who can open gates, lock down the site, and manage residents and packages — each with their own PIN.</div></div>
-          {manager && <button type="button" className="ok-btn pri" onClick={() => setAdding(true)}>Add a manager</button>}
+          {d && <button type="button" className="ok-btn pri" onClick={() => setAdding(true)}>Add a manager</button>}
         </div>
-        {!manager ? (
+        {d?.staff && <div className="ok-note">You’re signed in to Nexus as Gate Guard staff, so you can add this property’s managers without a PIN.{list.length === 0 ? ' Add the first one — they can add the rest.' : ''}</div>}
+        {needSignIn ? (
           <div className="ok-empty" style={{ display: 'grid', gap: 10, justifyItems: 'center' }}>
             <div>Sign in with your personal PIN to see and add managers.</div>
             <button type="button" className="ok-btn pri" onClick={requireSignIn}>Sign in</button>

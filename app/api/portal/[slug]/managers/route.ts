@@ -1,7 +1,8 @@
 /**
  * /api/portal/[slug]/managers — the property's own managers manage each other.
- * Gate Guard adds the FIRST manager (Nexus → property portal setup); after that any
- * signed-in manager (personal PIN) can add people, turn them off, give a new PIN, or
+ * Gate Guard adds the FIRST manager — in Nexus (property portal setup) or right here
+ * while signed in to Nexus as Gate Guard staff (middleware lets Clerk run on this one
+ * route). After that any signed-in manager (personal PIN) can add people, turn them off, give a new PIN, or
  * remove them. Nobody can turn off or remove themselves (so the property can't lock
  * itself out). PINs are hashed (lib/portal-manager.ts), unique per portal, never returned.
  *   GET                                         → { me, managers: [{ id, name, email, active, created_at, created_by }] }
@@ -14,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getPortalManager, hashManagerPin, portalRowForSlug, type PortalManager } from '@/lib/portal-manager'
+import { getCurrentUser } from '@/lib/current-user'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,16 +25,24 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
 const PIN_RE = /^\d{4,8}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-type Ctx = { portalId: string; orgId: string | null; siteId: string | null; me: PortalManager }
+type Ctx = { portalId: string; orgId: string | null; siteId: string | null; me: PortalManager; staff: boolean }
 
 async function gate(req: NextRequest, slug: string): Promise<Ctx | NextResponse> {
   const v = await verifyPortal(req, slug)
   if (!v.ok) return bad(v.error, v.status)
-  const me = await getPortalManager(req, slug)
-  if (!me) return bad('Sign in with your personal PIN to manage managers.', 401)
   const row = await portalRowForSlug(slug) as { id: string } | null
   if (!row) return bad('Portal not found.', 404)
-  return { portalId: row.id, orgId: v.portal.org_id ?? null, siteId: v.portal.site_id ?? null, me }
+  const base = { portalId: row.id, orgId: v.portal.org_id ?? null, siteId: v.portal.site_id ?? null }
+  const me = await getPortalManager(req, slug)
+  if (me) return { ...base, me, staff: false }
+  // Gate Guard staff signed in to Nexus in this browser (corporate only — same rule as
+  // the Nexus portal setup). Lets us add a property's first manager from the portal itself.
+  const u = await getCurrentUser()
+  if (u.isCorporate && u.id && u.id !== 'system' && u.id !== 'anonymous') {
+    const name = u.name || u.email || 'Gate Guard'
+    return { ...base, me: { id: `staff:${u.id}`, name: `${name} (Gate Guard)`, email: u.email ?? null }, staff: true }
+  }
+  return NextResponse.json({ error: 'Sign in with your personal PIN to manage managers.', code: 'sign_in' }, { status: 401 })
 }
 
 async function pinTaken(portalId: string, pin: string, exceptId?: string): Promise<boolean | null> {
@@ -57,7 +67,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const c = await gate(req, params.slug); if (c instanceof NextResponse) return c
   const { data, error } = await db().from('portal_managers').select('id, name, email, active, created_at, created_by').eq('client_portal_id', c.portalId).order('created_at', { ascending: true })
   if (error) return bad(error.message, 500)
-  return NextResponse.json({ me: c.me, managers: data ?? [] })
+  return NextResponse.json({ me: c.me, staff: c.staff, managers: data ?? [] })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
