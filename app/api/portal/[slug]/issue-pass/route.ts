@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getSiteBrivoToken, createBrivoUser, resendBrivoMobilePass } from '@/lib/brivo'
+import { getSiteBrivoToken, createBrivoUser, resendBrivoMobilePass, listBrivoSiteGroupIds } from '@/lib/brivo'
+import { getPortalManager } from '@/lib/portal-manager'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   const siteId = v.portal.site_id
   if (!siteId) return NextResponse.json({ error: 'This portal is not linked to a site.' }, { status: 400 })
 
+  // Issuing a pass needs a signed-in manager (the shared code is look-only).
+  const manager = await getPortalManager(req, params.slug)
+  if (!manager) return NextResponse.json({ error: 'Sign in with your personal PIN to issue passes.', need_manager: true }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const firstName = String(body.firstName ?? '').trim()
   const lastName = String(body.lastName ?? '').trim()
@@ -27,20 +31,24 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   if (!email) return NextResponse.json({ error: 'A guest email is required to send the pass.' }, { status: 400 })
 
   try {
-    const { token, apiKey } = await getSiteBrivoToken(siteId)
-    const created = await createBrivoUser(token, apiKey, { firstName, lastName, email, groupId: body.group_id ? String(body.group_id) : null })
+    const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+    // A group, if given, must be one of THIS property's Brivo groups.
+    let groupId: string | null = body.group_id ? String(body.group_id) : null
+    if (groupId && !(await listBrivoSiteGroupIds(token, apiKey, brivoSiteId)).map(String).includes(groupId)) {
+      return NextResponse.json({ error: 'That access group isn’t at this property.' }, { status: 403 })
+    }
+    const created = await createBrivoUser(token, apiKey, { firstName, lastName, email, groupId })
     await resendBrivoMobilePass(token, apiKey, created.id, email, { from: body.from ?? null, to: body.to ?? null })
 
-    try {
-      await supabase.from('site_events').insert({
-        site_id: siteId, event_type: 'guest_pass', event_source: 'brivo',
-        title: `Visitor pass issued: ${firstName} ${lastName}`,
-        description: `Issued from the customer portal (${params.slug}) by the site manager${body.to ? ` (valid to ${body.to})` : ''}`,
-        summary: `Guest pass via customer portal`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: { brivo_user_id: created.id, from: body.from ?? null, to: body.to ?? null, via: 'customer_portal', portal_slug: params.slug } as any,
-      })
-    } catch { /* audit best-effort */ }
+    const { error: aErr } = await supabase.from('site_events').insert({
+      site_id: siteId, event_type: 'guest_pass', event_source: 'brivo',
+      title: `Visitor pass issued: ${firstName} ${lastName}`,
+      description: `Issued from the property portal (${params.slug}) by ${manager.name}${body.to ? ` (valid to ${body.to})` : ''}`,
+      summary: `Guest pass · ${manager.name}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata: { brivo_user_id: created.id, from: body.from ?? null, to: body.to ?? null, actor: manager.name, actor_id: manager.id, via: 'customer_portal', portal_slug: params.slug } as any,
+    })
+    if (aErr) console.error('[portal issue-pass] audit failed:', aErr.message)
 
     return NextResponse.json({ ok: true, guest_id: created.id })
   } catch (e) {

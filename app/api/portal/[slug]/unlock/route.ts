@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyPortal } from '@/lib/portal-auth'
+import { verifyPortal, portalDoorAllowed } from '@/lib/portal-auth'
+import { getPortalManager } from '@/lib/portal-manager'
 import { getSiteBrivoToken, unlockBrivoDoor } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   const doorId = String(body.door_id ?? '')
   const doorName = String(body.door_name ?? 'Door')
   if (!doorId) return NextResponse.json({ error: 'door_id is required' }, { status: 400 })
+  // Opening a door needs a signed-in manager (the shared code is look-only) and a door on this portal.
+  const manager = await getPortalManager(req, params.slug)
+  if (!manager) return NextResponse.json({ error: 'Sign in with your personal PIN to open doors.', need_manager: true }, { status: 403 })
+  if (!portalDoorAllowed(v.portal, doorId)) return NextResponse.json({ error: 'That door isn’t on this portal.' }, { status: 403 })
 
   try {
     const { token, apiKey, credentialValue } = await getSiteBrivoToken(siteId)
@@ -30,18 +35,17 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
 
     // Audit — also surfaces in the site activity timeline. Actor is the portal
     // (site manager) rather than a Clerk user.
-    try {
-      await supabase.from('site_events').insert({
-        site_id: siteId,
-        event_type: 'door_unlock',
-        event_source: 'brivo',
-        title: `Door unlocked: ${doorName}`,
-        description: `Unlocked from the customer portal (${params.slug}) by the site manager`,
-        summary: `${doorName} unlocked via customer portal`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: { door_id: doorId, door_name: doorName, via: 'customer_portal', portal_slug: params.slug } as any,
-      })
-    } catch { /* audit best-effort — the unlock already happened */ }
+    const { error: aErr } = await supabase.from('site_events').insert({
+      site_id: siteId,
+      event_type: 'door_unlock',
+      event_source: 'brivo',
+      title: `Door unlocked: ${doorName}`,
+      description: `Unlocked from the property portal (${params.slug}) by ${manager.name}`,
+      summary: `${doorName} unlocked · ${manager.name}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata: { door_id: doorId, door_name: doorName, actor: manager.name, actor_id: manager.id, via: 'customer_portal', portal_slug: params.slug } as any,
+    })
+    if (aErr) console.error('[portal unlock] audit failed:', aErr.message)
 
     return NextResponse.json({ ok: true })
   } catch (e) {

@@ -75,6 +75,11 @@ export async function verifyPortal(req: NextRequest, slug: string): Promise<Port
   }
 }
 
+/** Is this door on the portal? (client_portals.door_ids — empty list = every door.) */
+export function portalDoorAllowed(portal: { door_ids: string[] | null }, doorId: string): boolean {
+  return !portal.door_ids || portal.door_ids.length === 0 || portal.door_ids.map(String).includes(String(doorId))
+}
+
 // Shared hash (must match /api/portal/[slug]/verify).
 export function hashPortalPin(pin: string): string {
   return createHash('sha256').update(`gg-portal:${pin.trim()}`).digest('hex')

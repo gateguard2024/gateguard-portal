@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyPortal } from '@/lib/portal-auth'
+import { verifyPortal, portalDoorAllowed } from '@/lib/portal-auth'
 import { getPortalManager } from '@/lib/portal-manager'
 import { getSiteBrivoToken, unlockBrivoDoor } from '@/lib/brivo'
 
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   const minutes = Math.max(1, Math.min(240, Number(body.minutes) || 60))
   if (!doorId) return NextResponse.json({ error: 'door_id is required' }, { status: 400 })
   if (!ACTIONS.includes(action)) return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  if (!portalDoorAllowed(v.portal, doorId)) return NextResponse.json({ error: 'That gate isn’t on this portal.' }, { status: 403 })
 
   const label: Record<Action, string> = {
     open: `Gate opened: ${doorName}`,
@@ -59,9 +60,9 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Gate command failed' }, { status: 502 })
   }
 
-  // Audit — names the manager who ran it.
-  try {
-    await supabase.from('site_events').insert({
+  // Audit — names the manager who ran it (awaited; a failed write is logged, the command already ran).
+  {
+    const { error: aErr } = await supabase.from('site_events').insert({
       site_id: siteId,
       event_type: `gate_${action}`,
       event_source: 'brivo',
@@ -71,7 +72,8 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       metadata: { door_id: doorId, door_name: doorName, action, minutes: action === 'hold_open' ? minutes : undefined, actor: manager.name, actor_id: manager.id, via: 'ops_portal', portal_slug: params.slug } as any,
     })
-  } catch { /* audit best-effort */ }
+    if (aErr) console.error('[portal gate] audit failed:', aErr.message)
+  }
 
   return NextResponse.json({ ok: true, physical, note: physicalNote || undefined })
 }

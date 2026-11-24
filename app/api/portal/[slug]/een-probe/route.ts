@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
+import { gateGuardStaff } from '@/lib/portal-manager'
 import { portalCameraScope } from '@/lib/video'
 import { getSiteEagleEyeAccess, eenTime } from '@/lib/eagle-eye'
 
@@ -42,6 +43,8 @@ async function tryStream(url: string, headers: Record<string, string>, ms: numbe
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const v = await verifyPortal(req, params.slug)
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
+  // Diagnostics show account details (camera ids, hosts) — Gate Guard staff only.
+  if (!(await gateGuardStaff())) return NextResponse.json({ error: 'Gate Guard staff only — sign in to Nexus.' }, { status: 403 })
   const cameraId = req.nextUrl.searchParams.get('camera_id') ?? ''
   if (!cameraId || !v.portal.site_id) return NextResponse.json({ error: 'camera_id required' }, { status: 400 })
   if (!portalCameraScope(v.portal.camera_ids).allow(`een:${cameraId}`)) return NextResponse.json({ error: 'Camera not on this portal.' }, { status: 403 })

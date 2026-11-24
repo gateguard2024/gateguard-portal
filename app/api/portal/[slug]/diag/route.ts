@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { gateGuardStaff } from '@/lib/portal-manager'
 import { getSiteEagleEyeAccess, listEagleEyeCameras, eagleEyePreviewFrame, eagleEyeFullFrame } from '@/lib/eagle-eye'
 import { createHash } from 'crypto'
 import { getSiteBrivoToken, getOrgBrivoToken, listBrivoDoors, listBrivoEvents, listBrivoUsers } from '@/lib/brivo'
@@ -18,6 +19,8 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const v = await verifyPortal(req, params.slug)
   if (!v.ok) return NextResponse.json({ authed: false, status: v.status, error: v.error }, { status: v.status })
+  // Diagnostics show account details (camera ids, hosts) — Gate Guard staff only.
+  if (!(await gateGuardStaff())) return NextResponse.json({ error: 'Gate Guard staff only — sign in to Nexus.' }, { status: 403 })
 
   const siteId = v.portal.site_id
   const out: Record<string, unknown> = {
