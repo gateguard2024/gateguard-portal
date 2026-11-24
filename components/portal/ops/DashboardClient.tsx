@@ -16,7 +16,9 @@ const { Zap, Users, ShieldCheck, Video, Package, Activity, ChevronDown, CreditCa
 type Cam = { id: string; name: string; online?: boolean | null }
 type Door = { id: string; name: string }
 type Act = { id: string; label: string; where: string; time: string; tone?: string }
-type Summary = { cameras?: Cam[]; doors?: Door[]; activity?: Act[]; events_today?: number; credentials_active?: number }
+type Summary = {
+  health?: { score: number; band: 'good' | 'watch' | 'bad'; reasons: { kind: string; text: string; points: number }[] } | null
+  gates?: { watched: number; open: { label: string; since: string | null }[]; blind: string[] }; cameras?: Cam[]; doors?: Door[]; activity?: Act[]; events_today?: number; credentials_active?: number }
 // Real invoices for this property (lib/portal-billing.ts) — no sample data.
 type Billing = { balance: number; overdue: number; due_next: { date: string; amount: number } | null; paid_90: number; invoices: { id: string; number: string; status: string; due_date: string | null; balance: number; days_late: number; pay_url: string | null }[] }
 
@@ -81,19 +83,22 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
     } catch { flash('Lockdown failed') }
   }
 
+  // Health = the SAME score Nexus shows (lib/site-health.ts via /summary): 100 minus
+  // what's wrong right now, with the reasons. Only real numbers here — no made-up bars.
+  const gatesOpen = s.gates?.open ?? []
+  const gatesBlind = s.gates?.blind ?? []
   const health = useMemo(() => {
     const camPct = cams.length ? Math.round((camsOnline / cams.length) * 100) : null
-    const accessPct = doors.length ? 100 : null
+    const okDoors = Math.max(0, doors.length - gatesOpen.length)
+    const accessPct = doors.length ? Math.round((okDoors / doors.length) * 100) : null
     const bars = [
-      { n: 'Access Control', pc: accessPct, note: doors.length ? `${doors.length}/${doors.length} gates` : 'not connected' },
+      { n: 'Gates & doors', pc: accessPct, note: doors.length ? (gatesOpen.length ? `${gatesOpen.length} left open` : `${doors.length}/${doors.length} secure`) : 'not connected' },
       { n: 'Cameras', pc: camPct, note: cams.length ? `${camsOnline}/${cams.length} online` : 'not connected' },
-      { n: 'Network', pc: 100, note: 'reporting' },
-      { n: 'Power / Relays', pc: 100, note: 'nominal' },
     ]
-    const known = [accessPct, camPct].filter(x => x != null) as number[]
-    const score = known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : null
-    return { score, bars }
-  }, [cams.length, camsOnline, doors.length])
+    const score = s.health ? s.health.score : null
+    return { score, band: s.health?.band ?? null, reasons: s.health?.reasons ?? [], bars }
+  }, [cams.length, camsOnline, doors.length, gatesOpen.length, s.health])
+  const healthCol = health.score == null ? C.ink3 : health.band === 'good' ? C.safe : health.band === 'watch' ? C.warn : C.alert
 
   const integrations = [{ n: 'Brivo', on: doors.length > 0 }, { n: 'Eagle Eye', on: cams.length > 0 }]
 
@@ -104,11 +109,13 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
     btnPrimary: { fontSize: 13, fontWeight: 700, borderRadius: 9, padding: '9px 15px', cursor: 'pointer', border: 0, background: BRAND, color: '#fff' },
   }
 
-  const statusCol = lockActive ? C.alert : C.safe
+  const statusCol = lockActive ? C.alert : healthCol
+  const statusTitle = lockActive ? 'Lockdown Active' : gatesOpen.length ? (gatesOpen.length === 1 ? 'Gate left open' : `${gatesOpen.length} gates left open`) : health.band === 'bad' ? 'Needs attention' : health.band === 'watch' ? 'Keep an eye on it' : 'All Secure'
+  const statusLine = lockActive ? 'Entry gates secured · residents can always exit' : gatesOpen.length ? `${gatesOpen.map(g => g.label).join(', ')}${health.reasons.length > gatesOpen.length ? ` · ${health.reasons.length - gatesOpen.length} more` : ''}` : health.reasons.length ? health.reasons.slice(0, 2).map(r => r.text).join(' · ') : `${doors.length} gates secured · ${camsOnline} of ${cams.length} cameras online`
   const kpis = [
     { label: 'Access Events Today', value: s.events_today != null ? s.events_today.toLocaleString() : (activity.length ? `${activity.length}` : '—'), sub: s.events_today != null ? 'across all gates' : 'recent in feed', pct: 100, tone: C.cyan, Icon: Zap },
     { label: 'Active Credentials', value: s.credentials_active != null ? s.credentials_active.toLocaleString() : '—', sub: s.credentials_active != null ? 'residents + staff' : 'syncing…', pct: 100, tone: C.safe, Icon: Users },
-    { label: 'Gates Secured', value: doors.length ? `${doors.length}/${doors.length}` : '—', sub: 'all secure', pct: doors.length ? 100 : 0, tone: C.safe, Icon: ShieldCheck },
+    { label: 'Gates Secured', value: doors.length ? `${Math.max(0, doors.length - gatesOpen.length)}/${doors.length}` : '—', sub: !doors.length ? 'not connected' : gatesOpen.length ? `${gatesOpen.length} left open` : 'all secure', pct: doors.length ? Math.round((Math.max(0, doors.length - gatesOpen.length) / doors.length) * 100) : 0, tone: gatesOpen.length ? C.alert : C.safe, Icon: ShieldCheck },
     { label: 'Cameras Online', value: cams.length ? `${camsOnline}/${cams.length}` : '—', sub: cams.length ? `${Math.round((camsOnline / cams.length) * 100)}% online` : 'not connected', pct: cams.length ? Math.round((camsOnline / cams.length) * 100) : 0, tone: C.cyan, Icon: Video },
   ]
 
@@ -130,13 +137,13 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
       {/* Security status hero */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.1fr', gap: 20, alignItems: 'center', padding: '22px 24px', marginBottom: 20, borderRadius: 22, background: lockActive ? '#FFF6F6' : C.card, border: `1px solid ${lockActive ? 'rgba(215,0,21,.35)' : C.border}`, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px -12px rgba(0,0,0,.18)' }} className="gg-hero">
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
-          <div style={{ width: 70, height: 70, borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: lockActive ? C.alert : BRAND }}>
+          <div style={{ width: 70, height: 70, borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: lockActive ? C.alert : gatesOpen.length || health.band === 'bad' ? C.alert : health.band === 'watch' ? C.warn : BRAND }}>
             <svg viewBox="0 0 24 24" width={34} height={34} fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
           </div>
           <div>
             <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.ink3 }}>Site status</div>
-            <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2 }}>{lockActive ? 'Lockdown Active' : 'All Secure'}</div>
-            <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{lockActive ? 'Entry gates secured · residents can always exit' : `${doors.length} gates secured · ${camsOnline} of ${cams.length} cameras online`}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2 }}>{statusTitle}</div>
+            <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{statusLine}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, justifyContent: 'center', borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: '0 18px' }} className="gg-hero-mid">
@@ -294,7 +301,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
         {phead('Site Health', <Activity size={16} color={C.cyan} />)}
         <div style={{ padding: 20 }}>
           <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Ring size={132} pct={health.score ?? 0} color={health.score == null ? C.ink3 : health.score >= 95 ? C.safe : health.score >= 85 ? C.cyan : C.warn} stroke={11}>
+            <Ring size={132} pct={health.score ?? 0} color={healthCol} stroke={11}>
               <b style={{ fontSize: 34, fontWeight: 800 }}>{health.score ?? '—'}</b>
               <span style={{ fontSize: 10.5, fontWeight: 700, color: C.ink2, letterSpacing: '0.04em' }}>HEALTH</span>
             </Ring>
@@ -304,6 +311,14 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 6 }}><b style={{ fontWeight: 700 }}>{h.n}</b><span style={{ fontWeight: 700, color: C.ink2 }}>{h.pc == null ? '—' : `${h.pc}%`} · {h.note}</span></div>
                   <div style={{ height: 6, borderRadius: 999, background: C.well, overflow: 'hidden' }}><i style={{ display: 'block', height: '100%', width: `${h.pc ?? 0}%`, background: col }} /></div>
                 </div>) })}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>{health.score == null ? 'Health not available yet' : health.reasons.length ? 'What’s lowering the score' : 'Nothing wrong right now'}</div>
+                {health.reasons.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12.5, color: C.ink2, padding: '5px 0', borderTop: i ? `1px solid ${C.border}` : undefined }}>
+                    <span>{r.text}</span><span style={{ fontWeight: 700, color: C.ink }}>−{r.points}</span>
+                  </div>))}
+                {gatesBlind.length > 0 && <div style={{ fontSize: 12, color: C.ink3, marginTop: 6 }}>Gate Watch can’t see: {gatesBlind.join(', ')}</div>}
+              </div>
             </div>
           </div>
         </div>

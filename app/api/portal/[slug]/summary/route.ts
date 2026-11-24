@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { siteHealth } from '@/lib/site-health'
+import { withCameras, type SiteHealth } from '@/lib/site-health-rules'
 import { portalCameraScope } from '@/lib/video'
 import { getSiteEagleEyeAccess, listEagleEyeCameras } from '@/lib/eagle-eye'
 import { getSiteBrivoToken, listBrivoDoors, listSiteBrivoEvents } from '@/lib/brivo'
@@ -85,5 +87,21 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     }
   } catch { /* billing optional */ }
 
-  return NextResponse.json({ cameras, doors, activity, balanceDue, payables })
+  // ── Health: the SAME score as Nexus (lib/site-health.ts) + live cameras ──────
+  // 100 minus what's wrong right now (gates left open, Faults, open jobs/requests…),
+  // with the reasons, so the property sees why.
+  let health: SiteHealth | null = null
+  let gates: { watched: number; open: { label: string; since: string | null }[]; blind: string[] } = { watched: 0, open: [], blind: [] }
+  try {
+    const h = (await siteHealth([siteId])).get(siteId) ?? null
+    const online = cameras.filter(c => c.online).length
+    health = h ? withCameras(h, online, cameras.length) : null
+    const { data: gw, error: gwErr } = await supabase.from('gate_watches').select('label, state, state_since').eq('site_id', siteId).eq('enabled', true)
+    if (!gwErr) {
+      const rows = (gw ?? []) as { label: string; state: string; state_since: string | null }[]
+      gates = { watched: rows.length, open: rows.filter(r => r.state === 'left_open').map(r => ({ label: r.label, since: r.state_since })), blind: rows.filter(r => r.state === 'blind').map(r => r.label) }
+    }
+  } catch (e) { console.error('[portal summary] health', e instanceof Error ? e.message : e) }
+
+  return NextResponse.json({ cameras, doors, activity, balanceDue, payables, health, gates })
 }
