@@ -112,6 +112,26 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
 
   const refresh = () => { fetch(`/api/portal/${slug}/manager/me`).then(r => r.json()).then(j => setManager(j.manager ?? null)).catch(() => {}) }
   useEffect(() => { refresh() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug])
+  // If the portal locks while a page is open (the PIN remembered on this computer ran
+  // out), every data call comes back 401 "Locked" and the page half-loads. Watch for
+  // that and go straight to the PIN screen instead (one reload, never a loop).
+  useEffect(() => {
+    const orig = window.fetch
+    let reloading = false
+    const wrapped: typeof window.fetch = async (input, init) => {
+      const res = await orig(input, init)
+      try {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        if (!reloading && res.status === 401 && url.includes(`/api/portal/${slug}/`) && !url.includes('/verify')) {
+          const j = await res.clone().json().catch(() => ({}))
+          if (/locked/i.test(String(j?.error ?? ''))) { reloading = true; window.location.reload() }
+        }
+      } catch { /* never break the call */ }
+      return res
+    }
+    window.fetch = wrapped
+    return () => { if (window.fetch === wrapped) window.fetch = orig }
+  }, [slug])
 
   async function signIn() {
     setBusy(true); setErr('')

@@ -13,6 +13,9 @@ function hashPortalPin(pin: string): string {
   return createHash('sha256').update(`gg-portal:${pin.trim()}`).digest('hex')
 }
 
+// View access is remembered on this computer for 30 days (was 12 h — the portal locked
+// overnight and pages half-loaded). Control (pm_ = signed-in manager) stays 12 h.
+const VIEW_COOKIE = { httpOnly: true, secure: true, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 24 * 30 }
 const COOKIE = { httpOnly: true, secure: true, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 12 }
 
 // POST /api/portal/[slug]/verify  { pin } — the portal's entry screen. Takes EITHER
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   const h = hashPortalPin(String(pin))
   if (h === portal.access_pin) {
     const res = NextResponse.json({ ok: true })
-    res.cookies.set(`pp_${params.slug}`, h, COOKIE)
+    res.cookies.set(`pp_${params.slug}`, h, VIEW_COOKIE)
     return res
   }
 
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     if (error) console.error('[portal verify] sign-in log failed:', error.message)
   }
   const res = NextResponse.json({ ok: true, manager: manager.name })
-  res.cookies.set(`pp_${params.slug}`, portal.access_pin, COOKIE)
+  res.cookies.set(`pp_${params.slug}`, portal.access_pin, VIEW_COOKIE)
   res.cookies.set(`pm_${params.slug}`, manager.id, COOKIE)
   return res
 }
