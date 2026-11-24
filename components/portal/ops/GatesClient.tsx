@@ -67,6 +67,54 @@ type Reset = { id: string; name: string; door_id: string | null; camera_id: stri
 const gnorm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const sameGate = (a: string, b: string) => { const x = gnorm(a), y = gnorm(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)) }
 
+/** Visitor pass: a Brivo person in one of THIS property's groups + a Mobile Pass by email,
+ * good from → to (/api/portal/[slug]/issue-pass — manager PIN, logged). */
+function PassSheet({ slug, onClose, onDone }: { slug: string; onClose: () => void; onDone: (msg: string) => void }) {
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([])
+  const now = new Date(), tomorrow = new Date(Date.now() + 864e5)
+  const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  const [f, setF] = useState({ first: '', last: '', email: '', group: '', from: local(now), to: local(tomorrow) })
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { fetch(`/api/portal/${slug}/users?groups=1`).then(r => r.json()).then(j => setGroups((j.groups ?? []).map((g: { id: string; name: string }) => ({ id: String(g.id), name: g.name })))).catch(() => {}) }, [slug])
+  const send = async () => {
+    if (!f.first.trim() || !f.last.trim()) return setErr('Enter the visitor’s first and last name.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return setErr('Enter the visitor’s email — the pass is sent there.')
+    if (!f.group) return setErr('Pick which doors they can use (access group).')
+    if (new Date(f.to) <= new Date(f.from)) return setErr('“Good until” must be after “Starts”.')
+    setBusy(true); setErr(null)
+    const r = await fetch(`/api/portal/${slug}/issue-pass`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ firstName: f.first.trim(), lastName: f.last.trim(), email: f.email.trim(), group_id: f.group, from: new Date(f.from).toISOString(), to: new Date(f.to).toISOString() }) })
+    const j = await r.json().catch(() => ({}))
+    setBusy(false)
+    if (!r.ok) return setErr(j.error || 'Could not send the pass.')
+    onDone(`Pass sent to ${f.email.trim()}`)
+  }
+  const inp: React.CSSProperties = { width: '100%', height: 38, borderRadius: 9, border: `1px solid ${C.border2}`, padding: '0 10px', font: 'inherit', fontSize: 14, background: '#fff', color: C.ink, boxSizing: 'border-box' }
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 4 }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div role="dialog" aria-modal="true" aria-label="Visitor pass" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 'min(520px, 100%)', maxHeight: '92dvh', overflowY: 'auto', padding: 18, display: 'grid', gap: 12, boxShadow: '0 24px 70px rgba(0,0,0,.3)' }}>
+        <div><div style={{ fontSize: 17, fontWeight: 600 }}>Visitor pass</div><div style={{ fontSize: 12.5, color: C.ink3 }}>They get a Brivo Mobile Pass by email that works only between these times.</div></div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label><span style={lbl}>First name</span><input style={inp} value={f.first} onChange={e => setF({ ...f, first: e.target.value })} autoFocus /></label>
+          <label><span style={lbl}>Last name</span><input style={inp} value={f.last} onChange={e => setF({ ...f, last: e.target.value })} /></label>
+        </div>
+        <label><span style={lbl}>Email</span><input style={inp} type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></label>
+        <label><span style={lbl}>Doors they can use</span><select style={inp} value={f.group} onChange={e => setF({ ...f, group: e.target.value })}><option value="">Pick an access group…</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label><span style={lbl}>Starts</span><input style={inp} type="datetime-local" value={f.from} onChange={e => setF({ ...f, from: e.target.value })} /></label>
+          <label><span style={lbl}>Good until</span><input style={inp} type="datetime-local" value={f.to} onChange={e => setF({ ...f, to: e.target.value })} /></label>
+        </div>
+        {err && <div style={{ fontSize: 13, color: C.alert }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={onClose} style={{ minHeight: 38, padding: '0 14px', borderRadius: 9, border: `1px solid ${C.border2}`, background: '#fff', font: 'inherit', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button type="button" onClick={send} disabled={busy} style={{ minHeight: 38, padding: '0 16px', borderRadius: 9, border: 0, background: C.blue, color: '#fff', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{busy ? 'Sending…' : 'Send pass'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Reset sheet: camera on screen, Start (hold to confirm), then live progress from the server run. */
 function ResetSheet({ slug, reset, onClose }: { slug: string; reset: Reset; onClose: () => void }) {
   const [runId, setRunId] = useState<string | null>(null)
@@ -162,6 +210,7 @@ function Inner({ slug }: { slug: string }) {
   // Gate reset (recipe set by Gate Guard in Nexus; runs on the server — lib/gate-reset.ts)
   const [resets, setResets] = useState<Reset[]>([])
   const [resetFor, setResetFor] = useState<Reset | null>(null)
+  const [passOpen, setPassOpen] = useState(false)
   useEffect(() => { fetch(`/api/portal/${slug}/gate-reset`).then(r => r.json()).then(j => setResets(j.resets ?? [])).catch(() => {}) }, [slug])
   // Which camera watches each door (refresh every 10 min — the Edge pass lasts 15).
   useEffect(() => {
@@ -221,6 +270,13 @@ function Inner({ slug }: { slug: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Visitor pass */}
+      <div style={{ ...card(), display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div><div style={{ fontSize: 14, fontWeight: 700 }}>Visitor pass</div><div style={{ fontSize: 12.5, color: C.ink2 }}>Send a guest a Mobile Pass that works only for the times you pick.</div></div>
+        <button type="button" onClick={() => manager ? setPassOpen(true) : requireSignIn()} style={{ minHeight: 38, padding: '0 16px', borderRadius: 10, border: 0, background: C.blue, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Send a visitor pass</button>
+      </div>
+      {passOpen && <PassSheet slug={slug} onClose={() => setPassOpen(false)} onDone={m => { setPassOpen(false); flash(m) }} />}
+
       {/* Lockdown */}
       <div style={{ ...card(), borderColor: lockActive ? 'rgba(215,0,21,0.5)' : C.border, boxShadow: lockActive ? '0 0 0 3px rgba(215,0,21,0.1)' : undefined }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
