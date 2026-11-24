@@ -110,3 +110,25 @@ export async function controlSiteShellyRelay(siteId: string, deviceId: string, c
   if (timerSec && timerSec > 0) params.timer = String(timerSec)
   await shellyPost(server, '/device/relay/control', params)
 }
+
+/** Live power on one relay channel, from the Shelly's own meter — or null when the
+ * device has no meter (plain Shelly 1 / Plus 1 without PM). Used by the gate reset
+ * to see the operator start drawing current once power is back.
+ *   Gen2/Plus/Pro: switch:N → apower (W), current (A), output
+ *   Gen1 PM:       meters[N].power (W), relays[N].ison */
+export async function readSiteShellyPower(siteId: string, deviceId: string, channel: number): Promise<{ watts: number | null; amps: number | null; on: boolean | null; metered: boolean }> {
+  const { authKey, server } = await creds(siteId)
+  const j = await shellyPost(server, '/device/status', { id: deviceId, auth_key: authKey })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const st: any = j?.data?.device_status ?? {}
+  const sw = st[`switch:${channel}`]
+  if (sw && typeof sw === 'object') {
+    const watts = typeof sw.apower === 'number' ? sw.apower : null
+    const amps = typeof sw.current === 'number' ? sw.current : null
+    return { watts, amps, on: typeof sw.output === 'boolean' ? sw.output : null, metered: watts != null || amps != null }
+  }
+  const m = Array.isArray(st.meters) ? st.meters[channel] : null
+  const r = Array.isArray(st.relays) ? st.relays[channel] : null
+  const watts = m && typeof m.power === 'number' ? m.power : null
+  return { watts, amps: null, on: r && typeof r.ison === 'boolean' ? r.ison : null, metered: watts != null }
+}

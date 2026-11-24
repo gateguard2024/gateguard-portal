@@ -67,7 +67,10 @@ export function GateReboots({ siteId, isCorporate }: { siteId: string; isCorpora
 }
 
 // ── Run ──────────────────────────────────────────────────────────────────────
-type Phase = 'idle' | 'powering_off' | 'waiting' | 'powering_on' | 'ready' | 'actuating' | 'done' | 'error'
+type Phase = 'idle' | 'powering_off' | 'waiting' | 'powering_on' | 'sensing' | 'ready' | 'actuating' | 'done' | 'error'
+// After power is back: watch the power relay's meter; the moment the operator draws
+// current, trip the gate (Brivo or a pulse). No meter / nothing seen → open by hand.
+const DRAW_WATTS = 3, DRAW_AMPS = 0.05, SENSE_MAX_MS = 90_000, SENSE_EVERY_MS = 1500
 
 function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
@@ -76,6 +79,9 @@ function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string;
   const [log, setLog] = useState<string[]>([])
   const [tick, setTick] = useState(0)
   const [camBad, setCamBad] = useState(false)
+  const [power, setPower] = useState<{ watts: number | null; amps: number | null } | null>(null)
+  const [manualWhy, setManualWhy] = useState<string | null>(null)
+  const openNow = useRef(false)
   const cancelled = useRef(false)
   useEffect(() => () => { cancelled.current = true }, [])
   useEffect(() => { const t = setInterval(() => { setCamBad(false); setTick(x => x + 1) }, 1500); return () => clearInterval(t) }, [])
@@ -96,8 +102,26 @@ function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string;
       if (cancelled.current) return
       setPhase('powering_on'); addLog('Power on')
       await shelly(reboot.power_device_id, reboot.power_channel, { on: true }, reboot.power_relay_name || 'Power relay')
-      addLog('Power restored — watch the camera for the operator to come back')
-      setPhase('ready')
+      if (reboot.actuation_type === 'none') { addLog('Power restored'); setPhase('ready'); return }
+      // Watch for the operator to draw current, then trip the gate on its own.
+      setPhase('sensing'); addLog('Power restored — waiting for the operator to draw current')
+      const started = Date.now()
+      openNow.current = false
+      while (!cancelled.current && Date.now() - started < SENSE_MAX_MS) {
+        if (openNow.current) { addLog('Opened by hand'); await actuate(); return }
+        const r = await getJson(`/api/shelly/relays/${reboot.power_device_id}?site_id=${siteId}&channel=${reboot.power_channel}`)
+        if (!r.ok) { setManualWhy('Couldn’t read the relay’s power — open the gate when it’s up on camera.'); addLog('Power reading failed — open by hand'); setPhase('ready'); return }
+        if (!r.data.metered) { setManualWhy('This relay doesn’t measure power — open the gate when it’s up on camera.'); addLog('No power meter on this relay — open by hand'); setPhase('ready'); return }
+        const w = typeof r.data.watts === 'number' ? r.data.watts : null, a = typeof r.data.amps === 'number' ? r.data.amps : null
+        setPower({ watts: w, amps: a })
+        if ((w != null && w >= DRAW_WATTS) || (a != null && a >= DRAW_AMPS)) {
+          addLog(`Operator drawing current (${w != null ? `${Math.round(w)} W` : `${a} A`}) — opening the gate`)
+          await actuate(); return
+        }
+        await sleep(SENSE_EVERY_MS)
+      }
+      if (cancelled.current) return
+      setManualWhy('No current seen in 90 s — check the camera, then open by hand.'); addLog('No current seen in 90 s'); setPhase('ready')
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setPhase('error') }
   }
   async function actuate() {
@@ -121,12 +145,13 @@ function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string;
     powering_off: 'Cutting power to the gate…',
     waiting: `Power is off — turning it back on in ${countdown}s…`,
     powering_on: 'Restoring power…',
-    ready: 'Power is back. When the operator is up on camera, open the gate.',
+    sensing: `Power is back — watching for the operator to draw current${power ? ` (now ${power.watts != null ? `${Math.round(power.watts)} W` : `${power.amps ?? 0} A`})` : ''}. The gate opens on its own.`,
+    ready: manualWhy || 'Power is back. When the operator is up on camera, open the gate.',
     actuating: 'Opening the gate…',
     done: 'Done — gate re-boot complete.',
     error: 'Something went wrong.',
   }
-  const running = phase === 'powering_off' || phase === 'waiting' || phase === 'powering_on' || phase === 'actuating'
+  const running = phase === 'powering_off' || phase === 'waiting' || phase === 'powering_on' || phase === 'sensing' || phase === 'actuating'
   return (
     <Sheet title={reboot.name} sub="Gate re-boot" onClose={onClose} width={600} locked={running}>
       <div className="sy-cam" style={{ cursor: 'default' }}>
@@ -137,7 +162,8 @@ function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string;
         {phase === 'waiting' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)', color: '#fff', fontSize: 48, fontWeight: 600 }}>{countdown}s</div>}
       </div>
       <div role="status" style={{ fontSize: 14, color: phase === 'error' ? RED : undefined }}>{err || status[phase]}</div>
-      {(phase === 'idle' || phase === 'error') && <button type="button" className="sy-b pri" onClick={runReset}>Start — power off {reboot.wait_seconds}s, then on</button>}
+      {(phase === 'idle' || phase === 'error') && <button type="button" className="sy-b pri" onClick={runReset}>Start — power off {reboot.wait_seconds}s, on, then {reboot.actuation_type === 'none' ? 'done' : 'open when it draws current'}</button>}
+      {phase === 'sensing' && <button type="button" className="sy-b line" onClick={() => { openNow.current = true }}>Open now</button>}
       {phase === 'ready' && reboot.actuation_type !== 'none' && <button type="button" className="sy-b pri" onClick={actuate}>{reboot.actuation_type === 'brivo' ? `Open ${reboot.actuation_door_name || 'gate'}` : `Pulse ${reboot.actuation_relay_name || 'gate relay'}`}</button>}
       {((phase === 'ready' && reboot.actuation_type === 'none') || phase === 'done') && <button type="button" className="sy-b line" onClick={onClose}>Close</button>}
       {log.length > 0 && <div style={{ background: '#F5F5F7', borderRadius: 10, padding: 10, fontSize: 12, color: MUTED, display: 'grid', gap: 3 }}>{log.map((l, i) => <div key={i}>{l}</div>)}</div>}
@@ -153,7 +179,7 @@ function BuilderSheet({ siteId, reboot, onClose, onSaved }: { siteId: string; re
   const [name, setName] = useState(reboot?.name || '')
   const [cameraId, setCameraId] = useState(reboot?.camera_id || '')
   const [powerId, setPowerId] = useState(reboot?.power_device_id ? `${reboot.power_device_id}:${reboot.power_channel}` : '')
-  const [wait, setWait] = useState(reboot?.wait_seconds ?? 30)
+  const [wait, setWait] = useState(reboot?.wait_seconds ?? 20)
   const [actType, setActType] = useState<'brivo' | 'shelly' | 'none'>(reboot?.actuation_type || 'brivo')
   const [doorId, setDoorId] = useState(reboot?.actuation_door_id || '')
   const [actRelay, setActRelay] = useState(reboot?.actuation_device_id ? `${reboot.actuation_device_id}:${reboot.actuation_channel ?? 0}` : '')
@@ -176,7 +202,7 @@ function BuilderSheet({ siteId, reboot, onClose, onSaved }: { siteId: string; re
     const payload: Any = {
       name: name.trim(), camera_id: cameraId || null, camera_name: cams.find(c => c.id === cameraId)?.name || null,
       power_device_id: pDev, power_channel: Number(pCh) || 0, power_relay_name: relays.find(r => `${r.id}:${r.channel}` === powerId)?.name || null,
-      wait_seconds: Math.max(1, Math.min(600, Number(wait) || 30)), actuation_type: actType,
+      wait_seconds: Math.max(1, Math.min(600, Number(wait) || 20)), actuation_type: actType,
       actuation_door_id: null, actuation_door_name: null, actuation_device_id: null, actuation_channel: null, actuation_relay_name: null,
       actuation_pulse_seconds: Math.max(1, Math.min(10, Number(pulse) || 1)),
     }

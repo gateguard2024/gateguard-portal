@@ -3,12 +3,15 @@
  * Turn a Shelly relay on/off. Physical action — requires confirm:true. Logged
  * as a site event so the activity timeline shows who toggled what + when.
  * [id] = Shelly device id.
+ *
+ * GET /api/shelly/relays/[id]?site_id=&channel= → { watts, amps, on, metered }
+ * Live power reading (gate reset watches for the operator to start drawing current).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { canOperate } from '@/lib/system-access'
-import { controlSiteShellyRelay } from '@/lib/shelly'
+import { controlSiteShellyRelay, readSiteShellyPower } from '@/lib/shelly'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -44,5 +47,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ ok: true, pulsed: !!pulseSec })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Relay control failed' }, { status: 502 })
+  }
+}
+
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser()
+  const siteId = req.nextUrl.searchParams.get('site_id') ?? ''
+  if (!siteId) return NextResponse.json({ error: 'site_id required' }, { status: 400 })
+  if (!(await canOperate(user, siteId, 'relays'))) return NextResponse.json({ error: 'You don’t have relay access for this site.' }, { status: 403 })
+  const channel = Number(req.nextUrl.searchParams.get('channel')) || 0
+  try {
+    return NextResponse.json(await readSiteShellyPower(siteId, params.id, channel))
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not read the relay' }, { status: 502 })
   }
 }
