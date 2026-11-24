@@ -162,10 +162,11 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (pathname === '/api/cron/gate-watch') {
     return NextResponse.next()
   }
-  // Property portal → managers: the portal's own PIN sign-in, OR Gate Guard staff signed in
-  // to Nexus (to add a property's FIRST manager). Clerk is initialised so the route can see
-  // a Nexus session; never redirect — portal visitors aren't Nexus users.
-  if (/^\/api\/portal\/[^/]+\/managers$/.test(pathname)) {
+  // Property portal pages + APIs: managers sign in with their own PIN (no Clerk), but
+  // Gate Guard staff signed in to Nexus get in too (view + Settings → managers), so
+  // Clerk is initialised here to SEE a Nexus session. Never redirect — portal visitors
+  // aren't Nexus users.
+  if (pathname.startsWith('/portal/') || pathname.startsWith('/api/portal/')) {
     return NextResponse.next()
   }
 
@@ -188,7 +189,7 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 export function middleware(req: NextRequest, event: NextFetchEvent) {
   // The public request form only submits (POST). Listing or changing requests needs a sign-in.
   if (req.nextUrl.pathname === '/api/request' && req.method !== 'POST') return clerkHandler(req, event)
-  if (/^\/api\/portal\/[^/]+\/managers$/.test(req.nextUrl.pathname)) return clerkHandler(req, event)
+  if (req.nextUrl.pathname.startsWith('/portal/') || req.nextUrl.pathname.startsWith('/api/portal/')) return clerkHandler(req, event)
   if (isBypassPath(req.nextUrl.pathname)) {
     return NextResponse.next()
   }
