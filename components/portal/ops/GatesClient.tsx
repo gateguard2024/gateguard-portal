@@ -10,6 +10,8 @@
  * with the Open buttons, so the manager can see it's safe before opening.
  * Edge cameras = real live video; Eagle Eye = a picture every ~2 s, flagged if it
  * stops changing (Eagle Eye sometimes hands back an old still).
+ * Arrange (signed-in manager): drag tiles (or ← →) to set their order and pick the
+ * camera for each one — saved for the property (door-cameras POST).
  */
 import { useEffect, useRef, useState } from 'react'
 import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
@@ -77,6 +79,7 @@ function DoorCam({ slug, link, edge, big }: { slug: string; link: Link; edge: Ed
   )
 }
 const EGRESS = /(exit|egress|ped|pedestrian|walk|man\s?gate|ada|emergenc)/i
+const arrowBtn: React.CSSProperties = { width: 30, height: 28, borderRadius: 7, border: `1px solid ${C.border2}`, background: '#fff', cursor: 'pointer', fontSize: 13, color: C.ink }
 function card(): React.CSSProperties { return { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 } }
 
 function Inner({ slug }: { slug: string }) {
@@ -89,13 +92,42 @@ function Inner({ slug }: { slug: string }) {
   const [links, setLinks] = useState<Record<string, Link>>({})
   const [edge, setEdge] = useState<EdgePass | null>(null)
   const [watch, setWatch] = useState<Door | null>(null)
+  const [cams, setCams] = useState<LinkCam[]>([])
+  const [choices, setChoices] = useState<Record<string, string>>({})
+  const [order, setOrder] = useState<string[]>([])
+  const [arrange, setArrange] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetch(`/api/portal/${slug}/summary`).then(r => r.json()).then(j => setDoors(j.doors ?? [])).catch(() => {}) }, [slug])
   // Which camera watches each door (refresh every 10 min — the Edge pass lasts 15).
   useEffect(() => {
-    const load = () => fetch(`/api/portal/${slug}/door-cameras`).then(r => r.json()).then(j => { setLinks(j.links ?? {}); setEdge(j.edge ?? null) }).catch(() => {})
+    const load = () => fetch(`/api/portal/${slug}/door-cameras`).then(r => r.json()).then(j => { setLinks(j.links ?? {}); setEdge(j.edge ?? null); setCams(j.cameras ?? []); setChoices(j.choices ?? {}); setOrder(o => (arrangeRef.current ? o : (j.order ?? []))) }).catch(() => {})
+    loadRef.current = load
     load(); const t = setInterval(load, 10 * 60_000); return () => clearInterval(t)
   }, [slug])
+  const arrangeRef = useRef(false); arrangeRef.current = arrange
+  const loadRef = useRef<() => void>(() => {})
+
+  const saveLayout = async (body: Record<string, unknown>) => {
+    const r = await fetch(`/api/portal/${slug}/door-cameras`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || 'Could not save')
+  }
+  const startArrange = () => { if (!manager) { requireSignIn(); return } setOrder(sorted.map(d => d.id)); setArrange(true) }
+  const finishArrange = async () => {
+    setSaving(true)
+    try { await saveLayout({ action: 'set_order', order }); setToast('Tile order saved') }
+    catch (e) { setToast(e instanceof Error ? e.message : 'Could not save') }
+    setSaving(false); setArrange(false); setTimeout(() => setToast(null), 3000)
+  }
+  const move = (id: string, to: number) => setOrder(o => { const cur = o.includes(id) ? o : sorted.map(d => d.id); const from = cur.indexOf(id); if (from < 0 || to < 0 || to >= cur.length) return cur; const n = cur.slice(); n.splice(from, 1); n.splice(to, 0, id); return n })
+  const pickCamera = async (d: Door, value: string) => {
+    const key = value === 'auto' ? null : value
+    try { await saveLayout({ action: 'set_camera', door_id: d.id, camera_key: key }); loadRef.current(); setToast(`Camera for ${d.name} saved`) }
+    catch (e) { setToast(e instanceof Error ? e.message : 'Could not save') }
+    setTimeout(() => setToast(null), 3000)
+  }
   useEffect(() => { if (!watch) return; const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setWatch(null) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [watch])
 
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 3200) }
@@ -118,7 +150,9 @@ function Inner({ slug }: { slug: string }) {
     } catch { flash('Lockdown failed') }
   }
 
-  const shown = doors.filter(d => filter === 'all' ? true : filter === 'gates' ? /gate/i.test(d.name) : !/gate/i.test(d.name))
+  const rank = (id: string) => { const i = order.indexOf(id); return i < 0 ? 1e6 : i }
+  const sorted = doors.map((d, i) => ({ d, i })).sort((a, b) => rank(a.d.id) - rank(b.d.id) || a.i - b.i).map(x => x.d)
+  const shown = sorted.filter(d => filter === 'all' ? true : filter === 'gates' ? /gate/i.test(d.name) : !/gate/i.test(d.name))
   const counts = { all: doors.length, gates: doors.filter(d => /gate/i.test(d.name)).length, doors: doors.filter(d => !/gate/i.test(d.name)).length }
 
   return (
@@ -142,11 +176,17 @@ function Inner({ slug }: { slug: string }) {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {([['all', `All (${counts.all})`], ['gates', `Gates (${counts.gates})`], ['doors', `Doors (${counts.doors})`]] as const).map(([k, lbl]) => (
           <button key={k} onClick={() => setFilter(k)} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${filter === k ? 'rgba(0,113,227,0.5)' : C.border2}`, background: filter === k ? 'rgba(0,113,227,0.08)' : 'transparent', color: filter === k ? C.cyan : C.ink2 }}>{lbl}</button>
         ))}
+        <div style={{ flex: 1 }} />
+        {arrange
+          ? <button onClick={finishArrange} disabled={saving} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 16px', borderRadius: 999, cursor: 'pointer', border: 0, background: C.blue, color: '#fff' }}>{saving ? 'Saving…' : 'Done'}</button>
+          : doors.length > 0 && <button onClick={startArrange} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${C.border2}`, background: 'transparent', color: C.ink2 }}>Arrange tiles & cameras</button>}
       </div>
+
+      {arrange && <div style={{ fontSize: 12.5, color: C.ink2, marginTop: -6 }}>Drag a tile (or use ← →) to move it, and pick each one’s camera. Press <b>Done</b> to save the order.</div>}
 
       {/* Control cards */}
       {shown.length === 0 ? (
@@ -156,6 +196,28 @@ function Inner({ slug }: { slug: string }) {
           {shown.map(d => {
             const egress = EGRESS.test(d.name)
             const link = links[d.id]
+            const pos = sorted.findIndex(x => x.id === d.id)
+            if (arrange) return (
+              <div key={d.id} draggable
+                onDragStart={e => { setDragId(d.id); e.dataTransfer.effectAllowed = 'move' }}
+                onDragOver={e => { e.preventDefault(); if (dragId && dragId !== d.id) move(dragId, pos) }}
+                onDragEnd={() => setDragId(null)}
+                style={{ ...card(), cursor: 'grab', opacity: dragId === d.id ? 0.45 : 1, borderStyle: 'dashed', borderColor: C.blue }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span aria-hidden style={{ color: C.ink3, fontSize: 16, lineHeight: 1 }}>⠿</span>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                  <button type="button" aria-label={`Move ${d.name} earlier`} onClick={() => move(d.id, pos - 1)} disabled={pos <= 0} style={arrowBtn}>←</button>
+                  <button type="button" aria-label={`Move ${d.name} later`} onClick={() => move(d.id, pos + 1)} disabled={pos >= sorted.length - 1} style={arrowBtn}>→</button>
+                </div>
+                <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: C.ink2, marginBottom: 4 }}>Camera</label>
+                <select value={choices[d.id] && (choices[d.id] === 'none' || cams.some(c => c.key === choices[d.id])) ? choices[d.id] : 'auto'} onChange={e => pickCamera(d, e.target.value)}
+                  style={{ width: '100%', height: 36, borderRadius: 8, border: `1px solid ${C.border2}`, padding: '0 8px', font: 'inherit', fontSize: 13, background: '#fff', color: C.ink }}>
+                  <option value="auto">Automatic{link && link.how !== 'chosen' ? ` (${link.camera.name})` : ' (none found)'}</option>
+                  {cams.map(c => <option key={c.key} value={c.key}>{c.name}</option>)}
+                  <option value="none">No camera</option>
+                </select>
+              </div>
+            )
             return (
               <div key={d.id} style={card()}>
                 {link && (
@@ -173,7 +235,7 @@ function Inner({ slug }: { slug: string }) {
                   <div style={{ flex: 1 }}><HoldButton tone="alert" label="Force close" holdingLabel="Closing…" onConfirm={() => cmd(d, 'force_close')} disabled={!manager || egress} title={egress ? 'Egress/pedestrian routes cannot be force-closed' : undefined} /></div>
                 </div>
                 {egress && <div style={{ fontSize: 10.5, color: C.ink2, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}><Lock size={11} /> Egress route — never force-closed</div>}
-                {!link && <div style={{ fontSize: 11, color: C.ink3, marginTop: 8 }}>No camera linked to this {/gate/i.test(d.name) ? 'gate' : 'door'}.</div>}
+                {!link && <div style={{ fontSize: 11, color: C.ink3, marginTop: 8 }}>No camera on this {/gate/i.test(d.name) ? 'gate' : 'door'} — <button type="button" onClick={startArrange} style={{ border: 0, background: 'none', padding: 0, color: C.blue, font: 'inherit', fontSize: 11, cursor: 'pointer' }}>pick one</button></div>}
               </div>
             )
           })}
