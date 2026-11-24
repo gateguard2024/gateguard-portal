@@ -31,22 +31,26 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     const groups = req.nextUrl.searchParams.get('groups')
       ? await listBrivoGroups(token, apiKey, brivoSiteId).catch(() => [])
       : undefined
-    // Last time each person used a door/gate — from the saved access history (30 days,
+    // Last time each person used a door/gate — from the saved access history (kept 90 days,
     // migration 241), matched by name. null = no history yet (241 not run / not synced).
+    // history_days = how far back the history reaches (the 60-day flag needs >= 60).
     let lastUsed: Record<string, string> | null = null
+    let historyDays = 0
     {
       const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       const { data, error } = await sb.from('brivo_events').select('actor, occurred_at').eq('site_id', siteId)
-        .gte('occurred_at', new Date(Date.now() - 30 * 864e5).toISOString()).not('actor', 'is', null)
+        .gte('occurred_at', new Date(Date.now() - 90 * 864e5).toISOString()).not('actor', 'is', null)
         .order('occurred_at', { ascending: false }).limit(10000)
       if (!error) {
         const latest = new Map<string, string>()
         for (const r of (data ?? []) as { actor: string; occurred_at: string }[]) { const k = r.actor.trim().toLowerCase(); if (!latest.has(k)) latest.set(k, r.occurred_at) }
         lastUsed = {}
+        const { data: first } = await sb.from('brivo_events').select('occurred_at').eq('site_id', siteId).order('occurred_at', { ascending: true }).limit(1).maybeSingle()
+        if (first?.occurred_at) historyDays = Math.min(90, Math.floor((Date.now() - Date.parse(first.occurred_at)) / 864e5))
         for (const u of users) { const t = latest.get(`${u.firstName} ${u.lastName}`.trim().toLowerCase()); if (t) lastUsed[u.id] = t }
       }
     }
-    return NextResponse.json({ users, last_used: lastUsed, ...(groups ? { groups } : {}) })
+    return NextResponse.json({ users, last_used: lastUsed, history_days: historyDays, ...(groups ? { groups } : {}) })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load users', users: [] }, { status: 502 })
   }

@@ -1,5 +1,6 @@
 /**
- * lib/brivo-events-store.ts — 30 days of Brivo door events per property (migration 241).
+ * lib/brivo-events-store.ts — Brivo door events per property (migration 241). First sync
+ * backfills 30 days; we KEEP 90 (Nov 24 2026 — Residents flags people with no door use in 60+ days).
  *
  * Brivo answers at most 2 days per request, so screens can't ask it for a month.
  * Instead the hourly job (inngest/functions/brivo-events-sync.ts) calls
@@ -44,7 +45,8 @@ export async function nameEvents(siteId: string, events: BrivoEvent[]): Promise<
 }
 
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-export const KEEP_DAYS = 30
+export const KEEP_DAYS = 90
+export const BACKFILL_DAYS = 30
 const DAY = 864e5
 const OVERLAP = 10 * 60_000 // re-read the last 10 minutes each run (late events), duplicates are ignored
 
@@ -72,7 +74,7 @@ export async function syncSite(siteId: string, now = Date.now()): Promise<{ site
   const sb = db()
   const { data: st, error: stErr } = await sb.from('brivo_event_sync').select('synced_through').eq('site_id', siteId).maybeSingle()
   if (stErr) return { site_id: siteId, read: 0, error: stErr.message }
-  const floor = now - KEEP_DAYS * DAY
+  const floor = now - BACKFILL_DAYS * DAY
   const from = Math.max(floor, st?.synced_through ? Date.parse(st.synced_through) - OVERLAP : floor)
   let read = 0
   let error: string | null = null
@@ -107,7 +109,7 @@ export async function sitesWithBrivo(): Promise<string[]> {
   return (sites ?? []).filter(s => !s.status || s.status === 'active').map(s => String(s.id))
 }
 
-/** Delete events older than 30 days. */
+/** Delete events older than KEEP_DAYS (90). */
 export async function pruneOld(now = Date.now()): Promise<{ error: string | null }> {
   const { error } = await db().from('brivo_events').delete().lt('occurred_at', new Date(now - KEEP_DAYS * DAY).toISOString())
   return { error: error?.message ?? null }

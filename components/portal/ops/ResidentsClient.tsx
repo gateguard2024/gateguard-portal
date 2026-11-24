@@ -24,28 +24,34 @@ function Inner({ slug }: { slug: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [group, setGroup] = useState<string>('all')
-  const [show, setShow] = useState<'active' | 'off' | 'all'>('active')
+  const [show, setShow] = useState<'active' | 'off' | 'all' | 'idle'>('active')
   const [open, setOpen] = useState<Person | null>(null)
   const [adding, setAdding] = useState(false)
   const [lastUsed, setLastUsed] = useState<Record<string, string> | null>(null)
+  const [historyDays, setHistoryDays] = useState(0)
+  const [moveOut, setMoveOut] = useState(false)
 
   const load = useCallback(async () => {
     const r = await call(`/api/portal/${slug}/users?groups=1`)
     setPeople(Array.isArray(r.data.users) ? r.data.users : [])
     setGroups(Array.isArray(r.data.groups) ? r.data.groups : [])
     setLastUsed(r.data.last_used && typeof r.data.last_used === 'object' ? r.data.last_used : null)
+    setHistoryDays(Number(r.data.history_days) || 0)
     setErr(r.ok ? (r.data.needs_site_id ? 'This property’s Brivo site isn’t set yet — ask Gate Guard to finish its setup.' : null) : (r.data.error || 'Could not load residents from Brivo.'))
   }, [slug])
   useEffect(() => { void load() }, [load])
 
+  // No door use in 60+ days — only once we have 60+ days of history to look through.
+  const canFlag = !!lastUsed && historyDays >= 60
+  const idle = (p: Person) => canFlag && !lastUsed![p.id]
   const list = useMemo(() => {
     const s = q.trim().toLowerCase()
     return (people ?? [])
-      .filter(p => show === 'all' || (show === 'active' ? p.active !== false : p.active === false))
+      .filter(p => show === 'all' || (show === 'idle' ? p.active !== false && idle(p) : show === 'active' ? p.active !== false : p.active === false))
       .filter(p => group === 'all' || (p.groupIds ?? []).includes(group))
       .filter(p => !s || [nameOf(p), p.email ?? '', p.phone ?? '', p.unitNumber ?? ''].some(f => f.toLowerCase().includes(s)))
       .sort((a, b) => (a.unitNumber ?? '').localeCompare(b.unitNumber ?? '', undefined, { numeric: true }) || nameOf(a).localeCompare(nameOf(b)))
-  }, [people, q, group, show])
+  }, [people, q, group, show, lastUsed, historyDays]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = people?.length ?? 0
   const active = (people ?? []).filter(p => p.active !== false).length
@@ -64,12 +70,15 @@ function Inner({ slug }: { slug: string }) {
       <div className="ok-card">
         <div className="ok-hd">
           <div><h3>Residents</h3><div className="sub">Live from Brivo. Open a person to add a gate PIN, send a mobile pass or turn access off.</div></div>
-          <button type="button" className="ok-btn pri" onClick={() => manager ? setAdding(true) : requireSignIn()}>+ Add resident</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="ok-btn" onClick={() => manager ? setMoveOut(true) : requireSignIn()}>Move out a unit</button>
+            <button type="button" className="ok-btn pri" onClick={() => manager ? setAdding(true) : requireSignIn()}>+ Add resident</button>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
           <input className="ok-in" style={{ maxWidth: 320 }} placeholder="Search name, unit, email or phone" value={q} onChange={e => setQ(e.target.value)} aria-label="Search residents" />
           <div className="ok-seg" role="group" aria-label="Show">
-            {(['active', 'off', 'all'] as const).map(k => <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>{k === 'active' ? 'Access on' : k === 'off' ? 'Turned off' : 'Everyone'}</button>)}
+            {(canFlag ? ['active', 'idle', 'off', 'all'] as const : ['active', 'off', 'all'] as const).map(k => <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>{k === 'active' ? 'Access on' : k === 'idle' ? 'No use 60+ days' : k === 'off' ? 'Turned off' : 'Everyone'}</button>)}
           </div>
           {groups.length > 0 && (
             <select className="ok-in" style={{ maxWidth: 240 }} value={group} onChange={e => setGroup(e.target.value)} aria-label="Access group">
@@ -92,7 +101,7 @@ function Inner({ slug }: { slug: string }) {
                     <td>{nameOf(p)}</td>
                     <td style={{ color: C.ink3 }}>{[p.email, p.phone].filter(Boolean).join(' · ') || '—'}</td>
                     <td style={{ color: C.ink2 }}>{(p.groupNames ?? []).join(', ') || '—'}</td>
-                    {lastUsed && <td style={{ color: lastUsed[p.id] ? C.ink2 : C.ink3, whiteSpace: 'nowrap' }}>{lastUsed[p.id] ? when(lastUsed[p.id]) : 'Not in 30 days'}</td>}
+                    {lastUsed && <td style={{ color: lastUsed[p.id] ? C.ink2 : C.ink3, whiteSpace: 'nowrap' }}>{lastUsed[p.id] ? when(lastUsed[p.id]) : idle(p) ? <span className="ok-pill" title="Their access is on but they haven’t used a door or gate in 60+ days — moved out?"><Dot c={DOT.orange} />No use 60+ days</span> : `Not in ${Math.max(1, historyDays || 30)} days`}</td>}
                     <td><span className="ok-pill"><Dot c={p.active !== false ? DOT.green : DOT.gray} />{p.active !== false ? 'On' : 'Off'}</span></td>
                   </tr>
                 ))}
@@ -104,6 +113,7 @@ function Inner({ slug }: { slug: string }) {
       </div>
 
       {open && <PersonSheet slug={slug} person={open} groups={groups} onClose={() => setOpen(null)} onChanged={load} flash={flash} />}
+      {moveOut && people && <MoveOutSheet slug={slug} people={people} onClose={() => setMoveOut(false)} onDone={msg => { setMoveOut(false); flash(msg); void load() }} />}
       {adding && <AddSheet slug={slug} groups={groups} onClose={() => setAdding(false)} onDone={() => { setAdding(false); void load() }} flash={flash} />}
       {toast}
     </div>
@@ -194,6 +204,41 @@ function PersonSheet({ slug, person, groups, onClose, onChanged, flash }: { slug
           </div>
         </>
       )}
+    </Sheet>
+  )
+}
+
+/** Move out a unit: turn off access for everyone in it at once (each person logged). */
+function MoveOutSheet({ slug, people, onClose, onDone }: { slug: string; people: Person[]; onClose: () => void; onDone: (msg: string) => void }) {
+  const units = Array.from(new Set(people.map(p => p.unitNumber).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const [unit, setUnit] = useState('')
+  const [sure, setSure] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<string[]>([])
+  const [err, setErr] = useState<string | null>(null)
+  const inUnit = people.filter(p => p.unitNumber === unit && p.active !== false)
+  const run = async () => {
+    setBusy(true); setErr(null)
+    const failed: string[] = []
+    for (const p of inUnit) {
+      const r = await call(`/api/portal/${slug}/users/${p.id}`, { method: 'POST', body: JSON.stringify({ action: 'suspend', name: nameOf(p), email: p.email }) })
+      if (r.ok) setDone(d => [...d, p.id]); else failed.push(`${nameOf(p)}: ${r.data.error || 'failed'}`)
+    }
+    setBusy(false)
+    if (failed.length) setErr(`Some didn’t turn off — ${failed.join('; ')}`)
+    else onDone(`Unit ${unit}: access turned off for ${inUnit.length} ${inUnit.length === 1 ? 'person' : 'people'}`)
+  }
+  return (
+    <Sheet title="Move out a unit" sub="Turns off door and gate access for everyone in the unit. You can turn anyone back on later." onClose={onClose}>
+      <label><span className="ok-lbl">Unit</span><select className="ok-in" value={unit} onChange={e => { setUnit(e.target.value); setSure(false); setDone([]) }}><option value="">Pick a unit…</option>{units.map(u => <option key={u} value={u}>{u}</option>)}</select></label>
+      {unit && (!inUnit.length ? <div className="ok-note">Nobody in unit {unit} has access on.</div> : (
+        <>
+          <div style={{ display: 'grid', gap: 4 }}>{inUnit.map(p => <div key={p.id} style={{ fontSize: 13.5 }}>{done.includes(p.id) ? '✓ ' : ''}{nameOf(p)}{p.email ? <span style={{ color: C.ink3 }}> · {p.email}</span> : null}</div>)}</div>
+          {!sure ? <button type="button" className="ok-btn" onClick={() => setSure(true)}>Turn off access for {inUnit.length} {inUnit.length === 1 ? 'person' : 'people'}…</button>
+            : <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span style={{ fontSize: 13 }}>Turn off unit {unit}?</span><button type="button" className="ok-btn" onClick={() => setSure(false)} disabled={busy}>No</button><button type="button" className="ok-btn pri" onClick={run} disabled={busy}>{busy ? 'Turning off…' : 'Yes, turn off'}</button></div>}
+        </>
+      ))}
+      {err && <div className="ok-note red">{err}</div>}
     </Sheet>
   )
 }
