@@ -53,7 +53,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
 
   useEffect(() => { fetch(`/api/portal/${slug}/summary`).then(r => r.json()).then(setS).catch(() => {}) }, [slug])
   useEffect(() => { fetch(`/api/portal/${slug}/billing`).then(r => r.json()).then(setBill).catch(() => {}) }, [slug])
-  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 15000); return () => clearInterval(t) }, [])
+  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 5000); return () => clearInterval(t) }, [])
 
   const doors = s.doors ?? []
   const cams = s.cameras ?? []
@@ -109,7 +109,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
     { label: 'Access Events Today', value: s.events_today != null ? s.events_today.toLocaleString() : (activity.length ? `${activity.length}` : '—'), sub: s.events_today != null ? 'across all gates' : 'recent in feed', pct: 100, tone: C.cyan, Icon: Zap },
     { label: 'Active Credentials', value: s.credentials_active != null ? s.credentials_active.toLocaleString() : '—', sub: s.credentials_active != null ? 'residents + staff' : 'syncing…', pct: 100, tone: C.safe, Icon: Users },
     { label: 'Gates Secured', value: doors.length ? `${doors.length}/${doors.length}` : '—', sub: 'all secure', pct: doors.length ? 100 : 0, tone: C.safe, Icon: ShieldCheck },
-    { label: 'Cameras Online', value: cams.length ? `${camsOnline}/${cams.length}` : '—', sub: cams.length ? `${Math.round((camsOnline / cams.length) * 100)}% live` : 'not connected', pct: cams.length ? Math.round((camsOnline / cams.length) * 100) : 0, tone: C.cyan, Icon: Video },
+    { label: 'Cameras Online', value: cams.length ? `${camsOnline}/${cams.length}` : '—', sub: cams.length ? `${Math.round((camsOnline / cams.length) * 100)}% online` : 'not connected', pct: cams.length ? Math.round((camsOnline / cams.length) * 100) : 0, tone: C.cyan, Icon: Video },
   ]
 
   return (
@@ -136,7 +136,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
           <div>
             <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.ink3 }}>Site status</div>
             <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2 }}>{lockActive ? 'Lockdown Active' : 'All Secure'}</div>
-            <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{lockActive ? 'Entry gates secured · residents can always exit' : `${doors.length} gates secured · ${camsOnline} of ${cams.length} cameras live`}</div>
+            <div style={{ fontSize: 12.5, color: C.ink2, marginTop: 3 }}>{lockActive ? 'Entry gates secured · residents can always exit' : `${doors.length} gates secured · ${camsOnline} of ${cams.length} cameras online`}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, justifyContent: 'center', borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: '0 18px' }} className="gg-hero-mid">
@@ -190,13 +190,13 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
                 {cams.slice(0, 9).map(c => {
                   const off = c.online === false
                   return (
-                    <div key={c.id} style={{ position: 'relative', aspectRatio: '16 / 10', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border2}`, background: '#05070b' }}>
+                    <a key={c.id} href={`/portal/${slug}/video`} title="Open Video" style={{ display: 'block', position: 'relative', aspectRatio: '16 / 10', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border2}`, background: '#05070b' }}>
                       {off ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink3, fontSize: 11, fontWeight: 600 }}>No signal</div> :
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={`/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(c.id)}&t=${tick}`} alt={c.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                      <span style={{ position: 'absolute', left: 9, top: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px #000' }}><span style={{ width: 7, height: 7, borderRadius: 999, background: off ? C.alert : C.safe }} />{off ? 'Offline' : 'Live'}</span>
+                      <span style={{ position: 'absolute', left: 9, top: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px #000' }}><span style={{ width: 7, height: 7, borderRadius: 999, background: off ? C.alert : C.safe }} />{off ? 'Offline' : 'Picture · every 5 s'}</span>
                       <span style={{ position: 'absolute', left: 9, bottom: 8, fontSize: 11.5, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,.9)' }}>{c.name}</span>
-                    </div>
+                    </a>
                   )
                 })}
               </div>

@@ -167,6 +167,22 @@ export async function eagleEyePreviewFrame(token: string, baseHost: string, devi
   } catch { return null }
 }
 
+/** A small (preview stream) picture recorded in the last `maxAgeSec` seconds, or null.
+ * `liveImage.jpeg?type=preview` sometimes hands back a still that is HOURS old (seen on
+ * the property portal: a daytime picture at night), so the portal asks for this first —
+ * it can never be older than maxAgeSec. Preview recording is cheap and on by default. */
+export async function eagleEyeRecentPreviewFrame(token: string, baseHost: string, deviceId: string, maxAgeSec = 60): Promise<Buffer | null> {
+  const since = new Date(Date.now() - maxAgeSec * 1000).toISOString().replace('Z', '+00:00')
+  try {
+    const res = await fetch(`https://${baseHost}/api/v3.0/media/recordedImage.jpeg?deviceId=${encodeURIComponent(deviceId)}&type=preview&timestamp__gte=${encodeURIComponent(since)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'image/jpeg' }, signal: AbortSignal.timeout(6000), cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return buf.length > 500 && buf[0] === 0xff && buf[1] === 0xd8 ? buf : null
+  } catch { return null }
+}
+
 /** A full-resolution (main stream) picture from the last `maxAgeSec` seconds, or null.
  * EEN v3 `/media/recordedImage.jpeg?type=main&timestamp__gte=…` — the first recorded main
  * frame at/after that time, so it is never older than maxAgeSec. Only works while the

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
 import { portalCameraScope } from '@/lib/video'
-import { getSiteEagleEyeAccess, eagleEyeLiveFrame, eagleEyePreviewFrame, type EenLiveTrace } from '@/lib/eagle-eye'
+import { getSiteEagleEyeAccess, eagleEyeLiveFrame, eagleEyePreviewFrame, eagleEyeRecentPreviewFrame, type EenLiveTrace } from '@/lib/eagle-eye'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,10 +30,13 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const trace: EenLiveTrace[] = []
   try {
     const { token, baseHost } = await getSiteEagleEyeAccess(v.portal.site_id)
-    let source: 'live' | 'stored' = 'stored'
+    // Newest first: live feed (opt-in) → a picture recorded in the last minute → Eagle
+    // Eye's "latest" still (can be hours old — `X-Frame: stored` says so).
+    let source: 'live' | 'recent' | 'stored' = 'stored'
     let frame = tryLive ? await eagleEyeLiveFrame(token, baseHost, cameraId, trace) : null
     if (frame) source = 'live'
-    else frame = await eagleEyePreviewFrame(token, baseHost, cameraId)
+    if (!frame) { frame = await eagleEyeRecentPreviewFrame(token, baseHost, cameraId); if (frame) source = 'recent' }
+    if (!frame) frame = await eagleEyePreviewFrame(token, baseHost, cameraId)
     if (debug) return NextResponse.json({ source: frame ? source : 'none', bytes: frame?.length ?? 0, trace })
     if (!frame) return NextResponse.json({ error: 'No preview available' }, { status: 502 })
     return new NextResponse(new Uint8Array(frame), {

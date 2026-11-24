@@ -475,9 +475,9 @@ function StripSnap({ src, name }: { src: (tick: number) => string; name: string 
 
 const BG = '#0D1117', PANEL = '#161B22', LINE2 = 'rgba(255,255,255,.08)', INK = '#E6EDF3', SUB = '#8B949E', ACC = '#0A84FF'
 export const VIEWER_CSS = `
-.cv{position:fixed;inset:0;z-index:140;background:${BG};color:${INK};display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;letter-spacing:-.01em}
+.cv{position:fixed;inset:0;z-index:140;background:radial-gradient(circle at 18% 0%,rgba(0,163,255,.16),transparent 34%),radial-gradient(circle at 85% 100%,rgba(10,132,255,.10),transparent 40%),linear-gradient(180deg,#0B1628 0%,#060E1D 55%,#030916 100%);color:${INK};display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;letter-spacing:-.01em}
 .cv .dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
-.cv-hd{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid ${LINE2};background:${PANEL}}
+.cv-hd{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid ${LINE2};background:rgba(13,22,40,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .cv-title{min-width:0;flex:1}
 .cv-t{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cv-s{display:flex;align-items:center;gap:6px;font-size:12px;color:${SUB};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -499,7 +499,7 @@ export const VIEWER_CSS = `
 .cv-clock{position:absolute;top:10px;right:10px;font:500 11.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px}
 .cv-tag{position:absolute;bottom:10px;left:10px;font-size:11px;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:3px 8px}
 .cv-err{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(215,0,21,.92);color:#fff;font-size:13px;border-radius:8px;padding:6px 12px;max-width:90%}
-.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid ${LINE2};background:${PANEL}}
+.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid ${LINE2};background:rgba(13,22,40,.55)}
 .cv-ctl .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .cv-ib{min-width:36px;height:32px;padding:0 8px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
 .cv-ib:hover:not(:disabled){background:rgba(255,255,255,.12)}
@@ -510,7 +510,7 @@ export const VIEWER_CSS = `
 .cv-thumb.on{border-color:${ACC}}
 .cv-thumb img{width:100%;height:100%;object-fit:cover}
 .cv-thumb .nm{position:absolute;left:0;right:0;bottom:0;padding:10px 6px 4px;font:600 11px -apple-system,system-ui,sans-serif;color:#fff;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.7));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cv-side{min-height:0;display:flex;flex-direction:column;border-left:1px solid ${LINE2};background:${PANEL}}
+.cv-side{min-height:0;display:flex;flex-direction:column;border-left:1px solid ${LINE2};background:rgba(13,22,40,.45)}
 .cv-sideh{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid ${LINE2}}
 .cv-sideh>.cv-seg{justify-self:start}
 .cv-groups{display:flex;gap:6px;flex-wrap:wrap}
