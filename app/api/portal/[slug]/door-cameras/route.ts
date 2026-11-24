@@ -41,7 +41,8 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     (async () => {
       try {
         const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
-        const all = await memo(`brivo-doors-s:${siteId}`, 10 * 60_000, async () => (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: String(d.id), name: d.name })))
+        // Same memory key as /summary, so the dashboard and Access share one Brivo call.
+        const all = (await memo(`brivo-doors:${siteId}`, 10 * 60_000, async () => (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name })))).map(d => ({ id: String(d.id), name: d.name }))
         return whitelist ? all.filter(d => whitelist.has(d.id)) : all
       } catch { return [] as { id: string; name: string }[] }
     })(),

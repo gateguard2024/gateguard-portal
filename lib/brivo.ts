@@ -237,8 +237,38 @@ const renewed = new Map<string, string>()
 const latest = (t: string) => { let x = t; for (let i = 0; i < 5 && renewed.has(x); i++) x = renewed.get(x)!; return x }
 const expired = (status: number, text: string) => status === 401 && /invalid_token|expired|unauthori/i.test(text)
 
+// ─── Speed limit (Nov 24 2026: Brivo emailed "over its throttle limit (calls per
+// second)" for our Tier 1 key) ───────────────────────────────────────────────
+// Per API key, per server: at most BRIVO_MAX_INFLIGHT calls at once and a gap of
+// BRIVO_MIN_GAP_MS between starts (default 3 at once, ~4 calls/s). Brivo's 429
+// "too many" → wait (Retry-After, else 1/2/4/8 s) and retry, up to 4 times.
+const MAX_INFLIGHT = Math.max(1, Number(process.env.BRIVO_MAX_INFLIGHT) || 3)
+const MIN_GAP_MS = Math.max(0, Number(process.env.BRIVO_MIN_GAP_MS) || 250)
+const lanes = new Map<string, { inflight: number; next: number; queue: (() => void)[] }>()
+const nap = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+async function slot(key: string): Promise<() => void> {
+  const lane = lanes.get(key) ?? { inflight: 0, next: 0, queue: [] }
+  lanes.set(key, lane)
+  if (lane.inflight >= MAX_INFLIGHT) await new Promise<void>(r => lane.queue.push(r))
+  lane.inflight++
+  const wait = lane.next - Date.now()
+  lane.next = Math.max(Date.now(), lane.next) + MIN_GAP_MS
+  if (wait > 0) await nap(wait)
+  return () => { lane.inflight--; lane.queue.shift()?.() }
+}
+async function limitedFetch(apiKey: string, url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const done = await slot(apiKey)
+    let res: Response
+    try { res = await fetch(url, init) } finally { done() }
+    if (res.status !== 429 || attempt >= 4) return res
+    const ra = Number(res.headers.get('retry-after'))
+    await nap(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) * 1000 : 1000 * 2 ** attempt)
+  }
+}
+
 async function brivoSend(method: string, token: string, apiKey: string, url: string, body?: Record<string, any>): Promise<any> {
-  const send = (t: string) => fetch(url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+  const send = (t: string) => limitedFetch(apiKey, url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
   const label = `${method} ${url.replace(BRIVO_API_BASE, '').split('?')[0]}`
   let t = latest(token)
   let res = await send(t)
