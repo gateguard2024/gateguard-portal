@@ -12,6 +12,8 @@ import { loadWork, returnTrips } from '@/lib/service-stats'
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 const DONE = '(completed,complete,done,closed,cancelled,canceled,deleted)'
 const URGENT = new Set(['high', 'urgent', 'critical', 'emergency'])
+/** Planned upkeep, not a problem: preventive maintenance, inspections, scheduled service. */
+const PLANNED = /\b(pm|preventive|preventative|inspection|maintenance plan|quarterly|annual|tune[- ]?up)\b/i
 const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
@@ -34,8 +36,8 @@ export async function siteHealth(siteIds: string[]): Promise<Map<string, SiteHea
   const [gates, faults, jobs, reqs, work] = await Promise.all([
     inChunks<{ id: string; site_id: string; label: string; state: string; incident_id: string | null }>((c) => db().from('gate_watches').select('id, site_id, label, state, incident_id').in('site_id', c).eq('enabled', true), ids),
     inChunks<{ id: string; site_id: string; title: string | null; severity: string | null }>((c) => db().from('incidents').select('id, site_id, title, severity').in('site_id', c).in('status', ['open', 'investigating']), ids),
-    inChunks<{ id: string; site_id: string; priority: string | null; scheduled_date: string | null }>((c) => db().from('work_orders').select('id, site_id, priority, scheduled_date').in('site_id', c).not('status', 'in', DONE), ids),
-    inChunks<{ site_id: string; priority_requested: string | null; area: string | null }>((c) => db().from('wo_requests').select('site_id, priority_requested, area').in('site_id', c).in('status', ['new', 'acknowledged']), ids),
+    inChunks<{ id: string; site_id: string; priority: string | null; scheduled_date: string | null; title: string | null; job_type: string | null }>((c) => db().from('work_orders').select('id, site_id, priority, scheduled_date, title, job_type').in('site_id', c).not('status', 'in', DONE), ids),
+    inChunks<{ site_id: string; priority_requested: string | null; area: string | null; status: string; converted_wo_id: string | null }>((c) => db().from('wo_requests').select('site_id, priority_requested, area, status, converted_wo_id').in('site_id', c).in('status', ['new', 'acknowledged', 'converted']), ids),
     loadWork({ siteIds: ids, since: new Date(Date.now() - 90 * 86_400_000) }).catch(() => ({ jobs: [] as never[], visits: [], parts: [] })),
   ])
   const returns = returnTrips(work.jobs)
@@ -50,7 +52,15 @@ export async function siteHealth(siteIds: string[]): Promise<Map<string, SiteHea
     const counted = new Set(leftOpen.map((x) => x.incident_id).filter(Boolean))
     for (const f of faults.filter((x) => x.site_id === siteId && !counted.has(x.id))) reasons.push({ kind: 'fault', text: `Fault: ${f.title || 'open'}`, points: P.faultOpen })
 
-    const js = jobs.filter((x) => x.site_id === siteId)
+    // Fair counting (Nov 24 2026): one problem costs points ONCE, and planned work isn't a problem.
+    //  • the job made from a left-open gate's ticket is already counted as the gate
+    //  • preventive maintenance / inspections, and routine jobs booked for today or later, cost nothing
+    const openGates = new Set(leftOpen.map((x) => norm(x.label)))
+    const siteReqs = reqs.filter((x) => x.site_id === siteId)
+    const gateJobIds = new Set(siteReqs.filter((x) => x.converted_wo_id && openGates.has(norm(x.area))).map((x) => String(x.converted_wo_id)))
+    const planned = (x: { priority: string | null; scheduled_date: string | null; title: string | null; job_type: string | null }) =>
+      PLANNED.test(`${x.job_type ?? ''} ${x.title ?? ''}`) || (!URGENT.has(String(x.priority ?? '').toLowerCase()) && !!x.scheduled_date && x.scheduled_date >= today)
+    const js = jobs.filter((x) => x.site_id === siteId && !gateJobIds.has(String(x.id)) && !(planned(x) && !(x.scheduled_date && x.scheduled_date < today)))
     const urgent = js.filter((x) => URGENT.has(String(x.priority ?? '').toLowerCase())).length
     const other = js.length - urgent
     const overdue = js.filter((x) => x.scheduled_date && x.scheduled_date < today).length
@@ -59,8 +69,7 @@ export async function siteHealth(siteIds: string[]): Promise<Map<string, SiteHea
     if (overdue) reasons.push({ kind: 'overdue', text: `${plural(overdue, 'job')} overdue`, points: overdue * P.jobOverdue })
 
     // A request for a gate already counted as left open isn't counted twice.
-    const openGates = new Set(leftOpen.map((x) => norm(x.label)))
-    const rs = reqs.filter((x) => x.site_id === siteId && !openGates.has(norm(x.area)))
+    const rs = siteReqs.filter((x) => x.status !== 'converted' && !openGates.has(norm(x.area)))
     const rHigh = rs.filter((x) => URGENT.has(String(x.priority_requested ?? '').toLowerCase())).length
     const rOther = rs.length - rHigh
     if (rHigh) reasons.push({ kind: 'requests', text: `${plural(rHigh, 'urgent request')} waiting`, points: rHigh * P.requestHigh })

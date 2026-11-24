@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 import { siteHealth } from '@/lib/site-health'
+import { siteUptime, type UptimeIncident } from '@/lib/site-uptime'
 
 export const dynamic = 'force-dynamic'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -40,7 +41,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const [assetsRes, panelsRes, incRes, eventsRes, integRes] = await Promise.all([
     supabase.from('site_assets').select('product_category, product_name, status').eq('site_id', siteId),
     supabase.from('site_panels').select('door_count, status').eq('site_id', siteId),
-    supabase.from('incidents').select('status, started_at, resolved_at, created_at').eq('site_id', siteId).limit(500),
+    supabase.from('incidents').select('status, severity, category, asset_id, title, started_at, resolved_at, created_at, updated_at').eq('site_id', siteId).limit(1000),
     supabase.from('site_events').select('id', { count: 'exact', head: true }).eq('site_id', siteId).gte('created_at', new Date(Date.now() - 864e5).toISOString()),
     supabase.from('site_integrations').select('vendor, status').eq('site_id', siteId),
   ])
@@ -63,20 +64,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   let doors = 0, panelsLive = 0
   for (const p of panelsRes.data ?? []) { doors += Number(p.door_count) || 0; if (p.status === 'live') panelsLive++ }
 
-  // Faults + uptime (90d)
+  // Faults + uptime (90d) — lib/site-uptime.ts: device-weighted availability (a fault takes
+  // down its device, not the whole property; network/power = everything; no double counting).
   const now = Date.now()
-  let openFaults = 0, downtimeMs = 0, lastStart = 0
+  let openFaults = 0, lastStart = 0
   for (const i of incRes.data ?? []) {
     const started = i.started_at ? Date.parse(i.started_at as string) : (i.created_at ? Date.parse(i.created_at as string) : NaN)
     if (Number.isNaN(started)) continue
     if (started > lastStart) lastStart = started
-    const open = OPEN_INC.has(String(i.status))
-    if (open) openFaults++
-    const ended = open ? now : (i.resolved_at ? Date.parse(i.resolved_at as string) : now)
-    const clampStart = Math.max(started, now - WINDOW_MS)
-    if (ended > clampStart) downtimeMs += ended - clampStart
+    if (OPEN_INC.has(String(i.status))) openFaults++
   }
-  const uptimePct = Math.round(Math.max(0, Math.min(100, 100 * (1 - downtimeMs / WINDOW_MS))) * 100) / 100
+  const up = siteUptime((incRes.data ?? []) as UptimeIncident[], { camera: cat.camera, gate: cat.gate, door: Math.max(doors, cat.reader), intercom: cat.intercom, network: cat.network }, now, WINDOW_MS)
+  const uptimePct = up.pct
 
   // Health (lib/site-health.ts): 100 minus what's wrong now — Gate Watch, Faults, open jobs,
   // requests, repeat visits. The page adds live cameras (withCameras). Reasons are shown.
