@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
+import { memo } from '@/lib/memo'
 import { siteHealth } from '@/lib/site-health'
 import { withCameras, type SiteHealth } from '@/lib/site-health-rules'
 import { portalCameraScope } from '@/lib/video'
@@ -40,8 +41,10 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   // ── Cameras (Eagle Eye) ──────────────────────────────────────────────────
   const cameras = await (async () => {
     try {
-      const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
-      const all = await listEagleEyeCameras(token, baseHost)
+      const all = await memo(`een-cams:${siteId}`, 60_000, async () => {
+        const { token, baseHost } = await getSiteEagleEyeAccess(siteId)
+        return listEagleEyeCameras(token, baseHost)
+      })
       const scoped = all.filter(c => camScope.allow(`een:${c.id}`))
       return scoped.map(c => ({ id: c.id, name: c.name, online: c.online !== false }))
     } catch { return [] }
@@ -53,7 +56,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   try {
     const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
     try {
-      const allDoors = (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name }))
+      const allDoors = await memo(`brivo-doors:${siteId}`, 10 * 60_000, async () => (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name })))
       doors = doorWhitelist ? allDoors.filter(d => doorWhitelist.has(d.id)) : allDoors
     } catch { /* doors optional */ }
     try {
@@ -93,7 +96,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   let health: SiteHealth | null = null
   let gates: { watched: number; open: { label: string; since: string | null }[]; blind: string[] } = { watched: 0, open: [], blind: [] }
   try {
-    const h = (await siteHealth([siteId])).get(siteId) ?? null
+    const h = (await memo(`health:${siteId}`, 60_000, () => siteHealth([siteId]))).get(siteId) ?? null
     const online = cameras.filter(c => c.online).length
     health = h ? withCameras(h, online, cameras.length) : null
     const { data: gw, error: gwErr } = await supabase.from('gate_watches').select('label, state, state_since').eq('site_id', siteId).eq('enabled', true)

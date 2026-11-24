@@ -53,7 +53,12 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  useEffect(() => { fetch(`/api/portal/${slug}/summary`).then(r => r.json()).then(setS).catch(() => {}) }, [slug])
+  // Show what we had last time straight away, then refresh (keeps the page from starting empty).
+  useEffect(() => {
+    const k = `gg-pp-summary:${slug}`
+    try { const c = sessionStorage.getItem(k); if (c) setS(JSON.parse(c)) } catch { /* private mode */ }
+    fetch(`/api/portal/${slug}/summary`).then(r => r.ok ? r.json() : null).then(j => { if (!j) return; setS(j); try { sessionStorage.setItem(k, JSON.stringify(j)) } catch { /* full */ } }).catch(() => {})
+  }, [slug])
   useEffect(() => { fetch(`/api/portal/${slug}/billing`).then(r => r.json()).then(setBill).catch(() => {}) }, [slug])
   useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 5000); return () => clearInterval(t) }, [])
 

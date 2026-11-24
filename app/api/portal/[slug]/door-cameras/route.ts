@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getPortalManager } from '@/lib/portal-manager'
+import { memo } from '@/lib/memo'
 import { verifyPortal } from '@/lib/portal-auth'
 import { siteVideo, portalCameraScope } from '@/lib/video'
 import { getSiteBrivoToken, listBrivoDoors } from '@/lib/brivo'
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     (async () => {
       try {
         const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
-        const all = (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: String(d.id), name: d.name }))
+        const all = await memo(`brivo-doors-s:${siteId}`, 10 * 60_000, async () => (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: String(d.id), name: d.name })))
         return whitelist ? all.filter(d => whitelist.has(d.id)) : all
       } catch { return [] as { id: string; name: string }[] }
     })(),
