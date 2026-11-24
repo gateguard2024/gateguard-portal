@@ -12,7 +12,7 @@
  * falls back to asking Brivo live (the old behaviour) — nothing breaks.
  */
 import { createClient } from '@supabase/supabase-js'
-import { getSiteBrivoToken, listBrivoEventsRange, listBrivoUsers, noUserLabel, type BrivoEvent } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoEventsRange, listBrivoUsers, noUserLabel, isAccessEvent, type BrivoEvent } from '@/lib/brivo'
 
 // ── Names for events Brivo sent without one ────────────────────────────────
 // Some events carry only the user's id (or no person at all). Look the id up in the
@@ -55,7 +55,8 @@ const toEvent = (r: Row): BrivoEvent => ({ id: r.brivo_event_id, occurred: r.occ
 
 /** Save events for a site; duplicates (same Brivo id) are skipped. */
 async function store(siteId: string, events: BrivoEvent[]): Promise<{ saved: number; error: string | null }> {
-  const rows = events.filter(e => e.occurred).map(e => ({ site_id: siteId, brivo_event_id: e.id, occurred_at: e.occurred!, action: e.action, actor: e.actor, door: e.door }))
+  // Access events only — camera / video events aren't kept (isAccessEvent).
+  const rows = events.filter(e => e.occurred && isAccessEvent(e)).map(e => ({ site_id: siteId, brivo_event_id: e.id, occurred_at: e.occurred!, action: e.action, actor: e.actor, door: e.door }))
   let saved = 0
   for (let i = 0; i < rows.length; i += 500) {
     const part = rows.slice(i, i + 500)
@@ -129,7 +130,7 @@ export async function recentSiteEvents(siteId: string, opts: { days?: number; li
   }
   const since = new Date(now - days * DAY).toISOString()
   const { data, error } = await sb.from('brivo_events').select('brivo_event_id, occurred_at, action, actor, door')
-    .eq('site_id', siteId).gte('occurred_at', since).order('occurred_at', { ascending: false }).limit(limit)
+    .eq('site_id', siteId).gte('occurred_at', since).order('occurred_at', { ascending: false }).limit(limit * 2) // room for camera rows saved before the filter
   if (error) {
     console.error('[brivo-events] read failed:', error.message)
     return live(siteId, now - Math.min(days, 2) * DAY, now, limit)
@@ -140,13 +141,13 @@ export async function recentSiteEvents(siteId: string, opts: { days?: number; li
   const fresh = after < now ? await live(siteId, after, now, limit).catch(() => [] as BrivoEvent[]) : []
   const seen = new Set<string>()
   return [...fresh, ...stored]
-    .filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true })
+    .filter(e => { if (seen.has(e.id) || !isAccessEvent(e)) return false; seen.add(e.id); return true })
     .sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? '')))
     .slice(0, limit)
 }
 
 async function live(siteId: string, from: number, to: number, limit: number): Promise<BrivoEvent[]> {
   const { token, apiKey } = await getSiteBrivoToken(siteId)
-  const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, to, Math.max(limit, 200)))
-  return events.sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? ''))).slice(0, limit)
+  const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, to, Math.max(limit * 2, 400)))
+  return events.filter(isAccessEvent).sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? ''))).slice(0, limit)
 }

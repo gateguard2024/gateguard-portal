@@ -517,7 +517,12 @@ export async function unlockBrivoDoor(token: string, apiKey: string, doorId: str
 }
 
 // ─── Access events (the Brivo activity / event tracker) ──────────────────────
-export interface BrivoEvent { id: string; occurred: string | null; action: string; actor: string | null; door: string | null; actor_id?: string | null; credential?: string | null }
+export interface BrivoEvent { id: string; occurred: string | null; action: string; actor: string | null; door: string | null; actor_id?: string | null; credential?: string | null; camera?: boolean }
+
+/** Access log = doors, gates, credentials, people. Brivo's camera / video events
+ * (motion, clips, recording, camera on/offline) are left out (Nov 24 2026). */
+const CAMERA_EVENT = /\b(camera|video|motion|clip|snapshot|recording|onair|eagle ?eye|stream|analytics?)\b/i
+export const isAccessEvent = (e: Pick<BrivoEvent, 'action' | 'camera'>) => !e.camera && !CAMERA_EVENT.test(e.action || '')
 
 /** Recent access events for the account behind these creds (each site = own account). */
 export async function listBrivoEvents(token: string, apiKey: string, pageSize = 40, sinceDays = 7): Promise<BrivoEvent[]> {
@@ -558,7 +563,9 @@ export function mapBrivoEvent(e: any): BrivoEvent {
   const cred = ed.credentialObject ?? ed.credential ?? e.credential ?? (Array.isArray(ed.credentials) ? ed.credentials[0] : null) ?? null
   const credential = cred ? String(cred.reference ?? cred.referenceId ?? cred.value ?? cred.id ?? '') || null : null
   const id = e.id ?? e.eventId ?? e.uuid ?? `${occurred ?? ''}|${action}|${actor ?? ''}|${door ?? ''}`
-  return { id: String(id), occurred, action, actor: actor ? String(actor).trim() || null : null, door, actor_id, credential }
+  const objType = String(e.eventObject?.type ?? e.object?.type ?? ed.objectType ?? '').toLowerCase()
+  const camera = /camera|video/.test(objType)
+  return { id: String(id), occurred, action, actor: actor ? String(actor).trim() || null : null, door, actor_id, credential, camera }
 }
 
 /** What happened when no person is named — so a row never just shows a blank. */
