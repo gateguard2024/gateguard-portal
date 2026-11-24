@@ -67,7 +67,7 @@ export const siteViewerApi = (siteId: string): ViewerApi => ({
   live: (camId, n) => `/api/eagle-eye/live?site_id=${encodeURIComponent(siteId)}&camera_id=${encodeURIComponent(camId)}&n=${n}`,
 })
 
-export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose: closeNow, backLabel }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void; backLabel?: string }) {
+export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startAt, onClose: closeNow, backLabel, onShare }: { siteId: string; api?: ViewerApi; cam: Cam; cams?: Cam[]; edge: EdgePass | null; startAt?: number | null; onClose: () => void; backLabel?: string; onShare?: (cam: Cam, atMs: number) => void }) {
   // The browser's Back button (and a mouse back button) closes the viewer instead of
   // leaving the page: opening adds a history step; Back pops it → close. Our own
   // Back / Escape go through history too, so there's never a stray step left behind.
@@ -279,6 +279,7 @@ export function Viewer({ siteId, api: apiProp, cam: firstCam, cams, edge, startA
             </div>
             <div className="grp">
               <a className="cv-btn" href={downloadUrl} target="_blank" rel="noopener noreferrer" download>Download 1-min clip</a>
+              {onShare && !isEdge && <button type="button" className="cv-btn" onClick={() => onShare(cam, pos)}>Share clip</button>}
               <button type="button" className="cv-btn" onClick={saveFrame}>Save frame</button>
               <button type="button" className="cv-ib" onClick={fullscreen} aria-label="Full screen">⛶</button>
             </div>

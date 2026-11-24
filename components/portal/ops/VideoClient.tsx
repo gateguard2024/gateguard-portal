@@ -18,7 +18,7 @@
  * If the new route fails, falls back to the old Eagle Eye list (/summary).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { OpsShell, C } from '@/components/portal/ops/OpsShell'
+import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
 import { Viewer, VIEWER_CSS, KIND_DOT, type Cam, type VEvent, type ViewerApi } from '@/components/nexus/systems/cameras/Viewer'
 import { EdgeLive, EdgeSnap, edgeUrl, type EdgePass } from '@/components/nexus/systems/cameras/players'
 
@@ -120,6 +120,111 @@ const CSS = `
 @media (max-width:1000px){.vz-wrap{grid-template-columns:1fr}.vz-grid{max-height:none}}
 ${VIEWER_CSS}`
 
+/** Small modal that sits ABOVE the playback viewer (z 200). */
+function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()} style={{ background: '#fff', color: C.ink, borderRadius: 16, width: 'min(560px, 100%)', maxHeight: '90dvh', overflowY: 'auto', padding: 18, display: 'grid', gap: 12, boxShadow: '0 24px 70px rgba(0,0,0,.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+          <div><div style={{ fontSize: 17, fontWeight: 600 }}>{title}</div>{sub && <div style={{ fontSize: 12.5, color: C.ink3, marginTop: 2 }}>{sub}</div>}</div>
+          <button type="button" onClick={onClose} style={{ minHeight: 32, padding: '0 12px', borderRadius: 8, border: `1px solid ${C.border2}`, background: '#fff', font: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Done</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+const minp: React.CSSProperties = { width: '100%', height: 38, borderRadius: 9, border: `1px solid ${C.border2}`, padding: '0 10px', font: 'inherit', fontSize: 14, background: '#fff', color: C.ink, boxSizing: 'border-box' }
+const mbtn = (pri?: boolean): React.CSSProperties => ({ minHeight: 38, padding: '0 14px', borderRadius: 9, border: pri ? 0 : `1px solid ${C.border2}`, background: pri ? C.blue : '#fff', color: pri ? '#fff' : C.ink, font: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' })
+
+/** Share this clip → a private link that plays the recording at that moment (lib/clip-shares). */
+function ShareClip({ slug, cam, at, onClose }: { slug: string; cam: Cam; at: number; onClose: () => void }) {
+  const [note, setNote] = useState(''); const [days, setDays] = useState(7)
+  const [url, setUrl] = useState<string | null>(null); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const when = new Date(at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'medium' })
+  const make = async () => {
+    setBusy(true); setErr(null)
+    const r = await fetch(`/api/portal/${slug}/clip-share`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera_id: cam.id, camera_name: cam.name, ts: new Date(at).toISOString(), note: note.trim() || null, days }) })
+    const j = await r.json().catch(() => ({}))
+    setBusy(false)
+    if (!r.ok) return setErr(j.error || 'Could not make the link')
+    setUrl(j.url)
+  }
+  return (
+    <Modal title="Share this clip" sub={`${cam.name} · ${when} (Eastern)`} onClose={onClose}>
+      {!url ? (
+        <>
+          <div style={{ fontSize: 13, color: C.ink2 }}>Makes a private link that plays this recording — for police, insurance or a resident. Anyone with the link can watch and download it until it expires. You can turn it off any time.</div>
+          <label><span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 4 }}>Note (optional, shown with the video)</span><input style={minp} value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Case #2026-1123, car hit the gate" maxLength={200} /></label>
+          <label><span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 4 }}>Link works for</span><select style={minp} value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 14, 30].map(d => <option key={d} value={d}>{d} day{d === 1 ? '' : 's'}</option>)}</select></label>
+          {err && <div style={{ fontSize: 13, color: C.alert }}>{err}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" style={mbtn(true)} onClick={make} disabled={busy}>{busy ? 'Making…' : 'Make the link'}</button></div>
+        </>
+      ) : (
+        <>
+          <input style={minp} readOnly value={url} onFocus={e => e.currentTarget.select()} aria-label="Share link" />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ ...mbtn(), display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>Open</a>
+            <button type="button" style={mbtn(true)} onClick={() => { void navigator.clipboard?.writeText(url).then(() => setCopied(true)) }}>{copied ? 'Copied ✓' : 'Copy link'}</button>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+/** Shared clip links — see views, turn them off. */
+function SharedClips({ slug, onClose }: { slug: string; onClose: () => void }) {
+  const [list, setList] = useState<{ id: string; camera_name: string; ts: string; by: string; note: string | null; expires_at: string; revoked: boolean; views: number }[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const load = useCallback(() => { void getJson(`/api/portal/${slug}/clip-share`).then(r => { if (r.ok) setList(r.data.shares ?? []); else setErr(r.data.error || 'Could not load') }) }, [slug])
+  useEffect(() => { load() }, [load])
+  const off = async (id: string) => { await fetch(`/api/portal/${slug}/clip-share`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); load() }
+  const fmt = (x: string) => new Date(x).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })
+  return (
+    <Modal title="Shared clips" sub="Links made from playback. Turn one off and it stops working at once." onClose={onClose}>
+      {err ? <div style={{ color: C.alert, fontSize: 13 }}>{err}</div> : list == null ? <div style={{ fontSize: 13, color: C.ink3 }}>Loading…</div> : !list.length ? <div style={{ fontSize: 13, color: C.ink3 }}>No clips shared yet. Open a camera’s playback and press “Share clip”.</div> : list.map(x => {
+        const live = !x.revoked && Date.parse(x.expires_at) > Date.now()
+        return (
+          <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13.5 }}>{x.camera_name} · {fmt(x.ts)}</div>
+              <div style={{ fontSize: 12, color: C.ink3 }}>{x.by} · {x.views} view{x.views === 1 ? '' : 's'} · {x.revoked ? 'turned off' : live ? `works until ${fmt(x.expires_at)}` : 'expired'}{x.note ? ` · ${x.note}` : ''}</div>
+            </div>
+            {live && <button type="button" style={mbtn()} onClick={() => void off(x.id)}>Turn off</button>}
+          </div>
+        )
+      })}
+    </Modal>
+  )
+}
+
+/** Save the cameras you're watching as a named layout. */
+function SaveLayout({ slug, cams, featured, onClose, onSaved }: { slug: string; cams: Cam[]; featured: string | null; onClose: () => void; onSaved: (layouts: { id: string; name: string; cams: string[]; featured: string | null }[], id: string | null) => void }) {
+  const [name, setName] = useState(''); const [pick, setPick] = useState<string[]>(cams.map(c => c.key))
+  const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
+  const save = async () => {
+    setBusy(true); setErr(null)
+    const r = await fetch(`/api/portal/${slug}/vision-layouts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, cams: pick, featured: featured && pick.includes(featured) ? featured : pick[0] }) })
+    const j = await r.json().catch(() => ({}))
+    setBusy(false)
+    if (!r.ok) return setErr(j.error || 'Could not save')
+    const saved = (j.layouts ?? []).find((l: { name: string }) => l.name.toLowerCase() === name.trim().toLowerCase())
+    onSaved(j.layouts ?? [], saved?.id ?? null)
+  }
+  return (
+    <Modal title="Save this layout" sub="Everyone on this property sees saved layouts." onClose={onClose}>
+      <label><span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 4 }}>Name</span><input style={minp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Gates, Pool area" autoFocus /></label>
+      <div style={{ display: 'grid', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+        {cams.map(c => <label key={c.key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5 }}><input type="checkbox" checked={pick.includes(c.key)} onChange={e => setPick(p => e.target.checked ? [...p, c.key] : p.filter(k => k !== c.key))} />{c.name}</label>)}
+      </div>
+      {err && <div style={{ fontSize: 13, color: C.alert }}>{err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" style={mbtn(true)} onClick={save} disabled={busy || !name.trim() || !pick.length}>{busy ? 'Saving…' : 'Save layout'}</button></div>
+    </Modal>
+  )
+}
+
 function Inner({ slug }: { slug: string }) {
   const api: ViewerApi = useMemo(() => ({
     video: qs => `/api/portal/${slug}/video?${qs}`,
@@ -135,6 +240,15 @@ function Inner({ slug }: { slug: string }) {
   const [state, setState] = useState<Record<string, 'ok' | 'black' | 'error'>>({})
   const [liveFail, setLiveFail] = useState<string | null>(null)
   const [open, setOpen] = useState<{ cam: Cam; at?: number | null } | null>(null)
+  const { manager, requireSignIn } = useOpsManager()
+  // Saved layouts (shared by the property) — /api/portal/[slug]/vision-layouts
+  const [layouts, setLayouts] = useState<{ id: string; name: string; cams: string[]; featured: string | null }[]>([])
+  const [layoutId, setLayoutId] = useState<string>('all')
+  const [savingLayout, setSavingLayout] = useState(false)
+  useEffect(() => { void getJson(`/api/portal/${slug}/vision-layouts`).then(r => { if (r.ok) setLayouts(r.data.layouts ?? []) }) }, [slug])
+  // Share a clip (police / insurance) — /api/portal/[slug]/clip-share
+  const [share, setShare] = useState<{ cam: Cam; at: number } | null>(null)
+  const [sharesOpen, setSharesOpen] = useState(false)
 
   const load = useCallback(async () => {
     const r = await getJson(api.video('view=cameras'))
@@ -157,7 +271,9 @@ function Inner({ slug }: { slug: string }) {
     return () => clearTimeout(t)
   }, [edge, api])
 
-  const list = cams ?? []
+  const allCams = cams ?? []
+  const layout = layouts.find(l => l.id === layoutId) ?? null
+  const list = layout ? layout.cams.map(k => allCams.find(c => c.key === k)).filter((c): c is Cam => !!c) : allCams
   // Deep link from Activity: /video?cam=<key>&at=<ms> opens that camera at that moment (once).
   const linked = useRef(false)
   useEffect(() => {
@@ -207,6 +323,20 @@ function Inner({ slug }: { slug: string }) {
       {errs.een && <div className="vz-note">Eagle Eye: {errs.een}</div>}
       {fallback && <div className="vz-note">Showing Eagle Eye pictures only. Playback and event search will be back shortly.</div>}
 
+      {tab === 'cameras' && !!cams?.length && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <span style={{ fontSize: 12.5, color: C.ink3, marginRight: 4 }}>Layout</span>
+          {[{ id: 'all', name: 'All cameras' }, ...layouts].map(l => (
+            <button key={l.id} type="button" aria-pressed={layoutId === l.id} onClick={() => { setLayoutId(l.id); const L = layouts.find(x => x.id === l.id); setSel(L ? (L.featured ?? L.cams[0] ?? null) : sel) }}
+              style={{ minHeight: 32, padding: '0 12px', borderRadius: 999, border: `1px solid ${layoutId === l.id ? C.blue : C.border2}`, background: layoutId === l.id ? 'rgba(0,113,227,.08)' : '#fff', color: layoutId === l.id ? C.blue : C.ink, font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{l.name}</button>
+          ))}
+          <button type="button" onClick={() => manager ? setSavingLayout(true) : requireSignIn()} style={{ minHeight: 32, padding: '0 12px', borderRadius: 999, border: `1px dashed ${C.border2}`, background: 'transparent', color: C.ink2, font: 'inherit', fontSize: 13, cursor: 'pointer' }}>+ Save layout</button>
+          {layout && manager && <button type="button" onClick={() => { void fetch(`/api/portal/${slug}/vision-layouts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: layout.id }) }).then(r => r.json()).then(j => { setLayouts(j.layouts ?? []); setLayoutId('all') }) }} style={{ minHeight: 32, padding: '0 10px', borderRadius: 999, border: 0, background: 'transparent', color: C.ink3, font: 'inherit', fontSize: 12.5, cursor: 'pointer' }}>Remove “{layout.name}”</button>}
+          <span style={{ flex: 1 }} />
+          <button type="button" onClick={() => manager ? setSharesOpen(true) : requireSignIn()} style={{ minHeight: 32, padding: '0 12px', borderRadius: 999, border: `1px solid ${C.border2}`, background: '#fff', color: C.ink, font: 'inherit', fontSize: 13, cursor: 'pointer' }}>Shared clips</button>
+        </div>
+      )}
+
       {tab === 'events' && !fallback ? <EventSearch api={api} cams={list} edge={edge} onOpen={(cam, at) => setOpen({ cam, at })} />
         : cams == null ? <div className="vz-card"><div className="vz-empty">Loading cameras…</div></div>
         : !list.length ? <div className="vz-card"><div className="vz-empty">No cameras are connected to this property yet.</div></div>
@@ -245,7 +375,11 @@ function Inner({ slug }: { slug: string }) {
           </div>
         )}
 
-      {open && <Viewer siteId={slug} api={api} cam={open.cam} cams={list} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} backLabel="Vision" />}
+      {open && <Viewer siteId={slug} api={api} cam={open.cam} cams={list} edge={edge} startAt={open.at ?? null} onClose={() => setOpen(null)} backLabel="Vision"
+        onShare={(cam, at) => manager ? setShare({ cam, at }) : requireSignIn()} />}
+      {share && <ShareClip slug={slug} cam={share.cam} at={share.at} onClose={() => setShare(null)} />}
+      {sharesOpen && <SharedClips slug={slug} onClose={() => setSharesOpen(false)} />}
+      {savingLayout && <SaveLayout slug={slug} cams={allCams} featured={sel} onClose={() => setSavingLayout(false)} onSaved={(ls, id) => { setLayouts(ls); setSavingLayout(false); if (id) setLayoutId(id) }} />}
     </div>
   )
 }
