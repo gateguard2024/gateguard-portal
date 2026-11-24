@@ -130,14 +130,15 @@ function Inner({ slug }: { slug: string }) {
   }
   useEffect(() => { if (!watch) return; const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setWatch(null) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [watch])
 
-  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 3200) }
+  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), Math.max(3200, t.length * 70)) }
   async function cmd(d: Door, action: 'open' | 'hold_open' | 'force_close') {
     if (!manager) { requireSignIn(); return }
     setBusy(`${d.id}:${action}`)
     try {
       const r = await fetch(`/api/portal/${slug}/gate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ door_id: d.id, door_name: d.name, action, minutes: action === 'hold_open' ? 60 : undefined }) })
       const j = await r.json().catch(() => ({}))
-      flash(r.ok ? `${d.name}: ${action.replace('_', ' ')} ✓${j.note ? ' (recorded)' : ''}` : (j?.error || 'Command failed'))
+      // Only 'open' moves the gate. Hold / force close are logged for now — say so plainly.
+      flash(r.ok ? (j.physical ? `${d.name} opened ✓` : `${d.name}: ${action === 'hold_open' ? 'hold open' : 'force close'} logged — the gate does not do this automatically yet`) : (j?.error || 'Command failed'))
     } catch { flash('Command failed') } finally { setBusy(null) }
   }
   async function lockdown(active: boolean) {
@@ -145,7 +146,7 @@ function Inner({ slug }: { slug: string }) {
     try {
       const r = await fetch(`/api/portal/${slug}/lockdown`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) })
       const j = await r.json().catch(() => ({}))
-      if (r.ok) { setLockActive(active); flash(active ? `Lockdown engaged — ${(j.affected || []).length} gate(s); egress stays open` : 'Lockdown lifted') }
+      if (r.ok) { setLockActive(active); flash(active ? `Lockdown logged${j.alerted ? ' and Gate Guard alerted' : ''} — gates are NOT locked automatically yet. Call 911 in an emergency.` : 'Lockdown lifted') }
       else flash(j?.error || 'Lockdown failed')
     } catch { flash('Lockdown failed') }
   }

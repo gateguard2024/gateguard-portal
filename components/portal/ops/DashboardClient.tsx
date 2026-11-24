@@ -66,7 +66,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
   const cams = s.cameras ?? []
   const camsOnline = cams.filter(c => c.online !== false).length
   const activity = s.activity ?? []
-  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 3000) }
+  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), Math.max(3000, t.length * 70)) }
   const guarded = (fn: () => void) => { if (!manager) { requireSignIn(); return } fn() }
 
   async function openGate(d: Door) {
@@ -83,7 +83,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
     try {
       const r = await fetch(`/api/portal/${slug}/lockdown`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) })
       const j = await r.json().catch(() => ({}))
-      if (r.ok) { setLockActive(active); flash(active ? 'Lockdown engaged — residents can always exit' : 'Lockdown lifted') }
+      if (r.ok) { setLockActive(active); flash(active ? `Lockdown logged${j.alerted ? ' and Gate Guard alerted' : ''} — gates are NOT locked automatically yet. Call 911 in an emergency.` : 'Lockdown lifted') }
       else flash(j?.error || 'Lockdown failed')
     } catch { flash('Lockdown failed') }
   }
