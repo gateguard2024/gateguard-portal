@@ -31,9 +31,9 @@ export function PinGate({ slug, displayName }: { slug: string; displayName: stri
       <form onSubmit={submit} style={{ width: 'min(360px, 92vw)', background: T.panel, border: `1px solid ${T.border}`, borderRadius: 16, padding: 26, textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(190,215,240,0.06)' }}>
         <div style={{ fontSize: 24, marginBottom: 6 }}>🔒</div>
         <div style={{ color: T.ink, fontSize: 18, fontWeight: 600 }}>{displayName}</div>
-        <div style={{ color: T.ink2, fontSize: 13, margin: '4px 0 18px' }}>Enter your access code to continue</div>
+        <div style={{ color: T.ink2, fontSize: 13, margin: '4px 0 18px' }}>Enter your PIN — your personal PIN signs you in to control too</div>
         <input
-          value={pin} onChange={e => setPin(e.target.value)} type="password" inputMode="numeric" autoFocus placeholder="Access code"
+          value={pin} onChange={e => setPin(e.target.value)} type="password" inputMode="numeric" autoFocus placeholder="PIN"
           style={{ width: '100%', textAlign: 'center', letterSpacing: '0.3em', background: T.well, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px', color: T.ink, fontSize: 16, outline: 'none', boxSizing: 'border-box' }}
         />
         {err && <div style={{ color: T.alarm, fontSize: 12, marginTop: 10 }}>{err}</div>}
