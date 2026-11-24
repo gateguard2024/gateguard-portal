@@ -26,9 +26,29 @@ function Inner({ slug }: { slug: string }) {
   const [cat, setCat] = useState('all')
   const [q, setQ] = useState('')
   const [days, setDays] = useState<7 | 30>(7)
+  const [err, setErr] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
 
   // Up to 30 days: stored history synced hourly from Brivo (migration 241) + a live top-up.
-  useEffect(() => { setLoading(true); fetch(`/api/portal/${slug}/events?days=${days}`).then(r => r.json()).then(j => { setEvents(j.events || []); setLoading(false) }).catch(() => setLoading(false)) }, [slug, days])
+  // Shows the last list from this tab at once (coming back from Vision), then refreshes.
+  // A failed refresh keeps what's on screen and says so — never a silent empty list.
+  useEffect(() => {
+    const k = `gg-pp-events:${slug}:${days}`
+    let had = false
+    try { const c = sessionStorage.getItem(k); if (c) { setEvents(JSON.parse(c)); had = true } } catch { /* private mode */ }
+    setLoading(!had); setErr(null)
+    let live = true
+    fetch(`/api/portal/${slug}/events?days=${days}`)
+      .then(async r => { const j = await r.json().catch(() => ({})); return { ok: r.ok, j } })
+      .then(({ ok, j }) => {
+        if (!live) return
+        if (ok) { setEvents(j.events || []); try { sessionStorage.setItem(k, JSON.stringify(j.events || [])) } catch { /* full */ } }
+        else setErr(j.error || 'Door events didn’t load.')
+        setLoading(false)
+      })
+      .catch(() => { if (live) { setErr('Door events didn’t load — check your connection.'); setLoading(false) } })
+    return () => { live = false }
+  }, [slug, days, reload])
 
   const stats = useMemo(() => ({
     today: events.length,
@@ -82,13 +102,13 @@ function Inner({ slug }: { slug: string }) {
       <div style={panel()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px', borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontSize: 14, fontWeight: 700 }}>All events</span>
-          <span style={{ fontSize: 11.5, color: C.ink3 }}>{loading ? 'Loading…' : `${rows.length} of ${events.length} events`}</span>
+          <span style={{ fontSize: 11.5, color: err && events.length ? C.alert : C.ink3 }}>{loading ? 'Loading…' : err && events.length ? <>Couldn’t refresh — showing the last list. <button type="button" onClick={() => setReload(x => x + 1)} style={{ border: 0, background: 'none', color: C.cyan, font: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Try again</button></> : `${rows.length} of ${events.length} events`}</span>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['Timestamp', 'Event', 'User', 'Gate / Door', 'Camera'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: C.ink2 }}>Loading events…</td></tr> :
-              rows.length === 0 ? <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: C.ink2 }}>No events match.</td></tr> :
+              rows.length === 0 ? <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: err ? C.alert : C.ink2 }}>{err && !events.length ? <>{err} <button type="button" onClick={() => setReload(x => x + 1)} style={{ marginLeft: 8, border: 0, background: 'none', color: C.cyan, font: 'inherit', fontWeight: 600, cursor: 'pointer' }}>Try again</button></> : 'No events match.'}</td></tr> :
                 rows.map(e => (
                   <tr key={e.id}>
                     <td style={td}><div style={{ fontWeight: 700 }}>{e.time}</div><div style={{ fontSize: 11, color: C.ink3 }}>{e.date}</div></td>

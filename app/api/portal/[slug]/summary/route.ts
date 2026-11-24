@@ -65,7 +65,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
         id: e.id,
         label: e.actor ? `${e.action} — ${e.actor}` : e.action,
         where: e.door || 'Site',
-        time: e.occurred ? new Date(e.occurred).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
+        time: e.occurred ? new Date(e.occurred).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '',
       }))
     } catch { /* events optional */ }
   } catch { /* Brivo not connected */ }

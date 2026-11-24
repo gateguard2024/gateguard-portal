@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
 import { recentSiteEvents } from '@/lib/brivo-events-store'
+import { memo } from '@/lib/memo'
 import { getSiteBrivoToken, brivoRawEvents, mapBrivoEvent } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,8 @@ function categorize(action: string): { cat: 'access' | 'denied' | 'admin' | 'sch
 // GET /api/portal/[slug]/events?days=7 — PIN-gated. Categorized access events
 // for the property: up to 30 days from the stored history (synced hourly from
 // Brivo, migration 241) + a live top-up — buckets for the filter chips.
+export const maxDuration = 60
+
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const v = await verifyPortal(req, params.slug)
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
@@ -36,14 +39,18 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const days = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get('days') || 7)))
 
   try {
-    const raw = await recentSiteEvents(v.portal.site_id, { days, limit: days > 7 ? 1000 : 300 })
+    // One request per property at a time, kept 1 min: going Vision → Activity and back
+    // used to start a second Brivo pull while the first was still running → blank page.
+    const siteId = v.portal.site_id
+    const raw = await memo(`portal-events:${siteId}:${days}`, 60_000, () => recentSiteEvents(siteId, { days, limit: days > 7 ? 1000 : 300 }))
     const events = raw.map(e => {
       const { cat, tone } = categorize(e.action)
       const d = e.occurred ? new Date(e.occurred) : null
       return {
         id: e.id,
-        time: d ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '',
-        date: d ? d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: 'numeric' }) : '',
+        // Property time (Eastern) — the server runs in UTC, so 'undefined' showed times 5 h off.
+        time: d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' }) : '',
+        date: d ? d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '',
         label: e.action || 'Access event',
         user: e.actor || '—',
         gate: e.door || '—',
@@ -51,7 +58,8 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       }
     })
     return NextResponse.json({ events })
-  } catch {
-    return NextResponse.json({ events: [] })
+  } catch (e) {
+    // Say what went wrong — an empty list looked like "no one came through".
+    return NextResponse.json({ events: [], error: e instanceof Error ? e.message : 'Could not load door events' }, { status: 502 })
   }
 }
