@@ -71,8 +71,8 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     subject: `${active ? '🚨 LOCKDOWN requested' : 'Lockdown lifted'} — ${params.slug}`,
     html: `<p><b>${active ? 'A lockdown was requested' : 'The lockdown was lifted'}</b> from the property portal <b>${params.slug}</b> by <b>${manager.name}</b> at ${when} ET.</p>`
       + (active ? `<p>Gates are <b>not</b> locked automatically — please act now. Entry gates: ${affected.join(', ') || '—'}. Left open (exit / pedestrian): ${excluded.join(', ') || '—'}.</p>` : ''),
-  }).catch(e => ({ ok: false, error: e instanceof Error ? e.message : String(e) }))
-  const alerted = !!(r as { ok?: boolean }).ok
+  }).catch(e => ({ success: false, error: e instanceof Error ? e.message : String(e) }))
+  const alerted = !!r.success
   if (!alerted) console.error('[portal lockdown] alert email failed:', (r as { error?: string }).error)
 
   return NextResponse.json({ ok: true, active, affected, excluded, physical: false, alerted })

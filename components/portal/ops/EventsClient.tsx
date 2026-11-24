@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { OpsShell, C } from '@/components/portal/ops/OpsShell'
+import { OpsShell, useOpsManager, C } from '@/components/portal/ops/OpsShell'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
 const { Search, Zap, XCircle, ShieldCheck, Play, ChevronDown } = require('lucide-react') as any
 
@@ -40,6 +40,19 @@ function Inner({ slug }: { slug: string }) {
   const [camEvents, setCamEvents] = useState<Evt[] | null>(null)
   const [camErr, setCamErr] = useState<string | null>(null)
   const [byName, setByName] = useState<Record<string, string>>({})
+  // Emailed summary (each manager's own: Off / Daily / Weekly) — /api/portal/[slug]/activity-summary
+  const { manager, requireSignIn } = useOpsManager()
+  const [freq, setFreq] = useState<'off' | 'daily' | 'weekly' | null>(null)
+  const [freqMsg, setFreqMsg] = useState<string | null>(null)
+  useEffect(() => { if (!manager) { setFreq(null); return } fetch(`/api/portal/${slug}/activity-summary`).then(r => r.json()).then(j => setFreq(j.freq ?? 'off')).catch(() => {}) }, [slug, manager])
+  const setSummary = async (f: 'off' | 'daily' | 'weekly' | 'preview') => {
+    if (!manager) { requireSignIn(); return }
+    const r = await fetch(`/api/portal/${slug}/activity-summary`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f === 'preview' ? { preview: true } : { freq: f }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { setFreqMsg(j.error || 'Could not save'); return }
+    if (f === 'preview') setFreqMsg('Sample sent to your email'); else { setFreq(f); setFreqMsg(f === 'off' ? 'Summary emails off' : `You’ll get a ${f} summary by email`) }
+    setTimeout(() => setFreqMsg(null), 4000)
+  }
 
   // Camera events (Eagle Eye / Edge) — only fetched when Cameras or All is showing.
   useEffect(() => {
@@ -109,6 +122,16 @@ function Inner({ slug }: { slug: string }) {
     return shownAll.filter(e => (cat === 'all' || source === 'cameras' || e.cat === cat) && (!ql || `${e.user} ${e.label} ${e.gate}`.toLowerCase().includes(ql)))
   }, [shownAll, cat, q, source])
 
+  // Download what's on screen (current switch, filter and search) as a spreadsheet file.
+  const downloadCsv = () => {
+    const q2 = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const lines = [['Date', 'Time (Eastern)', 'Event', source === 'cameras' ? 'Plate' : 'User', 'Gate / Door / Camera', 'Type'].map(q2).join(',')]
+    for (const e of rows) lines.push([e.date, e.time, e.label, e.user, e.gate, e.cat].map(q2).join(','))
+    const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a'); a.href = url; a.download = `${slug}-activity-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   const statCards = [
     { v: stats.today, l: `Door events (last ${days} days)`, c: C.cyan, Icon: Zap },
     { v: stats.denied, l: 'Access denied', c: C.alert, Icon: XCircle },
@@ -153,7 +176,17 @@ function Inner({ slug }: { slug: string }) {
 
       <div style={panel()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px', borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>{source === 'doors' ? 'Door & gate events' : source === 'cameras' ? 'Camera events' : 'All events'}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{source === 'doors' ? 'Door & gate events' : source === 'cameras' ? 'Camera events' : 'All events'}</span>
+            <button type="button" onClick={downloadCsv} disabled={!rows.length} style={{ fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.border2}`, background: '#fff', color: C.ink, cursor: 'pointer' }}>Download CSV</button>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.ink2 }}>Email me a summary
+              <select value={freq ?? 'off'} onChange={e => void setSummary(e.target.value as 'off' | 'daily' | 'weekly')} onFocus={() => { if (!manager) requireSignIn() }} style={{ fontSize: 12, padding: '4px 6px', borderRadius: 7, border: `1px solid ${C.border2}`, background: '#fff' }}>
+                <option value="off">Off</option><option value="daily">Daily (7 am)</option><option value="weekly">Weekly (Mondays)</option>
+              </select>
+            </label>
+            {manager && <button type="button" onClick={() => void setSummary('preview')} style={{ fontSize: 12, border: 0, background: 'none', color: C.cyan, cursor: 'pointer', padding: 0 }}>Send me a sample</button>}
+            {freqMsg && <span style={{ fontSize: 12, color: C.ink2 }}>{freqMsg}</span>}
+          </span>
           <span style={{ fontSize: 11.5, color: err && events.length ? C.alert : C.ink3 }}>{loading ? 'Loading…' : err && events.length ? <>Couldn’t refresh — showing the last list. <button type="button" onClick={() => setReload(x => x + 1)} style={{ border: 0, background: 'none', color: C.cyan, font: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Try again</button></> : `${rows.length} of ${events.length} events`}</span>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
