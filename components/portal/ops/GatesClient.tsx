@@ -42,7 +42,7 @@ function EenLive({ slug, cam, everyMs }: { slug: string; cam: LinkCam; everyMs: 
         if (dead || !b.size) return
         const l = last.current
         l.same = b.size === l.size ? l.same + 1 : 0; l.size = b.size
-        setStuck(l.same >= 5); setErr(false)
+        setStuck(l.same >= (everyMs >= 10_000 ? 3 : 5)); setErr(false)
         const next = URL.createObjectURL(b), prev = cur.current
         cur.current = next; setUrl(next)
         if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000)
@@ -71,7 +71,7 @@ function DoorCam({ slug, link, edge, big }: { slug: string; link: Link; edge: Ed
     <div style={{ position: 'relative', aspectRatio: '16 / 9', background: '#0b0b0d', borderRadius: big ? 12 : 10, overflow: 'hidden' }}>
       {c.provider === 'edge' && edge
         ? (!liveFail ? <EdgeLive key={c.key} edge={edge} cam={c.id} onFail={() => setLiveFail(true)} /> : <EdgeSnap edge={edge} cam={c.id} everyMs={1500} alt={`${c.name} camera`} />)
-        : <EenLive slug={slug} cam={c} everyMs={big ? 1500 : 2500} />}
+        : <EenLive slug={slug} cam={c} everyMs={big ? 1500 : 30_000} />}
       <div style={{ position: 'absolute', left: 8, top: 7, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.5)', borderRadius: 6, padding: '2px 7px', pointerEvents: 'none' }}>
         <span style={{ width: 7, height: 7, borderRadius: 99, background: '#FF3B30' }} />{c.provider === 'edge' && !liveFail ? 'Live' : 'Camera'} · {c.name}
       </div>

@@ -43,6 +43,10 @@ function frameLuma(img: HTMLImageElement): number | null {
   } catch { return null }
 }
 
+/** Small tiles: a new picture every 30 s (Nov 24 2026 — was 5 s; too many camera calls).
+ * The big featured view stays quick. */
+const TILE_MS = 30_000
+
 /** Eagle Eye frame that refreshes every `everyMs`, flicker-free, with black-frame detection. */
 function EenFrame({ src, everyMs, alt, onState }: { src: (t: number) => string; everyMs: number; alt: string; onState: (s: 'ok' | 'black' | 'error') => void }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -167,11 +171,11 @@ function Inner({ slug }: { slug: string }) {
     if (c.provider === 'edge') {
       if (!edge) return <div className="vz-off">The Edge device isn’t reachable right now.</div>
       if (big && !liveFail) return <EdgeLive key={c.key} edge={edge} cam={c.id} onFail={setLiveFail} />
-      return <EdgeSnap edge={edge} cam={c.id} everyMs={big ? 1000 : 5000} height={big ? 720 : 270} alt={c.name} onError={() => mark(c.key, 'error')} />
+      return <EdgeSnap edge={edge} cam={c.id} everyMs={big ? 1000 : TILE_MS} height={big ? 720 : 270} alt={c.name} onError={() => mark(c.key, 'error')} />
     }
     if (state[c.key] === 'black') return <div className="vz-off">No signal: the camera is sending a black picture</div>
     if (state[c.key] === 'error') return <div className="vz-off">No picture from this camera</div>
-    return <EenFrame key={c.key + (big ? ':big' : '')} src={t => api.preview(c.id, t)} everyMs={big ? 3000 : 5000} alt={c.name} onState={s => mark(c.key, s)} />
+    return <EenFrame key={c.key + (big ? ':big' : '')} src={t => api.preview(c.id, t)} everyMs={big ? 3000 : TILE_MS} alt={c.name} onState={s => mark(c.key, s)} />
   }
 
   return (

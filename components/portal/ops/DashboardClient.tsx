@@ -60,7 +60,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
     fetch(`/api/portal/${slug}/summary`).then(r => r.ok ? r.json() : null).then(j => { if (!j) return; setS(j); try { sessionStorage.setItem(k, JSON.stringify(j)) } catch { /* full */ } }).catch(() => {})
   }, [slug])
   useEffect(() => { fetch(`/api/portal/${slug}/billing`).then(r => r.json()).then(setBill).catch(() => {}) }, [slug])
-  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 5000); return () => clearInterval(t) }, [])
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) setTick(x => x + 1) }, 30_000); return () => clearInterval(t) }, [])
 
   const doors = s.doors ?? []
   const cams = s.cameras ?? []
@@ -206,7 +206,7 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
                       {off ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink3, fontSize: 11, fontWeight: 600 }}>No signal</div> :
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={`/api/portal/${slug}/camera-preview?camera_id=${encodeURIComponent(c.id)}&t=${tick}`} alt={c.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                      <span style={{ position: 'absolute', left: 9, top: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px #000' }}><span style={{ width: 7, height: 7, borderRadius: 999, background: off ? C.alert : C.safe }} />{off ? 'Offline' : 'Picture · every 5 s'}</span>
+                      <span style={{ position: 'absolute', left: 9, top: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px #000' }}><span style={{ width: 7, height: 7, borderRadius: 999, background: off ? C.alert : C.safe }} />{off ? 'Offline' : 'Picture · every 30 s'}</span>
                       <span style={{ position: 'absolute', left: 9, bottom: 8, fontSize: 11.5, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,.9)' }}>{c.name}</span>
                     </a>
                   )
