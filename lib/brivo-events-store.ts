@@ -1,19 +1,26 @@
 /**
- * lib/brivo-events-store.ts — Brivo door events per property (migration 241). First sync
- * backfills 30 days; we KEEP 90 (Nov 24 2026 — Residents flags people with no door use in 60+ days).
+ * lib/brivo-events-store.ts — Brivo door events per property (migrations 241 + 243).
+ * We KEEP 90 days (Residents flags people with no door use in 60+ days) and fill in
+ * the last 30 the first time.
  *
  * Brivo answers at most 2 days per request, so screens can't ask it for a month.
- * Instead the hourly job (inngest/functions/brivo-events-sync.ts) calls
- * syncAllSites(): for each active property with a Brivo login it copies every
- * event since `synced_through` (first time: the last 30 days) into brivo_events,
- * then pruneOld() deletes anything older than 30 days.
+ * Instead the job (inngest/functions/brivo-events-sync.ts, every 15 min) calls
+ * syncSite() per property. Each run has a BUDGET of Brivo calls (Nov 24 2026: an
+ * account with Brivo's Eagle Eye link logs a camera event every few seconds, and
+ * reading 30 days in one go got the key throttled):
+ *   1. newest first, everything since `synced_through` → now;
+ *   2. with what's left, keep filling older history back from `backfilled_from`
+ *      (migration 243) toward 30 days ago — a few thousand events per run, so a
+ *      busy property's month fills in over a few hours without hurting screens.
+ * Only door / gate events are stored. pruneOld() deletes anything older than 90 days.
  *
  * Screens call recentSiteEvents(): stored events + a live top-up from Brivo for
  * anything after the last sync, newest first. If migration 241 hasn't run, it
  * falls back to asking Brivo live (the old behaviour) — nothing breaks.
  */
 import { createClient } from '@supabase/supabase-js'
-import { getSiteBrivoToken, listBrivoEventsRange, listBrivoUsers, noUserLabel, isAccessEvent, type BrivoEvent } from '@/lib/brivo'
+import { getSiteBrivoToken, readBrivoEvents, listBrivoUsers, noUserLabel, isAccessEvent, type BrivoEvent } from '@/lib/brivo'
+import { memo } from '@/lib/memo'
 
 // ── Names for events Brivo sent without one ────────────────────────────────
 // Some events carry only the user's id (or no person at all). Look the id up in the
@@ -69,32 +76,76 @@ async function store(siteId: string, events: BrivoEvent[]): Promise<{ saved: num
   return { saved, error: null }
 }
 
-/** Copy one property's new events. Returns how many were read from Brivo. */
-export async function syncSite(siteId: string, now = Date.now()): Promise<{ site_id: string; read: number; error: string | null }> {
+// Per run, per property: Brivo calls (100 events each) and wall time. Background lane
+// (~1.4 calls/s, screens always go first).
+const RUN_PAGES = Math.max(5, Number(process.env.BRIVO_SYNC_PAGES) || 80)
+const RUN_MS = 50_000
+const missingColumn = (msg?: string) => !!msg && /backfilled_from/i.test(msg)
+
+/** Copy one property's new events, then fill in older history with what's left. */
+export async function syncSite(siteId: string, now = Date.now()): Promise<{ site_id: string; read: number; saved: number; backfilled_from: string | null; error: string | null }> {
   const sb = db()
-  const { data: st, error: stErr } = await sb.from('brivo_event_sync').select('synced_through').eq('site_id', siteId).maybeSingle()
-  if (stErr) return { site_id: siteId, read: 0, error: stErr.message }
+  let hasBackfill = true
+  let st: { synced_through: string | null; backfilled_from?: string | null } | null = null
+  {
+    const r = await sb.from('brivo_event_sync').select('synced_through, backfilled_from').eq('site_id', siteId).maybeSingle()
+    if (r.error && missingColumn(r.error.message)) {
+      hasBackfill = false
+      const r2 = await sb.from('brivo_event_sync').select('synced_through').eq('site_id', siteId).maybeSingle()
+      if (r2.error) return { site_id: siteId, read: 0, saved: 0, backfilled_from: null, error: r2.error.message }
+      st = r2.data
+    } else if (r.error) return { site_id: siteId, read: 0, saved: 0, backfilled_from: null, error: r.error.message }
+    else st = r.data
+  }
   const floor = now - BACKFILL_DAYS * DAY
-  const from = Math.max(floor, st?.synced_through ? Date.parse(st.synced_through) - OVERLAP : floor)
+  const deadline = Date.now() + RUN_MS
   let read = 0
+  let saved = 0
   let error: string | null = null
+  let syncedThrough: number | null = st?.synced_through ? Date.parse(st.synced_through) : null
+  // How far back history is complete. Unknown (before 243) → only trust from synced_through.
+  let backfilledFrom: number | null = st?.backfilled_from ? Date.parse(st.backfilled_from) : syncedThrough
   try {
     const { token, apiKey } = await getSiteBrivoToken(siteId)
-    const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, now))
-    read = events.length
-    const r = await store(siteId, events)
-    error = r.error
+    let pagesLeft = RUN_PAGES
+    // 1. New events, newest first.
+    const from = syncedThrough != null ? Math.max(floor, syncedThrough - OVERLAP) : floor
+    const r1 = await readBrivoEvents(token, apiKey, from, now, { maxPages: pagesLeft, deadline, bg: true })
+    pagesLeft -= r1.pages; read += r1.read
+    const s1 = await store(siteId, await nameEvents(siteId, r1.events))
+    saved += s1.saved
+    if (s1.error) throw new Error(s1.error)
+    if (r1.complete) {
+      syncedThrough = now
+      backfilledFrom = backfilledFrom == null ? from : Math.min(backfilledFrom, from)
+    } else {
+      // Didn't get all the way back this run (first run, or a long outage): what we
+      // have is now → reachedFrom; the older part is filled in by step 2 next runs.
+      syncedThrough = now
+      backfilledFrom = r1.reachedFrom
+    }
+    // 2. Older history, back toward 30 days ago, with what's left of the budget.
+    if (hasBackfill && backfilledFrom != null && backfilledFrom > floor + 60_000 && pagesLeft > 0 && Date.now() < deadline) {
+      const r2 = await readBrivoEvents(token, apiKey, floor, backfilledFrom + OVERLAP, { maxPages: pagesLeft, deadline, bg: true })
+      read += r2.read
+      const s2 = await store(siteId, await nameEvents(siteId, r2.events))
+      saved += s2.saved
+      if (s2.error) throw new Error(s2.error)
+      backfilledFrom = Math.min(backfilledFrom, r2.reachedFrom)
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : 'Brivo sync failed'
   }
-  const { error: upErr } = await sb.from('brivo_event_sync').upsert({
+  const row: Record<string, unknown> = {
     site_id: siteId,
-    // Only move forward when everything saved — otherwise the next run retries the same window.
-    ...(error ? {} : { synced_through: new Date(now).toISOString() }),
     last_run_at: new Date(now).toISOString(), last_count: read, last_error: error, updated_at: new Date().toISOString(),
-  }, { onConflict: 'site_id' })
+  }
+  // Only move the markers for what was actually saved (an error mid-way keeps the old ones).
+  if (!error && syncedThrough != null) row.synced_through = new Date(syncedThrough).toISOString()
+  if (!error && hasBackfill && backfilledFrom != null) row.backfilled_from = new Date(backfilledFrom).toISOString()
+  const { error: upErr } = await sb.from('brivo_event_sync').upsert(row, { onConflict: 'site_id' })
   if (upErr && !error) error = upErr.message
-  return { site_id: siteId, read, error }
+  return { site_id: siteId, read, saved, backfilled_from: backfilledFrom != null ? new Date(backfilledFrom).toISOString() : null, error }
 }
 
 /** Active properties with a Brivo login. */
@@ -148,8 +199,14 @@ export async function recentSiteEvents(siteId: string, opts: { days?: number; li
     .slice(0, limit)
 }
 
+// Live read for screens: newest first, a few Brivo calls at most, kept 1 min per
+// property so every screen open doesn't ask Brivo again.
 async function live(siteId: string, from: number, to: number, limit: number): Promise<BrivoEvent[]> {
-  const { token, apiKey } = await getSiteBrivoToken(siteId)
-  const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, to, Math.max(limit * 2, 400)))
-  return events.filter(isAccessEvent).sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? ''))).slice(0, limit)
+  const key = `brivo-live:${siteId}:${Math.floor(from / 60_000)}:${limit}`
+  return memo(key, 60_000, async () => {
+    const { token, apiKey } = await getSiteBrivoToken(siteId)
+    const r = await readBrivoEvents(token, apiKey, from, to, { maxPages: 4, deadline: Date.now() + 15_000 })
+    const events = await nameEvents(siteId, r.events)
+    return events.sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? ''))).slice(0, limit)
+  })
 }

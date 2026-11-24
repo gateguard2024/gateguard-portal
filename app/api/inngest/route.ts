@@ -35,3 +35,6 @@ export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [enrichProperty, syncMailboxes, syncCalendars, ingestManual, fleetHealth, lexiMorningBrief, eventsAutoSend, qboSync, gateWatch, lexiEveningReview, lexiExec, lexiExecBriefs, leadSequences, brivoEventsSync, gateReset, portalSummaries, portalServiceUpdates],
 })
+
+// Steps like the Brivo event sync run up to ~50 s each.
+export const maxDuration = 300

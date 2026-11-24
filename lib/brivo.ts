@@ -244,31 +244,48 @@ const expired = (status: number, text: string) => status === 401 && /invalid_tok
 // "too many" → wait (Retry-After, else 1/2/4/8 s) and retry, up to 4 times.
 const MAX_INFLIGHT = Math.max(1, Number(process.env.BRIVO_MAX_INFLIGHT) || 3)
 const MIN_GAP_MS = Math.max(0, Number(process.env.BRIVO_MIN_GAP_MS) || 250)
-const lanes = new Map<string, { inflight: number; next: number; queue: (() => void)[] }>()
+// Background reads (the event history sync / top-up) go slower and always let a
+// screen's call go first (Nov 24 2026: the first 30-day sync paged hundreds of event
+// pages, Brivo throttled the key, and Residents / door actions stalled behind it).
+const BG_GAP_MS = Math.max(MIN_GAP_MS, Number(process.env.BRIVO_BG_GAP_MS) || 700)
+type Lane = { inflight: number; next: number; bgNext: number; queue: (() => void)[]; bgQueue: (() => void)[] }
+const lanes = new Map<string, Lane>()
 const nap = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-async function slot(key: string): Promise<() => void> {
-  const lane = lanes.get(key) ?? { inflight: 0, next: 0, queue: [] }
+async function slot(key: string, bg = false): Promise<() => void> {
+  const lane = lanes.get(key) ?? { inflight: 0, next: 0, bgNext: 0, queue: [], bgQueue: [] }
   lanes.set(key, lane)
-  if (lane.inflight >= MAX_INFLIGHT) await new Promise<void>(r => lane.queue.push(r))
+  // Background: at most one at a time, and only while no screen call is waiting.
+  while (bg ? (lane.inflight >= 1 || lane.queue.length > 0) : lane.inflight >= MAX_INFLIGHT) {
+    await new Promise<void>(r => (bg ? lane.bgQueue : lane.queue).push(r))
+  }
   lane.inflight++
-  const wait = lane.next - Date.now()
-  lane.next = Math.max(Date.now(), lane.next) + MIN_GAP_MS
-  if (wait > 0) await nap(wait)
-  return () => { lane.inflight--; lane.queue.shift()?.() }
+  const now = Date.now()
+  const at = bg ? Math.max(lane.next, lane.bgNext) : lane.next
+  lane.next = Math.max(now, at) + MIN_GAP_MS
+  if (bg) lane.bgNext = Math.max(now, at) + BG_GAP_MS
+  if (at > now) await nap(at - now)
+  return () => {
+    lane.inflight--
+    // Wake a screen call first; background only when none is waiting (it re-checks).
+    const next = lane.queue.shift() ?? lane.bgQueue.shift()
+    next?.()
+  }
 }
-async function limitedFetch(apiKey: string, url: string, init: RequestInit): Promise<Response> {
+async function limitedFetch(apiKey: string, url: string, init: RequestInit, bg = false): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const done = await slot(apiKey)
+    const done = await slot(apiKey, bg)
     let res: Response
     try { res = await fetch(url, init) } finally { done() }
     if (res.status !== 429 || attempt >= 4) return res
+    // Throttled: background work backs off harder (it can wait for the next run).
+    if (bg && attempt >= 1) return res
     const ra = Number(res.headers.get('retry-after'))
     await nap(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) * 1000 : 1000 * 2 ** attempt)
   }
 }
 
-async function brivoSend(method: string, token: string, apiKey: string, url: string, body?: Record<string, any>): Promise<any> {
-  const send = (t: string) => limitedFetch(apiKey, url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+async function brivoSend(method: string, token: string, apiKey: string, url: string, body?: Record<string, any>, bg = false): Promise<any> {
+  const send = (t: string) => limitedFetch(apiKey, url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }, bg)
   const label = `${method} ${url.replace(BRIVO_API_BASE, '').split('?')[0]}`
   let t = latest(token)
   let res = await send(t)
@@ -288,11 +305,11 @@ async function brivoSend(method: string, token: string, apiKey: string, url: str
 }
 
 export async function brivoGet(
-  token: string, apiKey: string, path: string, params?: Record<string, string>
+  token: string, apiKey: string, path: string, params?: Record<string, string>, opts?: { bg?: boolean }
 ): Promise<any> {
   const url = new URL(`${BRIVO_API_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  return brivoSend('GET', token, apiKey, url.toString())
+  return brivoSend('GET', token, apiKey, url.toString(), undefined, !!opts?.bg)
 }
 
 export async function brivoPost(
@@ -347,7 +364,7 @@ function brivoPhone(u: any): string | null {
  * Fetch all users for a Brivo site.
  * Handles Brivo's pagination (pageSize max 100).
  */
-// People lists are kept 2 min per account (every screen asks; Brivo is slow). Any write
+// People lists are kept 10 min per account (every screen asks; Brivo is slow). Any write
 // in this file (add person, group change, suspend…) clears it so changes show at once.
 const usersCache = new Map<string, { at: number; users: BrivoUser[] }>()
 export function forgetBrivoUsers() { usersCache.clear() }
@@ -359,7 +376,7 @@ export async function listBrivoUsers(
 ): Promise<BrivoUser[]> {
   const ck = `${apiKey}|${brivoSiteId}`
   const hit = usersCache.get(ck)
-  if (hit && Date.now() - hit.at < 120_000) return hit.users
+  if (hit && Date.now() - hit.at < 600_000) return hit.users
   const out = await listBrivoUsersFresh(token, apiKey, brivoSiteId)
   usersCache.set(ck, { at: Date.now(), users: out })
   return out
@@ -618,42 +635,71 @@ export async function brivoRawEvents(token: string, apiKey: string, fromMs: numb
   return (data.data ?? data.events ?? []) as any[]
 }
 
-/** EVERY event between two times, in Brivo's 2-day windows, paged.
- * Brivo pages BY TIME, not by row count: `offset` is a date inside the window and
- * results run newest → oldest from it ("Offset must be between the start and end
+/** Events between two times, NEWEST FIRST, in Brivo's 2-day windows, paged — with a
+ * budget. Brivo pages BY TIME, not by row count: `offset` is a date inside the window
+ * and results run newest → oldest from it ("Offset must be between the start and end
  * time, offset is applied from the greatest date…", Nov 23 2026). So each next page
- * asks from the oldest event seen so far; events at that same second come back
- * again and are skipped by id. Used by the hourly sync (lib/brivo-events-store.ts). */
-export async function listBrivoEventsRange(token: string, apiKey: string, fromMs: number, toMs: number, maxEvents = 20000): Promise<BrivoEvent[]> {
+ * asks from the oldest event seen so far; events at that same second come back again
+ * and are skipped by id.
+ *
+ * Nov 24 2026: an account with Brivo's Eagle Eye link logs a "Camera Motion" event
+ * every few seconds — ~99% of its events. Reading 30 days at once was hundreds of
+ * calls, Brivo throttled the key and every screen stalled. So:
+ *  - only ACCESS events come back (camera / video events are read past, not kept);
+ *  - it stops at `maxPages` calls or the `deadline`, and says how far back it got
+ *    (`reachedFrom`) so the caller can carry on from there next time;
+ *  - `bg` sends the calls in the slow background lane (screens go first). */
+export async function readBrivoEvents(
+  token: string, apiKey: string, fromMs: number, toMs: number,
+  opts: { maxPages?: number; deadline?: number; bg?: boolean } = {},
+): Promise<{ events: BrivoEvent[]; reachedFrom: number; complete: boolean; pages: number; read: number }> {
   const iso = (d: number) => new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z')
   const CHUNK = 2 * 24 * 60 * 60 * 1000 - 60_000
   const PAGE = 100
+  const maxPages = Math.max(1, opts.maxPages ?? 10)
   const out: BrivoEvent[] = []
   const seen = new Set<string>()
-  for (let start = fromMs; start < toMs && out.length < maxEvents; start += CHUNK) {
-    const end = Math.min(toMs, start + CHUNK)
+  let pages = 0
+  let read = 0
+  let reachedFrom = toMs // everything from here up to toMs has been read
+  const outOfBudget = () => pages >= maxPages || (opts.deadline != null && Date.now() >= opts.deadline)
+  for (let end = toMs; end > fromMs; end -= CHUNK) {
+    const start = Math.max(fromMs, end - CHUNK)
     let cursor: number | null = null
-    for (let page = 0; page < 200; page++) {
+    let windowDone = false
+    while (!outOfBudget()) {
       const params: Record<string, string> = { pageSize: String(PAGE), occurredAfter: iso(start), occurredBefore: iso(end) }
       if (cursor != null) params.offset = iso(cursor)
-      const data = await brivoGet(token, apiKey, '/events', params)
+      const data = await brivoGet(token, apiKey, '/events', params, { bg: opts.bg })
+      pages++
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = ((data.data ?? data.events ?? []) as any[]).map(mapBrivoEvent)
+      read += rows.length
       let added = 0
       let oldest = cursor ?? end
       for (const e of rows) {
         const t = e.occurred ? Date.parse(e.occurred) : NaN
         if (!Number.isNaN(t) && t < oldest) oldest = t
         if (seen.has(e.id)) continue
-        seen.add(e.id); out.push(e); added++
+        seen.add(e.id); added++
+        if (isAccessEvent(e)) out.push(e)
       }
       // Done with this window: short page, nothing new, or we've reached its start.
-      if (rows.length < PAGE || added === 0 || oldest <= start) break
+      if (rows.length < PAGE || added === 0 || oldest <= start) { windowDone = true; break }
       // Next page from the oldest second we have (Brivo times are whole seconds).
       cursor = Math.max(start, Math.floor(oldest / 1000) * 1000)
+      // Everything newer than that second is in hand (that second is re-read next page).
+      reachedFrom = Math.min(reachedFrom, cursor + 1000)
     }
+    if (!windowDone) return { events: out, reachedFrom, complete: false, pages, read }
+    reachedFrom = start
   }
-  return out
+  return { events: out, reachedFrom: fromMs, complete: true, pages, read }
+}
+
+/** Old name — every ACCESS event between two times (budget 40 calls). */
+export async function listBrivoEventsRange(token: string, apiKey: string, fromMs: number, toMs: number): Promise<BrivoEvent[]> {
+  return (await readBrivoEvents(token, apiKey, fromMs, toMs, { maxPages: 40 })).events
 }
 
 /** Per-site convenience: recent Brivo access events for a property. */

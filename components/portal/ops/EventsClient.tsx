@@ -88,7 +88,7 @@ function Inner({ slug }: { slug: string }) {
   // Shows the last list from this tab at once (coming back from Vision), then refreshes.
   // A failed refresh keeps what's on screen and says so — never a silent empty list.
   useEffect(() => {
-    const k = `gg-pp-events:${slug}:${days}`
+    const k = `gg-pp-events2:${slug}:${days}` // v2: drop lists saved before camera events were left out
     let had = false
     try { const c = sessionStorage.getItem(k); if (c) { setEvents(JSON.parse(c)); had = true } } catch { /* private mode */ }
     setLoading(!had); setErr(null)
