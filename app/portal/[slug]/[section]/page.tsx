@@ -14,7 +14,6 @@ const SECTIONS: Record<string, { title: string; body: string; today?: { label: s
   movein: { title: 'Move-in & Renewals', body: 'Your move-in and renewal portals: fees, revenue share, and the wording and look residents see.' },
   service: { title: 'Service', body: 'Service requests and GateGuard visits for this property.' },
   billing: { title: 'Billing', body: 'Invoices, payments, and revenue share in one place.', today: { label: 'Billing & payments are on the Dashboard for now', path: 'dashboard' } },
-  settings: { title: 'Settings', body: 'Staff users and permissions, and settings for this site.' },
 }
 
 export default async function Page({ params }: { params: { slug: string; section: string } }) {
