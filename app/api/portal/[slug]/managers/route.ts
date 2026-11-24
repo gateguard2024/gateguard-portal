@@ -14,8 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
-import { getPortalManager, hashManagerPin, portalRowForSlug, type PortalManager } from '@/lib/portal-manager'
-import { getCurrentUser } from '@/lib/current-user'
+import { getPortalManager, hashManagerPin, portalRowForSlug, gateGuardStaff, type PortalManager } from '@/lib/portal-manager'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,13 +34,10 @@ async function gate(req: NextRequest, slug: string): Promise<Ctx | NextResponse>
   const base = { portalId: row.id, orgId: v.portal.org_id ?? null, siteId: v.portal.site_id ?? null }
   const me = await getPortalManager(req, slug)
   if (me) return { ...base, me, staff: false }
-  // Gate Guard staff signed in to Nexus in this browser (corporate only — same rule as
-  // the Nexus portal setup). Lets us add a property's first manager from the portal itself.
-  const u = await getCurrentUser()
-  if (u.isCorporate && u.id && u.id !== 'system' && u.id !== 'anonymous') {
-    const name = u.name || u.email || 'Gate Guard'
-    return { ...base, me: { id: `staff:${u.id}`, name: `${name} (Gate Guard)`, email: u.email ?? null }, staff: true }
-  }
+  // Gate Guard staff signed in to Nexus in this browser (corporate only) — lets us add a
+  // property's first manager from the portal itself.
+  const staff = await gateGuardStaff(base.siteId)
+  if (staff) return { ...base, me: { id: `staff:${staff.id}`, name: staff.name, email: null }, staff: true }
   return NextResponse.json({ error: 'Sign in with your personal PIN to manage managers.', code: 'sign_in' }, { status: 401 })
 }
 
@@ -67,14 +63,20 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const c = await gate(req, params.slug); if (c instanceof NextResponse) return c
   const { data, error } = await db().from('portal_managers').select('id, name, email, active, created_at, created_by').eq('client_portal_id', c.portalId).order('created_at', { ascending: true })
   if (error) return bad(error.message, 500)
-  // Last sign-in per manager, from the sign-in log (site_events 'portal_sign_in').
+  // Sign-ins / sign-outs (site_events portal_sign_in / portal_sign_out): last sign-in per
+  // manager + the newest 50 for the history list.
   const last: Record<string, string> = {}
+  const history: { at: string; kind: 'in' | 'out' | 'staff'; name: string }[] = []
   if (c.siteId) {
-    const { data: ev, error: eErr } = await db().from('site_events').select('created_at, metadata').eq('site_id', c.siteId).eq('event_type', 'portal_sign_in').order('created_at', { ascending: false }).limit(1000)
+    const { data: ev, error: eErr } = await db().from('site_events').select('created_at, event_type, metadata').eq('site_id', c.siteId).in('event_type', ['portal_sign_in', 'portal_sign_out', 'portal_staff_view']).order('created_at', { ascending: false }).limit(1000)
     if (eErr) console.error('[portal managers] sign-in log:', eErr.message)
-    for (const e of (ev ?? []) as { created_at: string; metadata: { manager_id?: string } | null }[]) { const id = e.metadata?.manager_id; if (id && !last[id]) last[id] = e.created_at }
+    for (const e of (ev ?? []) as { created_at: string; event_type: string; metadata: { manager_id?: string; by?: string } | null }[]) {
+      const id = e.metadata?.manager_id
+      if (e.event_type === 'portal_sign_in' && id && !last[id]) last[id] = e.created_at
+      if (history.length < 50) history.push({ at: e.created_at, kind: e.event_type === 'portal_sign_in' ? 'in' : e.event_type === 'portal_staff_view' ? 'staff' : 'out', name: e.metadata?.by ?? 'Manager' })
+    }
   }
-  return NextResponse.json({ me: c.me, staff: c.staff, managers: (data ?? []).map(m => ({ ...m, last_sign_in: last[m.id] ?? null })) })
+  return NextResponse.json({ me: c.me, staff: c.staff, history, managers: (data ?? []).map(m => ({ ...m, last_sign_in: last[m.id] ?? null })) })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {

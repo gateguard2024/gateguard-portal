@@ -144,7 +144,8 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
   }
   async function signOut() {
     await fetch(`/api/portal/${slug}/manager/verify`, { method: 'DELETE' }).catch(() => {})
-    setManager(null); router.refresh()
+    // Signing out locks the portal on this device → PIN screen for the next person.
+    setManager(null); window.location.reload()
   }
 
   const tab = ACTIVE_ALIAS[active] ?? active

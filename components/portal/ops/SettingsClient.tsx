@@ -138,8 +138,21 @@ function Inner({ slug }: { slug: string }) {
               </tr>))}</tbody>
           </table></div>
         )}
-        <div style={{ fontSize: 12.5, color: C.ink3, marginTop: 10 }}>Forgot your PIN? Ask another manager to set a new one, or call Gate Guard.</div>
+        <div style={{ fontSize: 12.5, color: C.ink3, marginTop: 10 }}>Each manager’s PIN is their login — they stay signed in on their device until they press Sign out. Turning someone off, removing them or giving a new PIN signs them out everywhere. Forgot your PIN? Ask another manager to set a new one, or call Gate Guard.</div>
       </div>
+      {d && (
+        <div className="ok-card" style={{ marginTop: 14 }}>
+          <div className="ok-hd"><div><h3>Sign-in history</h3><div className="sub">Who signed in and out, newest first.</div></div></div>
+          {!(d.history ?? []).length ? <div className="ok-empty">No sign-ins yet.</div> : (
+            <div className="ok-tw"><table className="ok-tbl">
+              <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+              <tbody>{(d.history as Any[]).map((h, i) => (
+                <tr key={i}><td style={{ color: C.ink2, whiteSpace: 'nowrap' }}>{when(h.at)}</td><td style={{ fontWeight: 600 }}>{h.name}</td>
+                  <td><span className="ok-pill"><Dot c={h.kind === 'in' ? DOT.green : h.kind === 'staff' ? DOT.blue : DOT.gray} />{h.kind === 'in' ? 'Signed in' : h.kind === 'staff' ? 'Gate Guard visit (Nexus login)' : 'Signed out'}</span></td></tr>))}</tbody>
+            </table></div>
+          )}
+        </div>
+      )}
       {adding && <AddSheet slug={slug} onClose={() => setAdding(false)} onDone={n => { setAdding(false); show(`${n} added — they can sign in now`); void load() }} />}
       {open && <PersonSheet slug={slug} m={open} isMe={open.id === meId} onClose={() => setOpen(null)} onDone={msg => { setOpen(null); show(msg); void load() }} />}
       {toast}

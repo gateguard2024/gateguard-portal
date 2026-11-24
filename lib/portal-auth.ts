@@ -9,6 +9,7 @@
  */
 import { createHash } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { managerFromSession, gateGuardStaff } from '@/lib/portal-manager'
 import type { NextRequest } from 'next/server'
 
 function db() {
@@ -33,16 +34,20 @@ export type PortalVerify =
 export async function verifyPortal(req: NextRequest, slug: string): Promise<PortalVerify> {
   const { data: portal } = await db()
     .from('client_portals')
-    .select('site_id, org_id, slug, modules, camera_ids, door_ids, branding, access_pin, status')
+    .select('id, site_id, org_id, slug, modules, camera_ids, door_ids, branding, access_pin, status')
     .ilike('slug', slug)
     .maybeSingle()
 
   if (!portal || portal.status === 'disabled') return { ok: false, status: 404, error: 'Portal not found.' }
 
   // If a PIN is configured, require the matching verified cookie.
+  // In = the shared view code cookie OR a signed-in manager (their PIN is their login).
   if (portal.access_pin) {
     const cookie = req.cookies.get(`pp_${slug}`)?.value
-    if (!cookie || cookie !== portal.access_pin) return { ok: false, status: 401, error: 'Locked — enter the access code.' }
+    if (!cookie || cookie !== portal.access_pin) {
+      const m = await managerFromSession(req.cookies.get(`pm_${slug}`)?.value, portal.id)
+      if (!m && !(await gateGuardStaff())) return { ok: false, status: 401, error: 'Locked — enter your PIN.' }
+    }
   }
 
   return {
