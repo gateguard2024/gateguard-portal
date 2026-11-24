@@ -2,7 +2,10 @@
 
 /**
  * EventsClient — the Event Tracker page (approved design). Stat cards + filter
- * chips + search over live, categorized Brivo access events for the site.
+ * chips + search. Source switch (Nov 24 2026): Doors (Brivo access events) ·
+ * Cameras (Eagle Eye / Edge camera events — motion, people, vehicles, plates; last
+ * 7 days max) · All. The camera button opens Vision on the right camera at that
+ * moment (door events → the camera linked to that door).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10,7 +13,12 @@ import { OpsShell, C } from '@/components/portal/ops/OpsShell'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires
 const { Search, Zap, XCircle, ShieldCheck, Play, ChevronDown } = require('lucide-react') as any
 
-type Evt = { id: string; time: string; date: string; label: string; user: string; gate: string; cat: 'access' | 'denied' | 'admin' | 'schedule'; tone: string }
+type Evt = { id: string; at?: string | null; time: string; date: string; label: string; user: string; gate: string; cat: 'access' | 'denied' | 'admin' | 'schedule' | 'camera'; tone: string; camKey?: string | null }
+type Source = 'all' | 'doors' | 'cameras'
+const SOURCES: [Source, string][] = [['all', 'All'], ['doors', 'Doors & gates'], ['cameras', 'Cameras']]
+const TZ = 'America/New_York'
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: TZ })
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: TZ })
 const toneColor: Record<string, string> = { safe: C.safe, cyan: C.cyan, warn: C.warn, alert: C.alert }
 
 function panel(extra?: React.CSSProperties): React.CSSProperties {
@@ -23,11 +31,45 @@ function Inner({ slug }: { slug: string }) {
   const router = useRouter()
   const [events, setEvents] = useState<Evt[]>([])
   const [loading, setLoading] = useState(true)
-  const [cat, setCat] = useState('all')
-  const [q, setQ] = useState('')
   const [days, setDays] = useState<7 | 30>(7)
   const [err, setErr] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const [cat, setCat] = useState('all')
+  const [q, setQ] = useState('')
+  const [source, setSource] = useState<Source>('all')
+  const [camEvents, setCamEvents] = useState<Evt[] | null>(null)
+  const [camErr, setCamErr] = useState<string | null>(null)
+  const [byName, setByName] = useState<Record<string, string>>({})
+
+  // Camera events (Eagle Eye / Edge) — only fetched when Cameras or All is showing.
+  useEffect(() => {
+    if (source === 'doors') return
+    let live = true
+    setCamErr(null)
+    const start = new Date(Date.now() - Math.min(days, 7) * 864e5).toISOString()
+    fetch(`/api/portal/${slug}/video?view=events&start=${encodeURIComponent(start)}`)
+      .then(async r => ({ ok: r.ok, j: await r.json().catch(() => ({})) }))
+      .then(({ ok, j }) => {
+        if (!live) return
+        if (!ok) { setCamErr(j.error || 'Camera events didn’t load.'); setCamEvents([]); return }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setCamEvents((j.events ?? []).map((e: any): Evt => ({
+          id: e.key, at: e.start, time: fmtTime(e.start), date: fmtDate(e.start), label: e.label || 'Camera event',
+          user: e.plate ? `Plate ${e.plate}` : '—', gate: e.cameraName || 'Camera', cat: 'camera', tone: 'cyan', camKey: e.cameraKey,
+        })))
+        const errs = Object.values(j.errors ?? {}) as string[]
+        if (errs.length && !(j.events ?? []).length) setCamErr(errs[0])
+      })
+      .catch(() => { if (live) { setCamErr('Camera events didn’t load — check your connection.'); setCamEvents([]) } })
+    return () => { live = false }
+  }, [slug, source, days, reload])
+  // Door → its camera (by name), for the camera button on door events.
+  useEffect(() => { fetch(`/api/portal/${slug}/door-cameras`).then(r => r.json()).then(j => setByName(j.byName ?? {})).catch(() => {}) }, [slug])
+  const openCamera = (e: Evt) => {
+    const key = e.camKey ?? byName[e.gate] ?? null
+    const at = e.at ? Date.parse(e.at) - 5000 : null
+    router.push(key ? `/portal/${slug}/video?cam=${encodeURIComponent(key)}${at ? `&at=${at}` : ''}` : `/portal/${slug}/video`)
+  }
 
   // Up to 30 days: stored history synced hourly from Brivo (migration 241) + a live top-up.
   // Shows the last list from this tab at once (coming back from Vision), then refreshes.
@@ -56,13 +98,19 @@ function Inner({ slug }: { slug: string }) {
     admin: events.filter(e => e.cat === 'admin').length,
   }), [events])
 
+  const shownAll = useMemo(() => {
+    const doors = source === 'cameras' ? [] : events
+    const cams = source === 'doors' ? [] : (camEvents ?? [])
+    return [...doors, ...cams].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
+  }, [events, camEvents, source])
   const rows = useMemo(() => {
     const ql = q.trim().toLowerCase()
-    return events.filter(e => (cat === 'all' || e.cat === cat) && (!ql || `${e.user} ${e.label} ${e.gate}`.toLowerCase().includes(ql)))
-  }, [events, cat, q])
+    // Door type buttons only apply to door events.
+    return shownAll.filter(e => (cat === 'all' || source === 'cameras' || e.cat === cat) && (!ql || `${e.user} ${e.label} ${e.gate}`.toLowerCase().includes(ql)))
+  }, [shownAll, cat, q, source])
 
   const statCards = [
-    { v: stats.today, l: `Events (last ${days} days)`, c: C.cyan, Icon: Zap },
+    { v: stats.today, l: `Door events (last ${days} days)`, c: C.cyan, Icon: Zap },
     { v: stats.denied, l: 'Access denied', c: C.alert, Icon: XCircle },
     { v: stats.admin, l: 'Admin / manager actions', c: C.warn, Icon: ShieldCheck },
   ]
@@ -95,17 +143,21 @@ function Inner({ slug }: { slug: string }) {
       <div style={{ ...panel(), marginBottom: 20 }}>
         <div style={{ padding: '14px 16px', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <button type="button" onClick={() => setDays(days === 7 ? 30 : 7)} aria-label={`Showing the last ${days} days. Switch to ${days === 7 ? 30 : 7} days`} style={{ ...chip(false), color: C.ink2, cursor: 'pointer' }}><span style={{ color: C.ink3 }}>Date:</span> Last {days} days <ChevronDown size={14} color={C.ink3} /></button>
-          {CATS.map(([k, label]) => <span key={k} onClick={() => setCat(k)} style={chip(cat === k)}>{label}</span>)}
+          <span role="group" aria-label="Show" style={{ display: 'inline-flex', gap: 4, padding: 3, borderRadius: 12, background: C.well, border: `1px solid ${C.border}` }}>
+            {SOURCES.map(([k, label]) => <button key={k} type="button" aria-pressed={source === k} onClick={() => { setSource(k); if (k === 'cameras') setCat('all') }} style={{ ...chip(source === k), border: 0, padding: '7px 12px' }}>{label}</button>)}
+          </span>
+          {source !== 'cameras' && CATS.map(([k, label]) => <button key={k} type="button" aria-pressed={cat === k} onClick={() => setCat(k)} style={chip(cat === k)}>{label}</button>)}
+          {source !== 'doors' && <span style={{ fontSize: 11.5, color: camErr ? C.alert : C.ink3 }}>{camErr ? `Camera events: ${camErr}` : camEvents === null ? 'Loading camera events…' : `Camera events: last ${Math.min(days, 7)} days`}</span>}
         </div>
       </div>
 
       <div style={panel()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px', borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>All events</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>{source === 'doors' ? 'Door & gate events' : source === 'cameras' ? 'Camera events' : 'All events'}</span>
           <span style={{ fontSize: 11.5, color: err && events.length ? C.alert : C.ink3 }}>{loading ? 'Loading…' : err && events.length ? <>Couldn’t refresh — showing the last list. <button type="button" onClick={() => setReload(x => x + 1)} style={{ border: 0, background: 'none', color: C.cyan, font: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Try again</button></> : `${rows.length} of ${events.length} events`}</span>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr>{['Timestamp', 'Event', 'User', 'Gate / Door', 'Camera'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Timestamp', 'Event', source === 'cameras' ? 'Plate' : 'User', source === 'cameras' ? 'Camera' : 'Gate / Door / Camera', 'Watch'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: C.ink2 }}>Loading events…</td></tr> :
               rows.length === 0 ? <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: err ? C.alert : C.ink2 }}>{err && !events.length ? <>{err} <button type="button" onClick={() => setReload(x => x + 1)} style={{ marginLeft: 8, border: 0, background: 'none', color: C.cyan, font: 'inherit', fontWeight: 600, cursor: 'pointer' }}>Try again</button></> : 'No events match.'}</td></tr> :
@@ -115,7 +167,7 @@ function Inner({ slug }: { slug: string }) {
                     <td style={td}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor[e.tone] }} />{e.label}</span></td>
                     <td style={{ ...td, fontWeight: 600 }}>{e.user}</td>
                     <td style={{ ...td, color: C.ink2 }}>{e.gate}</td>
-                    <td style={td}><button onClick={() => router.push(`/portal/${slug}/video`)} title="View camera" style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,113,227,.08)', border: '1px solid rgba(0,113,227,.3)', color: C.cyan, cursor: 'pointer' }}><Play size={14} /></button></td>
+                    <td style={td}><button type="button" onClick={() => openCamera(e)} title={(e.camKey || byName[e.gate]) ? 'Watch this moment' : 'Open Vision'} aria-label={`Watch ${e.gate} at ${e.time}`} style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,113,227,.08)', border: '1px solid rgba(0,113,227,.3)', color: C.cyan, cursor: 'pointer' }}><Play size={14} /></button></td>
                   </tr>
                 ))}
           </tbody>

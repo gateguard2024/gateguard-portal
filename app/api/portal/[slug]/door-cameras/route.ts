@@ -54,7 +54,9 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   try {
     const links = await doorCameraLinks(siteId, doors, cameras, layout.cams ?? {})
     const usesEdge = cameras.some(c => c.provider === 'edge')
-    return NextResponse.json({ links, cameras, choices: layout.cams ?? {}, order: Array.isArray(layout.order) ? layout.order : [], edge: usesEdge ? (body.edge ?? null) : null })
+    const byName: Record<string, string> = {}
+    for (const d of doors) if (links[d.id]) byName[d.name] = links[d.id].camera.key
+    return NextResponse.json({ links, byName, cameras, choices: layout.cams ?? {}, order: Array.isArray(layout.order) ? layout.order : [], edge: usesEdge ? (body.edge ?? null) : null })
   } catch (e) {
     return NextResponse.json({ links: {}, cameras, order: [], edge: null, error: e instanceof Error ? e.message : 'Could not match cameras' })
   }

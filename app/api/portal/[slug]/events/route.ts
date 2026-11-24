@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
 import { recentSiteEvents } from '@/lib/brivo-events-store'
 import { memo } from '@/lib/memo'
-import { getSiteBrivoToken, brivoRawEvents, mapBrivoEvent } from '@/lib/brivo'
+import { getSiteBrivoToken, brivoRawEvents, mapBrivoEvent, listBrivoDoors } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -42,12 +42,24 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     // One request per property at a time, kept 1 min: going Vision → Activity and back
     // used to start a second Brivo pull while the first was still running → blank page.
     const siteId = v.portal.site_id
-    const raw = await memo(`portal-events:${siteId}:${days}`, 60_000, () => recentSiteEvents(siteId, { days, limit: days > 7 ? 1000 : 300 }))
+    let raw = await memo(`portal-events:${siteId}:${days}`, 60_000, () => recentSiteEvents(siteId, { days, limit: days > 7 ? 1000 : 300 }))
+    // Only this portal's doors (client_portals.door_ids). Events carry the door NAME,
+    // so map the allowed ids to names (same cached door list as the dashboard).
+    const ids = (v.portal.door_ids ?? []).map(String)
+    if (ids.length) {
+      try {
+        const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+        const doors = await memo(`brivo-doors:${siteId}`, 10 * 60_000, async () => (await listBrivoDoors(token, apiKey, brivoSiteId)).map(d => ({ id: d.id, name: d.name })))
+        const allowed = new Set(doors.filter(d => ids.includes(String(d.id))).map(d => d.name))
+        raw = raw.filter(e => !e.door || allowed.has(e.door))
+      } catch { /* door list unavailable — show what we have rather than nothing */ }
+    }
     const events = raw.map(e => {
       const { cat, tone } = categorize(e.action)
       const d = e.occurred ? new Date(e.occurred) : null
       return {
         id: e.id,
+        at: e.occurred,
         // Property time (Eastern) — the server runs in UTC, so 'undefined' showed times 5 h off.
         time: d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' }) : '',
         date: d ? d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '',

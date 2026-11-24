@@ -158,6 +158,17 @@ function Inner({ slug }: { slug: string }) {
   }, [edge, api])
 
   const list = cams ?? []
+  // Deep link from Activity: /video?cam=<key>&at=<ms> opens that camera at that moment (once).
+  const linked = useRef(false)
+  useEffect(() => {
+    if (linked.current || !cams?.length) return
+    const sp = new URLSearchParams(window.location.search)
+    const key = sp.get('cam'); if (!key) return
+    linked.current = true
+    const cam = cams.find(c => c.key === key)
+    const at = Number(sp.get('at'))
+    if (cam) setOpen({ cam, at: Number.isFinite(at) && at > 0 ? at : null })
+  }, [cams])
   const featured = list.find(c => c.key === sel) ?? list[0] ?? null
   useEffect(() => { setLiveFail(null) }, [featured?.key])
   const mark = useCallback((k: string, s: 'ok' | 'black' | 'error') => setState(m => m[k] === s ? m : { ...m, [k]: s }), [])
