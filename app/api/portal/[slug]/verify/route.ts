@@ -35,14 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   if (!portal.access_pin) return NextResponse.json({ ok: true }) // no gate configured
   if (await pinLocked(portal.site_id)) return NextResponse.json({ error: LOCKED_MSG }, { status: 429 })
 
+  // The portal's own code = the Gate Guard PIN, or a manager's personal PIN: both let
+  // you in AND sign you in (Gate Guard signs in as "Gate Guard"). matchManagerPin checks both.
   const h = hashPortalPin(String(pin))
-  if (h === portal.access_pin) {
-    const res = NextResponse.json({ ok: true })
-    res.cookies.set(`pp_${params.slug}`, h, VIEW_COOKIE)
-    return res
-  }
-
-  // A manager's personal PIN: let them in and sign them in.
   const manager = await matchManagerPin(params.slug, String(pin))
   if (!manager) {
     await recordPinFail(portal.site_id, clientIp(req.headers))
@@ -52,5 +47,6 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
   // Signed in on this device until they press Sign out (signed session — see lib/portal-manager).
   const res = NextResponse.json({ ok: true, manager: manager.name })
   res.cookies.set(`pm_${params.slug}`, (manager as typeof manager & { session: string }).session, MANAGER_COOKIE)
+  if (h === portal.access_pin) res.cookies.set(`pp_${params.slug}`, h, VIEW_COOKIE)
   return res
 }

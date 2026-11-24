@@ -7,7 +7,11 @@
  * the signature covers the manager's current PIN hash, so changing their PIN, turning
  * them off or removing them ends every session at once. Sign-ins and sign-outs are
  * logged in site_events (portal_sign_in / portal_sign_out).
- * The shared code (client_portals.access_pin) still gives look-only access.
+ * The portal's own code (client_portals.access_pin, set by Gate Guard in Nexus) is the
+ * GATE GUARD PIN: it signs in as "Gate Guard" with full control (Nov 24 2026 — it's
+ * Gate Guard's only PIN). Session `gg.<sig>`, tied to that code: changing it in Nexus
+ * signs Gate Guard out everywhere. Never give this code to a property — they each get
+ * their own personal PIN.
  */
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
@@ -37,9 +41,20 @@ const sign = (id: string, pinHash: string) => createHmac('sha256', sessionKey())
 /** The cookie value for a signed-in manager (see header). */
 export function managerSession(id: string, pinHash: string): string { return `${id}.${sign(id, pinHash)}` }
 
+/** The built-in Gate Guard sign-in (the portal's own code). */
+export const GATE_GUARD_ID = 'gate-guard'
+const portalCodeHash = (pin: string) => createHash('sha256').update(`gg-portal:${pin.trim()}`).digest('hex') // = portal-auth hashPortalPin
+export function gateGuardSession(accessPinHash: string): string { return `gg.${sign(GATE_GUARD_ID, accessPinHash)}` }
+
 /** Check a pm_ cookie against this portal's managers → the active manager, or null. */
 export async function managerFromSession(value: string | undefined | null, portalId: string): Promise<PortalManager | null> {
   if (!value) return null
+  if (value.startsWith('gg.')) {
+    const { data } = await db().from('client_portals').select('access_pin').eq('id', portalId).maybeSingle()
+    if (!data?.access_pin) return null
+    const want = Buffer.from(sign(GATE_GUARD_ID, data.access_pin)), got = Buffer.from(value.slice(3))
+    return want.length === got.length && timingSafeEqual(want, got) ? { id: GATE_GUARD_ID, name: 'Gate Guard', email: null } : null
+  }
   const dot = value.lastIndexOf('.')
   if (dot < 1) return null // old unsigned cookie (just an id) → sign in again
   const id = value.slice(0, dot), sig = value.slice(dot + 1)
@@ -52,14 +67,14 @@ export async function managerFromSession(value: string | undefined | null, porta
 }
 
 /** The portal row id for a slug (managers are scoped to one portal). */
-async function portalRow(slug: string): Promise<{ id: string; site_id: string | null; org_id: string } | null> {
+async function portalRow(slug: string): Promise<{ id: string; site_id: string | null; org_id: string; access_pin: string | null } | null> {
   const { data } = await db()
     .from('client_portals')
-    .select('id, site_id, org_id, status')
+    .select('id, site_id, org_id, status, access_pin')
     .ilike('slug', slug)
     .maybeSingle()
   if (!data || data.status === 'disabled') return null
-  return { id: data.id, site_id: data.site_id, org_id: data.org_id }
+  return { id: data.id, site_id: data.site_id, org_id: data.org_id, access_pin: data.access_pin ?? null }
 }
 
 /** Resolve the signed-in manager from the pm_<slug> cookie, or null. */
@@ -80,6 +95,10 @@ export async function matchManagerPin(slug: string, pin: string): Promise<Portal
     .select('id, name, email, pin_hash, active')
     .eq('client_portal_id', portal.id)
     .eq('active', true)
+  // The portal's own code = the Gate Guard PIN (full control, signed in as "Gate Guard").
+  if (portal.access_pin && portalCodeHash(pin) === portal.access_pin) {
+    return { id: GATE_GUARD_ID, name: 'Gate Guard', email: null, session: gateGuardSession(portal.access_pin) } as PortalManager & { session: string }
+  }
   const hash = hashManagerPin(pin)
   const m = (data ?? []).find(r => r.pin_hash === hash)
   return m ? { id: m.id, name: m.name, email: m.email ?? null, session: managerSession(m.id, m.pin_hash) } as PortalManager & { session: string } : null
