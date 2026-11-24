@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPortal } from '@/lib/portal-auth'
 import { getPortalManager } from '@/lib/portal-manager'
-import { getSiteBrivoToken, listBrivoUsers, listBrivoGroups, listBrivoSiteGroupIds, createBrivoUser, issueBrivoMobilePass, assignBrivoFob, assignBrivoPin } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoUsersEx, listBrivoGroups, listBrivoSiteGroupIds, createBrivoUser, issueBrivoMobilePass, assignBrivoFob, assignBrivoPin } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   try {
     const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
     if (!brivoSiteId) return NextResponse.json({ users: [], needs_site_id: true })
-    const all = await listBrivoUsers(token, apiKey, brivoSiteId)
+    const { users: all, groupsPending } = await listBrivoUsersEx(token, apiKey, brivoSiteId)
     const q = (req.nextUrl.searchParams.get('q') ?? '').trim().toLowerCase()
     const users = q
       ? all.filter(u => [`${u.firstName} ${u.lastName}`, u.email ?? '', u.phone ?? '', u.unitNumber ?? '']
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
         for (const u of users) { const t = latest.get(`${u.firstName} ${u.lastName}`.trim().toLowerCase()); if (t) lastUsed[u.id] = t }
       }
     }
-    return NextResponse.json({ users, last_used: lastUsed, history_days: historyDays, ...(groups ? { groups } : {}) })
+    return NextResponse.json({ users, groups_pending: groupsPending, last_used: lastUsed, history_days: historyDays, ...(groups ? { groups } : {}) })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load users', users: [] }, { status: 502 })
   }

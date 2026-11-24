@@ -31,8 +31,13 @@ function Inner({ slug }: { slug: string }) {
   const [historyDays, setHistoryDays] = useState(0)
   const [moveOut, setMoveOut] = useState(false)
 
+  // Groups fill in over a few loads the first time (each group's members are a Brivo
+  // call, saved once found) — reload quietly until they're all in.
+  const [groupsPending, setGroupsPending] = useState(0)
+  const [tries, setTries] = useState(0)
   const load = useCallback(async () => {
     const r = await call(`/api/portal/${slug}/users?groups=1`)
+    setGroupsPending(Number(r.data.groups_pending) || 0)
     setPeople(Array.isArray(r.data.users) ? r.data.users : [])
     setGroups(Array.isArray(r.data.groups) ? r.data.groups : [])
     setLastUsed(r.data.last_used && typeof r.data.last_used === 'object' ? r.data.last_used : null)
@@ -40,6 +45,11 @@ function Inner({ slug }: { slug: string }) {
     setErr(r.ok ? (r.data.needs_site_id ? 'This property’s Brivo site isn’t set yet — ask Gate Guard to finish its setup.' : null) : (r.data.error || 'Could not load residents from Brivo.'))
   }, [slug])
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (!groupsPending || tries >= 15) return
+    const t = setTimeout(() => { setTries(n => n + 1); void load() }, 3000)
+    return () => clearTimeout(t)
+  }, [groupsPending, tries, load])
 
   // No door use in 60+ days — only once we have 60+ days of history to look through.
   const canFlag = !!lastUsed && historyDays >= 60
@@ -88,6 +98,7 @@ function Inner({ slug }: { slug: string }) {
           )}
         </div>
         {err && <div className="ok-note red" role="alert">{err}</div>}
+        {people && groupsPending > 0 && <div style={{ fontSize: 12, color: C.ink3, margin: '0 0 8px' }}>Loading access groups from Brivo… {groupsPending} left</div>}
         {!people ? <div className="ok-empty">Loading residents from Brivo…</div> : !list.length ? (
           <div className="ok-empty">{total ? 'Nobody matches that search.' : 'No residents in Brivo yet. Use “Add resident”.'}</div>
         ) : (

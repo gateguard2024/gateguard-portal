@@ -248,44 +248,63 @@ const MIN_GAP_MS = Math.max(0, Number(process.env.BRIVO_MIN_GAP_MS) || 250)
 // screen's call go first (Nov 24 2026: the first 30-day sync paged hundreds of event
 // pages, Brivo throttled the key, and Residents / door actions stalled behind it).
 const BG_GAP_MS = Math.max(MIN_GAP_MS, Number(process.env.BRIVO_BG_GAP_MS) || 700)
+type Prio = 'urgent' | 'normal' | 'bg'
 type Lane = { inflight: number; next: number; bgNext: number; queue: (() => void)[]; bgQueue: (() => void)[] }
 const lanes = new Map<string, Lane>()
 const nap = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-async function slot(key: string, bg = false): Promise<() => void> {
+async function slot(key: string, prio: Prio = 'normal'): Promise<() => void> {
   const lane = lanes.get(key) ?? { inflight: 0, next: 0, bgNext: 0, queue: [], bgQueue: [] }
   lanes.set(key, lane)
-  // Background: at most one at a time, and only while no screen call is waiting.
-  while (bg ? (lane.inflight >= 1 || lane.queue.length > 0) : lane.inflight >= MAX_INFLIGHT) {
-    await new Promise<void>(r => (bg ? lane.bgQueue : lane.queue).push(r))
+  const bg = prio === 'bg'
+  // Urgent (open a gate, add a person — anything that isn't a read) goes to the FRONT
+  // of the line and may use one extra slot (Nov 24 2026: "Open gate" sat behind a
+  // residents load's hundreds of reads and timed out). Background: one at a time, and
+  // only while no screen call is waiting.
+  const blocked = () => prio === 'urgent' ? lane.inflight >= MAX_INFLIGHT + 1
+    : bg ? (lane.inflight >= 1 || lane.queue.length > 0) : lane.inflight >= MAX_INFLIGHT
+  while (blocked()) {
+    await new Promise<void>(r => (bg ? lane.bgQueue : lane.queue)[prio === 'urgent' ? 'unshift' : 'push'](r))
   }
   lane.inflight++
   const now = Date.now()
+  if (prio === 'urgent') return release(lane)
   const at = bg ? Math.max(lane.next, lane.bgNext) : lane.next
   lane.next = Math.max(now, at) + MIN_GAP_MS
   if (bg) lane.bgNext = Math.max(now, at) + BG_GAP_MS
   if (at > now) await nap(at - now)
+  return release(lane)
+}
+function release(lane: Lane) {
+  let done = false
   return () => {
+    if (done) return
+    done = true
     lane.inflight--
     // Wake a screen call first; background only when none is waiting (it re-checks).
     const next = lane.queue.shift() ?? lane.bgQueue.shift()
     next?.()
   }
 }
-async function limitedFetch(apiKey: string, url: string, init: RequestInit, bg = false): Promise<Response> {
+async function limitedFetch(apiKey: string, url: string, init: RequestInit, prio: Prio = 'normal'): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const done = await slot(apiKey, bg)
+    const done = await slot(apiKey, prio)
     let res: Response
     try { res = await fetch(url, init) } finally { done() }
-    if (res.status !== 429 || attempt >= 4) return res
-    // Throttled: background work backs off harder (it can wait for the next run).
-    if (bg && attempt >= 1) return res
+    if (res.status !== 429) return res
+    // Throttled. Background gives up (next run carries on); a gate open retries
+    // quickly twice; reads back off up to 4 times.
+    if (prio === 'bg' && attempt >= 1) return res
+    if (prio === 'urgent' && attempt >= 2) return res
+    if (attempt >= 4) return res
     const ra = Number(res.headers.get('retry-after'))
-    await nap(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) * 1000 : 1000 * 2 ** attempt)
+    const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) * 1000 : 1000 * 2 ** attempt
+    await nap(prio === 'urgent' ? Math.min(wait, 2000) : wait)
   }
 }
 
 async function brivoSend(method: string, token: string, apiKey: string, url: string, body?: Record<string, any>, bg = false): Promise<any> {
-  const send = (t: string) => limitedFetch(apiKey, url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }, bg)
+  const prio: Prio = bg ? 'bg' : method === 'GET' ? 'normal' : 'urgent'
+  const send = (t: string) => limitedFetch(apiKey, url, { method, headers: brivoHeaders(t, apiKey), body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }, prio)
   const label = `${method} ${url.replace(BRIVO_API_BASE, '').split('?')[0]}`
   let t = latest(token)
   let res = await send(t)
@@ -366,7 +385,7 @@ function brivoPhone(u: any): string | null {
  */
 // People lists are kept 10 min per account (every screen asks; Brivo is slow). Any write
 // in this file (add person, group change, suspend…) clears it so changes show at once.
-const usersCache = new Map<string, { at: number; users: BrivoUser[] }>()
+const usersCache = new Map<string, { at: number; users: BrivoUser[]; pending: number }>()
 export function forgetBrivoUsers() { usersCache.clear() }
 
 export async function listBrivoUsers(
@@ -374,19 +393,90 @@ export async function listBrivoUsers(
   apiKey: string,
   brivoSiteId: string
 ): Promise<BrivoUser[]> {
+  return (await listBrivoUsersEx(token, apiKey, brivoSiteId)).users
+}
+
+/** Same, plus how many groups' members are still being looked up (shown as "loading
+ * groups" and filled in on the next load). Kept 10 min once complete, 20 s while not. */
+export async function listBrivoUsersEx(
+  token: string,
+  apiKey: string,
+  brivoSiteId: string
+): Promise<{ users: BrivoUser[]; groupsPending: number }> {
   const ck = `${apiKey}|${brivoSiteId}`
   const hit = usersCache.get(ck)
-  if (hit && Date.now() - hit.at < 600_000) return hit.users
-  const out = await listBrivoUsersFresh(token, apiKey, brivoSiteId)
-  usersCache.set(ck, { at: Date.now(), users: out })
-  return out
+  if (hit && Date.now() - hit.at < (hit.pending ? 20_000 : 600_000)) return { users: hit.users, groupsPending: hit.pending }
+  const inflight = usersInflight.get(ck)
+  if (inflight) return inflight
+  const p = listBrivoUsersFresh(token, apiKey, brivoSiteId)
+    .then(r => { usersCache.set(ck, { at: Date.now(), users: r.users, pending: r.groupsPending }); return r })
+    .finally(() => usersInflight.delete(ck))
+  usersInflight.set(ck, p)
+  return p
+}
+const usersInflight = new Map<string, Promise<{ users: BrivoUser[]; groupsPending: number }>>()
+
+// ─── Who is in which group (Nov 24 2026) ────────────────────────────────────
+// Brivo's /users list leaves out groupIds, so membership = one call per group (a
+// property with a group per unit = hundreds of calls; that timed out the Residents
+// page every time). Saved in brivo_group_members (migration 244) and refreshed a
+// slice at a time: each load spends at most `budgetMs` on the groups that are
+// missing or oldest, in the background lane. Without 244 it's kept in memory only.
+const MEMBERS_FRESH_MS = 6 * 3600_000
+/** A person was added to / removed from a group here — look its members up again. */
+async function groupChanged(groupId: string) {
+  memMembers.forEach((_, k) => { if (k.endsWith(`|${groupId}`)) memMembers.delete(k) })
+  const { error } = await serviceDb().from('brivo_group_members').delete().eq('group_id', groupId)
+  if (error && !/brivo_group_members|does not exist|schema cache/i.test(error.message)) console.error('[brivo] members reset:', error.message)
+}
+const memMembers = new Map<string, { at: number; ids: string[] }>()
+async function groupMembership(token: string, apiKey: string, brivoSiteId: string, groupIds: string[], budgetMs: number): Promise<{ byGroup: Map<string, string[]>; pending: number }> {
+  const byGroup = new Map<string, string[]>()
+  const fetchedAt = new Map<string, number>()
+  let hasTable = true
+  const { data, error } = await serviceDb().from('brivo_group_members').select('group_id, user_ids, fetched_at').eq('brivo_site_id', String(brivoSiteId))
+  if (error) { hasTable = false; if (!/brivo_group_members|does not exist|schema cache/i.test(error.message)) console.error('[brivo] members read:', error.message) }
+  for (const r of (data ?? []) as { group_id: string; user_ids: string[] | null; fetched_at: string }[]) {
+    byGroup.set(String(r.group_id), (r.user_ids ?? []).map(String)); fetchedAt.set(String(r.group_id), Date.parse(r.fetched_at))
+  }
+  for (const gid of groupIds) {
+    const m = memMembers.get(`${brivoSiteId}|${gid}`)
+    if (m && (!fetchedAt.has(gid) || m.at > fetchedAt.get(gid)!)) { byGroup.set(gid, m.ids); fetchedAt.set(gid, m.at) }
+  }
+  // Missing first, then the oldest; only stale ones.
+  const todo = groupIds.filter(g => !fetchedAt.has(g) || Date.now() - fetchedAt.get(g)! > MEMBERS_FRESH_MS)
+    .sort((a, b) => (fetchedAt.get(a) ?? 0) - (fetchedAt.get(b) ?? 0))
+  const deadline = Date.now() + budgetMs
+  const fresh: { brivo_site_id: string; group_id: string; user_ids: string[]; fetched_at: string }[] = []
+  let i = 0
+  // Two at a time in the background lane (each still waits its turn).
+  const worker = async () => {
+    while (i < todo.length && Date.now() < deadline) {
+      const gid = todo[i++]
+      try {
+        const ids = await groupMemberIds(token, apiKey, gid, true)
+        byGroup.set(gid, ids); memMembers.set(`${brivoSiteId}|${gid}`, { at: Date.now(), ids })
+        fresh.push({ brivo_site_id: String(brivoSiteId), group_id: gid, user_ids: ids, fetched_at: new Date().toISOString() })
+      } catch (e) {
+        console.error('[brivo] group members', gid, e instanceof Error ? e.message : e)
+        if (/\(429\)/.test(String(e))) break // throttled — stop, carry on next load
+      }
+    }
+  }
+  await Promise.all([worker(), worker()])
+  if (hasTable && fresh.length) {
+    const { error: upErr } = await serviceDb().from('brivo_group_members').upsert(fresh, { onConflict: 'brivo_site_id,group_id' })
+    if (upErr) console.error('[brivo] members save:', upErr.message)
+  }
+  const pending = groupIds.filter(g => !byGroup.has(g)).length
+  return { byGroup, pending }
 }
 
 /** Members of one group (Brivo: GET /groups/{id}/users, paged). */
-async function groupMemberIds(token: string, apiKey: string, groupId: string): Promise<string[]> {
+async function groupMemberIds(token: string, apiKey: string, groupId: string, bg = false): Promise<string[]> {
   const ids: string[] = []
   for (let offset = 0; offset <= 20000; offset += 100) {
-    const data = await brivoGet(token, apiKey, `/groups/${groupId}/users`, { pageSize: '100', offset: String(offset) })
+    const data = await brivoGet(token, apiKey, `/groups/${groupId}/users`, { pageSize: '100', offset: String(offset) }, { bg })
     const page: any[] = data.data ?? []
     for (const m of page) ids.push(String(m.id ?? m.userId ?? m))
     if (page.length < 100) break
@@ -398,7 +488,7 @@ async function listBrivoUsersFresh(
   token: string,
   apiKey: string,
   brivoSiteId: string
-): Promise<BrivoUser[]> {
+): Promise<{ users: BrivoUser[]; groupsPending: number }> {
   const users: BrivoUser[] = []
   let offset = 0
   const pageSize = 100
@@ -453,30 +543,28 @@ async function listBrivoUsersFresh(
   }
 
   // Brivo's /users list usually leaves out groupIds (Nov 24 2026: no groups showed on
-  // Residents). Ask each of the site's groups for its members instead (4 at a time).
+  // Residents). Membership comes from the saved per-group lists (groupMembership).
+  let groupsPending = 0
   if (siteGroups.length > 0 && !users.some(u => u.groupIds.length)) {
+    const m = await groupMembership(token, apiKey, brivoSiteId, siteGroups.map((g: any) => String(g.id)), 8_000)
+    groupsPending = m.pending
     const byUser = new Map<string, string[]>()
-    const list = siteGroups.map((g: any) => String(g.id))
-    for (let i = 0; i < list.length; i += 4) {
-      const part = list.slice(i, i + 4)
-      const members = await Promise.all(part.map(gid => groupMemberIds(token, apiKey, gid).catch(() => [] as string[])))
-      part.forEach((gid, k) => { for (const uid of members[k]) byUser.set(uid, [...(byUser.get(uid) ?? []), gid]) })
-    }
+    m.byGroup.forEach((ids, gid) => { for (const uid of ids) byUser.set(uid, [...(byUser.get(uid) ?? []), gid]) })
     for (const u of users) {
       const gids = byUser.get(u.id) ?? []
       u.groupIds = gids
       u.groupNames = gids.map(id => groupNameById.get(id)).filter(Boolean) as string[]
-      if (!u.unitNumber) { const m = u.groupNames.map(n => n.match(/unit\s*(\d+[A-Za-z]*)/i)).find(Boolean); if (m) u.unitNumber = m[1] }
+      if (!u.unitNumber) { const mm = u.groupNames.map(n => n.match(/unit\s*(\d+[A-Za-z]*)/i)).find(Boolean); if (mm) u.unitNumber = mm[1] }
     }
   }
 
-  // Narrow to this site's groups — but ONLY if that leaves results (an account where
-  // no one is in a group still shows everyone rather than nothing). (Doors do the same.)
-  if (siteGroupSet.size > 0) {
+  // Narrow to this site's groups — but ONLY if that leaves results (and only once every
+  // group's members are known — a half-filled list would hide people).
+  if (siteGroupSet.size > 0 && groupsPending === 0) {
     const scoped = users.filter(u => (u.groupIds ?? []).some(g => siteGroupSet.has(String(g))))
-    if (scoped.length > 0) return scoped
+    if (scoped.length > 0) return { users: scoped, groupsPending }
   }
-  return users
+  return { users, groupsPending }
 }
 
 /**
@@ -504,6 +592,7 @@ export async function createBrivoUser(
   // Adding the user to a group is how Brivo grants access at a site.
   if (input.groupId) {
     await brivoPut(token, apiKey, `/groups/${input.groupId}/users/${id}`, {})
+    await groupChanged(String(input.groupId))
   }
   return { id }
 }
@@ -555,8 +644,12 @@ export async function unlockBrivoDoor(token: string, apiKey: string, doorId: str
     await brivoPost(token, apiKey, `/access-points/${doorId}/activate`, {})
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    if (/\(429\)|throttl|too many/i.test(msg)) {
+      throw new Error(`Brivo is limiting our requests right now (too many calls) — try again in a minute. (${msg})`)
+    }
     if (/\b40[13]\b/.test(msg) || /not allowed|invalid|permission|activat/i.test(msg)) {
-      throw new Error('Brivo would not open this door. In Brivo’s Account Config Tool, open this Door and check “Control From Browser” (remote activation), and confirm your admin account can unlock it — then retry.')
+      // Keep Brivo's own words — a suspended / throttled key also answers 401/403.
+      throw new Error(`Brivo would not open this door. In Brivo’s Account Config Tool, open this Door and check “Control From Browser” (remote activation), and confirm your admin account can unlock it — then retry. Brivo said: ${msg}`)
     }
     throw e
   }
@@ -810,12 +903,14 @@ export async function setBrivoCredentialSuspended(token: string, apiKey: string,
 /** Assign a Brivo user to a group (how Brivo grants site access). */
 export async function assignBrivoUserToGroup(token: string, apiKey: string, groupId: string, userId: string): Promise<{ success: true }> {
   await brivoPut(token, apiKey, `/groups/${groupId}/users/${userId}`, {})
+  await groupChanged(String(groupId))
   return { success: true }
 }
 
 /** Remove a Brivo user from a group (revokes that group's access). */
 export async function removeBrivoUserFromGroup(token: string, apiKey: string, groupId: string, userId: string): Promise<{ success: true }> {
   await brivoDelete(token, apiKey, `/groups/${groupId}/users/${userId}`)
+  await groupChanged(String(groupId))
   return { success: true }
 }
 
