@@ -12,7 +12,36 @@
  * falls back to asking Brivo live (the old behaviour) — nothing breaks.
  */
 import { createClient } from '@supabase/supabase-js'
-import { getSiteBrivoToken, listBrivoEventsRange, type BrivoEvent } from '@/lib/brivo'
+import { getSiteBrivoToken, listBrivoEventsRange, listBrivoUsers, noUserLabel, type BrivoEvent } from '@/lib/brivo'
+
+// ── Names for events Brivo sent without one ────────────────────────────────
+// Some events carry only the user's id (or no person at all). Look the id up in the
+// property's Brivo people (kept 30 min per server), and label person-less events by
+// what happened (Exit button, Schedule, Unknown card…). Names are saved with the event.
+const userNames = new Map<string, { at: number; names: Map<string, string> }>()
+async function namesFor(siteId: string): Promise<Map<string, string>> {
+  const hit = userNames.get(siteId)
+  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.names
+  const names = new Map<string, string>()
+  try {
+    const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+    for (const u of await listBrivoUsers(token, apiKey, brivoSiteId)) {
+      const n = [u.firstName, u.lastName].filter(Boolean).join(' ').trim()
+      if (n) names.set(String(u.id), n)
+    }
+  } catch (e) { console.error('[brivo-events] user names:', e instanceof Error ? e.message : e) }
+  userNames.set(siteId, { at: Date.now(), names })
+  return names
+}
+export async function nameEvents(siteId: string, events: BrivoEvent[]): Promise<BrivoEvent[]> {
+  const needIds = events.some(e => !e.actor && e.actor_id)
+  const names = needIds ? await namesFor(siteId) : null
+  return events.map(e => {
+    if (e.actor) return e
+    const byId = e.actor_id && names ? names.get(e.actor_id) : undefined
+    return { ...e, actor: byId ?? noUserLabel(e.action, e.credential) }
+  })
+}
 
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 export const KEEP_DAYS = 30
@@ -22,7 +51,7 @@ const OVERLAP = 10 * 60_000 // re-read the last 10 minutes each run (late events
 const missingTable = (msg?: string) => !!msg && /brivo_event|does not exist|schema cache/i.test(msg)
 
 type Row = { brivo_event_id: string; occurred_at: string; action: string | null; actor: string | null; door: string | null }
-const toEvent = (r: Row): BrivoEvent => ({ id: r.brivo_event_id, occurred: r.occurred_at, action: r.action ?? 'Access event', actor: r.actor, door: r.door })
+const toEvent = (r: Row): BrivoEvent => ({ id: r.brivo_event_id, occurred: r.occurred_at, action: r.action ?? 'Access event', actor: r.actor ?? noUserLabel(r.action ?? ''), door: r.door })
 
 /** Save events for a site; duplicates (same Brivo id) are skipped. */
 async function store(siteId: string, events: BrivoEvent[]): Promise<{ saved: number; error: string | null }> {
@@ -48,7 +77,7 @@ export async function syncSite(siteId: string, now = Date.now()): Promise<{ site
   let error: string | null = null
   try {
     const { token, apiKey } = await getSiteBrivoToken(siteId)
-    const events = await listBrivoEventsRange(token, apiKey, from, now)
+    const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, now))
     read = events.length
     const r = await store(siteId, events)
     error = r.error
@@ -118,6 +147,6 @@ export async function recentSiteEvents(siteId: string, opts: { days?: number; li
 
 async function live(siteId: string, from: number, to: number, limit: number): Promise<BrivoEvent[]> {
   const { token, apiKey } = await getSiteBrivoToken(siteId)
-  const events = await listBrivoEventsRange(token, apiKey, from, to, Math.max(limit, 200))
+  const events = await nameEvents(siteId, await listBrivoEventsRange(token, apiKey, from, to, Math.max(limit, 200)))
   return events.sort((a, b) => String(b.occurred ?? '').localeCompare(String(a.occurred ?? ''))).slice(0, limit)
 }

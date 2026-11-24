@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPortal } from '@/lib/portal-auth'
 import { recentSiteEvents } from '@/lib/brivo-events-store'
+import { getSiteBrivoToken, brivoRawEvents, mapBrivoEvent } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -20,6 +21,16 @@ function categorize(action: string): { cat: 'access' | 'denied' | 'admin' | 'sch
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const v = await verifyPortal(req, params.slug)
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: v.status })
+  // ?raw=1 — what Brivo actually sends for events we can't put a name on (last 2 days,
+  // up to 5). Same people the page already shows; for checking Brivo's field names.
+  if (req.nextUrl.searchParams.get('raw') === '1' && v.portal.site_id) {
+    try {
+      const { token, apiKey } = await getSiteBrivoToken(v.portal.site_id)
+      const raw = await brivoRawEvents(token, apiKey, Date.now() - 2 * 864e5, Date.now(), 100)
+      const blank = raw.filter(e => !mapBrivoEvent(e).actor)
+      return NextResponse.json({ checked: raw.length, without_name: blank.length, samples: blank.slice(0, 5), named_sample: raw.find(e => mapBrivoEvent(e).actor) ?? null })
+    } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 502 }) }
+  }
   if (!v.portal.site_id) return NextResponse.json({ events: [] })
 
   const days = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get('days') || 7)))

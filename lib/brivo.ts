@@ -253,6 +253,7 @@ async function brivoSend(method: string, token: string, apiKey: string, url: str
     t = fresh.token
     res = await send(t)
   }
+  if (method !== 'GET' && res.ok) forgetBrivoUsers()
   return handleBrivoResponse(res, label)
 }
 
@@ -316,7 +317,37 @@ function brivoPhone(u: any): string | null {
  * Fetch all users for a Brivo site.
  * Handles Brivo's pagination (pageSize max 100).
  */
+// People lists are kept 2 min per account (every screen asks; Brivo is slow). Any write
+// in this file (add person, group change, suspend…) clears it so changes show at once.
+const usersCache = new Map<string, { at: number; users: BrivoUser[] }>()
+export function forgetBrivoUsers() { usersCache.clear() }
+
 export async function listBrivoUsers(
+  token: string,
+  apiKey: string,
+  brivoSiteId: string
+): Promise<BrivoUser[]> {
+  const ck = `${apiKey}|${brivoSiteId}`
+  const hit = usersCache.get(ck)
+  if (hit && Date.now() - hit.at < 120_000) return hit.users
+  const out = await listBrivoUsersFresh(token, apiKey, brivoSiteId)
+  usersCache.set(ck, { at: Date.now(), users: out })
+  return out
+}
+
+/** Members of one group (Brivo: GET /groups/{id}/users, paged). */
+async function groupMemberIds(token: string, apiKey: string, groupId: string): Promise<string[]> {
+  const ids: string[] = []
+  for (let offset = 0; offset <= 20000; offset += 100) {
+    const data = await brivoGet(token, apiKey, `/groups/${groupId}/users`, { pageSize: '100', offset: String(offset) })
+    const page: any[] = data.data ?? []
+    for (const m of page) ids.push(String(m.id ?? m.userId ?? m))
+    if (page.length < 100) break
+  }
+  return ids
+}
+
+async function listBrivoUsersFresh(
   token: string,
   apiKey: string,
   brivoSiteId: string
@@ -374,9 +405,26 @@ export async function listBrivoUsers(
     offset += pageSize
   }
 
-  // Narrow to this site's groups — but ONLY if that leaves results. If the /users
-  // payload carries no matching groupIds (Brivo doesn't always expand them), fall
-  // back to the full account list rather than showing nothing. (Doors do the same.)
+  // Brivo's /users list usually leaves out groupIds (Nov 24 2026: no groups showed on
+  // Residents). Ask each of the site's groups for its members instead (4 at a time).
+  if (siteGroups.length > 0 && !users.some(u => u.groupIds.length)) {
+    const byUser = new Map<string, string[]>()
+    const list = siteGroups.map((g: any) => String(g.id))
+    for (let i = 0; i < list.length; i += 4) {
+      const part = list.slice(i, i + 4)
+      const members = await Promise.all(part.map(gid => groupMemberIds(token, apiKey, gid).catch(() => [] as string[])))
+      part.forEach((gid, k) => { for (const uid of members[k]) byUser.set(uid, [...(byUser.get(uid) ?? []), gid]) })
+    }
+    for (const u of users) {
+      const gids = byUser.get(u.id) ?? []
+      u.groupIds = gids
+      u.groupNames = gids.map(id => groupNameById.get(id)).filter(Boolean) as string[]
+      if (!u.unitNumber) { const m = u.groupNames.map(n => n.match(/unit\s*(\d+[A-Za-z]*)/i)).find(Boolean); if (m) u.unitNumber = m[1] }
+    }
+  }
+
+  // Narrow to this site's groups — but ONLY if that leaves results (an account where
+  // no one is in a group still shows everyone rather than nothing). (Doors do the same.)
   if (siteGroupSet.size > 0) {
     const scoped = users.filter(u => (u.groupIds ?? []).some(g => siteGroupSet.has(String(g))))
     if (scoped.length > 0) return scoped
@@ -469,7 +517,7 @@ export async function unlockBrivoDoor(token: string, apiKey: string, doorId: str
 }
 
 // ─── Access events (the Brivo activity / event tracker) ──────────────────────
-export interface BrivoEvent { id: string; occurred: string | null; action: string; actor: string | null; door: string | null }
+export interface BrivoEvent { id: string; occurred: string | null; action: string; actor: string | null; door: string | null; actor_id?: string | null; credential?: string | null }
 
 /** Recent access events for the account behind these creds (each site = own account). */
 export async function listBrivoEvents(token: string, apiKey: string, pageSize = 40, sinceDays = 7): Promise<BrivoEvent[]> {
@@ -495,12 +543,42 @@ export async function listBrivoEvents(token: string, apiKey: string, pageSize = 
 /** One Brivo event row → our shape, with a STABLE id (used as the storage key). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapBrivoEvent(e: any): BrivoEvent {
+  // Brivo's event shape varies by event type and API version — read every place a
+  // field can be (Nov 24 2026: events were showing a blank user when the name was in
+  // eventData / eventObject, or Brivo only sent the user's id).
+  const ed = e.eventData ?? e.data ?? {}
   const occurred = e.occurred ?? e.occurredTime ?? e.created ?? e.timestamp ?? null
-  const action = e.securityAction?.actionName ?? e.eventType?.name ?? e.action ?? e.actionName ?? e.name ?? 'Access event'
-  const actor = e.actor?.name ?? e.user?.name ?? ([e.actor?.firstName, e.actor?.lastName].filter(Boolean).join(' ') || e.credentialHolderName || null)
-  const door = e.object?.name ?? e.accessPoint?.name ?? e.door?.name ?? e.objectName ?? null
+  const action = e.securityAction?.actionName ?? e.securityAction?.action ?? e.eventType?.name ?? e.action ?? e.actionName ?? ed.actionName ?? e.name ?? 'Access event'
+  const full = (o: any) => (o ? (o.name ?? ([o.firstName, o.lastName].filter(Boolean).join(' ') || null)) : null)
+  const actor = full(e.actor) ?? full(e.user) ?? ed.actorName ?? ed.userName ?? e.actorName ?? e.credentialHolderName ?? ed.credentialHolderName ?? null
+  const actorType = String(e.actor?.type ?? ed.actorType ?? '').toLowerCase()
+  const actorIdRaw = e.actor?.id ?? e.user?.id ?? ed.actorId ?? ed.userId ?? e.actorId ?? null
+  const actor_id = actorIdRaw != null && (!actorType || /user/.test(actorType)) ? String(actorIdRaw) : null
+  const door = e.object?.name ?? e.eventObject?.name ?? e.accessPoint?.name ?? e.door?.name ?? ed.objectName ?? e.objectName ?? null
+  const cred = ed.credentialObject ?? ed.credential ?? e.credential ?? (Array.isArray(ed.credentials) ? ed.credentials[0] : null) ?? null
+  const credential = cred ? String(cred.reference ?? cred.referenceId ?? cred.value ?? cred.id ?? '') || null : null
   const id = e.id ?? e.eventId ?? e.uuid ?? `${occurred ?? ''}|${action}|${actor ?? ''}|${door ?? ''}`
-  return { id: String(id), occurred, action, actor, door }
+  return { id: String(id), occurred, action, actor: actor ? String(actor).trim() || null : null, door, actor_id, credential }
+}
+
+/** What happened when no person is named — so a row never just shows a blank. */
+export function noUserLabel(action: string, credential?: string | null): string | null {
+  const a = action.toLowerCase()
+  if (/request to exit|rex|exit request|egress/.test(a)) return 'Exit button'
+  if (/schedule/.test(a)) return 'Schedule'
+  if (/held open|left open|ajar/.test(a)) return 'Door held open'
+  if (/forced/.test(a)) return 'Door forced open'
+  if (/unknown|invalid|not found|unrecognized/.test(a)) return credential ? `Unknown card / code ${credential}` : 'Unknown card / code'
+  if (/administrat|remote|activation|activated|control from browser/.test(a)) return 'Remote unlock'
+  if (/offline|online|tamper|power|battery|communicat/.test(a)) return 'Device'
+  return credential ? `Card / code ${credential}` : null
+}
+
+/** A few RAW Brivo events (for checking field names) — the diag view only. */
+export async function brivoRawEvents(token: string, apiKey: string, fromMs: number, toMs: number, pageSize = 50): Promise<any[]> {
+  const iso = (d: number) => new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize), occurredAfter: iso(Math.max(fromMs, toMs - 2 * 864e5 + 60_000)), occurredBefore: iso(toMs) })
+  return (data.data ?? data.events ?? []) as any[]
 }
 
 /** EVERY event between two times, in Brivo's 2-day windows, paged.
