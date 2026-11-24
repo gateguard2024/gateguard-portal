@@ -211,6 +211,15 @@ function Inner({ slug }: { slug: string }) {
   const [resets, setResets] = useState<Reset[]>([])
   const [resetFor, setResetFor] = useState<Reset | null>(null)
   const [passOpen, setPassOpen] = useState(false)
+  // /gates?pass=1 (from the dashboard's Issue pass) opens the pass form once signed in.
+  const passAsked = useRef(false)
+  useEffect(() => {
+    if (passAsked.current || new URLSearchParams(window.location.search).get('pass') !== '1') return
+    if (manager) { passAsked.current = true; setPassOpen(true); return }
+    // The signed-in manager loads a moment after the page — only ask to sign in if still nobody.
+    const t = setTimeout(() => { if (!passAsked.current) { passAsked.current = true; requireSignIn() } }, 1500)
+    return () => clearTimeout(t)
+  }, [manager]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetch(`/api/portal/${slug}/gate-reset`).then(r => r.json()).then(j => setResets(j.resets ?? [])).catch(() => {}) }, [slug])
   // Which camera watches each door (refresh every 10 min — the Edge pass lasts 15).
   useEffect(() => {

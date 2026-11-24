@@ -167,11 +167,45 @@ function Inner({ slug, lockActive, setLockActive }: { slug: string; lockActive: 
             ? <HoldButton tone="cyan" label="Hold to lift lockdown" holdingLabel="Lifting…" onConfirm={() => lockdown(false)} />
             : <HoldButton tone="alert" label="Hold to lock down site" holdingLabel="Engaging…" disabled={!manager} title={manager ? undefined : 'Sign in to control'} onConfirm={() => guarded(() => lockdown(true))} />}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button onClick={() => guarded(() => flash('Issue pass — opens the guest pass form'))} style={qbtn}><Ticket size={15} color={C.cyan} /> Issue pass</button>
-            <button onClick={() => doors[0] && openGate(doors[0])} style={qbtn}>{ICON_UNLOCK} Open gate</button>
+            {/* Both go to Access: the pass form, and the gates with their cameras (look before you open).
+                This button used to open whichever gate was first in the list, with no camera. */}
+            <a href={`/portal/${slug}/gates?pass=1`} style={{ ...qbtn, textDecoration: 'none', color: 'inherit' }}><Ticket size={15} color={C.cyan} /> Issue pass</a>
+            <a href={`/portal/${slug}/gates`} style={{ ...qbtn, textDecoration: 'none', color: 'inherit' }}>{ICON_UNLOCK} Open a gate</a>
           </div>
         </div>
       </div>
+
+      {/* Needs your attention — what's wrong right now, each with where to fix it */}
+      {(() => {
+        const go: Record<string, { href: string; label: string }> = {
+          gate: { href: `/portal/${slug}/gates`, label: 'See gates' }, blind: { href: `/portal/${slug}/video`, label: 'See cameras' },
+          cameras: { href: `/portal/${slug}/video`, label: 'See cameras' }, fault: { href: `/portal/${slug}/service`, label: 'See service' },
+          jobs: { href: `/portal/${slug}/service`, label: 'See service' }, overdue: { href: `/portal/${slug}/service`, label: 'See service' },
+          requests: { href: `/portal/${slug}/service`, label: 'See service' }, repeat: { href: `/portal/${slug}/service`, label: 'See history' },
+        }
+        const items = [...health.reasons].sort((a, b) => b.points - a.points)
+        const off = cams.filter(c => !c.online)
+        return (
+          <div style={{ ...panel(), marginBottom: 20 }}>
+            {phead(items.length ? `Needs your attention (${items.length})` : 'Needs your attention')}
+            {!items.length ? <div style={{ padding: '14px 18px', fontSize: 13, color: C.ink2 }}>{health.score == null ? 'Checking…' : 'Nothing right now — all clear.'}</div> : (
+              <div>
+                {items.map((r, i) => {
+                  const g = go[r.kind] ?? { href: `/portal/${slug}/service`, label: 'Open' }
+                  const extra = r.kind === 'cameras' && off.length ? `: ${off.map(c => c.name).slice(0, 4).join(', ')}${off.length > 4 ? '…' : ''}` : ''
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 18px', borderTop: i ? `1px solid ${C.border}` : undefined }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: r.points >= 15 ? C.alert : r.points >= 6 ? C.warn : C.ink3 }} />
+                      <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>{r.text}{extra}</span>
+                      <a href={g.href} style={{ fontSize: 12.5, fontWeight: 600, color: C.cyan, textDecoration: 'none', whiteSpace: 'nowrap' }}>{g.label} ›</a>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* KPI Metrics */}
       <div style={{ ...panel(), marginBottom: 20 }}>
