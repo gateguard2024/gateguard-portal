@@ -476,21 +476,39 @@ export function mapBrivoEvent(e: any): BrivoEvent {
   return { id: String(id), occurred, action, actor, door }
 }
 
-/** EVERY event between two times (oldest window first), in Brivo's 2-day windows,
- * paging each window. Used by the hourly sync (lib/brivo-events-store.ts). */
+/** EVERY event between two times, in Brivo's 2-day windows, paged.
+ * Brivo pages BY TIME, not by row count: `offset` is a date inside the window and
+ * results run newest → oldest from it ("Offset must be between the start and end
+ * time, offset is applied from the greatest date…", Nov 23 2026). So each next page
+ * asks from the oldest event seen so far; events at that same second come back
+ * again and are skipped by id. Used by the hourly sync (lib/brivo-events-store.ts). */
 export async function listBrivoEventsRange(token: string, apiKey: string, fromMs: number, toMs: number, maxEvents = 20000): Promise<BrivoEvent[]> {
   const iso = (d: number) => new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z')
   const CHUNK = 2 * 24 * 60 * 60 * 1000 - 60_000
   const PAGE = 100
   const out: BrivoEvent[] = []
+  const seen = new Set<string>()
   for (let start = fromMs; start < toMs && out.length < maxEvents; start += CHUNK) {
     const end = Math.min(toMs, start + CHUNK)
-    for (let offset = 0; offset < 5000; offset += PAGE) {
-      const data = await brivoGet(token, apiKey, '/events', { pageSize: String(PAGE), offset: String(offset), occurredAfter: iso(start), occurredBefore: iso(end) })
+    let cursor: number | null = null
+    for (let page = 0; page < 200; page++) {
+      const params: Record<string, string> = { pageSize: String(PAGE), occurredAfter: iso(start), occurredBefore: iso(end) }
+      if (cursor != null) params.offset = iso(cursor)
+      const data = await brivoGet(token, apiKey, '/events', params)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const page = (data.data ?? data.events ?? []) as any[]
-      out.push(...page.map(mapBrivoEvent))
-      if (page.length < PAGE) break
+      const rows = ((data.data ?? data.events ?? []) as any[]).map(mapBrivoEvent)
+      let added = 0
+      let oldest = cursor ?? end
+      for (const e of rows) {
+        const t = e.occurred ? Date.parse(e.occurred) : NaN
+        if (!Number.isNaN(t) && t < oldest) oldest = t
+        if (seen.has(e.id)) continue
+        seen.add(e.id); out.push(e); added++
+      }
+      // Done with this window: short page, nothing new, or we've reached its start.
+      if (rows.length < PAGE || added === 0 || oldest <= start) break
+      // Next page from the oldest second we have (Brivo times are whole seconds).
+      cursor = Math.max(start, Math.floor(oldest / 1000) * 1000)
     }
   }
   return out
