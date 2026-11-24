@@ -473,23 +473,24 @@ function StripSnap({ src, name }: { src: (tick: number) => string; name: string 
   return <LiveCam src={src(tick)} alt={name} onError={() => setBad(true)} />
 }
 
-const BG = '#0D1117', PANEL = '#161B22', LINE2 = 'rgba(255,255,255,.08)', INK = '#E6EDF3', SUB = '#8B949E', ACC = '#0A84FF'
+// Light, same as the page behind it (Apple light: #F5F5F7 canvas, white panels). Only the video stays black.
+const BG = '#F5F5F7', PANEL = '#FFFFFF', LINE2 = 'rgba(0,0,0,.08)', INK = '#1D1D1F', SUB = '#6E6E73', ACC = '#0071E3'
 export const VIEWER_CSS = `
-.cv{position:fixed;inset:0;z-index:140;background:radial-gradient(circle at 18% 0%,rgba(0,163,255,.16),transparent 34%),radial-gradient(circle at 85% 100%,rgba(10,132,255,.10),transparent 40%),linear-gradient(180deg,#0B1628 0%,#060E1D 55%,#030916 100%);color:${INK};display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;letter-spacing:-.01em}
+.cv{position:fixed;inset:0;z-index:140;background:${BG};color:${INK};display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;letter-spacing:-.01em}
 .cv .dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
-.cv-hd{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid ${LINE2};background:rgba(13,22,40,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.cv-hd{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid ${LINE2};background:rgba(0,0,0,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .cv-title{min-width:0;flex:1}
 .cv-t{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cv-s{display:flex;align-items:center;gap:6px;font-size:12px;color:${SUB};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cv-hacts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.cv-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:500;font-size:13px;font-family:inherit;cursor:pointer;text-decoration:none;white-space:nowrap}
-.cv-btn:hover{background:rgba(255,255,255,.1)}
+.cv-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid ${LINE2};background:rgba(0,0,0,.06);color:${INK};font-weight:500;font-size:13px;font-family:inherit;cursor:pointer;text-decoration:none;white-space:nowrap}
+.cv-btn:hover{background:rgba(0,0,0,.1)}
 .cv-btn.on{background:rgba(255,69,58,.16);border-color:rgba(255,69,58,.4);color:#FF6961;font-weight:600}
-.cv-seg{display:flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid ${LINE2}}
+.cv-seg{display:flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:rgba(0,0,0,.06);border:1px solid ${LINE2}}
 .cv-seg button{border:0;background:none;color:${SUB};height:28px;padding:0 10px;border-radius:6px;font-weight:500;font-size:12.5px;font-family:inherit;cursor:pointer;white-space:nowrap}
-.cv-seg button[aria-pressed=true]{background:rgba(255,255,255,.14);color:${INK};font-weight:600}
+.cv-seg button[aria-pressed=true]{background:rgba(0,0,0,.14);color:${INK};font-weight:600}
 .cv-seg.sm button{height:24px;padding:0 8px;font-size:12px}
-.cv-seg input[type=date]{height:28px;border:0;background:transparent;color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 6px;color-scheme:dark}
+.cv-seg input[type=date]{height:28px;border:0;background:transparent;color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 6px;color-scheme:light}
 .cv-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 320px}
 .cv-main{min-width:0;min-height:0;display:flex;flex-direction:column}
 .cv-stage{position:relative;background:#000;flex:1 1 auto;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -499,49 +500,49 @@ export const VIEWER_CSS = `
 .cv-clock{position:absolute;top:10px;right:10px;font:500 11.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px}
 .cv-tag{position:absolute;bottom:10px;left:10px;font-size:11px;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:3px 8px}
 .cv-err{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(215,0,21,.92);color:#fff;font-size:13px;border-radius:8px;padding:6px 12px;max-width:90%}
-.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid ${LINE2};background:rgba(13,22,40,.55)}
+.cv-ctl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid ${LINE2};background:${PANEL}}
 .cv-ctl .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.cv-ib{min-width:36px;height:32px;padding:0 8px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
-.cv-ib:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.cv-ib{min-width:36px;height:32px;padding:0 8px;border-radius:8px;border:1px solid ${LINE2};background:rgba(0,0,0,.06);color:${INK};font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
+.cv-ib:hover:not(:disabled){background:rgba(0,0,0,.12)}
 .cv-ib:disabled,.cv-sel:disabled{opacity:.4;cursor:default}
-.cv-sel{height:32px;border-radius:8px;border:1px solid ${LINE2};background:rgba(255,255,255,.06);color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 8px;color-scheme:dark}
+.cv-sel{height:32px;border-radius:8px;border:1px solid ${LINE2};background:rgba(0,0,0,.06);color:${INK};font-weight:500;font-size:12.5px;font-family:inherit;padding:0 8px;color-scheme:light}
 .cv-strip{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;border-top:1px solid ${LINE2};background:${BG};flex:none}
 .cv-thumb{position:relative;flex:none;width:156px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:2px solid transparent;background:#000;padding:0;cursor:pointer}
 .cv-thumb.on{border-color:${ACC}}
 .cv-thumb img{width:100%;height:100%;object-fit:cover}
 .cv-thumb .nm{position:absolute;left:0;right:0;bottom:0;padding:10px 6px 4px;font:600 11px -apple-system,system-ui,sans-serif;color:#fff;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.7));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cv-side{min-height:0;display:flex;flex-direction:column;border-left:1px solid ${LINE2};background:rgba(13,22,40,.45)}
+.cv-side{min-height:0;display:flex;flex-direction:column;border-left:1px solid ${LINE2};background:${PANEL}}
 .cv-sideh{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid ${LINE2}}
 .cv-sideh>.cv-seg{justify-self:start}
 .cv-groups{display:flex;gap:6px;flex-wrap:wrap}
 .cv-gchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;border:1px solid ${LINE2};background:transparent;color:${SUB};font-weight:500;font-size:12px;font-family:inherit;cursor:pointer}
-.cv-gchip[aria-pressed=true]{background:rgba(255,255,255,.1);color:${INK}}
+.cv-gchip[aria-pressed=true]{background:rgba(0,0,0,.1);color:${INK}}
 .cv-zoom{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:${SUB}}
 .cv-loading{display:flex;align-items:center;gap:8px;margin:8px 12px 0;font-size:12px;color:${SUB}}
-.cv-loading .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:${ACC};animation:cvspin .8s linear infinite}
+.cv-loading .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(0,0,0,.18);border-top-color:${ACC};animation:cvspin .8s linear infinite}
 @keyframes cvspin{to{transform:rotate(360deg)}}
 .cv-note{margin:8px 12px 0;font-size:12px;color:#FFB340;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);border-radius:8px;padding:6px 8px}
 .cv-tlscroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;position:relative}
 .cv-bar{position:relative;cursor:ns-resize;touch-action:none;user-select:none;outline:none}
-.cv-tick{position:absolute;left:0;right:0;height:0;border-top:1px solid rgba(255,255,255,.05)}
-.cv-tick.mj{border-top-color:rgba(255,255,255,.14)}
+.cv-tick{position:absolute;left:0;right:0;height:0;border-top:1px solid rgba(0,0,0,.05)}
+.cv-tick.mj{border-top-color:rgba(0,0,0,.14)}
 .cv-tick span{position:absolute;left:10px;top:-8px;font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:${SUB};white-space:nowrap}
-.cv-track{position:absolute;top:${PAD}px;bottom:${PAD}px;left:76px;width:10px;border-radius:5px;background:rgba(255,255,255,.04)}
+.cv-track{position:absolute;top:${PAD}px;bottom:${PAD}px;left:76px;width:10px;border-radius:5px;background:rgba(0,0,0,.04)}
 .cv-rec{position:absolute;left:76px;width:10px;border-radius:2px;background:rgba(10,132,255,.55)}
 .cv-ev{position:absolute;left:94px;width:6px;border-radius:3px;border:0;padding:0;cursor:pointer;opacity:.9}
 .cv-ev.motion{width:4px;left:95px;opacity:.55}
-.cv-ev:hover{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.cv-ev:hover{opacity:1;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
 .cv-ev .lb{position:absolute;left:12px;top:-2px;font:500 11px -apple-system,system-ui,sans-serif;color:${INK};white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .cv-none{position:absolute;left:104px;right:10px;font-size:12px;color:${SUB}}
 .cv-head{position:absolute;left:0;right:0;height:0;border-top:2px solid ${ACC};pointer-events:none;z-index:2}
 .cv-head span{position:absolute;right:8px;top:-11px;font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:${ACC};border-radius:6px;padding:2px 6px}
-.cv-hov{position:absolute;left:0;right:0;height:0;border-top:1px dashed rgba(255,255,255,.45);pointer-events:none;z-index:1}
-.cv-hov span{position:absolute;left:8px;top:-10px;font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#0D1117;background:#E6EDF3;border-radius:5px;padding:1px 5px}
+.cv-hov{position:absolute;left:0;right:0;height:0;border-top:1px dashed rgba(0,0,0,.45);pointer-events:none;z-index:1}
+.cv-hov span{position:absolute;left:8px;top:-10px;font:500 10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;background:#1D1D1F;border-radius:5px;padding:1px 5px}
 .cv-evs{flex:1;min-height:0;overflow-y:auto;padding:8px;display:grid;gap:6px;align-content:start}
-.cv-evc{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid ${LINE2};background:rgba(255,255,255,.03);border-radius:10px;padding:6px;cursor:pointer;font:inherit;color:inherit}
+.cv-evc{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid ${LINE2};background:rgba(0,0,0,.03);border-radius:10px;padding:6px;cursor:pointer;font:inherit;color:inherit}
 .cv-evc:hover{border-color:rgba(10,132,255,.5)}
 .cv-evc.on{border-color:${ACC};background:rgba(10,132,255,.12)}
-.cv-evc img,.cv-evc .ph{width:72px;height:44px;border-radius:6px;object-fit:cover;background:rgba(255,255,255,.06);flex:none;display:flex;align-items:center;justify-content:center}
+.cv-evc img,.cv-evc .ph{width:72px;height:44px;border-radius:6px;object-fit:cover;background:rgba(0,0,0,.06);flex:none;display:flex;align-items:center;justify-content:center}
 .cv-evc .tx{display:flex;flex-direction:column;min-width:0;flex:1;font-size:12px}
 .cv-evc .tx b{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cv-evc .tx span{color:${SUB}}
