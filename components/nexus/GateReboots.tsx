@@ -15,6 +15,7 @@ type Reboot = {
   wait_seconds: number
   actuation_type: 'brivo' | 'shelly' | 'none'
   actuation_door_id: string | null; actuation_door_name: string | null
+  portal_door_id?: string | null; portal_enabled?: boolean | null; draw_watts?: number | null; sense_seconds?: number | null
   actuation_device_id: string | null; actuation_channel: number | null
   actuation_pulse_seconds: number | null; actuation_relay_name: string | null
 }
@@ -107,21 +108,23 @@ function RunSheet({ reboot, siteId, onClose }: { reboot: Reboot; siteId: string;
       setPhase('sensing'); addLog('Power restored — waiting for the operator to draw current')
       const started = Date.now()
       openNow.current = false
-      while (!cancelled.current && Date.now() - started < SENSE_MAX_MS) {
+      const senseMax = (Number(reboot.sense_seconds) > 0 ? Number(reboot.sense_seconds) * 1000 : SENSE_MAX_MS)
+      while (!cancelled.current && Date.now() - started < senseMax) {
         if (openNow.current) { addLog('Opened by hand'); await actuate(); return }
         const r = await getJson(`/api/shelly/relays/${reboot.power_device_id}?site_id=${siteId}&channel=${reboot.power_channel}`)
         if (!r.ok) { setManualWhy('Couldn’t read the relay’s power — open the gate when it’s up on camera.'); addLog('Power reading failed — open by hand'); setPhase('ready'); return }
         if (!r.data.metered) { setManualWhy('This relay doesn’t measure power — open the gate when it’s up on camera.'); addLog('No power meter on this relay — open by hand'); setPhase('ready'); return }
         const w = typeof r.data.watts === 'number' ? r.data.watts : null, a = typeof r.data.amps === 'number' ? r.data.amps : null
         setPower({ watts: w, amps: a })
-        if ((w != null && w >= DRAW_WATTS) || (a != null && a >= DRAW_AMPS)) {
+        const need = Number(reboot.draw_watts) > 0 ? Number(reboot.draw_watts) : DRAW_WATTS
+        if ((w != null && w >= need) || (a != null && a >= DRAW_AMPS * need / DRAW_WATTS)) {
           addLog(`Operator drawing current (${w != null ? `${Math.round(w)} W` : `${a} A`}) — opening the gate`)
           await actuate(); return
         }
         await sleep(SENSE_EVERY_MS)
       }
       if (cancelled.current) return
-      setManualWhy('No current seen in 90 s — check the camera, then open by hand.'); addLog('No current seen in 90 s'); setPhase('ready')
+      setManualWhy(`No current seen in ${Math.round(senseMax / 1000)} s — check the camera, then open by hand.`); addLog(`No current seen in ${Math.round(senseMax / 1000)} s`); setPhase('ready')
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setPhase('error') }
   }
   async function actuate() {
@@ -184,6 +187,11 @@ function BuilderSheet({ siteId, reboot, onClose, onSaved }: { siteId: string; re
   const [doorId, setDoorId] = useState(reboot?.actuation_door_id || '')
   const [actRelay, setActRelay] = useState(reboot?.actuation_device_id ? `${reboot.actuation_device_id}:${reboot.actuation_channel ?? 0}` : '')
   const [pulse, setPulse] = useState(reboot?.actuation_pulse_seconds ?? 1)
+  // Property portal (migration 242): which gate card shows Reset, on/off, and the tuning.
+  const [portalDoor, setPortalDoor] = useState(reboot?.portal_door_id || '')
+  const [portalOn, setPortalOn] = useState(reboot?.portal_enabled !== false)
+  const [draw, setDraw] = useState<number>(Number(reboot?.draw_watts) || 3)
+  const [senseSec, setSenseSec] = useState<number>(Number(reboot?.sense_seconds) || 90)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -205,6 +213,8 @@ function BuilderSheet({ siteId, reboot, onClose, onSaved }: { siteId: string; re
       wait_seconds: Math.max(1, Math.min(600, Number(wait) || 20)), actuation_type: actType,
       actuation_door_id: null, actuation_door_name: null, actuation_device_id: null, actuation_channel: null, actuation_relay_name: null,
       actuation_pulse_seconds: Math.max(1, Math.min(10, Number(pulse) || 1)),
+      portal_door_id: portalDoor || (actType === 'brivo' ? doorId : null) || null, portal_enabled: portalOn,
+      draw_watts: Math.max(0.5, Math.min(500, Number(draw) || 3)), sense_seconds: Math.max(15, Math.min(300, Number(senseSec) || 90)),
     }
     if (actType === 'brivo') { payload.actuation_door_id = doorId; payload.actuation_door_name = doors.find(d => String(d.id) === doorId)?.name || null }
     if (actType === 'shelly') {
@@ -236,6 +246,16 @@ function BuilderSheet({ siteId, reboot, onClose, onSaved }: { siteId: string; re
         <Field label="Relay to pulse"><select className="sy-in" value={actRelay} onChange={e => setActRelay(e.target.value)}><option value="">Pick a relay…</option>{relayOpts}</select></Field>
         <Field label="Pulse seconds (1–10)"><input className="sy-in" type="number" min={1} max={10} value={pulse} onChange={e => setPulse(Number(e.target.value))} /></Field>
       </>}
+      {actType !== 'none' && <>
+        <Field label="Open the gate once the operator draws (watts)"><input className="sy-in" type="number" min={0.5} max={500} step={0.5} value={draw} onChange={e => setDraw(Number(e.target.value))} /></Field>
+        <Field label="Wait for that draw up to (seconds) — then “open by hand”"><input className="sy-in" type="number" min={15} max={300} value={senseSec} onChange={e => setSenseSec(Number(e.target.value))} /></Field>
+      </>}
+      <div style={{ borderTop: '1px solid rgba(0,0,0,.08)', paddingTop: 10 }}>
+        <span className="sy-lbl">Property portal</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '6px 0' }}><input type="checkbox" checked={portalOn} onChange={e => setPortalOn(e.target.checked)} /> Managers can run this reset from the property portal</label>
+        {portalOn && <Field label="Show the Reset button on this gate"><select className="sy-in" value={portalDoor} onChange={e => setPortalDoor(e.target.value)}><option value="">{actType === 'brivo' && doorId ? 'Same as the door it opens' : 'In the “Gate resets” list'}</option>{doors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>}
+        <div style={{ fontSize: 12, color: '#6E6E73' }}>Managers can only press Reset — only Gate Guard can change these settings.</div>
+      </div>
       {err && <Note tone="red">{err}</Note>}
       <button type="button" className="sy-b pri" onClick={save} disabled={saving}>{saving ? 'Saving…' : reboot ? 'Save changes' : 'Create re-boot'}</button>
     </Sheet>

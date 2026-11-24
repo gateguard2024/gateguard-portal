@@ -63,6 +63,62 @@ function EenLive({ slug, cam, everyMs }: { slug: string; cam: LinkCam; everyMs: 
   )
 }
 
+type Reset = { id: string; name: string; door_id: string | null; camera_id: string | null; camera_name: string | null; wait_seconds: number }
+const gnorm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+const sameGate = (a: string, b: string) => { const x = gnorm(a), y = gnorm(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)) }
+
+/** Reset sheet: camera on screen, Start (hold to confirm), then live progress from the server run. */
+function ResetSheet({ slug, reset, onClose }: { slug: string; reset: Reset; onClose: () => void }) {
+  const [runId, setRunId] = useState<string | null>(null)
+  const [run, setRun] = useState<{ phase: string; log: { at: string; text: string }[]; watts?: number | null; finished?: boolean } | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const start = async () => {
+    setErr(null)
+    const r = await fetch(`/api/portal/${slug}/gate-reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset_id: reset.id }) })
+    const j = await r.json().catch(() => ({}))
+    if (r.ok || (r.status === 409 && j.run_id)) setRunId(j.run_id); else setErr(j.error || 'Could not start the reset')
+  }
+  useEffect(() => {
+    if (!runId) return
+    let live = true
+    const poll = async () => {
+      const r = await fetch(`/api/portal/${slug}/gate-reset?run=${runId}`).then(x => x.json()).catch(() => null)
+      if (!live || !r?.run) return
+      setRun(r.run)
+      if (!r.run.finished) setTimeout(poll, 2000)
+    }
+    void poll()
+    return () => { live = false }
+  }, [slug, runId])
+  const cam: LinkCam | null = reset.camera_id ? { key: `een:${reset.camera_id}`, id: reset.camera_id, name: reset.camera_name || 'Camera', provider: 'een' } : null
+  const STEP: Record<string, string> = { starting: 'Starting…', power_off: `Power off — back on by itself after ${reset.wait_seconds} s`, power_on: 'Power back on', sensing: 'Waiting for the operator to come back…', opening: 'Opening the gate…', done: 'Done', open_by_hand: 'Open the gate by hand when it’s up on camera', failed: 'Stopped' }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div role="dialog" aria-modal="true" aria-label={`Reset ${reset.name}`} onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 'min(860px, 100%)', maxHeight: '92dvh', overflowY: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+          <div><div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>Reset {reset.name}</div><div style={{ fontSize: 12.5, color: C.ink3 }}>Turns the gate’s power off for {reset.wait_seconds} s, back on, then opens it once it’s running. Keeps going if you close this.</div></div>
+          <button type="button" onClick={onClose} style={{ minHeight: 34, padding: '0 12px', borderRadius: 8, border: `1px solid ${C.border2}`, background: '#fff', font: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>{run?.finished || !runId ? 'Done' : 'Close'}</button>
+        </div>
+        <div style={{ padding: 16, display: 'grid', gap: 12 }}>
+          {cam && <div style={{ position: 'relative', aspectRatio: '16 / 9', background: '#0b0b0d', borderRadius: 12, overflow: 'hidden' }}><EenLive slug={slug} cam={cam} everyMs={2000} /></div>}
+          {!runId ? (
+            <>
+              <HoldButton tone="amber" label="Hold to reset the gate" holdingLabel="Starting…" onConfirm={start} />
+              <div style={{ fontSize: 12, color: C.ink3 }}>Only reset when the gate is stuck. Make sure no car or person is in the gate.</div>
+            </>
+          ) : (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: run?.phase === 'failed' ? C.alert : run?.phase === 'done' ? C.safe : C.ink }}>{STEP[run?.phase ?? 'starting'] ?? run?.phase}{run?.phase === 'sensing' && run.watts != null ? ` (now ${Math.round(run.watts)} W)` : ''}</div>
+              {(run?.log ?? []).map((l, i) => <div key={i} style={{ fontSize: 12.5, color: C.ink2 }}>{new Date(l.at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', second: '2-digit' })} · {l.text}</div>)}
+            </div>
+          )}
+          {err && <div style={{ fontSize: 13, color: C.alert }}>{err}</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** The camera for a door: Edge = live video, Eagle Eye = refreshing picture. */
 function DoorCam({ slug, link, edge, big }: { slug: string; link: Link; edge: EdgePass | null; big?: boolean }) {
   const [liveFail, setLiveFail] = useState(false)
@@ -99,7 +155,14 @@ function Inner({ slug }: { slug: string }) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { fetch(`/api/portal/${slug}/summary`).then(r => r.json()).then(j => setDoors(j.doors ?? [])).catch(() => {}) }, [slug])
+  const [leftOpen, setLeftOpen] = useState<string[]>([])
+  useEffect(() => { fetch(`/api/portal/${slug}/summary`).then(r => r.json()).then(j => { setDoors(j.doors ?? []); setLeftOpen((j.gates?.open ?? []).map((g: { label: string }) => g.label)) }).catch(() => {}) }, [slug])
+  const isLeftOpen = (name: string) => leftOpen.some(l => sameGate(l, name))
+
+  // Gate reset (recipe set by Gate Guard in Nexus; runs on the server — lib/gate-reset.ts)
+  const [resets, setResets] = useState<Reset[]>([])
+  const [resetFor, setResetFor] = useState<Reset | null>(null)
+  useEffect(() => { fetch(`/api/portal/${slug}/gate-reset`).then(r => r.json()).then(j => setResets(j.resets ?? [])).catch(() => {}) }, [slug])
   // Which camera watches each door (refresh every 10 min — the Edge pass lasts 15).
   useEffect(() => {
     const load = () => fetch(`/api/portal/${slug}/door-cameras`).then(r => r.json()).then(j => { setLinks(j.links ?? {}); setEdge(j.edge ?? null); setCams(j.cameras ?? []); setChoices(j.choices ?? {}); setOrder(o => (arrangeRef.current ? o : (j.order ?? []))) }).catch(() => {})
@@ -228,13 +291,16 @@ function Inner({ slug }: { slug: string }) {
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{d.name}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: 'rgba(31,138,59,0.08)', color: C.safe, border: '1px solid rgba(31,138,59,0.3)' }}>SECURED</span>
+                  {isLeftOpen(d.name) && <span title="Gate Watch sees this gate standing open" style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: 'rgba(215,0,21,0.08)', color: C.alert, border: '1px solid rgba(215,0,21,0.3)' }}>LEFT OPEN</span>}
                 </div>
                 <button onClick={() => cmd(d, 'open')} disabled={busy === `${d.id}:open`} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid rgba(0,113,227,0.4)', background: 'rgba(0,113,227,0.08)', color: C.cyan, fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}><KeyRound size={14} /> Open (10s)</button>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1 }}><HoldButton tone="amber" label="Hold 1 hr" holdingLabel="Holding…" onConfirm={() => cmd(d, 'hold_open')} disabled={!manager} /></div>
                   <div style={{ flex: 1 }}><HoldButton tone="alert" label="Force close" holdingLabel="Closing…" onConfirm={() => cmd(d, 'force_close')} disabled={!manager || egress} title={egress ? 'Egress/pedestrian routes cannot be force-closed' : undefined} /></div>
                 </div>
+                {resets.filter(x => x.door_id === d.id).map(x => (
+                  <button key={x.id} type="button" onClick={() => manager ? setResetFor(x) : requireSignIn()} style={{ width: '100%', marginTop: 8, padding: '9px', borderRadius: 10, border: `1px solid ${C.border2}`, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>↻ Reset this gate</button>
+                ))}
                 {egress && <div style={{ fontSize: 10.5, color: C.ink2, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}><Lock size={11} /> Egress route — never force-closed</div>}
                 {!link && <div style={{ fontSize: 11, color: C.ink3, marginTop: 8 }}>No camera on this {/gate/i.test(d.name) ? 'gate' : 'door'} — <button type="button" onClick={startArrange} style={{ border: 0, background: 'none', padding: 0, color: C.blue, font: 'inherit', fontSize: 11, cursor: 'pointer' }}>pick one</button></div>}
               </div>
@@ -243,6 +309,17 @@ function Inner({ slug }: { slug: string }) {
         </div>
       )}
       {!manager && <div style={{ fontSize: 11.5, color: C.ink2 }}>Sign in with your personal PIN to control gates.</div>}
+
+      {/* Resets not tied to one gate card */}
+      {resets.some(x => !x.door_id || !doors.some(d => d.id === x.door_id)) && (
+        <div style={card()}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Gate resets</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {resets.filter(x => !x.door_id || !doors.some(d => d.id === x.door_id)).map(x => <button key={x.id} type="button" onClick={() => manager ? setResetFor(x) : requireSignIn()} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${C.border2}`, background: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>↻ {x.name}</button>)}
+          </div>
+        </div>
+      )}
+      {resetFor && <ResetSheet slug={slug} reset={resetFor} onClose={() => setResetFor(null)} />}
 
       {/* Watch big + open */}
       {watch && links[watch.id] && (

@@ -49,7 +49,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     actuation_relay_name: b.actuation_relay_name ?? null,
     created_by: user.id,
   }
-  const { data, error } = await supabase.from('gate_reboots').insert(row).select().single()
+  // Migration 242 — portal reset tuning (dropped + retried if 242 hasn't run yet).
+  const extra: Record<string, unknown> = {}
+  if ('portal_door_id' in b) extra.portal_door_id = b.portal_door_id ? String(b.portal_door_id) : null
+  if ('portal_enabled' in b) extra.portal_enabled = b.portal_enabled !== false
+  if ('draw_watts' in b) extra.draw_watts = Number(b.draw_watts) > 0 ? Number(b.draw_watts) : null
+  if ('sense_seconds' in b) extra.sense_seconds = Number(b.sense_seconds) > 0 ? Math.round(Number(b.sense_seconds)) : null
+  let { data, error } = await supabase.from('gate_reboots').insert({ ...row, ...extra }).select().single()
+  let note: string | undefined
+  if (error && Object.keys(extra).some(f => error!.message.includes(f))) {
+    ;({ data, error } = await supabase.from('gate_reboots').insert(row).select().single())
+    note = 'Saved — but the portal settings need migration 242 first.'
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ reboot: data }, { status: 201 })
+  return NextResponse.json({ reboot: data, note }, { status: 201 })
 }
