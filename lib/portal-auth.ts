@@ -45,8 +45,19 @@ export async function verifyPortal(req: NextRequest, slug: string): Promise<Port
   if (portal.access_pin) {
     const cookie = req.cookies.get(`pp_${slug}`)?.value
     if (!cookie || cookie !== portal.access_pin) {
-      const m = await managerFromSession(req.cookies.get(`pm_${slug}`)?.value, portal.id)
-      if (!m && !(await gateGuardStaff())) return { ok: false, status: 401, error: 'Locked — enter your PIN.' }
+      const pmRaw = req.cookies.get(`pm_${slug}`)?.value
+      const m = await managerFromSession(pmRaw, portal.id)
+      if (!m && !(await gateGuardStaff())) {
+        // Say which sign-in was checked and why it failed (shown on the portal's bar).
+        const { auth } = await import('@clerk/nextjs/server')
+        const clerkId = await Promise.resolve(auth()).then(a => a.userId).catch(() => null)
+        const why = [
+          `view code ${cookie ? 'out of date' : 'not entered'}`,
+          `manager sign-in ${pmRaw ? (pmRaw.includes('.') ? 'not valid — PIN changed or turned off?' : 'from before the update — sign in again') : 'none'}`,
+          `Gate Guard login ${clerkId ? 'not corporate' : 'not seen'}`,
+        ].join(' · ')
+        return { ok: false, status: 401, error: `Locked — enter your PIN. (${why})` }
+      }
     }
   }
 

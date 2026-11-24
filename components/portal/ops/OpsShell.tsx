@@ -112,19 +112,22 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
 
   const refresh = () => { fetch(`/api/portal/${slug}/manager/me`).then(r => r.json()).then(j => setManager(j.manager ?? null)).catch(() => {}) }
   useEffect(() => { refresh() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug])
-  // If the portal locks while a page is open (the PIN remembered on this computer ran
-  // out), every data call comes back 401 "Locked" and the page half-loads. Watch for
-  // that and go straight to the PIN screen instead (one reload, never a loop).
+  // If the portal locks while a page is open, data calls come back 401 "Locked". Show
+  // a bar with the reason and a button to the PIN screen — NEVER reload on our own
+  // (Nov 24 2026: an automatic reload looped when the page and its data disagreed).
+  const [locked, setLocked] = useState<string | null>(null)
   useEffect(() => {
     const orig = window.fetch
-    let reloading = false
     const wrapped: typeof window.fetch = async (input, init) => {
       const res = await orig(input, init)
       try {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-        if (!reloading && res.status === 401 && url.includes(`/api/portal/${slug}/`) && !url.includes('/verify')) {
+        if (res.status === 401 && url.includes(`/api/portal/${slug}/`) && !url.includes('/verify')) {
           const j = await res.clone().json().catch(() => ({}))
-          if (/locked/i.test(String(j?.error ?? ''))) { reloading = true; window.location.reload() }
+          if (/locked/i.test(String(j?.error ?? ''))) {
+            const m = String(j.error).match(/\(([^)]*)\)\s*$/)
+            setLocked(m ? m[1] : 'signed out')
+          }
         }
       } catch { /* never break the call */ }
       return res
@@ -214,6 +217,12 @@ export function OpsShell({ slug, displayName, active, lockdown, children }: { sl
               <nav className="ops-sub" aria-label="Access">
                 {ACCESS_SUB.map(s => <Link key={s.key} href={href(s.key)} className={active === s.key ? 'on' : ''} aria-current={active === s.key ? 'page' : undefined}>{s.label}</Link>)}
               </nav>
+            )}
+            {locked && (
+              <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#FFF4E5', border: '1px solid #FFD8A8', color: '#8A4B00', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 13 }}>
+                <span style={{ flex: 1, minWidth: 200 }}><b>You’re signed out of this portal</b> — data can’t load. <span style={{ opacity: .75 }}>({locked})</span></span>
+                <button type="button" onClick={() => window.location.reload()} className="ops-btn" style={{ minHeight: 34, fontSize: 13 }}>Enter PIN</button>
+              </div>
             )}
             {children}
           </main>
